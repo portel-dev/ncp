@@ -1,0 +1,26 @@
+# Source files - only publish compiled dist
+src/
+tsconfig.json
+
+# Development files
+.git
+.gitignore
+*.log
+.DS_Store
+.env
+.vscode/
+
+# Test files
+test/
+tests/
+__tests__/
+*.test.js
+*.test.ts
+
+# Coverage reports
+coverage/
+
+# Build configuration
+jest.config.js
+webpack.config.js
+rollup.config.js
