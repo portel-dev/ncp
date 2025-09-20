@@ -12,6 +12,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { DiscoveryEngine } from '../discovery/engine.js';
 import { MCPHealthMonitor } from '../utils/health-monitor.js';
 import { mcpWrapper } from '../utils/mcp-wrapper.js';
+import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -229,16 +230,20 @@ export class NCPOrchestrator {
         { capabilities: {} }
       );
 
-      // Connect with timeout
-      await Promise.race([
-        client.connect(transport),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Probe timeout')), this.QUICK_PROBE_TIMEOUT)
-        )
-      ]);
+      // Connect with timeout and filtered output
+      await withFilteredOutput(async () => {
+        await Promise.race([
+          client!.connect(transport!),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Probe timeout')), this.QUICK_PROBE_TIMEOUT)
+          )
+        ]);
+      });
 
-      // Get tool list
-      const response = await client.listTools();
+      // Get tool list with filtered output
+      const response = await withFilteredOutput(async () => {
+        return await client!.listTools();
+      });
       const tools = response.tools.map(t => ({
         name: t.name,
         description: t.description || '',
@@ -368,9 +373,12 @@ export class NCPOrchestrator {
       // Get or create pooled connection
       const connection = await this.getOrCreateConnection(mcpName);
 
-      const result = await connection.client.callTool({
-        name: actualToolName,
-        arguments: parameters
+      // Execute tool with filtered output to suppress MCP server console messages
+      const result = await withFilteredOutput(async () => {
+        return await connection.client.callTool({
+          name: actualToolName,
+          arguments: parameters
+        });
       });
 
       // Mark MCP as healthy on successful execution
@@ -440,13 +448,15 @@ export class NCPOrchestrator {
         { capabilities: {} }
       );
 
-      // Connect with timeout
-      await Promise.race([
-        client.connect(transport),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Connection timeout')), this.CONNECTION_TIMEOUT)
-        )
-      ]);
+      // Connect with timeout and filtered output
+      await withFilteredOutput(async () => {
+        await Promise.race([
+          client.connect(transport),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Connection timeout')), this.CONNECTION_TIMEOUT)
+          )
+        ]);
+      });
 
       const connection: MCPConnection = {
         client,
@@ -682,16 +692,20 @@ export class NCPOrchestrator {
         { capabilities: {} }
       );
 
-      // Connect with timeout
-      await Promise.race([
-        client.connect(transport),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Resources connection timeout')), this.QUICK_PROBE_TIMEOUT)
-        )
-      ]);
+      // Connect with timeout and filtered output
+      await withFilteredOutput(async () => {
+        await Promise.race([
+          client.connect(transport),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Resources connection timeout')), this.QUICK_PROBE_TIMEOUT)
+          )
+        ]);
+      });
 
-      // Get resources list
-      const response = await client.listResources();
+      // Get resources list with filtered output
+      const response = await withFilteredOutput(async () => {
+        return await client.listResources();
+      });
       await client.close();
 
       return response.resources || [];
@@ -735,16 +749,20 @@ export class NCPOrchestrator {
         { capabilities: {} }
       );
 
-      // Connect with timeout
-      await Promise.race([
-        client.connect(transport),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Prompts connection timeout')), this.QUICK_PROBE_TIMEOUT)
-        )
-      ]);
+      // Connect with timeout and filtered output
+      await withFilteredOutput(async () => {
+        await Promise.race([
+          client.connect(transport),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Prompts connection timeout')), this.QUICK_PROBE_TIMEOUT)
+          )
+        ]);
+      });
 
-      // Get prompts list
-      const response = await client.listPrompts();
+      // Get prompts list with filtered output
+      const response = await withFilteredOutput(async () => {
+        return await client.listPrompts();
+      });
       await client.close();
 
       return response.prompts || [];
