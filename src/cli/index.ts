@@ -12,6 +12,7 @@ import { formatCommandDisplay } from '../utils/security.js';
 import { TextUtils } from '../utils/text-utils.js';
 import { MCPDescriptions } from '../services/mcp-descriptions.js';
 import { OutputFormatter } from '../services/output-formatter.js';
+import { ErrorHandler } from '../services/error-handler.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -128,9 +129,10 @@ program
     for (const profileName of profiles) {
       try {
         await manager.addMCPToProfile(profileName, name, config);
-        console.log(chalk.green(`✅ Added ${chalk.bold(name)} to profile: ${chalk.cyan(profileName)}`));
+        console.log(OutputFormatter.success(`Added ${name} to profile: ${profileName}`));
       } catch (error: any) {
-        console.log(chalk.red(`❌ Failed to add to ${profileName}: ${error.message}`));
+        const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('profile', 'add', `${name} to ${profileName}`));
+        console.log(ErrorHandler.formatForConsole(errorResult));
       }
     }
 
@@ -326,9 +328,10 @@ program
     for (const profileName of profiles) {
       try {
         await manager.removeMCPFromProfile(profileName, name);
-        console.log(chalk.green(`✅ Removed ${chalk.bold(name)} from profile: ${chalk.cyan(profileName)}`));
+        console.log(OutputFormatter.success(`Removed ${name} from profile: ${profileName}`));
       } catch (error: any) {
-        console.log(chalk.red(`❌ Failed to remove from ${profileName}: ${error.message}`));
+        const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('profile', 'remove', `${name} from ${profileName}`));
+        console.log(ErrorHandler.formatForConsole(errorResult));
       }
     }
   });
@@ -465,15 +468,49 @@ program
                            (contentStr.includes('Error:') || contentStr.includes('not found') || contentStr.includes('Unknown tool'));
 
       if (isActualError) {
-        console.log(OutputFormatter.error('Tool execution failed'));
         const errorText = result.content?.[0]?.text || 'Unknown error occurred';
-        console.log(OutputFormatter.muted(errorText));
+        let suggestions: string[] = [];
 
-        // Provide helpful suggestion for unknown tools
-        if (errorText.includes('Unknown tool')) {
-          const [mcpName] = tool.split(':');
-          console.log('\n' + OutputFormatter.tip(`Try 'ncp find "${mcpName}"' to see available tools`));
+        if (errorText.includes('not configured') || errorText.includes('Unknown tool')) {
+          // Extract the query from the tool name for vector search
+          const [mcpName, toolName] = tool.split(':');
+
+          // Try multiple search strategies to find the best matches
+          let similarTools: any[] = [];
+
+          try {
+            // Strategy 1: Search with both MCP context and tool name for better domain matching
+            if (toolName && mcpName) {
+              const contextualQuery = `${mcpName} ${toolName}`;
+              similarTools = await orchestrator.find(contextualQuery, 3, false);
+            }
+
+            // Strategy 2: If no results, try just the tool name
+            if (similarTools.length === 0 && toolName) {
+              similarTools = await orchestrator.find(toolName, 3, false);
+            }
+
+            // Strategy 3: If still no results, try just the MCP name (domain search)
+            if (similarTools.length === 0) {
+              similarTools = await orchestrator.find(mcpName, 3, false);
+            }
+
+            if (similarTools.length > 0) {
+              suggestions.push('💡 Did you mean:');
+              similarTools.forEach(similar => {
+                const confidence = Math.round(similar.confidence * 100);
+                suggestions.push(`  • ${similar.toolName} (${confidence}% match)`);
+              });
+            }
+          } catch (error: any) {
+            // Fallback to basic suggestions if vector search fails
+            suggestions = ['Try \'ncp find <keyword>\' to discover similar tools'];
+          }
         }
+
+        const context = ErrorHandler.createContext('mcp', 'run', tool, suggestions);
+        const errorResult = ErrorHandler.handle(errorText, context);
+        console.log(ErrorHandler.formatForConsole(errorResult));
       } else {
         console.log(OutputFormatter.success('Tool execution completed'));
 
@@ -486,8 +523,49 @@ program
         }
       }
     } else {
-      console.log(OutputFormatter.error('Tool execution failed'));
-      console.log(OutputFormatter.muted(result.error || 'Unknown error occurred'));
+      // Check if this is a tool not found error and provide "did you mean" suggestions
+      const errorMessage = result.error || 'Unknown error occurred';
+      let suggestions: string[] = [];
+
+      if (errorMessage.includes('not configured') || errorMessage.includes('Unknown tool')) {
+        // Extract the query from the tool name for vector search
+        const [mcpName, toolName] = tool.split(':');
+
+        // Try multiple search strategies to find the best matches
+        let similarTools: any[] = [];
+
+        try {
+          // Strategy 1: Search with both MCP context and tool name for better domain matching
+          if (toolName && mcpName) {
+            const contextualQuery = `${mcpName} ${toolName}`;
+            similarTools = await orchestrator.find(contextualQuery, 3, false);
+          }
+
+          // Strategy 2: If no results, try just the tool name
+          if (similarTools.length === 0 && toolName) {
+            similarTools = await orchestrator.find(toolName, 3, false);
+          }
+
+          // Strategy 3: If still no results, try just the MCP name (domain search)
+          if (similarTools.length === 0) {
+            similarTools = await orchestrator.find(mcpName, 3, false);
+          }
+          if (similarTools.length > 0) {
+            suggestions.push('💡 Did you mean:');
+            similarTools.forEach(similar => {
+              const confidence = Math.round(similar.confidence * 100);
+              suggestions.push(`  • ${similar.toolName} (${confidence}% match)`);
+            });
+          }
+        } catch (error: any) {
+          // Fallback to basic suggestions if vector search fails
+          suggestions = ['Try \'ncp find <keyword>\' to discover similar tools'];
+        }
+      }
+
+      const context = ErrorHandler.createContext('mcp', 'run', tool, suggestions);
+      const errorResult = ErrorHandler.handle(errorMessage, context);
+      console.log(ErrorHandler.formatForConsole(errorResult));
     }
 
     await orchestrator.cleanup();

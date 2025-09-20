@@ -7,6 +7,8 @@ import { createInterface } from 'readline';
 import chalk from 'chalk';
 import clipboardy from 'clipboardy';
 import { ProfileManager } from '../profiles/profile-manager.js';
+import { OutputFormatter } from '../services/output-formatter.js';
+import { ErrorHandler } from '../services/error-handler.js';
 
 const execAsync = promisify(exec);
 
@@ -80,11 +82,12 @@ export class ConfigManager {
       console.log(chalk.green('✓ Opened config directory in your default file manager'));
       console.log(chalk.blue(`  Found ${profiles.length} profile files: ${profiles.join(', ')}`));
     } catch (error: any) {
-      console.log(chalk.red(`✗ Failed to open config directory: ${error.message}`));
-      console.log(chalk.blue(`Config directory location: ${configDir}`));
-      console.log(chalk.blue(`Profile files:`));
+      const errorResult = ErrorHandler.handle(error, ErrorHandler.fileOperation('open', configDir));
+      console.log(ErrorHandler.formatForConsole(errorResult));
+      console.log(OutputFormatter.info(`Config directory location: ${configDir}`));
+      console.log(OutputFormatter.info(`Profile files:`));
       profiles.forEach(profile => {
-        console.log(`  • ${profile}.json`);
+        console.log(OutputFormatter.bullet(`${profile}.json`));
       });
     }
   }
@@ -189,7 +192,8 @@ export class ConfigManager {
 
       await this.processImportData(mcpData, profileName, dryRun);
     } catch (error: any) {
-      console.log(chalk.red(`✗ Failed to import from file: ${error.message}`));
+      const errorResult = ErrorHandler.handle(error, ErrorHandler.fileOperation('import', filePath));
+      console.log(ErrorHandler.formatForConsole(errorResult));
     }
   }
 
@@ -289,7 +293,8 @@ export class ConfigManager {
 
     } catch (error: any) {
       console.log('');
-      console.log(chalk.red(`✗ Import failed: ${error.message}`));
+      const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('config', 'import', undefined, ['Check the JSON format', 'Ensure the file is readable']));
+      console.log(ErrorHandler.formatForConsole(errorResult));
     }
   }
 
@@ -397,12 +402,13 @@ export class ConfigManager {
         await this.profileManager.addMCPToProfile(profileName, mcpName, config);
         successCount++;
       } catch (error: any) {
-        console.log(chalk.red(`✗ Failed to add ${mcpName}: ${error.message}`));
+        const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('profile', 'add', mcpName));
+        console.log(ErrorHandler.formatForConsole(errorResult));
       }
     }
 
     if (successCount > 0) {
-      console.log(chalk.green(`  ✅ Successfully imported ${successCount} MCP server(s)`));
+      console.log(OutputFormatter.success(`Successfully imported ${successCount} MCP server(s)`));
       console.log('');
       console.log(chalk.blue(`  🔍 Test with: ncp find "file tools"`));
       console.log(chalk.blue(`  📋 List all: ncp list`));
