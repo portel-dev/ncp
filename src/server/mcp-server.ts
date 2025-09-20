@@ -625,7 +625,8 @@ export class MCPServer {
     }
 
     // Tool execution guidance with actual examples
-    if (results.length > 0) {
+    if (results.length > 0 && depth >= 2) {
+      // Only show parameter examples when depth >= 2 (when schemas are available)
       // Find the first tool that has parameters to show a better example
       let exampleTool = results[0];
       let exampleParams = this.generateExampleParams(exampleTool);
@@ -643,6 +644,9 @@ export class MCPServer {
       }
 
       tips += `• **Run tools**: Use \`ncp run ${exampleTool.toolName} --params '${exampleParams}'\` to execute\n`;
+    } else if (results.length > 0) {
+      // At depth 0-1, show generic example since schemas aren't loaded
+      tips += `• **Run tools**: Use \`ncp run ${results[0].toolName} --params '{"param": "value"}'\` to execute\n`;
     } else {
       tips += `• **Run tools**: Use \`ncp run <tool_name> --params '{"param": "value"}'\` to execute\n`;
     }
