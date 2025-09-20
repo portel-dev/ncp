@@ -606,6 +606,20 @@ export class NCPOrchestrator {
   }
 
   /**
+   * Check if a tool requires parameters
+   */
+  toolRequiresParameters(toolIdentifier: string): boolean {
+    const [mcpName, toolName] = toolIdentifier.split(':');
+    if (!mcpName || !toolName) return false;
+
+    const schema = this.getToolSchema(mcpName, toolName);
+    if (!schema || typeof schema !== 'object') return false;
+
+    const required = schema.required || [];
+    return Array.isArray(required) && required.length > 0;
+  }
+
+  /**
    * Get all resources from active MCPs
    */
   async getAllResources(): Promise<Array<any>> {

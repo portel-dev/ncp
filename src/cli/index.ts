@@ -490,15 +490,32 @@ program
 program
   .command('run <tool>')
   .description('Run a specific tool')
-  .option('--params <json>', 'Tool parameters as JSON string (default: {})')
+  .option('--params <json>', 'Tool parameters as JSON string (optional for tools with no required parameters)')
   .action(async (tool, options) => {
     const profileName = program.getOptionValue('profile') || 'all';
-    const parameters = options.params ? JSON.parse(options.params) : {};
 
     const { NCPOrchestrator } = await import('../orchestrator/ncp-orchestrator.js');
     const orchestrator = new NCPOrchestrator(profileName);
 
     await orchestrator.initialize();
+
+    // Check if parameters are provided or if tool requires them
+    let parameters = {};
+    if (options.params) {
+      parameters = JSON.parse(options.params);
+    } else {
+      // If no params provided, check if tool requires them
+      const requiresParams = orchestrator.toolRequiresParameters(tool);
+      if (requiresParams) {
+        console.log(chalk.red('❌ Error: This tool requires parameters'));
+        console.log(chalk.yellow(`💡 Use: ncp run ${tool} --params '{"param": "value"}'`));
+        console.log(chalk.yellow(`💡 Or use: ncp find "${tool}" --depth 2 to see required parameters`));
+        await orchestrator.cleanup();
+        return;
+      }
+      // Tool doesn't require parameters, use empty object
+      parameters = {};
+    }
 
     console.log(chalk.blue(`🚀 Running ${tool}...\n`));
 

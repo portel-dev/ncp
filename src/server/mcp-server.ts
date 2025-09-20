@@ -643,7 +643,11 @@ export class MCPServer {
         }
       }
 
-      tips += `• **Run tools**: Use \`ncp run ${exampleTool.toolName} --params '${exampleParams}'\` to execute\n`;
+      if (exampleParams === '{}') {
+        tips += `• **Run tools**: Use \`ncp run ${exampleTool.toolName}\` to execute (no parameters needed)\n`;
+      } else {
+        tips += `• **Run tools**: Use \`ncp run ${exampleTool.toolName} --params '${exampleParams}'\` to execute\n`;
+      }
     } else if (results.length > 0) {
       // At depth 0-1, show generic example since schemas aren't loaded
       tips += `• **Run tools**: Use \`ncp run ${results[0].toolName} --params '{"param": "value"}'\` to execute\n`;
