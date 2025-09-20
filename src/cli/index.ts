@@ -461,8 +461,8 @@ configCmd
 
 // Find command (existing functionality)
 program
-  .command('find <query>')
-  .description('Find tools matching a query')
+  .command('find [query]')
+  .description('Find tools matching a query or list all tools')
   .option('--limit <number>', 'Maximum number of results (default: 5)')
   .option('--page <number>', 'Page number (default: 1)')
   .option('--depth <number>', 'Display depth: 0=overview, 1=tools, 2=details (default: 2)')
@@ -478,7 +478,7 @@ program
 
     const result = await server.handleFind(
       { jsonrpc: '2.0', id: 'cli', method: 'tools/call' },
-      { description: query, limit, page, depth }
+      { description: query || '', limit, page, depth }
     );
 
     const formattedOutput = formatFindOutput(result.result.content[0].text);
