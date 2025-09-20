@@ -135,69 +135,64 @@ program
 // List command
 program
   .command('list')
-  .description('List all MCPs across profiles')
+  .description('List all profiles and their MCPs')
   .option('--limit <number>', 'Maximum number of items to show (default: 20)')
   .option('--page <number>', 'Page number for pagination (default: 1)')
-  .option('--depth <number>', 'Display depth: 0=MCP names only, 1=MCP names+description, 2=MCP names+description+command (default: 2)')
+  .option('--depth <number>', 'Display depth: 0=profiles only, 1=profiles+MCPs, 2=full details (default: 2)')
   .action(async (options) => {
+    const limit = parseInt(options.limit || '20');
+    const page = parseInt(options.page || '1');
+    const depth = parseInt(options.depth || '2');
+
     const manager = new ProfileManager();
     await manager.initialize();
 
     const profiles = manager.listProfiles();
-    const depth = parseInt(options.depth || '2');
 
     if (profiles.length === 0) {
-      console.log(chalk.yellow('📭 No profiles configured yet'));
-      console.log(chalk.dim('💡 Use: ncp add <name> <command> to add your first MCP server'));
-      console.log(chalk.dim('💡 Use: ncp config import to import from clipboard or file'));
+      console.log(chalk.yellow('📋 No profiles configured'));
+      console.log(chalk.dim('💡 Use: ncp add <name> <command> to add an MCP server'));
       return;
     }
 
-    // Collect all MCPs across profiles
-    const allMCPs = new Map<string, { config: any, profiles: string[] }>();
+    console.log(chalk.bold.white('\n📋 Configured Profiles:\n'));
 
+    let totalMCPs = 0;
     for (const profileName of profiles) {
       const mcps = manager.getProfileMCPs(profileName);
-      if (mcps) {
-        for (const [mcpName, config] of Object.entries(mcps)) {
-          if (allMCPs.has(mcpName)) {
-            allMCPs.get(mcpName)!.profiles.push(profileName);
-          } else {
-            allMCPs.set(mcpName, { config, profiles: [profileName] });
-          }
-        }
-      }
-    }
+      const mcpCount = mcps ? Object.keys(mcps).length : 0;
+      totalMCPs += mcpCount;
 
-    if (allMCPs.size === 0) {
-      console.log(chalk.yellow('📭 No MCPs configured yet'));
-      console.log(chalk.dim('💡 Use: ncp add <name> <command> to add your first MCP server'));
-      return;
-    }
+      // Profile header with count
+      const countBadge = mcpCount > 0 ? chalk.green(`${mcpCount} MCPs`) : chalk.dim('empty');
+      console.log(chalk.blue(`📦 ${chalk.bold(profileName)}`), chalk.dim(`(${countBadge})`));
 
-    console.log(chalk.blue(`🛠️  Found ${allMCPs.size} MCP server(s):\n`));
-
-    const mcpEntries = Array.from(allMCPs.entries());
-    mcpEntries.forEach(([mcpName, { config, profiles }], index) => {
-      const isLast = index === mcpEntries.length - 1;
-      const connector = isLast ? '└──' : '├──';
-
+      // Depth 0: profiles only - skip MCP details
       if (depth === 0) {
-        // MCP names only
-        console.log(chalk.cyan(mcpName));
-      } else if (depth === 1) {
-        // MCP names + description (profiles they're in)
-        console.log(chalk.cyan(mcpName) + chalk.gray(` (in: ${profiles.join(', ')})`));
-      } else {
-        // Full details: MCP name + profiles + command
-        console.log(chalk.cyan(mcpName) + chalk.gray(` (in: ${profiles.join(', ')})`));
-        console.log(chalk.gray('  └── ') + chalk.dim(formatCommandDisplay(config.command, config.args)));
-        if (config.env && Object.keys(config.env).length > 0) {
-          console.log(chalk.gray('      ') + chalk.dim(`env: ${Object.keys(config.env).join(', ')}`));
-        }
-        if (!isLast) console.log('');
+        // Already showing profile, nothing more needed
+      } else if (mcps && Object.keys(mcps).length > 0) {
+        const mcpEntries = Object.entries(mcps);
+        mcpEntries.forEach(([mcpName, config], index) => {
+          const isLast = index === mcpEntries.length - 1;
+          const connector = isLast ? '└──' : '├──';
+          const indent = isLast ? '   ' : '│  ';
+
+          console.log(`  ${connector} ${chalk.green(mcpName)}`);
+
+          // Depth 2: full details - show command details
+          if (depth >= 2) {
+            console.log(`  ${indent} ${chalk.dim(formatCommandDisplay(config.command, config.args))}`);
+          }
+        });
+      } else if (depth > 0) {
+        console.log(chalk.dim('  └── (empty)'));
       }
-    });
+      console.log('');
+    }
+
+    // Summary footer
+    console.log(chalk.dim('─'.repeat(50)));
+    console.log(chalk.bold.white(`📊 Summary: ${profiles.length} profiles, ${totalMCPs} MCPs configured`));
   });
 
 // Remove command
