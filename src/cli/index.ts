@@ -490,7 +490,8 @@ program
 program
   .command('run <tool>')
   .description('Run a specific tool')
-  .option('--params <json>', 'Tool parameters as JSON string (optional for tools with no required parameters)')
+  .option('--params <json>', 'Tool parameters as JSON string (optional - will prompt interactively if not provided)')
+  .option('--no-prompt', 'Skip interactive prompting for missing parameters')
   .action(async (tool, options) => {
     const profileName = program.getOptionValue('profile') || 'all';
 
@@ -499,22 +500,44 @@ program
 
     await orchestrator.initialize();
 
-    // Check if parameters are provided or if tool requires them
+    // Check if parameters are provided
     let parameters = {};
     if (options.params) {
       parameters = JSON.parse(options.params);
     } else {
-      // If no params provided, check if tool requires them
-      const requiresParams = orchestrator.toolRequiresParameters(tool);
-      if (requiresParams) {
-        console.log(chalk.red('❌ Error: This tool requires parameters'));
-        console.log(chalk.yellow(`💡 Use: ncp run ${tool} --params '{"param": "value"}'`));
-        console.log(chalk.yellow(`💡 Or use: ncp find "${tool}" --depth 2 to see required parameters`));
-        await orchestrator.cleanup();
-        return;
+      // Get tool schema and parameters
+      const toolParams = orchestrator.getToolParameters(tool);
+
+      if (toolParams && toolParams.length > 0) {
+        const requiredParams = toolParams.filter(p => p.required);
+
+        if (requiredParams.length > 0 && options.prompt !== false) {
+          // Interactive prompting for parameters (default behavior)
+          const { ParameterPrompter } = await import('../utils/parameter-prompter.js');
+          const { ParameterPredictor } = await import('../server/mcp-server.js');
+
+          const prompter = new ParameterPrompter();
+          const predictor = new ParameterPredictor();
+          const toolContext = orchestrator.getToolContext(tool);
+
+          try {
+            parameters = await prompter.promptForParameters(tool, toolParams, predictor, toolContext);
+            prompter.close();
+          } catch (error) {
+            prompter.close();
+            console.log(chalk.red('❌ Error during parameter input'));
+            await orchestrator.cleanup();
+            return;
+          }
+        } else if (requiredParams.length > 0 && options.prompt === false) {
+          console.log(chalk.red('❌ Error: This tool requires parameters'));
+          console.log(chalk.yellow(`💡 Use: ncp run ${tool} --params '{"param": "value"}'`));
+          console.log(chalk.yellow(`💡 Or use: ncp find "${tool}" --depth 2 to see required parameters`));
+          console.log(chalk.yellow(`💡 Or remove --no-prompt to use interactive prompting`));
+          await orchestrator.cleanup();
+          return;
+        }
       }
-      // Tool doesn't require parameters, use empty object
-      parameters = {};
     }
 
     console.log(chalk.blue(`🚀 Running ${tool}...\n`));

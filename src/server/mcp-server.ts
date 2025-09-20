@@ -646,13 +646,13 @@ export class MCPServer {
       if (exampleParams === '{}') {
         tips += `• **Run tools**: Use \`ncp run ${exampleTool.toolName}\` to execute (no parameters needed)\n`;
       } else {
-        tips += `• **Run tools**: Use \`ncp run ${exampleTool.toolName} --params '${exampleParams}'\` to execute\n`;
+        tips += `• **Run tools**: Use \`ncp run ${exampleTool.toolName}\` (interactive prompts) or \`--params '${exampleParams}'\`\n`;
       }
     } else if (results.length > 0) {
-      // At depth 0-1, schemas aren't loaded so we can't provide meaningful parameter examples
-      tips += `• **Run tools**: Use \`ncp run ${results[0].toolName}\` to execute, or use \`--depth 2\` to see parameters\n`;
+      // At depth 0-1, use interactive prompting
+      tips += `• **Run tools**: Use \`ncp run ${results[0].toolName}\` to execute (interactive prompts for parameters)\n`;
     } else {
-      tips += `• **Run tools**: Use \`ncp run <tool_name>\` to execute, or search with \`--depth 2\` for parameters\n`;
+      tips += `• **Run tools**: Use \`ncp run <tool_name>\` to execute (interactive prompts for parameters)\n`;
     }
 
     // Check for updates (non-blocking)
@@ -968,7 +968,7 @@ export class MCPServer {
   }
 }
 
-class ParameterPredictor {
+export class ParameterPredictor {
   predictValue(paramName: string, paramType: string, toolContext: string, description?: string): any {
     const name = paramName.toLowerCase();
     const desc = (description || '').toLowerCase();

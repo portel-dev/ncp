@@ -620,6 +620,55 @@ export class NCPOrchestrator {
   }
 
   /**
+   * Get tool parameters for interactive prompting
+   */
+  getToolParameters(toolIdentifier: string): Array<{name: string, type: string, required: boolean, description?: string}> {
+    const [mcpName, toolName] = toolIdentifier.split(':');
+    if (!mcpName || !toolName) return [];
+
+    const schema = this.getToolSchema(mcpName, toolName);
+    if (!schema || typeof schema !== 'object') return [];
+
+    const params: Array<{name: string, type: string, required: boolean, description?: string}> = [];
+    const properties = schema.properties || {};
+    const required = schema.required || [];
+
+    for (const [name, prop] of Object.entries(properties)) {
+      const propDef = prop as any;
+      params.push({
+        name,
+        type: propDef.type || 'unknown',
+        required: required.includes(name),
+        description: propDef.description
+      });
+    }
+
+    return params;
+  }
+
+  /**
+   * Get tool context for parameter prediction
+   */
+  getToolContext(toolIdentifier: string): string {
+    const [mcpName] = toolIdentifier.split(':');
+
+    // Map MCP names to contexts
+    const contextMap: Record<string, string> = {
+      'filesystem': 'filesystem',
+      'memory': 'database',
+      'shell': 'system',
+      'sequential-thinking': 'ai',
+      'portel': 'development',
+      'tavily': 'web',
+      'desktop-commander': 'system',
+      'stripe': 'payment',
+      'context7-mcp': 'documentation'
+    };
+
+    return contextMap[mcpName] || 'general';
+  }
+
+  /**
    * Get all resources from active MCPs
    */
   async getAllResources(): Promise<Array<any>> {
