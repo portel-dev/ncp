@@ -117,6 +117,51 @@ export class PersistentRAGEngine {
     
     return inferredDomains;
   }
+
+  /**
+   * Add capability enhancements for reverse domain mapping
+   * Terminal/shell tools should advertise their git, build, and development capabilities
+   */
+  private getCapabilityEnhancements(toolName: string, description: string): string {
+    const enhancements: string[] = [];
+
+    // Terminal/shell tools get comprehensive capability advertisements
+    if (toolName.includes('start_process') ||
+        toolName.includes('run_command') ||
+        description.toLowerCase().includes('terminal') ||
+        description.toLowerCase().includes('shell') ||
+        description.toLowerCase().includes('command line') ||
+        description.toLowerCase().includes('execute')) {
+
+      enhancements.push(
+        // Git capabilities
+        ' Can execute git commands: git commit, git push, git pull, git status, git add, git log, git diff, git branch, git checkout, git merge, git clone.',
+        // Development tool capabilities
+        ' Can run development tools: npm, yarn, bun, pip, cargo, make, build scripts.',
+        // System command capabilities
+        ' Can execute system commands: ls, cd, mkdir, rm, cp, mv, chmod, chown.',
+        // Package manager capabilities
+        ' Can run package managers: apt, brew, yum, pacman.',
+        // Script execution capabilities
+        ' Can execute scripts: bash scripts, python scripts, shell scripts.',
+        // Build and deployment capabilities
+        ' Can run build tools: webpack, vite, rollup, parcel, docker, kubernetes.'
+      );
+    }
+
+    // File management tools get development-related file capabilities
+    if (toolName.includes('read_file') ||
+        toolName.includes('write_file') ||
+        toolName.includes('edit_file')) {
+
+      enhancements.push(
+        ' Can handle development files: package.json, tsconfig.json, .gitignore, README.md, configuration files.'
+      );
+    }
+
+    return enhancements.join('');
+  }
+
   private model: any;
   private vectorDB: Map<string, ToolEmbedding> = new Map();
   private dbPath: string;
@@ -331,7 +376,8 @@ export class PersistentRAGEngine {
           logger.debug(`🧮 Computing embedding for ${toolId}...`);
           try {
             const mcpDomain = this.getMCPDomain(mcpName);
-            const enhancedDescription = `${mcpDomain} context: ${description}`;
+            const capabilityEnhancements = this.getCapabilityEnhancements(tool.name, description);
+            const enhancedDescription = `${mcpDomain} context: ${description}${capabilityEnhancements}`;
             
             const embedding = await this.model(enhancedDescription, { 
               pooling: 'mean', 
@@ -362,7 +408,7 @@ export class PersistentRAGEngine {
             lastUpdated: new Date().toISOString(),
             toolName: tool.name,
             description: description,
-            enhancedDescription: `${mcpDomain} context: ${description}`,
+            enhancedDescription: `${mcpDomain} context: ${description}${this.getCapabilityEnhancements(tool.name, description)}`,
             mcpName: mcpName,
             mcpDomain: mcpDomain
           });
@@ -570,9 +616,20 @@ export class PersistentRAGEngine {
         boost: 3.0
       },
       'git_operations': {
-        tools: ['Shell:run_command'],
-        keywords: ['git', 'commit', 'push', 'pull', 'clone', 'branch', 'merge', 'repository', 'git commit', 'git push', 'git pull', 'git status', 'git add', 'git log', 'git diff', 'git branch', 'git checkout', 'git merge', 'commit changes', 'push to git', 'pull from git', 'check git status', 'add files to git', 'create git branch', 'checkout', 'add', 'status', 'log', 'diff', 'remote', 'fetch', 'rebase', 'stash', 'tag'],
-        boost: 4.5
+        tools: ['Shell:run_command', 'desktop-commander:start_process'],
+        keywords: [
+          // Basic git terms
+          'git', 'commit', 'push', 'pull', 'clone', 'branch', 'merge', 'repository',
+          // Full git commands
+          'git commit', 'git push', 'git pull', 'git status', 'git add', 'git log', 'git diff', 'git branch', 'git checkout', 'git merge',
+          // Hyphenated variants (common in user queries)
+          'git-commit', 'git-push', 'git-pull', 'git-status', 'git-add', 'git-log', 'git-diff', 'git-branch', 'git-checkout', 'git-merge',
+          // Action-oriented phrases
+          'commit changes', 'push to git', 'pull from git', 'check git status', 'add files to git', 'create git branch',
+          // Individual commands (for brevity)
+          'checkout', 'add', 'status', 'log', 'diff', 'remote', 'fetch', 'rebase', 'stash', 'tag'
+        ],
+        boost: 8.0
       },
       'script_execution': {
         tools: ['Shell:run_command'],
@@ -580,8 +637,8 @@ export class PersistentRAGEngine {
         boost: 8.0
       },
       'shell_commands': {
-        tools: ['Shell:run_command'],
-        keywords: ['npm', 'yarn', 'bun', 'pip', 'cargo', 'make', 'ls', 'cd', 'pwd', 'echo', 'mkdir', 'rm', 'cp', 'mv', 'chmod', 'chown', 'apt', 'brew', 'terminal command', 'shell command', 'command line'],
+        tools: ['Shell:run_command', 'desktop-commander:start_process'],
+        keywords: ['npm', 'yarn', 'bun', 'pip', 'cargo', 'make', 'ls', 'cd', 'pwd', 'echo', 'mkdir', 'rm', 'cp', 'mv', 'chmod', 'chown', 'apt', 'brew', 'terminal command', 'shell command', 'command line', 'execute command', 'run command'],
         boost: 4.0
       },
       'ncp_meta_operations': {
@@ -666,7 +723,34 @@ export class PersistentRAGEngine {
         }
       }
     }
-    
+
+    // Apply domain-aware penalties for incidental matches
+    // Tools that mention git but can't actually execute git commands should be deprioritized
+    const incidentalGitPatterns = ['git-style', 'git style', 'git format', 'git diff format'];
+    const actualGitCapabilityTools = ['Shell:run_command', 'desktop-commander:start_process'];
+
+    if (queryLower.includes('git')) {
+      for (const [toolId, data] of scores) {
+        const toolData = this.vectorDB.get(toolId);
+        if (toolData) {
+          const description = toolData.description.toLowerCase();
+          const hasIncidentalMention = incidentalGitPatterns.some(pattern => description.includes(pattern));
+          const hasActualCapability = actualGitCapabilityTools.includes(toolId) ||
+                                     toolData.enhancedDescription?.includes('Can execute git commands');
+
+          if (hasIncidentalMention && !hasActualCapability) {
+            // Significantly reduce score for incidental mentions
+            data.score *= 0.3;
+            data.matches.push('penalty:incidental-git-mention');
+          } else if (hasActualCapability) {
+            // Boost tools with actual git capabilities
+            data.score *= 1.5;
+            data.matches.push('boost:actual-git-capability');
+          }
+        }
+      }
+    }
+
     // Semantic keyword mappings for general matching
     const synonyms: Record<string, string[]> = {
       'create': ['make', 'add', 'new', 'generate', 'build'], // Removed 'write' to avoid confusion

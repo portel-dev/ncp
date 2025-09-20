@@ -51,37 +51,98 @@ const version = packageJson.version;
 
 const program = new Command();
 
-// Custom help configuration with colors
+// Custom help configuration with colors and enhanced content
 program
   .name('ncp')
-  .description(`${chalk.bold('Natural Context Provider')} ${chalk.dim('v' + version)} - ${chalk.cyan('1 MCP to rule them all')}
-
-${chalk.dim('Config Location:')}
-  ${chalk.yellow('NCP Profiles:')} ~/.ncp/profiles/`)
+  .description(`${chalk.bold.white('Natural Context Provider')} ${chalk.dim('v' + version)} - ${chalk.cyan('1 MCP to rule them all')}
+${chalk.dim('Orchestrates multiple MCP servers through a unified interface for AI assistants.')}
+${chalk.dim('Reduces cognitive load and clutter, saving tokens and speeding up AI interactions.')}
+${chalk.dim('Enables smart tool discovery across all configured servers with vector similarity search.')}`)
   .option('--profile <name>', 'Profile to use (default: all)')
   .option('--no-color', 'Disable colored output');
 
-// Configure help with command grouping
+// Configure help with enhanced formatting, Quick Start, and examples
 program.configureHelp({
   sortSubcommands: true,
-  subcommandTerm: (cmd) => {
-    // Group commands by category
-    const managementCommands = ['add', 'remove', 'list', 'config'];
-    const discoveryCommands = ['find'];
-    const executionCommands = ['run'];
+  formatHelp: (cmd, helper) => {
+    // Calculate proper padding based on actual command names (without colors)
+    const allCommands = cmd.commands.filter((cmd: any) => !cmd.hidden);
+    const maxCmdLength = Math.max(
+      ...allCommands.map(cmd => cmd.name().length),
+      ...cmd.options.map(option => option.flags.length)
+    );
+    const pad = maxCmdLength + 4; // Add extra space for alignment
+    const helpWidth = helper.helpWidth || 80;
 
-    if (managementCommands.includes(cmd.name())) {
-      return chalk.cyan(cmd.name());
-    } else if (discoveryCommands.includes(cmd.name())) {
-      return chalk.green(cmd.name());
-    } else if (executionCommands.includes(cmd.name())) {
-      return chalk.yellow(cmd.name());
+    function formatItem(term: string, description?: string): string {
+      if (description) {
+        return term.padEnd(pad) + description;
+      }
+      return term;
     }
-    return cmd.name();
-  },
-  commandUsage: (cmd) => chalk.bold(cmd.name() + ' ' + cmd.usage()),
-  commandDescription: (cmd) => chalk.dim(cmd.description())
+
+    // Add description first
+    let output = cmd.description() + '\n\n';
+
+    // Then usage and config info
+    output += `${chalk.bold.white('Usage:')} ${cmd.name()} [options] [command]\n`;
+    output += `${chalk.yellow('NCP config files:')} ~/.ncp/profiles/\n\n`;
+
+    // Options
+    if (cmd.options.length) {
+      output += chalk.bold.white('Options:') + '\n';
+      cmd.options.forEach(option => {
+        output += formatItem(
+          '  ' + chalk.cyan(option.flags),
+          chalk.white(option.description)
+        ) + '\n';
+      });
+      output += '\n';
+    }
+
+    // Commands
+    const commands = cmd.commands.filter((cmd: any) => !cmd.hidden);
+    if (commands.length) {
+      output += chalk.bold.white('Commands:') + '\n';
+      commands.sort((a, b) => a.name().localeCompare(b.name()));
+
+      commands.forEach(cmd => {
+        // Group commands by category with enhanced styling
+        const managementCommands = ['add', 'remove', 'list', 'config'];
+        const discoveryCommands = ['find'];
+        const executionCommands = ['run'];
+
+        let cmdName = cmd.name();
+        if (managementCommands.includes(cmd.name())) {
+          cmdName = chalk.cyan(cmd.name());
+        } else if (discoveryCommands.includes(cmd.name())) {
+          cmdName = chalk.green.bold(cmd.name());
+        } else if (executionCommands.includes(cmd.name())) {
+          cmdName = chalk.yellow.bold(cmd.name());
+        }
+
+        output += formatItem(
+          '  ' + cmdName,
+          chalk.white(cmd.description())
+        ) + '\n';
+      });
+    }
+
+    return output;
+  }
 });
+
+// Add Quick Start and Examples after all commands are defined
+program.addHelpText('after', `
+${chalk.bold.white('Quick Start:')}
+  ${chalk.cyan('1')} Add your MCPs with ${chalk.green('ncp add')}
+  ${chalk.cyan('2')} Configure NCP in AI client settings
+
+${chalk.bold.white('Examples:')}
+  $ ${chalk.yellow('ncp find "file operations"')}
+  $ ${chalk.yellow('ncp add filesystem npx @modelcontextprotocol/server-filesystem /tmp')}
+  $ ${chalk.yellow('ncp run filesystem:read_file --params \'{"path": "/tmp/example.txt"}\'')}
+  $ ${chalk.yellow('ncp list --depth 1')}`);
 
 // Check if we should run as MCP server
 // MCP server mode: ncp --profile <name> (no other commands)
@@ -443,6 +504,47 @@ program
     const orchestrator = new NCPOrchestrator(profileName);
 
     await orchestrator.initialize();
+
+    // If tool doesn't contain a colon, try to find matching tools first
+    if (!tool.includes(':')) {
+      console.log(chalk.dim(`🔍 Searching for tools matching "${tool}"...`));
+
+      try {
+        const matchingTools = await orchestrator.find(tool, 5, false);
+
+        if (matchingTools.length === 0) {
+          console.log(OutputFormatter.error(`No tools found matching "${tool}"`));
+          console.log(chalk.yellow('💡 Try \'ncp find\' to explore all available tools'));
+          await orchestrator.cleanup();
+          return;
+        }
+
+        if (matchingTools.length === 1) {
+          // Only one match, use it automatically
+          const matchedTool = matchingTools[0];
+          tool = matchedTool.toolName;
+          console.log(chalk.green(`✅ Found exact match: ${tool}`));
+        } else {
+          // Multiple matches, show them and ask user to be more specific
+          console.log(chalk.yellow(`Found ${matchingTools.length} matching tools:`));
+          matchingTools.forEach((match, index) => {
+            const confidence = Math.round(match.confidence * 100);
+            console.log(`  ${index + 1}. ${chalk.cyan(match.toolName)} (${confidence}% match)`);
+            if (match.description) {
+              console.log(`     ${chalk.dim(match.description)}`);
+            }
+          });
+          console.log(chalk.yellow('\n💡 Please specify the exact tool name from the list above'));
+          console.log(chalk.yellow(`💡 Example: ncp run ${matchingTools[0].toolName}`));
+          await orchestrator.cleanup();
+          return;
+        }
+      } catch (error: any) {
+        console.log(OutputFormatter.error(`Error searching for tools: ${error.message}`));
+        await orchestrator.cleanup();
+        return;
+      }
+    }
 
     // Check if parameters are provided
     let parameters = {};
