@@ -439,33 +439,39 @@ export class MCPServer {
       return '{}';
     }
 
+    const predictor = new ParameterPredictor();
+    const toolContext = this.getToolContext(tool.toolName);
     const exampleObj: any = {};
+
     for (const param of requiredParams) {
-      switch (param.type) {
-        case 'string':
-          if (param.name.includes('path') || param.name.includes('file')) {
-            exampleObj[param.name] = '/path/to/file';
-          } else if (param.name.includes('url')) {
-            exampleObj[param.name] = 'https://example.com';
-          } else {
-            exampleObj[param.name] = 'example';
-          }
-          break;
-        case 'number':
-          exampleObj[param.name] = param.name.includes('pid') ? 1234 : 10;
-          break;
-        case 'boolean':
-          exampleObj[param.name] = true;
-          break;
-        case 'array':
-          exampleObj[param.name] = ['item1', 'item2'];
-          break;
-        default:
-          exampleObj[param.name] = 'value';
-      }
+      exampleObj[param.name] = predictor.predictValue(
+        param.name,
+        param.type,
+        toolContext,
+        param.description
+      );
     }
 
     return JSON.stringify(exampleObj);
+  }
+
+  private getToolContext(toolName: string): string {
+    const [mcp] = toolName.split(':');
+
+    // Map MCP names to contexts
+    const contextMap: Record<string, string> = {
+      'filesystem': 'filesystem',
+      'memory': 'database',
+      'shell': 'system',
+      'sequential-thinking': 'ai',
+      'portel': 'development',
+      'tavily': 'web',
+      'desktop-commander': 'system',
+      'stripe': 'payment',
+      'context7-mcp': 'documentation'
+    };
+
+    return contextMap[mcp] || 'general';
   }
 
   private parseParameters(schema: any): Array<{name: string, type: string, required: boolean, description?: string}> {
@@ -926,6 +932,189 @@ export class MCPServer {
     process.stdin.on('end', () => {
       this.shutdown();
     });
+  }
+}
+
+class ParameterPredictor {
+  predictValue(paramName: string, paramType: string, toolContext: string, description?: string): any {
+    const name = paramName.toLowerCase();
+    const desc = (description || '').toLowerCase();
+
+    // String type predictions
+    if (paramType === 'string') {
+      return this.predictStringValue(name, desc, toolContext);
+    }
+
+    // Number type predictions
+    if (paramType === 'number' || paramType === 'integer') {
+      return this.predictNumberValue(name, desc, toolContext);
+    }
+
+    // Boolean type predictions
+    if (paramType === 'boolean') {
+      return this.predictBooleanValue(name, desc);
+    }
+
+    // Array type predictions
+    if (paramType === 'array') {
+      return this.predictArrayValue(name, desc, toolContext);
+    }
+
+    // Object type predictions
+    if (paramType === 'object') {
+      return this.predictObjectValue(name, desc);
+    }
+
+    // Default fallback
+    return this.getDefaultForType(paramType);
+  }
+
+  private predictStringValue(name: string, desc: string, context: string): string {
+    // File and path patterns
+    if (name.includes('path') || name.includes('file') || desc.includes('path') || desc.includes('file')) {
+      if (context === 'filesystem') {
+        if (name.includes('dir') || desc.includes('directory')) {
+          return '/home/user/documents';
+        }
+        if (name.includes('config') || desc.includes('config')) {
+          return '/etc/config.json';
+        }
+        return '/home/user/document.txt';
+      }
+      return './file.txt';
+    }
+
+    // URL patterns
+    if (name.includes('url') || name.includes('link') || desc.includes('url') || desc.includes('http')) {
+      if (context === 'web') {
+        return 'https://api.example.com/data';
+      }
+      return 'https://example.com';
+    }
+
+    // Email patterns
+    if (name.includes('email') || name.includes('mail') || desc.includes('email')) {
+      return 'user@example.com';
+    }
+
+    // Name patterns
+    if (name.includes('name') || name === 'title' || name === 'label') {
+      if (context === 'filesystem') {
+        return 'my-file';
+      }
+      return 'example-name';
+    }
+
+    // Content/text patterns
+    if (name.includes('content') || name.includes('text') || name.includes('message') || name.includes('body')) {
+      return 'Hello, world!';
+    }
+
+    // Query/search patterns
+    if (name.includes('query') || name.includes('search') || name.includes('term')) {
+      return 'search term';
+    }
+
+    // Key/ID patterns
+    if (name.includes('key') || name.includes('id') || name.includes('token')) {
+      if (context === 'payment') {
+        return 'sk_test_...';
+      }
+      return 'abc123';
+    }
+
+    // Command patterns
+    if (name.includes('command') || name.includes('cmd')) {
+      if (context === 'system') {
+        return 'ls -la';
+      }
+      return 'echo hello';
+    }
+
+    // Default string
+    return 'example';
+  }
+
+  private predictNumberValue(name: string, desc: string, context: string): number {
+    // Process ID patterns
+    if (name.includes('pid') || desc.includes('process') || desc.includes('pid')) {
+      return 1234;
+    }
+
+    // Port patterns
+    if (name.includes('port') || desc.includes('port')) {
+      return 8080;
+    }
+
+    // Size/length patterns
+    if (name.includes('size') || name.includes('length') || name.includes('limit') || name.includes('count')) {
+      return 10;
+    }
+
+    // Line number patterns
+    if (name.includes('line') || name.includes('head') || name.includes('tail')) {
+      return 5;
+    }
+
+    // Timeout patterns
+    if (name.includes('timeout') || name.includes('delay') || desc.includes('timeout')) {
+      return 5000;
+    }
+
+    // Default number
+    return 1;
+  }
+
+  private predictBooleanValue(name: string, desc: string): boolean {
+    // Negative patterns default to false
+    if (name.includes('disable') || name.includes('skip') || name.includes('ignore')) {
+      return false;
+    }
+
+    // Most booleans default to true for examples
+    return true;
+  }
+
+  private predictArrayValue(name: string, desc: string, context: string): any[] {
+    // File paths array
+    if (name.includes('path') || name.includes('file') || desc.includes('path')) {
+      return ['/path/to/file1.txt', '/path/to/file2.txt'];
+    }
+
+    // Arguments array
+    if (name.includes('arg') || name.includes('param') || desc.includes('argument')) {
+      return ['--verbose', '--output', 'result.txt'];
+    }
+
+    // Tags/keywords
+    if (name.includes('tag') || name.includes('keyword') || name.includes('label')) {
+      return ['tag1', 'tag2'];
+    }
+
+    // Default array
+    return ['item1', 'item2'];
+  }
+
+  private predictObjectValue(name: string, desc: string): object {
+    // Options/config object
+    if (name.includes('option') || name.includes('config') || name.includes('setting')) {
+      return { enabled: true, timeout: 5000 };
+    }
+
+    // Default object
+    return { key: 'value' };
+  }
+
+  private getDefaultForType(type: string): any {
+    switch (type) {
+      case 'string': return 'value';
+      case 'number':
+      case 'integer': return 0;
+      case 'boolean': return true;
+      case 'array': return [];
+      case 'object': return {};
+      default: return null;
+    }
   }
 }
 
