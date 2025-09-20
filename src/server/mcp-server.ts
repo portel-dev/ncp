@@ -431,52 +431,6 @@ export class MCPServer {
     });
   }
 
-
-
-  private formatSchema(schema: any): string {
-    // Use commercial NCP's battle-tested parameter formatting
-    if (!schema || typeof schema !== 'object') {
-      return "none";
-    }
-
-    const { type, properties, required = [] } = schema;
-
-    if (!properties || typeof properties !== 'object') {
-      return "none";
-    }
-
-    const paramLines: string[] = [];
-
-    // Group parameters by required/optional (commercial approach)
-    const requiredParams: string[] = [];
-    const optionalParams: string[] = [];
-
-    for (const [name, paramSchema] of Object.entries(properties)) {
-      const isRequired = required.includes(name);
-      const ps = paramSchema as any;
-      const paramType = ps.type || 'any';
-      const description = ps.description || '';
-
-      const paramString = `${name} (${paramType})${description ? ': ' + description.split('.')[0] : ''}`;
-
-      if (isRequired) {
-        requiredParams.push(paramString);
-      } else {
-        optionalParams.push(paramString);
-      }
-    }
-
-    if (requiredParams.length > 0) {
-      paramLines.push('Required: ' + requiredParams.join(', '));
-    }
-
-    if (optionalParams.length > 0) {
-      paramLines.push('Optional: ' + optionalParams.join(', '));
-    }
-
-    return paramLines.length > 0 ? paramLines.join(' | ') : "none";
-  }
-
   private getSuggestions(input: string, validOptions: string[]): string[] {
     const inputLower = input.toLowerCase();
     return validOptions.filter(option => {
