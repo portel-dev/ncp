@@ -8,6 +8,7 @@ import { logger } from '../utils/logger.js';
 import { updater } from '../utils/updater.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
+import { ToolFinder } from '../services/tool-finder.js';
 
 interface MCPRequest {
   jsonrpc: string;
@@ -251,49 +252,26 @@ export class MCPServer {
     const description = args?.description || '';
     const page = Math.max(1, args?.page || 1);
     const limit = args?.limit || (description ? 5 : 20);
-    const depth = args?.depth !== undefined ? Math.max(0, Math.min(2, args.depth)) : 2; // Tree depth: 0=MCPs, 1=MCPs+Tools, 2=Full Details (default: 2 for AI-friendly experience)
+    const depth = args?.depth !== undefined ? Math.max(0, Math.min(2, args.depth)) : 2;
 
-    // Detect MCP-specific search (e.g., "portel" -> show only portel tools)
-    const mcpFilter = this.detectMCPFilter(description);
-
-    // Get all results first for pagination calculation
-    // For MCP filters, get all tools then filter. For semantic search, use the description.
-    const searchQuery = mcpFilter ? '' : description;
-    const allResults = await this.orchestrator.find(searchQuery, 1000, depth >= 1);
-
-    // Apply MCP filtering if detected
-    const filteredResults = mcpFilter ?
-      allResults.filter(r => r.mcpName.toLowerCase() === mcpFilter.toLowerCase()) :
-      allResults;
-
-    // Calculate pagination
-    const totalResults = filteredResults.length;
-    const totalPages = Math.ceil(totalResults / limit);
-    const startIndex = (page - 1) * limit;
-    const endIndex = Math.min(startIndex + limit, totalResults);
-    const results = filteredResults.slice(startIndex, endIndex);
-
-    // Group results by MCP
-    const mcpGroups: Record<string, Array<{toolName: string, confidence: number, description?: string, schema?: any}>> = {};
-    results.forEach(result => {
-      if (!mcpGroups[result.mcpName]) {
-        mcpGroups[result.mcpName] = [];
-      }
-      mcpGroups[result.mcpName].push({
-        toolName: result.toolName,
-        confidence: result.confidence,
-        description: result.description,
-        schema: result.schema
-      });
+    // Use ToolFinder service for search logic
+    const finder = new ToolFinder(this.orchestrator);
+    const findResult = await finder.find({
+      query: description,
+      page,
+      limit,
+      depth
     });
+
+    const { tools: results, groupedByMCP: mcpGroups, pagination, mcpFilter, isListing } = findResult;
 
     const queryText = description ? `"${description}"` : 'all available tools';
     const filterText = mcpFilter ? ` (filtered to ${mcpFilter})` : '';
 
     // Enhanced pagination display
-    const paginationInfo = totalPages > 1 ?
-      ` | Page ${page} of ${totalPages} (showing ${results.length} of ${totalResults} results)` :
-      ` (${totalResults} results)`;
+    const paginationInfo = pagination.totalPages > 1 ?
+      ` | Page ${pagination.page} of ${pagination.totalPages} (showing ${pagination.resultsInPage} of ${pagination.totalResults} results)` :
+      ` (${pagination.totalResults} results)`;
 
     let output = `🔍 Found tools for ${queryText}${filterText}${paginationInfo}:\n\n`;
 
@@ -302,13 +280,12 @@ export class MCPServer {
       output = `❌ No tools found for "${description}"\n\n`;
 
       // Show sample of available MCPs
-      const sampleTools = await this.orchestrator.find('', 8);
-      const sampleMCPs = [...new Set(sampleTools.map(t => t.mcpName))];
+      const samples = await finder.getSampleTools(8);
 
-      if (sampleMCPs.length > 0) {
+      if (samples.length > 0) {
         output += `📝 Available MCPs to explore:\n`;
-        sampleMCPs.forEach(mcpName => {
-          output += `📁 **${mcpName}** - ${this.getMCPDescription(mcpName)}\n`;
+        samples.forEach(sample => {
+          output += `📁 **${sample.mcpName}** - ${sample.description}\n`;
         });
         output += `\n💡 *Try broader search terms or specify an MCP name in your query.*`;
       }
@@ -321,9 +298,6 @@ export class MCPServer {
         }
       };
     }
-
-    // Check if this is a listing (no query) or search (with query)
-    const isListing = !description || description.trim() === '';
 
     // Format output based on depth and mode
     if (depth === 0) {
@@ -414,7 +388,7 @@ export class MCPServer {
     output += '\n';
 
     // Add comprehensive usage guidance
-    output += await this.generateUsageTips(depth, page, totalPages, limit, totalResults, description, mcpFilter, results);
+    output += await this.generateUsageTips(depth, pagination.page, pagination.totalPages, limit, pagination.totalResults, description, mcpFilter, results);
 
     return {
       jsonrpc: '2.0',
@@ -521,38 +495,6 @@ export class MCPServer {
     ).join('');
   }
 
-  private getMCPDescription(mcpName: string): string {
-    const descriptions: Record<string, string> = {
-      'filesystem': 'File and directory operations',
-      'memory': 'Knowledge graph and entity storage',
-      'shell': 'System command execution',
-      'sequential-thinking': 'Step-by-step reasoning and analysis',
-      'portel': 'Code analysis and development tools',
-      'tavily': 'Web search and information retrieval',
-      'stripe': 'Payment processing and billing',
-      'context7-mcp': 'Documentation and library context',
-      'desktop-commander': 'Desktop automation and control'
-    };
-    return descriptions[mcpName] || 'MCP server tools';
-  }
-
-  private detectMCPFilter(description: string): string | null {
-    if (!description) return null;
-
-    // Get list of available MCPs from the descriptions
-    const availableMCPs = ['filesystem', 'memory', 'shell', 'sequential-thinking', 'portel', 'tavily', 'stripe', 'context7-mcp', 'desktop-commander'];
-
-    // Check if description is exactly an MCP name or starts with MCP name
-    const lowerDesc = description.toLowerCase().trim();
-
-    for (const mcpName of availableMCPs) {
-      if (lowerDesc === mcpName.toLowerCase() || lowerDesc.startsWith(mcpName.toLowerCase() + ' ')) {
-        return mcpName;
-      }
-    }
-
-    return null;
-  }
 
   private async generateUsageTips(depth: number, page: number, totalPages: number, limit: number, totalResults: number, description: string, mcpFilter: string | null, results: any[] = []): Promise<string> {
     let tips = '\n\n💡 **Usage Tips**:\n';
