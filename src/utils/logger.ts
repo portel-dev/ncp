@@ -13,9 +13,9 @@ export class Logger {
   private debugMode: boolean = false;
 
   private constructor() {
-    // Check if running CLI commands (find, run, etc.)
+    // Check if running CLI commands (list, find, run, add, remove, config, etc.)
     this.isCLIMode = process.argv.some(arg =>
-      arg === '--find' || arg === '--run' || arg === '--help'
+      ['list', 'find', 'run', 'add', 'remove', 'config', '--help'].includes(arg)
     );
 
     // Detect if running as MCP server (no CLI commands and either explicit --server or no args)

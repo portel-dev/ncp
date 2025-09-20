@@ -138,7 +138,7 @@ program
   .description('List all profiles and their MCPs')
   .option('--limit <number>', 'Maximum number of items to show (default: 20)')
   .option('--page <number>', 'Page number for pagination (default: 1)')
-  .option('--depth <number>', 'Display depth: 0=profiles only, 1=profiles+MCPs, 2=full details (default: 2)')
+  .option('--depth <number>', 'Display depth: 0=profiles only, 1=profiles+MCPs+description, 2=profiles+MCPs+description+tools (default: 2)')
   .action(async (options) => {
     const limit = parseInt(options.limit || '20');
     const page = parseInt(options.page || '1');
@@ -155,6 +155,39 @@ program
       return;
     }
 
+    // Initialize orchestrator to get MCP descriptions and tool counts if needed
+    let orchestrator;
+    let mcpDescriptions: Record<string, string> = {};
+    let mcpToolCounts: Record<string, number> = {};
+
+    if (depth >= 1) {
+      try {
+        const { NCPOrchestrator } = await import('../orchestrator/ncp-orchestrator.js');
+        orchestrator = new NCPOrchestrator('all'); // Use 'all' profile to get all MCPs
+        await orchestrator.initialize();
+
+        // Get descriptions and tool counts
+        const allTools = await orchestrator.find('', 1000, false); // Get all tools without details
+        const mcpStats: Record<string, { description: string, toolCount: number }> = {};
+
+        for (const tool of allTools) {
+          if (!mcpStats[tool.mcpName]) {
+            mcpStats[tool.mcpName] = { description: '', toolCount: 0 };
+          }
+          mcpStats[tool.mcpName].toolCount++;
+        }
+
+        // Generate descriptions based on MCP names
+        for (const mcpName of Object.keys(mcpStats)) {
+          mcpDescriptions[mcpName] = getMCPDescription(mcpName);
+          mcpToolCounts[mcpName] = mcpStats[mcpName].toolCount;
+        }
+      } catch (error) {
+        // If orchestrator fails, continue without descriptions
+        console.log(chalk.dim('Note: Could not load MCP descriptions and tool counts'));
+      }
+    }
+
     console.log(chalk.bold.white('\n📋 Configured Profiles:\n'));
 
     let totalMCPs = 0;
@@ -165,7 +198,7 @@ program
 
       // Profile header with count
       const countBadge = mcpCount > 0 ? chalk.green(`${mcpCount} MCPs`) : chalk.dim('empty');
-      console.log(chalk.blue(`📦 ${chalk.bold(profileName)}`), chalk.dim(`(${countBadge})`));
+      console.log(`📦 ${chalk.bold.white(profileName)}`, chalk.dim(`(${countBadge})`));
 
       // Depth 0: profiles only - skip MCP details
       if (depth === 0) {
@@ -177,11 +210,23 @@ program
           const connector = isLast ? '└──' : '├──';
           const indent = isLast ? '   ' : '│  ';
 
-          console.log(`  ${connector} ${chalk.green(mcpName)}`);
+          // MCP name with tool count (following profile count style)
+          const toolCount = mcpToolCounts[mcpName];
+          const toolBadge = toolCount !== undefined ? chalk.dim(` (${chalk.green(`${toolCount} tools`)})`) : '';
+          console.log(`  ${connector} ${chalk.bold.cyanBright(mcpName)}${toolBadge}`);
 
-          // Depth 2: full details - show command details
+          // Depth 1+: Show description
+          if (depth >= 1) {
+            const description = mcpDescriptions[mcpName] || 'MCP server';
+            console.log(`  ${indent} ${chalk.white(description)}`);
+          }
+
+          // Depth 2: Show command with reverse colors and text wrapping
           if (depth >= 2) {
-            console.log(`  ${indent} ${chalk.dim(formatCommandDisplay(config.command, config.args))}`);
+            const commandText = formatCommandDisplay(config.command, config.args);
+            const maxWidth = process.stdout.columns ? process.stdout.columns - 6 : 80; // Leave space for indentation
+            const wrappedLines = wrapTextWithBackgroundIndent(commandText, maxWidth, `  ${indent} `);
+            console.log(wrappedLines);
           }
         });
       } else if (depth > 0) {
@@ -190,10 +235,167 @@ program
       console.log('');
     }
 
+    // Cleanup orchestrator
+    if (orchestrator) {
+      await orchestrator.cleanup();
+    }
+
     // Summary footer
     console.log(chalk.dim('─'.repeat(50)));
     console.log(chalk.bold.white(`📊 Summary: ${profiles.length} profiles, ${totalMCPs} MCPs configured`));
   });
+
+// Helper function to wrap text with proper indentation
+function wrapText(text: string, maxWidth: number, indent: string = ''): string {
+  if (text.length <= maxWidth) {
+    return text;
+  }
+
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+
+    if (testLine.length <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        // Single word is longer than maxWidth, just use it
+        lines.push(word);
+      }
+    }
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  // Join lines with proper indentation for continuation lines
+  return lines.map((line, index) =>
+    index === 0 ? line : `\n${indent}${line}`
+  ).join('');
+}
+
+// Helper function to format find command output with consistent color scheme
+function formatFindOutput(text: string): string {
+  return text
+    // Tool names in headers: # **toolname** -> bold light blue
+    .replace(/^# \*\*([^*]+)\*\*/gm, (match, toolName) => chalk.bold.cyanBright(toolName))
+    // Parameters: ### param: type (optional) - description
+    .replace(/^### ([^:]+): (.+)$/gm, (match, param, rest) => {
+      // Handle: type (optional) - description
+      const optionalDescMatch = rest.match(/^(.+?)\s+\*\(optional\)\*\s*-\s*(.+)$/);
+      if (optionalDescMatch) {
+        return `${chalk.yellow(param)}: ${chalk.cyan(optionalDescMatch[1])} ${chalk.dim('(optional)')} - ${chalk.white(optionalDescMatch[2])}`;
+      }
+
+      // Handle: type - description
+      const descMatch = rest.match(/^(.+?)\s*-\s*(.+)$/);
+      if (descMatch) {
+        return `${chalk.yellow(param)}: ${chalk.cyan(descMatch[1])} - ${chalk.white(descMatch[2])}`;
+      }
+
+      // Handle: type (optional)
+      const optionalMatch = rest.match(/^(.+)\s+\*\(optional\)\*$/);
+      if (optionalMatch) {
+        return `${chalk.yellow(param)}: ${chalk.cyan(optionalMatch[1])} ${chalk.dim('(optional)')}`;
+      }
+
+      // Handle: type only
+      return `${chalk.yellow(param)}: ${chalk.cyan(rest)}`;
+    })
+    // Parameter descriptions: #### description -> dim
+    .replace(/^#### (.+)$/gm, (match, desc) => chalk.dim(desc))
+    // Separators: --- -> dim
+    .replace(/^---$/gm, chalk.dim('---'))
+    // Bold text in general: **text** -> bold for tool names in lists
+    .replace(/\*\*([^*]+)\*\*/g, (match, text) => {
+      // Check if it's a tool name (contains colon)
+      if (text.includes(':')) {
+        return chalk.bold.cyanBright(text);
+      } else {
+        // MCP name or other bold text
+        return chalk.bold(text);
+      }
+    })
+    // [no parameters] -> dim
+    .replace(/\*\[no parameters\]\*/g, chalk.dim('[no parameters]'))
+    // Italic text: *text* -> dim for tips
+    .replace(/\*([^*\[]+)\*/g, (match, text) => chalk.dim(text))
+    // Confidence percentages: (XX% match) -> green percentage
+    .replace(/\((\d+)% match\)/g, (match, percentage) => chalk.dim(`(${chalk.green(percentage + '%')} match)`))
+    // Header search results - make query bold white
+    .replace(/Found tools for "([^"]+)"/g, (match, query) => `Found tools for ${chalk.bold.white(`"${query}"`)}`)
+    // No results message
+    .replace(/❌ No tools found for "([^"]+)"/g, (match, query) => `❌ No tools found for ${chalk.bold.white(`"${query}"`)}`)
+    // Usage tips
+    .replace(/^💡 (.+)$/gm, (match, tip) => `💡 ${chalk.white(tip)}`);
+}
+
+// Helper function to wrap text with background color applied to each line including indentation
+function wrapTextWithBackgroundIndent(text: string, maxWidth: number, indent: string): string {
+  if (text.length <= maxWidth) {
+    return `${indent}${chalk.bgGray.black(text)}`;
+  }
+
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+
+    if (testLine.length <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      if (currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        // Single word is longer than maxWidth, just use it
+        lines.push(word);
+      }
+    }
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  // Apply background color to each line with proper indentation
+  return lines.map((line, index) =>
+    `${indent}${chalk.bgGray.black(line)}`
+  ).join('\n');
+}
+
+// Helper function to get MCP descriptions
+function getMCPDescription(mcpName: string): string {
+  const descriptions: Record<string, string> = {
+    'filesystem': 'File and directory operations',
+    'memory': 'Persistent memory and note-taking',
+    'sequential-thinking': 'Step-by-step reasoning and analysis',
+    'shell': 'System shell command execution',
+    'portel': 'Portel integration and tools',
+    'tavily': 'Web search and research',
+    'desktop-commander': 'Desktop automation and control',
+    'stripe': 'Payment processing and Stripe API',
+    'context7-mcp': 'Context7 documentation and library access',
+    'github': 'GitHub repository operations',
+    'git': 'Git version control operations',
+    'database': 'Database operations and queries',
+    'web-search': 'Web search and information retrieval',
+    'demo-fs': 'Demo filesystem operations',
+    'demo-web': 'Demo web search functionality',
+    'test-mcp2': 'Test MCP server'
+  };
+
+  return descriptions[mcpName] || 'MCP server';
+}
 
 // Remove command
 program
@@ -279,7 +481,8 @@ program
       { description: query, limit, page, depth }
     );
 
-    console.log(result.result.content[0].text);
+    const formattedOutput = formatFindOutput(result.result.content[0].text);
+    console.log(formattedOutput);
     await server.cleanup();
   });
 

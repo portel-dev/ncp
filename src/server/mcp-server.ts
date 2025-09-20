@@ -257,7 +257,7 @@ export class MCPServer {
     // Get all results first for pagination calculation
     // For MCP filters, get all tools then filter. For semantic search, use the description.
     const searchQuery = mcpFilter ? '' : description;
-    const allResults = await this.orchestrator.find(searchQuery, 1000, depth >= 2);
+    const allResults = await this.orchestrator.find(searchQuery, 1000, depth >= 1);
 
     // Apply MCP filtering if detected
     const filteredResults = mcpFilter ?
@@ -320,51 +320,96 @@ export class MCPServer {
       };
     }
 
-    // Tree depth-based hierarchical display
+    // Check if this is a listing (no query) or search (with query)
+    const isListing = !description || description.trim() === '';
+
+    // Format output based on depth and mode
     if (depth === 0) {
-      // Depth 0: MCPs only (root level)
+      // Depth 0: Tool names only (no parameters, no descriptions)
       Object.entries(mcpGroups).forEach(([mcpName, tools]) => {
-        output += `📁 **${mcpName}** (${tools.length} tools)\n`;
-      });
-      output += `\n💡 *Use --depth 1 to see tools, or search with MCP name (e.g., 'filesystem') to explore specific MCP*`;
-    } else if (depth === 1) {
-      // Depth 1: MCPs + Tools (branch level)
-      Object.entries(mcpGroups).forEach(([mcpName, tools]) => {
-        const mcpDescription = this.getMCPDescription(mcpName);
-        output += `📁 **${mcpName}** - ${mcpDescription}\n`;
-
-        tools.forEach((tool, index) => {
-          const confidence = Math.round(tool.confidence * 100);
-          const isLast = index === tools.length - 1;
-          const connector = isLast ? '└──' : '├──';
-          output += `${connector} ${tool.toolName} (${confidence}%)\n`;
-        });
-        output += '\n';
-      });
-      output += `💡 *Default depth=2 shows full parameter details. Use depth=0 for quick MCP overview*`;
-    } else {
-      // Depth 2: Full details (leaf level)
-      Object.entries(mcpGroups).forEach(([mcpName, tools]) => {
-        const mcpDescription = this.getMCPDescription(mcpName);
-        output += `📁 **${mcpName}** - ${mcpDescription}\n`;
-
-        tools.forEach((tool, index) => {
-          const confidence = Math.round(tool.confidence * 100);
-          const isLast = index === tools.length - 1;
-          const connector = isLast ? '└──' : '├──';
-          const hasSchema = tool.description && tool.schema;
-
-          if (hasSchema) {
-            output += `${connector} **${tool.toolName}** (${confidence}%) - ${tool.description}\n`;
-            const indent = isLast ? '    ' : '│   ';
-            output += `${indent}📋 Parameters: ${this.formatSchema(tool.schema)}\n`;
+        tools.forEach((tool) => {
+          if (isListing) {
+            output += `# **${tool.toolName}**\n`;
           } else {
-            output += `${connector} ${tool.toolName} (${confidence}%)\n`;
+            const confidence = Math.round(tool.confidence * 100);
+            output += `# **${tool.toolName}** (${confidence}% match)\n`;
           }
         });
-        output += '\n';
+      });
+    } else if (depth === 1) {
+      // Depth 1: Tool name + description only (no parameters)
+      let toolIndex = 0;
+      Object.entries(mcpGroups).forEach(([mcpName, tools]) => {
+        tools.forEach((tool) => {
+          if (toolIndex > 0) output += '---\n';
+
+          // Tool name
+          if (isListing) {
+            output += `# **${tool.toolName}**\n`;
+          } else {
+            const confidence = Math.round(tool.confidence * 100);
+            output += `# **${tool.toolName}** (${confidence}% match)\n`;
+          }
+
+          // Tool description
+          if (tool.description) {
+            const cleanDescription = tool.description
+              .replace(/^[^:]+:\s*/, '') // Remove MCP prefix
+              .replace(/\s+/g, ' ') // Normalize whitespace
+              .trim();
+            output += `${cleanDescription}\n`;
+          }
+
+          // No parameters at depth 1
+
+          toolIndex++;
+        });
+      });
+    } else {
+      // Depth 2: Full details with parameter descriptions
+      let toolIndex = 0;
+      Object.entries(mcpGroups).forEach(([mcpName, tools]) => {
+        tools.forEach((tool) => {
+          if (toolIndex > 0) output += '---\n';
+
+          // Tool name
+          if (isListing) {
+            output += `# **${tool.toolName}**\n`;
+          } else {
+            const confidence = Math.round(tool.confidence * 100);
+            output += `# **${tool.toolName}** (${confidence}% match)\n`;
+          }
+
+          // Tool description
+          if (tool.description) {
+            const cleanDescription = tool.description
+              .replace(/^[^:]+:\s*/, '') // Remove MCP prefix
+              .replace(/\s+/g, ' ') // Normalize whitespace
+              .trim();
+            output += `${cleanDescription}\n`;
+          }
+
+          // Parameters with descriptions inline
+          if (tool.schema) {
+            const params = this.parseParameters(tool.schema);
+            if (params.length > 0) {
+              params.forEach(param => {
+                const optionalText = param.required ? '' : ' *(optional)*';
+                const descText = param.description ? ` - ${param.description}` : '';
+                output += `### ${param.name}: ${param.type}${optionalText}${descText}\n`;
+              });
+            } else {
+              output += `*[no parameters]*\n`;
+            }
+          } else {
+            output += `*[no parameters]*\n`;
+          }
+
+          toolIndex++;
+        });
       });
     }
+    output += '\n';
 
     // Add comprehensive usage guidance
     output += await this.generateUsageTips(depth, page, totalPages, limit, totalResults, description, mcpFilter);
@@ -379,6 +424,75 @@ export class MCPServer {
         }]
       }
     };
+  }
+
+
+  private parseParameters(schema: any): Array<{name: string, type: string, required: boolean, description?: string}> {
+    const params: Array<{name: string, type: string, required: boolean, description?: string}> = [];
+
+    if (!schema || typeof schema !== 'object') {
+      return params;
+    }
+
+    const properties = schema.properties || {};
+    const required = schema.required || [];
+
+    for (const [name, prop] of Object.entries(properties)) {
+      const propDef = prop as any;
+      params.push({
+        name,
+        type: propDef.type || 'unknown',
+        required: required.includes(name),
+        description: propDef.description
+      });
+    }
+
+    return params;
+  }
+
+  private wrapText(text: string, maxWidth: number, indent: string): string {
+    if (!text) {
+      return text;
+    }
+
+    // Clean up the text: remove extra whitespace, newlines, and MCP prefixes
+    const cleanText = text
+      .replace(/^[^:]+:\s*/, '') // Remove "desktop-commander: " prefix
+      .replace(/\s+/g, ' ') // Replace multiple whitespace with single space
+      .trim();
+
+    if (cleanText.length <= maxWidth) {
+      return cleanText;
+    }
+
+    const words = cleanText.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+
+      if (testLine.length <= maxWidth) {
+        currentLine = testLine;
+      } else {
+        if (currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          // Single word longer than maxWidth
+          lines.push(word);
+        }
+      }
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+    }
+
+    // Join lines with proper indentation for continuation
+    return lines.map((line, index) =>
+      index === 0 ? line : `\n${indent}${line}`
+    ).join('');
   }
 
   private getMCPDescription(mcpName: string): string {
