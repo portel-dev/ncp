@@ -11,6 +11,7 @@ import { ConfigManager } from '../utils/config-manager.js';
 import { formatCommandDisplay } from '../utils/security.js';
 import { TextUtils } from '../utils/text-utils.js';
 import { MCPDescriptions } from '../services/mcp-descriptions.js';
+import { OutputFormatter } from '../services/output-formatter.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -31,6 +32,9 @@ const supportsEmoji = () => {
 
 const getIcon = (emoji: string, fallback: string) =>
   supportsEmoji() ? emoji : fallback;
+
+// Configure OutputFormatter
+OutputFormatter.configure({ noColor: !!noColor, emoji: !!supportsEmoji() });
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -435,12 +439,12 @@ program
             prompter.close();
           } catch (error) {
             prompter.close();
-            console.log(chalk.red('❌ Error during parameter input'));
+            console.log(OutputFormatter.error('Error during parameter input'));
             await orchestrator.cleanup();
             return;
           }
         } else if (requiredParams.length > 0 && options.prompt === false) {
-          console.log(chalk.red('❌ Error: This tool requires parameters'));
+          console.log(OutputFormatter.error('This tool requires parameters'));
           console.log(chalk.yellow(`💡 Use: ncp run ${tool} --params '{"param": "value"}'`));
           console.log(chalk.yellow(`💡 Or use: ncp find "${tool}" --depth 2 to see required parameters`));
           console.log(chalk.yellow(`💡 Or remove --no-prompt to use interactive prompting`));
@@ -450,23 +454,40 @@ program
       }
     }
 
-    console.log(chalk.blue(`🚀 Running ${tool}...\n`));
+    console.log(OutputFormatter.running(tool) + '\n');
 
     const result = await orchestrator.run(tool, parameters);
 
     if (result.success) {
-      console.log(chalk.green('✅ Success!'));
+      // Check if the content indicates an actual error despite "success" status
+      const contentStr = JSON.stringify(result.content);
+      const isActualError = contentStr.includes('"type":"text"') &&
+                           (contentStr.includes('Error:') || contentStr.includes('not found') || contentStr.includes('Unknown tool'));
 
-      // Use JSON syntax highlighting for better readability
-      if (options.jsonStyle === 'none') {
-        console.log(JSON.stringify(result.content, null, 2));
+      if (isActualError) {
+        console.log(OutputFormatter.error('Tool execution failed'));
+        const errorText = result.content?.[0]?.text || 'Unknown error occurred';
+        console.log(OutputFormatter.muted(errorText));
+
+        // Provide helpful suggestion for unknown tools
+        if (errorText.includes('Unknown tool')) {
+          const [mcpName] = tool.split(':');
+          console.log('\n' + OutputFormatter.tip(`Try 'ncp find "${mcpName}"' to see available tools`));
+        }
       } else {
-        const { formatJson } = await import('../utils/highlighting.js');
-        console.log(formatJson(result.content, options.jsonStyle));
+        console.log(OutputFormatter.success('Tool execution completed'));
+
+        // Use JSON syntax highlighting for better readability
+        if (options.jsonStyle === 'none') {
+          console.log(JSON.stringify(result.content, null, 2));
+        } else {
+          const { formatJson } = await import('../utils/highlighting.js');
+          console.log(formatJson(result.content, options.jsonStyle));
+        }
       }
     } else {
-      console.log(chalk.red('❌ Failed!'));
-      console.log(chalk.red(result.error));
+      console.log(OutputFormatter.error('Tool execution failed'));
+      console.log(OutputFormatter.muted(result.error || 'Unknown error occurred'));
     }
 
     await orchestrator.cleanup();
