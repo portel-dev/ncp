@@ -492,6 +492,7 @@ program
   .description('Run a specific tool')
   .option('--params <json>', 'Tool parameters as JSON string (optional - will prompt interactively if not provided)')
   .option('--no-prompt', 'Skip interactive prompting for missing parameters')
+  .option('--json-style <style>', 'JSON highlighting style: auto, cli-highlight, colorizer, prettyjson, none', 'auto')
   .action(async (tool, options) => {
     const profileName = program.getOptionValue('profile') || 'all';
 
@@ -546,7 +547,14 @@ program
 
     if (result.success) {
       console.log(chalk.green('✅ Success!'));
-      console.log(JSON.stringify(result.content, null, 2));
+
+      // Use JSON syntax highlighting for better readability
+      if (options.jsonStyle === 'none') {
+        console.log(JSON.stringify(result.content, null, 2));
+      } else {
+        const { formatJson } = await import('../utils/highlighting.js');
+        console.log(formatJson(result.content, options.jsonStyle));
+      }
     } else {
       console.log(chalk.red('❌ Failed!'));
       console.log(chalk.red(result.error));
