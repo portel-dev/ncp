@@ -32,9 +32,9 @@ describe('CLI Interface', () => {
 
       child.on('close', (code) => {
         expect(code).toBe(0);
-        expect(output).toContain('NCP-OSS Command Line Interface');
-        expect(output).toContain('--find');
-        expect(output).toContain('--run');
+        expect(output).toContain('Natural Context Provider');
+        expect(output).toContain('find');
+        expect(output).toContain('run');
         expect(output).toContain('--help');
         done();
       });
