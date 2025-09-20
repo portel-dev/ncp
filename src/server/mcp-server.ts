@@ -10,6 +10,7 @@ import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import { ToolFinder } from '../services/tool-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
+import { TextUtils } from '../utils/text-utils.js';
 
 interface MCPRequest {
   jsonrpc: string;
@@ -423,48 +424,11 @@ export class MCPServer {
   }
 
   private wrapText(text: string, maxWidth: number, indent: string): string {
-    if (!text) {
-      return text;
-    }
-
-    // Clean up the text: remove extra whitespace, newlines, and MCP prefixes
-    const cleanText = text
-      .replace(/^[^:]+:\s*/, '') // Remove "desktop-commander: " prefix
-      .replace(/\s+/g, ' ') // Replace multiple whitespace with single space
-      .trim();
-
-    if (cleanText.length <= maxWidth) {
-      return cleanText;
-    }
-
-    const words = cleanText.split(' ');
-    const lines: string[] = [];
-    let currentLine = '';
-
-    for (const word of words) {
-      const testLine = currentLine ? `${currentLine} ${word}` : word;
-
-      if (testLine.length <= maxWidth) {
-        currentLine = testLine;
-      } else {
-        if (currentLine) {
-          lines.push(currentLine);
-          currentLine = word;
-        } else {
-          // Single word longer than maxWidth
-          lines.push(word);
-        }
-      }
-    }
-
-    if (currentLine) {
-      lines.push(currentLine);
-    }
-
-    // Join lines with proper indentation for continuation
-    return lines.map((line, index) =>
-      index === 0 ? line : `\n${indent}${line}`
-    ).join('');
+    return TextUtils.wrapText(text, {
+      maxWidth,
+      indent,
+      cleanupPrefixes: true
+    });
   }
 
 

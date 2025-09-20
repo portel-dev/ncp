@@ -9,6 +9,7 @@ import { ProfileManager } from '../profiles/profile-manager.js';
 import { MCPServer } from '../server/mcp-server.js';
 import { ConfigManager } from '../utils/config-manager.js';
 import { formatCommandDisplay } from '../utils/security.js';
+import { TextUtils } from '../utils/text-utils.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -225,7 +226,7 @@ program
           if (depth >= 2) {
             const commandText = formatCommandDisplay(config.command, config.args);
             const maxWidth = process.stdout.columns ? process.stdout.columns - 6 : 80; // Leave space for indentation
-            const wrappedLines = wrapTextWithBackgroundIndent(commandText, maxWidth, `  ${indent} `);
+            const wrappedLines = TextUtils.wrapTextWithBackground(commandText, maxWidth, `  ${indent} `, (text: string) => chalk.bgGray.black(text));
             console.log(wrappedLines);
           }
         });
@@ -245,41 +246,6 @@ program
     console.log(chalk.bold.white(`📊 Summary: ${profiles.length} profiles, ${totalMCPs} MCPs configured`));
   });
 
-// Helper function to wrap text with proper indentation
-function wrapText(text: string, maxWidth: number, indent: string = ''): string {
-  if (text.length <= maxWidth) {
-    return text;
-  }
-
-  const words = text.split(' ');
-  const lines: string[] = [];
-  let currentLine = '';
-
-  for (const word of words) {
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-
-    if (testLine.length <= maxWidth) {
-      currentLine = testLine;
-    } else {
-      if (currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        // Single word is longer than maxWidth, just use it
-        lines.push(word);
-      }
-    }
-  }
-
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-
-  // Join lines with proper indentation for continuation lines
-  return lines.map((line, index) =>
-    index === 0 ? line : `\n${indent}${line}`
-  ).join('');
-}
 
 // Helper function to format find command output with consistent color scheme
 function formatFindOutput(text: string): string {
@@ -337,41 +303,6 @@ function formatFindOutput(text: string): string {
     .replace(/^💡 (.+)$/gm, (match, tip) => `💡 ${chalk.white(tip)}`);
 }
 
-// Helper function to wrap text with background color applied to each line including indentation
-function wrapTextWithBackgroundIndent(text: string, maxWidth: number, indent: string): string {
-  if (text.length <= maxWidth) {
-    return `${indent}${chalk.bgGray.black(text)}`;
-  }
-
-  const words = text.split(' ');
-  const lines: string[] = [];
-  let currentLine = '';
-
-  for (const word of words) {
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-
-    if (testLine.length <= maxWidth) {
-      currentLine = testLine;
-    } else {
-      if (currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        // Single word is longer than maxWidth, just use it
-        lines.push(word);
-      }
-    }
-  }
-
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-
-  // Apply background color to each line with proper indentation
-  return lines.map((line, index) =>
-    `${indent}${chalk.bgGray.black(line)}`
-  ).join('\n');
-}
 
 // Helper function to get MCP descriptions
 function getMCPDescription(mcpName: string): string {
