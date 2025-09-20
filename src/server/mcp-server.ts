@@ -533,12 +533,12 @@ export class MCPServer {
 
     // Depth guidance
     if (depth === 0) {
-      tips += `• **See tools**: Use \`--depth 1\` to see tool names or \`--depth 2\` for full details\n`;
+      tips += `• **See descriptions**: Use \`--depth 1\` for descriptions, \`--depth 2\` for parameters\n`;
     } else if (depth === 1) {
-      tips += `• **See details**: Use \`--depth 2\` for parameter schemas (recommended for AI)\n`;
-      tips += `• **Quick overview**: Use \`--depth 0\` for just MCP names\n`;
+      tips += `• **See parameters**: Use \`--depth 2\` for parameter details (recommended for AI)\n`;
+      tips += `• **Quick scan**: Use \`--depth 0\` for just tool names\n`;
     } else {
-      tips += `• **Less detail**: Use \`--depth 1\` for tool names only or \`--depth 0\` for MCP overview\n`;
+      tips += `• **Less detail**: Use \`--depth 1\` for descriptions only or \`--depth 0\` for names only\n`;
     }
 
     // Pagination guidance
@@ -559,15 +559,15 @@ export class MCPServer {
 
     // Search guidance
     if (!description) {
-      tips += `• **Search examples**: \`ncp --find "filesystem"\` (MCP filter) or \`ncp --find "write file"\` (cross-MCP search)\n`;
+      tips += `• **Search examples**: \`ncp find "filesystem"\` (MCP filter) or \`ncp find "write file"\` (cross-MCP search)\n`;
     } else if (mcpFilter) {
       tips += `• **Broader search**: Remove MCP name from query for cross-MCP results\n`;
     } else {
-      tips += `• **Filter to MCP**: Use MCP name like \`ncp --find "filesystem"\` to see only that MCP's tools\n`;
+      tips += `• **Filter to MCP**: Use MCP name like \`ncp find "filesystem"\` to see only that MCP's tools\n`;
     }
 
     // Tool execution guidance
-    tips += `• **Run tools**: Use \`ncp --run <tool_name> --params '{"param": "value"}'\` to execute\n`;
+    tips += `• **Run tools**: Use \`ncp run <tool_name> --params '{"param": "value"}'\` to execute\n`;
 
     // Check for updates (non-blocking)
     try {
