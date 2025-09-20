@@ -9,6 +9,7 @@ import { updater } from '../utils/updater.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import { ToolFinder } from '../services/tool-finder.js';
+import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 
 interface MCPRequest {
   jsonrpc: string;
@@ -388,7 +389,16 @@ export class MCPServer {
     output += '\n';
 
     // Add comprehensive usage guidance
-    output += await this.generateUsageTips(depth, pagination.page, pagination.totalPages, limit, pagination.totalResults, description, mcpFilter, results);
+    output += await UsageTipsGenerator.generate({
+      depth,
+      page: pagination.page,
+      totalPages: pagination.totalPages,
+      limit,
+      totalResults: pagination.totalResults,
+      description,
+      mcpFilter,
+      results
+    });
 
     return {
       jsonrpc: '2.0',
@@ -403,44 +413,6 @@ export class MCPServer {
   }
 
 
-  private generateExampleParams(tool: any): string {
-    if (!tool.schema) {
-      return '{}';
-    }
-
-    const params = this.parseParameters(tool.schema);
-    const requiredParams = params.filter(p => p.required);
-    const optionalParams = params.filter(p => !p.required);
-
-    const predictor = new ParameterPredictor();
-    const toolContext = this.getToolContext(tool.toolName);
-    const exampleObj: any = {};
-
-    // Always include required parameters
-    for (const param of requiredParams) {
-      exampleObj[param.name] = predictor.predictValue(
-        param.name,
-        param.type,
-        toolContext,
-        param.description
-      );
-    }
-
-    // If no required parameters, show 1-2 optional parameters as examples
-    if (requiredParams.length === 0 && optionalParams.length > 0) {
-      const exampleOptionals = optionalParams.slice(0, 2); // Show up to 2 optional params
-      for (const param of exampleOptionals) {
-        exampleObj[param.name] = predictor.predictValue(
-          param.name,
-          param.type,
-          toolContext,
-          param.description
-        );
-      }
-    }
-
-    return Object.keys(exampleObj).length > 0 ? JSON.stringify(exampleObj) : '{}';
-  }
 
   private getToolContext(toolName: string): string {
     return ToolContextResolver.getContext(toolName);
@@ -496,87 +468,6 @@ export class MCPServer {
   }
 
 
-  private async generateUsageTips(depth: number, page: number, totalPages: number, limit: number, totalResults: number, description: string, mcpFilter: string | null, results: any[] = []): Promise<string> {
-    let tips = '\n\n💡 **Usage Tips**:\n';
-
-    // Depth guidance
-    if (depth === 0) {
-      tips += `• **See descriptions**: Use \`--depth 1\` for descriptions, \`--depth 2\` for parameters\n`;
-    } else if (depth === 1) {
-      tips += `• **See parameters**: Use \`--depth 2\` for parameter details (recommended for AI)\n`;
-      tips += `• **Quick scan**: Use \`--depth 0\` for just tool names\n`;
-    } else {
-      tips += `• **Less detail**: Use \`--depth 1\` for descriptions only or \`--depth 0\` for names only\n`;
-    }
-
-    // Pagination guidance
-    if (totalPages > 1) {
-      tips += `• **Navigation**: `;
-      if (page < totalPages) {
-        tips += `\`--page ${page + 1}\` for next page, `;
-      }
-      if (page > 1) {
-        tips += `\`--page ${page - 1}\` for previous, `;
-      }
-      tips += `\`--limit ${Math.min(limit * 2, 50)}\` for more per page\n`;
-    } else if (totalResults > limit) {
-      tips += `• **See more**: Use \`--limit ${Math.min(totalResults, 50)}\` to see all ${totalResults} results\n`;
-    } else if (limit > 10 && totalResults < limit) {
-      tips += `• **Smaller pages**: Use \`--limit 5\` for easier browsing\n`;
-    }
-
-    // Search guidance
-    if (!description) {
-      tips += `• **Search examples**: \`ncp find "filesystem"\` (MCP filter) or \`ncp find "write file"\` (cross-MCP search)\n`;
-    } else if (mcpFilter) {
-      tips += `• **Broader search**: Remove MCP name from query for cross-MCP results\n`;
-    } else {
-      tips += `• **Filter to MCP**: Use MCP name like \`ncp find "filesystem"\` to see only that MCP's tools\n`;
-    }
-
-    // Tool execution guidance with actual examples
-    if (results.length > 0 && depth >= 2) {
-      // Only show parameter examples when depth >= 2 (when schemas are available)
-      // Find the first tool that has parameters to show a better example
-      let exampleTool = results[0];
-      let exampleParams = this.generateExampleParams(exampleTool);
-
-      // If first tool has no parameters, try to find one that does
-      if (exampleParams === '{}' && results.length > 1) {
-        for (let i = 1; i < results.length; i++) {
-          const candidateParams = this.generateExampleParams(results[i]);
-          if (candidateParams !== '{}') {
-            exampleTool = results[i];
-            exampleParams = candidateParams;
-            break;
-          }
-        }
-      }
-
-      if (exampleParams === '{}') {
-        tips += `• **Run tools**: Use \`ncp run ${exampleTool.toolName}\` to execute (no parameters needed)\n`;
-      } else {
-        tips += `• **Run tools**: Use \`ncp run ${exampleTool.toolName}\` (interactive prompts) or \`--params '${exampleParams}'\`\n`;
-      }
-    } else if (results.length > 0) {
-      // At depth 0-1, use interactive prompting
-      tips += `• **Run tools**: Use \`ncp run ${results[0].toolName}\` to execute (interactive prompts for parameters)\n`;
-    } else {
-      tips += `• **Run tools**: Use \`ncp run <tool_name>\` to execute (interactive prompts for parameters)\n`;
-    }
-
-    // Check for updates (non-blocking)
-    try {
-      const updateTip = await updater.getUpdateTip();
-      if (updateTip) {
-        tips += `• ${updateTip}\n`;
-      }
-    } catch {
-      // Fail silently - don't let update checks break the find command
-    }
-
-    return tips;
-  }
 
   private formatSchema(schema: any): string {
     // Use commercial NCP's battle-tested parameter formatting
