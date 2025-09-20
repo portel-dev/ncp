@@ -18,6 +18,11 @@ import { ErrorHandler } from '../services/error-handler.js';
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
 if (noColor) {
   chalk.level = 0; // Disable colors globally
+} else {
+  // Ensure colors are enabled for TTY and when FORCE_COLOR is set
+  if (process.env.FORCE_COLOR || process.stdout?.isTTY) {
+    chalk.level = 3; // Full color support
+  }
 }
 
 // Simple emoji support detection for cross-platform compatibility
@@ -55,6 +60,28 @@ ${chalk.dim('Config Location:')}
   ${chalk.yellow('NCP Profiles:')} ~/.ncp/profiles/`)
   .option('--profile <name>', 'Profile to use (default: all)')
   .option('--no-color', 'Disable colored output');
+
+// Configure help with command grouping
+program.configureHelp({
+  sortSubcommands: true,
+  subcommandTerm: (cmd) => {
+    // Group commands by category
+    const managementCommands = ['add', 'remove', 'list', 'config'];
+    const discoveryCommands = ['find'];
+    const executionCommands = ['run'];
+
+    if (managementCommands.includes(cmd.name())) {
+      return chalk.cyan(cmd.name());
+    } else if (discoveryCommands.includes(cmd.name())) {
+      return chalk.green(cmd.name());
+    } else if (executionCommands.includes(cmd.name())) {
+      return chalk.yellow(cmd.name());
+    }
+    return cmd.name();
+  },
+  commandUsage: (cmd) => chalk.bold(cmd.name() + ' ' + cmd.usage()),
+  commandDescription: (cmd) => chalk.dim(cmd.description())
+});
 
 // Check if we should run as MCP server
 // MCP server mode: ncp --profile <name> (no other commands)
