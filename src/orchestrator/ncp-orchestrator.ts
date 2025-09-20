@@ -13,6 +13,8 @@ import { DiscoveryEngine } from '../discovery/engine.js';
 import { MCPHealthMonitor } from '../utils/health-monitor.js';
 import { mcpWrapper } from '../utils/mcp-wrapper.js';
 import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
+import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
+import { ToolContextResolver } from '../services/tool-context-resolver.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -613,59 +615,25 @@ export class NCPOrchestrator {
     if (!mcpName || !toolName) return false;
 
     const schema = this.getToolSchema(mcpName, toolName);
-    if (!schema || typeof schema !== 'object') return false;
-
-    const required = schema.required || [];
-    return Array.isArray(required) && required.length > 0;
+    return ToolSchemaParser.hasRequiredParameters(schema);
   }
 
   /**
    * Get tool parameters for interactive prompting
    */
-  getToolParameters(toolIdentifier: string): Array<{name: string, type: string, required: boolean, description?: string}> {
+  getToolParameters(toolIdentifier: string): ParameterInfo[] {
     const [mcpName, toolName] = toolIdentifier.split(':');
     if (!mcpName || !toolName) return [];
 
     const schema = this.getToolSchema(mcpName, toolName);
-    if (!schema || typeof schema !== 'object') return [];
-
-    const params: Array<{name: string, type: string, required: boolean, description?: string}> = [];
-    const properties = schema.properties || {};
-    const required = schema.required || [];
-
-    for (const [name, prop] of Object.entries(properties)) {
-      const propDef = prop as any;
-      params.push({
-        name,
-        type: propDef.type || 'unknown',
-        required: required.includes(name),
-        description: propDef.description
-      });
-    }
-
-    return params;
+    return ToolSchemaParser.parseParameters(schema);
   }
 
   /**
    * Get tool context for parameter prediction
    */
   getToolContext(toolIdentifier: string): string {
-    const [mcpName] = toolIdentifier.split(':');
-
-    // Map MCP names to contexts
-    const contextMap: Record<string, string> = {
-      'filesystem': 'filesystem',
-      'memory': 'database',
-      'shell': 'system',
-      'sequential-thinking': 'ai',
-      'portel': 'development',
-      'tavily': 'web',
-      'desktop-commander': 'system',
-      'stripe': 'payment',
-      'context7-mcp': 'documentation'
-    };
-
-    return contextMap[mcpName] || 'general';
+    return ToolContextResolver.getContext(toolIdentifier);
   }
 
   /**

@@ -6,6 +6,8 @@
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
 import { logger } from '../utils/logger.js';
 import { updater } from '../utils/updater.js';
+import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
+import { ToolContextResolver } from '../services/tool-context-resolver.js';
 
 interface MCPRequest {
   jsonrpc: string;
@@ -467,45 +469,11 @@ export class MCPServer {
   }
 
   private getToolContext(toolName: string): string {
-    const [mcp] = toolName.split(':');
-
-    // Map MCP names to contexts
-    const contextMap: Record<string, string> = {
-      'filesystem': 'filesystem',
-      'memory': 'database',
-      'shell': 'system',
-      'sequential-thinking': 'ai',
-      'portel': 'development',
-      'tavily': 'web',
-      'desktop-commander': 'system',
-      'stripe': 'payment',
-      'context7-mcp': 'documentation'
-    };
-
-    return contextMap[mcp] || 'general';
+    return ToolContextResolver.getContext(toolName);
   }
 
-  private parseParameters(schema: any): Array<{name: string, type: string, required: boolean, description?: string}> {
-    const params: Array<{name: string, type: string, required: boolean, description?: string}> = [];
-
-    if (!schema || typeof schema !== 'object') {
-      return params;
-    }
-
-    const properties = schema.properties || {};
-    const required = schema.required || [];
-
-    for (const [name, prop] of Object.entries(properties)) {
-      const propDef = prop as any;
-      params.push({
-        name,
-        type: propDef.type || 'unknown',
-        required: required.includes(name),
-        description: propDef.description
-      });
-    }
-
-    return params;
+  private parseParameters(schema: any): ParameterInfo[] {
+    return ToolSchemaParser.parseParameters(schema);
   }
 
   private wrapText(text: string, maxWidth: number, indent: string): string {
