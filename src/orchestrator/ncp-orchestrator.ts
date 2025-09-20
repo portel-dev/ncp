@@ -174,9 +174,10 @@ export class NCPOrchestrator {
           this.toolToMCP.set(prefixedToolName, config.name);
 
           // Prepare for discovery engine indexing
+          // Pass unprefixed name - RAG engine will add the prefix
           discoveryTools.push({
             id: prefixedToolName,
-            name: prefixedToolName,
+            name: tool.name,  // Use unprefixed name here
             description: prefixedDescription,
             mcpServer: config.name,
             inputSchema: {}
@@ -532,9 +533,10 @@ export class NCPOrchestrator {
           this.toolToMCP.set(prefixedToolName, mcpName);
 
           // Prepare for discovery engine indexing
+          // Pass unprefixed name - RAG engine will add the prefix
           discoveryTools.push({
             id: prefixedToolName,
-            name: prefixedToolName,
+            name: actualToolName,  // Use unprefixed name here
             description: prefixedDescription,
             mcpServer: mcpName,
             inputSchema: {}
