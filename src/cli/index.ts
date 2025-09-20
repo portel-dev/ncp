@@ -10,6 +10,7 @@ import { MCPServer } from '../server/mcp-server.js';
 import { ConfigManager } from '../utils/config-manager.js';
 import { formatCommandDisplay } from '../utils/security.js';
 import { TextUtils } from '../utils/text-utils.js';
+import { MCPDescriptions } from '../services/mcp-descriptions.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -180,7 +181,7 @@ program
 
         // Generate descriptions based on MCP names
         for (const mcpName of Object.keys(mcpStats)) {
-          mcpDescriptions[mcpName] = getMCPDescription(mcpName);
+          mcpDescriptions[mcpName] = MCPDescriptions.getDescription(mcpName);
           mcpToolCounts[mcpName] = mcpStats[mcpName].toolCount;
         }
       } catch (error) {
@@ -304,29 +305,6 @@ function formatFindOutput(text: string): string {
 }
 
 
-// Helper function to get MCP descriptions
-function getMCPDescription(mcpName: string): string {
-  const descriptions: Record<string, string> = {
-    'filesystem': 'File and directory operations',
-    'memory': 'Persistent memory and note-taking',
-    'sequential-thinking': 'Step-by-step reasoning and analysis',
-    'shell': 'System shell command execution',
-    'portel': 'Portel integration and tools',
-    'tavily': 'Web search and research',
-    'desktop-commander': 'Desktop automation and control',
-    'stripe': 'Payment processing and Stripe API',
-    'context7-mcp': 'Context7 documentation and library access',
-    'github': 'GitHub repository operations',
-    'git': 'Git version control operations',
-    'database': 'Database operations and queries',
-    'web-search': 'Web search and information retrieval',
-    'demo-fs': 'Demo filesystem operations',
-    'demo-web': 'Demo web search functionality',
-    'test-mcp2': 'Test MCP server'
-  };
-
-  return descriptions[mcpName] || 'MCP server';
-}
 
 // Remove command
 program

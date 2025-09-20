@@ -4,6 +4,7 @@
  */
 
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
+import { MCPDescriptions } from './mcp-descriptions.js';
 
 export interface FindOptions {
   query?: string;
@@ -172,7 +173,7 @@ export class ToolFinder {
         mcpSet.add(tool.mcpName);
         samples.push({
           mcpName: tool.mcpName,
-          description: this.getMCPDescription(tool.mcpName)
+          description: MCPDescriptions.getDescription(tool.mcpName)
         });
       }
     }
@@ -180,25 +181,4 @@ export class ToolFinder {
     return samples;
   }
 
-  /**
-   * Get description for an MCP
-   */
-  private getMCPDescription(mcpName: string): string {
-    const descriptions: Record<string, string> = {
-      'filesystem': 'File and directory operations',
-      'memory': 'In-memory data storage',
-      'shell': 'Shell command execution',
-      'sequential-thinking': 'AI reasoning and analysis',
-      'portel': 'Development workflow automation',
-      'tavily': 'Web search and research',
-      'desktop-commander': 'Desktop and process control',
-      'stripe': 'Payment processing',
-      'context7-mcp': 'Documentation tools',
-      'github': 'GitHub integration',
-      'gitlab': 'GitLab integration',
-      'slack': 'Slack messaging'
-    };
-
-    return descriptions[mcpName] || 'MCP tools';
-  }
 }
