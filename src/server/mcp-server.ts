@@ -434,15 +434,13 @@ export class MCPServer {
 
     const params = this.parseParameters(tool.schema);
     const requiredParams = params.filter(p => p.required);
-
-    if (requiredParams.length === 0) {
-      return '{}';
-    }
+    const optionalParams = params.filter(p => !p.required);
 
     const predictor = new ParameterPredictor();
     const toolContext = this.getToolContext(tool.toolName);
     const exampleObj: any = {};
 
+    // Always include required parameters
     for (const param of requiredParams) {
       exampleObj[param.name] = predictor.predictValue(
         param.name,
@@ -452,7 +450,20 @@ export class MCPServer {
       );
     }
 
-    return JSON.stringify(exampleObj);
+    // If no required parameters, show 1-2 optional parameters as examples
+    if (requiredParams.length === 0 && optionalParams.length > 0) {
+      const exampleOptionals = optionalParams.slice(0, 2); // Show up to 2 optional params
+      for (const param of exampleOptionals) {
+        exampleObj[param.name] = predictor.predictValue(
+          param.name,
+          param.type,
+          toolContext,
+          param.description
+        );
+      }
+    }
+
+    return Object.keys(exampleObj).length > 0 ? JSON.stringify(exampleObj) : '{}';
   }
 
   private getToolContext(toolName: string): string {
@@ -615,9 +626,23 @@ export class MCPServer {
 
     // Tool execution guidance with actual examples
     if (results.length > 0) {
-      const firstTool = results[0];
-      const exampleParams = this.generateExampleParams(firstTool);
-      tips += `• **Run tools**: Use \`ncp run ${firstTool.toolName} --params '${exampleParams}'\` to execute\n`;
+      // Find the first tool that has parameters to show a better example
+      let exampleTool = results[0];
+      let exampleParams = this.generateExampleParams(exampleTool);
+
+      // If first tool has no parameters, try to find one that does
+      if (exampleParams === '{}' && results.length > 1) {
+        for (let i = 1; i < results.length; i++) {
+          const candidateParams = this.generateExampleParams(results[i]);
+          if (candidateParams !== '{}') {
+            exampleTool = results[i];
+            exampleParams = candidateParams;
+            break;
+          }
+        }
+      }
+
+      tips += `• **Run tools**: Use \`ncp run ${exampleTool.toolName} --params '${exampleParams}'\` to execute\n`;
     } else {
       tips += `• **Run tools**: Use \`ncp run <tool_name> --params '{"param": "value"}'\` to execute\n`;
     }
