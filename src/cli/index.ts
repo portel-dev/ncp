@@ -546,7 +546,21 @@ program
     const result = await orchestrator.run(tool, parameters);
 
     if (result.success) {
-      console.log(chalk.green('✅ Success!'));
+      // Check if the content contains error messages
+      const contentStr = JSON.stringify(result.content);
+      const hasError = contentStr.includes('Error:') ||
+                      contentStr.includes('Access denied') ||
+                      contentStr.includes('Failed:') ||
+                      contentStr.includes('permission denied') ||
+                      contentStr.includes('not found') ||
+                      contentStr.includes('Invalid') ||
+                      contentStr.includes('Unauthorized');
+
+      if (hasError) {
+        console.log(chalk.red('❌ Error Response!'));
+      } else {
+        console.log(chalk.green('✅ Success!'));
+      }
 
       // Use JSON syntax highlighting for better readability
       if (options.jsonStyle === 'none') {
