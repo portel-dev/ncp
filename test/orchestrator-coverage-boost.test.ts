@@ -18,7 +18,7 @@ jest.mock('../src/utils/logger', () => ({
   }
 }));
 
-describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
+describe.skip('NCPOrchestrator Coverage Boost - 80% Target (TypeScript mock complexity)', () => {
   let orchestrator: NCPOrchestrator;
 
   beforeEach(() => {
@@ -97,7 +97,7 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
 
       // Mock connection attempt
       const mockClient = {
-        connect: jest.fn().mockResolvedValue(undefined as any),
+        connect: jest.fn().mockResolvedValue(undefined),
         listTools: jest.fn().mockResolvedValue({ tools: [] }),
         close: jest.fn()
       } as any;
@@ -151,7 +151,7 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
       await orchestrator.initialize();
 
       const mockClient = {
-        connect: jest.fn().mockResolvedValue(undefined as any),
+        connect: jest.fn().mockResolvedValue(undefined),
         listTools: jest.fn().mockResolvedValue({
           tools: [{ name: 'test-tool' }]
         }),
@@ -179,7 +179,7 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
       await orchestrator.initialize();
 
       const mockClient = {
-        connect: jest.fn().mockResolvedValue(undefined as any),
+        connect: jest.fn().mockResolvedValue(undefined),
         listTools: jest.fn().mockResolvedValue({
           tools: [{ name: 'failing-tool' }]
         }),
@@ -227,7 +227,7 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
       await orchestrator.initialize();
 
       const mockClient1 = {
-        connect: jest.fn().mockResolvedValue(undefined as any),
+        connect: jest.fn().mockResolvedValue(undefined),
         listResources: jest.fn().mockResolvedValue({
           resources: [
             { name: 'resource1', uri: 'uri1' }
@@ -237,7 +237,7 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
       } as any;
 
       const mockClient2 = {
-        connect: jest.fn().mockResolvedValue(undefined as any),
+        connect: jest.fn().mockResolvedValue(undefined),
         listResources: jest.fn().mockResolvedValue({
           resources: [
             { name: 'resource2', uri: 'uri2' }
@@ -250,7 +250,7 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
         .mockReturnValueOnce(mockClient1)
         .mockReturnValueOnce(mockClient2);
 
-      const resources = await orchestrator.getResources();
+      const resources = await orchestrator.getAllResources();
 
       expect(resources).toHaveLength(2);
       expect(resources[0].mcpName).toBe('res-mcp1');
@@ -270,14 +270,14 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
       await orchestrator.initialize();
 
       const mockClient = {
-        connect: jest.fn().mockResolvedValue(undefined as any),
+        connect: jest.fn().mockResolvedValue(undefined),
         listResources: jest.fn().mockRejectedValue(new Error('Resource error')),
         close: jest.fn()
       } as any;
 
       (Client as unknown as jest.Mock).mockReturnValue(mockClient);
 
-      const resources = await orchestrator.getResources();
+      const resources = await orchestrator.getAllResources();
 
       // Should return empty array on error
       expect(resources).toEqual([]);
@@ -296,7 +296,7 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
       await orchestrator.initialize();
 
       const mockClient = {
-        connect: jest.fn().mockResolvedValue(undefined as any),
+        connect: jest.fn().mockResolvedValue(undefined),
         listPrompts: jest.fn().mockResolvedValue({
           prompts: [
             { name: 'prompt1', description: 'Test prompt' }
@@ -307,7 +307,7 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
 
       (Client as unknown as jest.Mock).mockReturnValue(mockClient);
 
-      const prompts = await orchestrator.getPrompts();
+      const prompts = await orchestrator.getAllPrompts();
 
       expect(prompts).toHaveLength(1);
       expect(prompts[0].mcpName).toBe('prompt-mcp');
@@ -326,7 +326,7 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
       await orchestrator.initialize();
 
       const mockClient = {
-        connect: jest.fn().mockResolvedValue(undefined as any),
+        connect: jest.fn().mockResolvedValue(undefined),
         listTools: jest.fn().mockResolvedValue({
           tools: [
             { name: 'tool1', description: 'Tool 1' },
@@ -379,9 +379,9 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
       await orchestrator.initialize();
 
       const mockClient = {
-        connect: jest.fn().mockResolvedValue(undefined as any),
+        connect: jest.fn().mockResolvedValue(undefined),
         listTools: jest.fn().mockResolvedValue({ tools: [] }),
-        close: jest.fn().mockResolvedValue(undefined as any)
+        close: jest.fn().mockResolvedValue(undefined)
       } as any;
 
       (Client as unknown as jest.Mock).mockReturnValue(mockClient);
@@ -408,7 +408,7 @@ describe.skip('NCPOrchestrator Coverage Boost - 80% Target', () => {
       await orchestrator.initialize();
 
       const mockClient = {
-        connect: jest.fn().mockResolvedValue(undefined as any),
+        connect: jest.fn().mockResolvedValue(undefined),
         listTools: jest.fn().mockResolvedValue({ tools: [] }),
         close: jest.fn().mockRejectedValue(new Error('Close failed'))
       } as any;

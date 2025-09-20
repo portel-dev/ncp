@@ -190,6 +190,7 @@ describe('Logger', () => {
     it('should not output progress messages in MCP mode', () => {
       jest.clearAllMocks();
       logger.setMCPMode(true);
+      logger.setDebugMode(false); // Ensure debug mode is off
       logger.progress('test progress message');
       expect(mockConsole.error).not.toHaveBeenCalled();
     });
