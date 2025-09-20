@@ -412,7 +412,7 @@ export class MCPServer {
     output += '\n';
 
     // Add comprehensive usage guidance
-    output += await this.generateUsageTips(depth, page, totalPages, limit, totalResults, description, mcpFilter);
+    output += await this.generateUsageTips(depth, page, totalPages, limit, totalResults, description, mcpFilter, results);
 
     return {
       jsonrpc: '2.0',
@@ -426,6 +426,47 @@ export class MCPServer {
     };
   }
 
+
+  private generateExampleParams(tool: any): string {
+    if (!tool.schema) {
+      return '{}';
+    }
+
+    const params = this.parseParameters(tool.schema);
+    const requiredParams = params.filter(p => p.required);
+
+    if (requiredParams.length === 0) {
+      return '{}';
+    }
+
+    const exampleObj: any = {};
+    for (const param of requiredParams) {
+      switch (param.type) {
+        case 'string':
+          if (param.name.includes('path') || param.name.includes('file')) {
+            exampleObj[param.name] = '/path/to/file';
+          } else if (param.name.includes('url')) {
+            exampleObj[param.name] = 'https://example.com';
+          } else {
+            exampleObj[param.name] = 'example';
+          }
+          break;
+        case 'number':
+          exampleObj[param.name] = param.name.includes('pid') ? 1234 : 10;
+          break;
+        case 'boolean':
+          exampleObj[param.name] = true;
+          break;
+        case 'array':
+          exampleObj[param.name] = ['item1', 'item2'];
+          break;
+        default:
+          exampleObj[param.name] = 'value';
+      }
+    }
+
+    return JSON.stringify(exampleObj);
+  }
 
   private parseParameters(schema: any): Array<{name: string, type: string, required: boolean, description?: string}> {
     const params: Array<{name: string, type: string, required: boolean, description?: string}> = [];
@@ -528,7 +569,7 @@ export class MCPServer {
     return null;
   }
 
-  private async generateUsageTips(depth: number, page: number, totalPages: number, limit: number, totalResults: number, description: string, mcpFilter: string | null): Promise<string> {
+  private async generateUsageTips(depth: number, page: number, totalPages: number, limit: number, totalResults: number, description: string, mcpFilter: string | null, results: any[] = []): Promise<string> {
     let tips = '\n\n💡 **Usage Tips**:\n';
 
     // Depth guidance
@@ -566,8 +607,14 @@ export class MCPServer {
       tips += `• **Filter to MCP**: Use MCP name like \`ncp find "filesystem"\` to see only that MCP's tools\n`;
     }
 
-    // Tool execution guidance
-    tips += `• **Run tools**: Use \`ncp run <tool_name> --params '{"param": "value"}'\` to execute\n`;
+    // Tool execution guidance with actual examples
+    if (results.length > 0) {
+      const firstTool = results[0];
+      const exampleParams = this.generateExampleParams(firstTool);
+      tips += `• **Run tools**: Use \`ncp run ${firstTool.toolName} --params '${exampleParams}'\` to execute\n`;
+    } else {
+      tips += `• **Run tools**: Use \`ncp run <tool_name> --params '{"param": "value"}'\` to execute\n`;
+    }
 
     // Check for updates (non-blocking)
     try {
