@@ -1,16 +1,10 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { writeFileSync, readFileSync, unlinkSync, existsSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { readFileSync, existsSync } from 'fs';
 import { createInterface } from 'readline';
 import chalk from 'chalk';
 import clipboardy from 'clipboardy';
 import { ProfileManager } from '../profiles/profile-manager.js';
 import { OutputFormatter } from '../services/output-formatter.js';
 import { ErrorHandler } from '../services/error-handler.js';
-
-const execAsync = promisify(exec);
 
 interface MCPConfig {
   command: string;
@@ -76,20 +70,15 @@ export class ConfigManager {
       return;
     }
 
-    try {
-      // Open the config directory in default file manager/editor
-      await this.openFileInDefaultEditor(configDir, false);
-      console.log(chalk.green('✓ Opened config directory in your default file manager'));
-      console.log(chalk.blue(`  Found ${profiles.length} profile files: ${profiles.join(', ')}`));
-    } catch (error: any) {
-      const errorResult = ErrorHandler.handle(error, ErrorHandler.fileOperation('open', configDir));
-      console.log(ErrorHandler.formatForConsole(errorResult));
-      console.log(OutputFormatter.info(`Config directory location: ${configDir}`));
-      console.log(OutputFormatter.info(`Profile files:`));
-      profiles.forEach(profile => {
-        console.log(OutputFormatter.bullet(`${profile}.json`));
-      });
-    }
+    // Just show the config location and files
+    console.log(chalk.green('✓ Configuration location:'));
+    console.log(OutputFormatter.info(`Config directory: ${configDir}`));
+    console.log(OutputFormatter.info(`Profile files:`));
+    profiles.forEach(profile => {
+      console.log(OutputFormatter.bullet(`${profile}.json`));
+    });
+    console.log('');
+    console.log(chalk.blue('💡 You can edit these files directly with your preferred editor'))
   }
 
   /**
@@ -198,178 +187,140 @@ export class ConfigManager {
   }
 
   /**
-   * Interactive import - tries clipboard first, fallback to editor
+   * Interactive import - clipboard-first approach
    */
   private async importInteractive(profileName: string, dryRun: boolean): Promise<void> {
-    console.log(chalk.blue('🔄 NCP Config Import - Smart Detection Active'));
-    console.log(chalk.gray('   Workflow: Clipboard → Editor (automatic fallback)'));
+    console.log(chalk.blue('📋 NCP Config Import'));
     console.log('');
 
     try {
-      // First, try to read from clipboard
-      console.log(chalk.blue('📋 Step 1: Checking clipboard for MCP configuration...'));
-
+      // Try to read from clipboard
       let clipboardContent = '';
       try {
         clipboardContent = await clipboardy.read();
       } catch (clipboardError) {
-        console.log(chalk.yellow('  ❌ Could not access system clipboard'));
-        console.log(chalk.blue('  ➡️  Skipping to editor mode'));
-        console.log('');
+        console.log(chalk.red('❌ Could not access system clipboard'));
+        console.log(chalk.yellow('💡 Copy your MCP configuration JSON first, then run this command again'));
+        console.log(chalk.yellow('💡 Or use: ncp config import <file> to import from a file'));
+        return;
       }
+
+      // Check if clipboard has content
+      if (!clipboardContent.trim()) {
+        console.log(chalk.red('❌ Clipboard is empty'));
+        console.log(chalk.yellow('💡 Copy your MCP configuration JSON first, then run this command again'));
+        console.log(chalk.yellow('💡 Or use: ncp config import <file> to import from a file'));
+        console.log('');
+        console.log(chalk.dim('Common config file locations:'));
+        console.log(chalk.dim('  Claude Desktop (macOS): ~/Library/Application Support/Claude/claude_desktop_config.json'));
+        console.log(chalk.dim('  Claude Desktop (Windows): %APPDATA%\\Claude\\claude_desktop_config.json'));
+        return;
+      }
+
+      // Display clipboard content in a highlighted box
+      console.log(chalk.blue('📋 Clipboard content detected:'));
+      this.displayJsonInBox(clipboardContent);
+      console.log('');
 
       // Try to parse clipboard content as JSON
-      if (clipboardContent.trim()) {
-        console.log(chalk.green('  ✓ Found clipboard content'));
-        console.log(chalk.blue('  🔍 Validating JSON format...'));
-
-        try {
-          const parsedData = JSON.parse(clipboardContent);
-
-          // Check if it's a direct MCP config (has "command" property at root level)
-          const isDirectConfig = parsedData.command && typeof parsedData === 'object' && !Array.isArray(parsedData);
-
-          let mcpData: any;
-          let mcpNames: string[];
-
-          if (isDirectConfig) {
-            // Handle direct MCP configuration
-            console.log(chalk.green('  ✅ Single MCP configuration detected!'));
-            console.log('');
-
-            // Prompt for name
-            console.log(chalk.blue('❓ What should we name this MCP server?'));
-            console.log(chalk.gray('   (e.g., \'filesystem\', \'web-search\', \'github\')'));
-
-            const mcpName = await this.promptForMCPName(parsedData.command);
-
-            mcpData = { [mcpName]: parsedData };
-            mcpNames = [mcpName];
-
-            console.log(chalk.green(`  ✅ Adding as '${mcpName}' to profile '${profileName}'`));
-            console.log('');
-          } else {
-            // Handle key-value format
-            mcpData = this.cleanImportData(parsedData);
-            mcpNames = Object.keys(mcpData).filter(key => {
-              if (key.startsWith('//')) return false;
-              const config = mcpData[key];
-              return config && typeof config === 'object' && config.command;
-            });
-
-            if (mcpNames.length > 0) {
-              console.log(chalk.green(`  ✅ Multiple MCP configurations detected!`));
-              console.log(chalk.green(`  📊 Found ${mcpNames.length} MCP server(s) to import`));
-            }
-          }
-
-          if (mcpNames.length > 0) {
-            console.log(chalk.blue(`  🚀 Importing to profile '${profileName}'...`));
-            console.log('');
-
-            await this.processImportData(mcpData, profileName, dryRun);
-
-            if (!dryRun) {
-              console.log('');
-              console.log(chalk.green('🎉 SUCCESS: Imported from clipboard!'));
-            }
-            return;
-          } else {
-            console.log(chalk.yellow('  ❌ Valid JSON found, but no MCP configurations detected'));
-          }
-        } catch (jsonError) {
-          console.log(chalk.yellow('  ❌ Clipboard content is not valid JSON'));
-        }
-      } else {
-        console.log(chalk.yellow('  ❌ Clipboard is empty or contains only whitespace'));
+      let parsedData: any;
+      try {
+        parsedData = JSON.parse(clipboardContent);
+      } catch (jsonError) {
+        console.log(chalk.red('❌ Invalid JSON format in clipboard'));
+        console.log(chalk.yellow('💡 Please ensure your clipboard contains valid JSON'));
+        return;
       }
 
-      // Fallback to editor mode
-      console.log('');
-      console.log(chalk.blue('📝 Step 2: Opening system default editor for manual configuration...'));
-      console.log('');
+      // Check if it's a direct MCP config (has "command" property at root level)
+      const isDirectConfig = parsedData.command && typeof parsedData === 'object' && !Array.isArray(parsedData);
 
-      await this.importWithEditor(profileName, dryRun);
+      let mcpData: any;
+      let mcpNames: string[];
+
+      if (isDirectConfig) {
+        // Handle direct MCP configuration
+        console.log(chalk.green('✅ Single MCP configuration detected'));
+
+        // Prompt for name
+        console.log('');
+        console.log(chalk.blue('❓ What should we name this MCP server?'));
+        console.log(chalk.gray('   (e.g., \'filesystem\', \'web-search\', \'github\')'));
+
+        const mcpName = await this.promptForMCPName(parsedData.command);
+
+        mcpData = { [mcpName]: parsedData };
+        mcpNames = [mcpName];
+      } else {
+        // Handle key-value format (multiple MCPs or client config)
+        mcpData = this.cleanImportData(parsedData);
+        mcpNames = Object.keys(mcpData).filter(key => {
+          if (key.startsWith('//')) return false;
+          const config = mcpData[key];
+          return config && typeof config === 'object' && config.command;
+        });
+
+        if (mcpNames.length > 0) {
+          console.log(chalk.green(`✅ ${mcpNames.length} MCP configuration(s) detected`));
+        } else {
+          console.log(chalk.red('❌ No valid MCP configurations found'));
+          console.log(chalk.yellow('💡 Expected JSON with MCP server configurations'));
+          console.log(chalk.dim('   Example: {"server": {"command": "npx", "args": ["..."]}}'));
+          return;
+        }
+      }
+
+      console.log('');
+      await this.processImportData(mcpData, profileName, dryRun);
 
     } catch (error: any) {
       console.log('');
-      const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('config', 'import', undefined, ['Check the JSON format', 'Ensure the file is readable']));
+      const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('config', 'import', undefined, ['Check the JSON format', 'Ensure the clipboard contains valid MCP configuration']));
       console.log(ErrorHandler.formatForConsole(errorResult));
     }
   }
 
   /**
-   * Import using system default editor (fallback method)
+   * Display JSON content in a highlighted box
    */
-  private async importWithEditor(profileName: string, dryRun: boolean): Promise<void> {
-    const tempFile = join(tmpdir(), `ncp-import-${Date.now()}.json`);
-
-    // Create template file
-    const template = {
-      "// Instructions": "Add your MCP server configurations below, then save and close",
-      "// Example": {
-        "filesystem": {
-          "command": "mcp-filesystem",
-          "args": ["--path", "/"]
-        },
-        "github": {
-          "command": "mcp-github-server",
-          "env": {
-            "GITHUB_TOKEN": "your_token_here"
-          }
-        }
-      },
-      "// Your MCPs - Replace this section": {
-        "your-mcp-name": {
-          "command": "your-mcp-command",
-          "args": ["optional", "arguments"]
-        }
-      }
-    };
-
-    writeFileSync(tempFile, JSON.stringify(template, null, 2));
-
+  private displayJsonInBox(jsonContent: string): void {
+    // Pretty format the JSON for display
+    let formattedJson: string;
     try {
-      // Open in default editor
-      await this.openFileInDefaultEditor(tempFile, true);
-      console.log(chalk.green('  ✅ Template file opened in your default editor'));
-
-      // Wait for user to finish editing
-      console.log('');
-      console.log(chalk.blue('  📝 Instructions:'));
-      console.log(chalk.gray('     1. Replace the example configurations with your MCPs'));
-      console.log(chalk.gray('     2. Save the file'));
-      console.log(chalk.gray('     3. Close your editor'));
-      console.log(chalk.gray('     4. Return here and press Enter'));
-      console.log('');
-
-      await this.waitForUserInput(chalk.blue('  ⏳ Press Enter when you\'re done editing...'));
-
-      // Read and process the edited file
-      console.log('');
-      console.log(chalk.blue('  🔍 Reading your configuration...'));
-
-      const editedContent = readFileSync(tempFile, 'utf-8');
-      const mcpData = this.cleanImportData(JSON.parse(editedContent));
-
-      const mcpCount = Object.keys(mcpData).filter(key => !key.startsWith('//')).length;
-      console.log(chalk.green(`  ✅ Found ${mcpCount} MCP configuration(s)`));
-      console.log(chalk.blue(`  🚀 Importing to profile '${profileName}'...`));
-      console.log('');
-
-      await this.processImportData(mcpData, profileName, dryRun);
-
-      if (!dryRun) {
-        console.log('');
-        console.log(chalk.green('🎉 SUCCESS: Imported from editor!'));
-      }
-
-    } finally {
-      // Cleanup temp file
-      if (existsSync(tempFile)) {
-        unlinkSync(tempFile);
-      }
+      const parsed = JSON.parse(jsonContent);
+      formattedJson = JSON.stringify(parsed, null, 2);
+    } catch {
+      // If parsing fails, use original content
+      formattedJson = jsonContent;
     }
+
+    // Split into lines and add box borders
+    const lines = formattedJson.split('\n');
+    const maxLength = Math.max(...lines.map(line => line.length), 20);
+    const boxWidth = Math.min(maxLength + 4, 80); // Limit box width to 80 chars
+
+    // Top border
+    console.log(chalk.gray('┌' + '─'.repeat(boxWidth - 2) + '┐'));
+
+    // Content lines (truncate if too long)
+    lines.slice(0, 20).forEach(line => { // Limit to 20 lines
+      let displayLine = line;
+      if (line.length > boxWidth - 4) {
+        displayLine = line.substring(0, boxWidth - 7) + '...';
+      }
+      const padding = ' '.repeat(Math.max(0, boxWidth - displayLine.length - 4));
+      console.log(chalk.gray('│ ') + chalk.cyan(displayLine) + padding + chalk.gray(' │'));
+    });
+
+    // Show truncation indicator if there are more lines
+    if (lines.length > 20) {
+      const truncatedMsg = `... (${lines.length - 20} more lines)`;
+      const padding = ' '.repeat(Math.max(0, boxWidth - truncatedMsg.length - 4));
+      console.log(chalk.gray('│ ') + chalk.dim(truncatedMsg) + padding + chalk.gray(' │'));
+    }
+
+    // Bottom border
+    console.log(chalk.gray('└' + '─'.repeat(boxWidth - 2) + '┘'));
   }
 
   /**
@@ -395,23 +346,47 @@ export class ConfigManager {
     }
 
     // Actually import the MCPs
-    let successCount = 0;
+    console.log(chalk.blue(`🚀 Importing ${mcpNames.length} MCP server(s) to profile '${profileName}'...`));
+    console.log('');
+
+    const successful: Array<{name: string, config: MCPConfig}> = [];
+    const failed: Array<{name: string, error: string}> = [];
+
     for (const mcpName of mcpNames) {
       try {
         const config = mcpData[mcpName];
         await this.profileManager.addMCPToProfile(profileName, mcpName, config);
-        successCount++;
+        successful.push({ name: mcpName, config });
       } catch (error: any) {
-        const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('profile', 'add', mcpName));
-        console.log(ErrorHandler.formatForConsole(errorResult));
+        failed.push({ name: mcpName, error: error.message });
       }
     }
 
-    if (successCount > 0) {
-      console.log(OutputFormatter.success(`Successfully imported ${successCount} MCP server(s)`));
+    // Show results
+    if (successful.length > 0) {
+      console.log(chalk.green(`✅ Successfully imported ${successful.length} MCP server(s):`));
+      successful.forEach(({ name, config }) => {
+        const commandDisplay = config.args && config.args.length > 0
+          ? `${config.command} ${config.args.join(' ')}`
+          : config.command;
+        console.log(`  ${chalk.cyan('•')} ${chalk.bold(name)} → ${chalk.dim(commandDisplay)}`);
+      });
       console.log('');
-      console.log(chalk.blue(`  🔍 Test with: ncp find "file tools"`));
-      console.log(chalk.blue(`  📋 List all: ncp list`));
+    }
+
+    if (failed.length > 0) {
+      console.log(chalk.red(`❌ Failed to import ${failed.length} server(s):`));
+      failed.forEach(({ name, error }) => {
+        console.log(`  ${chalk.red('•')} ${chalk.bold(name)} → ${chalk.dim(error)}`);
+      });
+      console.log('');
+    }
+
+    if (successful.length > 0) {
+      console.log(chalk.blue('💡 Next steps:'));
+      console.log(chalk.blue(`  🔍 Test discovery: ncp find "file tools"`));
+      console.log(chalk.blue(`  📋 List all MCPs: ncp list`));
+      console.log(chalk.blue(`  🎯 Update your AI client config to use NCP`));
     }
   }
 
@@ -440,46 +415,6 @@ export class ConfigManager {
     return cleaned;
   }
 
-  /**
-   * Open file in system default editor
-   */
-  private async openFileInDefaultEditor(filePath: string, showInstructions: boolean): Promise<void> {
-    const platform = process.platform;
-    let command: string;
-
-    if (platform === 'darwin') {
-      command = `open "${filePath}"`;
-    } else if (platform === 'linux') {
-      command = `xdg-open "${filePath}"`;
-    } else if (platform === 'win32') {
-      command = `start "" "${filePath}"`;
-    } else {
-      throw new Error(`Unsupported platform: ${platform}`);
-    }
-
-    await execAsync(command);
-
-    if (showInstructions) {
-      console.log(chalk.green('✓ Opened template in your default editor'));
-    }
-  }
-
-  /**
-   * Wait for user input
-   */
-  private async waitForUserInput(message: string): Promise<void> {
-    const rl = createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-
-    return new Promise((resolve) => {
-      rl.question(message, () => {
-        rl.close();
-        resolve();
-      });
-    });
-  }
 
   /**
    * Prompt user for MCP name with smart suggestions
