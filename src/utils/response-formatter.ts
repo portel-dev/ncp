@@ -4,12 +4,46 @@
  */
 
 import chalk from 'chalk';
+import { marked } from 'marked';
+import TerminalRenderer from 'marked-terminal';
+
+// Configure marked with terminal renderer
+const terminalRenderer = new TerminalRenderer({
+  // Customize terminal rendering options
+  code: chalk.yellowBright,
+  blockquote: chalk.gray.italic,
+  html: chalk.gray,
+  heading: chalk.bold.cyan,
+  firstHeading: chalk.bold.cyan.underline,
+  hr: chalk.gray,
+  listitem: chalk.gray,
+  paragraph: chalk.white,
+  table: chalk.gray,
+  strong: chalk.bold,
+  em: chalk.italic,
+  codespan: chalk.yellow,
+  del: chalk.strikethrough,
+  link: chalk.blue.underline,
+  text: chalk.white,
+  unescape: true,
+  emoji: true,
+  width: 80,
+  showSectionPrefix: false,
+  reflowText: true,
+  tab: 2
+});
+
+marked.setOptions({
+  renderer: terminalRenderer as any,
+  breaks: true,
+  gfm: true
+});
 
 export class ResponseFormatter {
   /**
    * Format response intelligently based on content type
    */
-  static format(content: any): string {
+  static format(content: any, renderMarkdown: boolean = true): string {
     // Handle null/undefined
     if (!content) {
       return chalk.gray('(No output)');
@@ -54,7 +88,7 @@ export class ResponseFormatter {
 
     // Text block - extract and format text
     if (block.type === 'text') {
-      return this.formatText(block.text || '');
+      return this.formatText(block.text || '', true);
     }
 
     // Image block - show placeholder
@@ -74,7 +108,7 @@ export class ResponseFormatter {
   /**
    * Format text content with proper newlines and spacing
    */
-  private static formatText(text: string): string {
+  private static formatText(text: string, renderMarkdown: boolean = true): string {
     // Handle empty text
     if (!text || text.trim() === '') {
       return chalk.gray('(Empty response)');
@@ -85,6 +119,17 @@ export class ResponseFormatter {
       .replace(/\\n/g, '\n')  // Convert escaped newlines
       .replace(/\\t/g, '  ')  // Convert tabs to spaces
       .replace(/\\r/g, '');   // Remove carriage returns
+
+    // Try markdown rendering if enabled and content looks like markdown
+    if (renderMarkdown && this.looksLikeMarkdown(formatted)) {
+      try {
+        const rendered = marked(formatted);
+        return rendered.toString().trim();
+      } catch (error) {
+        // Markdown parsing failed, fall back to plain text
+        console.error('Markdown rendering failed:', error);
+      }
+    }
 
     // Detect and handle special formats
     if (this.looksLikeJson(formatted)) {
@@ -109,6 +154,47 @@ export class ResponseFormatter {
     }
 
     return formatted;
+  }
+
+  /**
+   * Check if text looks like markdown
+   */
+  private static looksLikeMarkdown(text: string): boolean {
+    const lines = text.split('\n');
+
+    // Count markdown indicators
+    let indicators = 0;
+
+    // Check for headers
+    if (lines.some(line => /^#{1,6}\s/.test(line))) indicators++;
+
+    // Check for bold/italic
+    if (/\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|_[^_]+_/.test(text)) indicators++;
+
+    // Check for code blocks or inline code
+    if (/```[\s\S]*?```|`[^`]+`/.test(text)) indicators++;
+
+    // Check for links
+    if (/\[([^\]]+)\]\(([^)]+)\)/.test(text)) indicators++;
+
+    // Check for lists (but not simple ones like directory listings)
+    const listPattern = /^[\s]*[-*+]\s+[^[\]()]+$/gm;
+    const listMatches = text.match(listPattern);
+    if (listMatches && listMatches.length >= 2) {
+      // Additional check: if it looks like file listings, don't treat as markdown
+      if (!listMatches.some(item => item.includes('[FILE]') || item.includes('[DIR]'))) {
+        indicators++;
+      }
+    }
+
+    // Check for blockquotes
+    if (lines.some(line => /^>\s/.test(line))) indicators++;
+
+    // Check for horizontal rules
+    if (lines.some(line => /^[\s]*[-*_]{3,}[\s]*$/.test(line))) indicators++;
+
+    // If we have 2 or more markdown indicators, treat as markdown
+    return indicators >= 2;
   }
 
   /**
