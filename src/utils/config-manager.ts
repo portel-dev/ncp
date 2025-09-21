@@ -177,7 +177,10 @@ export class ConfigManager {
 
     try {
       const content = readFileSync(filePath, 'utf-8');
-      const mcpData = JSON.parse(content);
+      const parsedData = JSON.parse(content);
+
+      // Clean the data to handle Claude Desktop format and remove unwanted entries
+      const mcpData = this.cleanImportData(parsedData);
 
       await this.processImportData(mcpData, profileName, dryRun);
     } catch (error: any) {
