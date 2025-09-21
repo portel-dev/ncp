@@ -91,14 +91,43 @@ export class ResponseFormatter {
       return this.formatText(block.text || '', true);
     }
 
-    // Image block - show placeholder
+    // Image block - show detailed info
     if (block.type === 'image') {
-      return chalk.gray(`[Image: ${block.alt || 'No description'}]`);
+      const mimeType = block.mimeType || 'unknown';
+      const size = block.data ? `${Math.round(block.data.length * 0.75 / 1024)}KB` : 'unknown size';
+      return chalk.cyan(`🖼️  Image (${mimeType}, ${size})`);
     }
 
-    // Resource block - show formatted reference
+    // Audio block - show detailed info
+    if (block.type === 'audio') {
+      const mimeType = block.mimeType || 'unknown';
+      const size = block.data ? `${Math.round(block.data.length * 0.75 / 1024)}KB` : 'unknown size';
+      return chalk.magenta(`🔊 Audio (${mimeType}, ${size})`);
+    }
+
+    // Resource link - show formatted link
+    if (block.type === 'resource_link') {
+      const name = block.name || 'Unnamed resource';
+      const uri = block.uri || 'No URI';
+      const description = block.description ? `\n   ${chalk.gray(block.description)}` : '';
+      return chalk.blue(`🔗 ${name}`) + chalk.dim(` → ${uri}`) + description;
+    }
+
+    // Embedded resource - format based on content
     if (block.type === 'resource') {
-      return chalk.gray(`[Resource: ${block.uri || 'Unknown'}]`);
+      const resource = block.resource;
+      if (!resource) return chalk.gray('[Invalid resource]');
+
+      const title = resource.title || 'Resource';
+      const mimeType = resource.mimeType || 'unknown';
+
+      // Format resource content based on MIME type
+      if (resource.text) {
+        const content = this.formatResourceContent(resource.text, mimeType);
+        return chalk.green(`📄 ${title} (${mimeType})\n`) + content;
+      }
+
+      return chalk.green(`📄 ${title} (${mimeType})`) + chalk.dim(` → ${resource.uri || 'No URI'}`);
     }
 
     // Unknown type - show as JSON
@@ -239,6 +268,42 @@ export class ResponseFormatter {
    */
   private static preserveListFormatting(text: string): string {
     // Lists are already well-formatted, just ensure consistency
+    return text;
+  }
+
+  /**
+   * Format resource content based on MIME type
+   */
+  private static formatResourceContent(text: string, mimeType: string): string {
+    // Code files - apply syntax highlighting concepts
+    if (mimeType.includes('javascript') || mimeType.includes('typescript')) {
+      return chalk.yellow(text);
+    }
+    if (mimeType.includes('python')) {
+      return chalk.blue(text);
+    }
+    if (mimeType.includes('rust') || mimeType.includes('x-rust')) {
+      return chalk.red(text);
+    }
+    if (mimeType.includes('json')) {
+      try {
+        const parsed = JSON.parse(text);
+        return JSON.stringify(parsed, null, 2);
+      } catch {
+        return text;
+      }
+    }
+    if (mimeType.includes('yaml') || mimeType.includes('yml')) {
+      return chalk.green(text);
+    }
+    if (mimeType.includes('xml') || mimeType.includes('html')) {
+      return chalk.magenta(text);
+    }
+    if (mimeType.includes('markdown')) {
+      return this.formatText(text, true);
+    }
+
+    // Plain text or unknown - return as-is
     return text;
   }
 

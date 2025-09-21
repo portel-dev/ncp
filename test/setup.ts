@@ -20,7 +20,13 @@ beforeEach(() => {
 afterEach(() => {
   // Restore console methods
   if (process.env.NODE_ENV !== 'test-verbose') {
-    (console.log as jest.Mock).mockRestore();
-    (console.info as jest.Mock).mockRestore();
+    const logMock = console.log as jest.Mock;
+    const infoMock = console.info as jest.Mock;
+    if (logMock && typeof logMock.mockRestore === 'function') {
+      logMock.mockRestore();
+    }
+    if (infoMock && typeof infoMock.mockRestore === 'function') {
+      infoMock.mockRestore();
+    }
   }
 });

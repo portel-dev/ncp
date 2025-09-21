@@ -187,12 +187,24 @@ describe('Logger', () => {
       expect(mockConsole.error).toHaveBeenCalledWith('[NCP] test progress message');
     });
 
-    it('should not output progress messages in MCP mode', () => {
+    it('should not output progress messages in MCP mode', async () => {
+      // Ensure debug mode is off
+      const originalDebug = process.env.NCP_DEBUG;
+      const originalArgv = process.argv;
+      delete process.env.NCP_DEBUG;
+      process.argv = ['node', 'script.js']; // Clean argv without --debug
+
+      jest.resetModules();
+      const { logger: testLogger } = await import('../src/utils/logger.js');
+
       jest.clearAllMocks();
-      logger.setMCPMode(true);
-      logger.setDebugMode(false); // Ensure debug mode is off
-      logger.progress('test progress message');
+      testLogger.setMCPMode(true);
+      testLogger.progress('test progress message');
       expect(mockConsole.error).not.toHaveBeenCalled();
+
+      // Restore environment
+      if (originalDebug) process.env.NCP_DEBUG = originalDebug;
+      process.argv = originalArgv;
     });
   });
 

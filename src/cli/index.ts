@@ -789,7 +789,7 @@ program
   .description('Run a specific tool')
   .option('--params <json>', 'Tool parameters as JSON string (optional - will prompt interactively if not provided)')
   .option('--no-prompt', 'Skip interactive prompting for missing parameters')
-  .option('--json-style <style>', 'JSON highlighting style: auto, cli-highlight, colorizer, prettyjson, none', 'auto')
+  .option('--output-format <format>', 'Output format: auto (smart rendering), json (raw JSON)', 'auto')
   .action(async (tool, options) => {
     const profileName = program.getOptionValue('profile') || 'all';
 
@@ -936,27 +936,30 @@ program
       } else {
         console.log(OutputFormatter.success('Tool execution completed'));
 
-        // Smart response formatting
-        const { ResponseFormatter } = await import('../utils/response-formatter.js');
-
-        // Check if this is text content that should be formatted naturally
-        const isTextResponse = Array.isArray(result.content) &&
-                              result.content.every((item: any) => item?.type === 'text');
-
-        if (isTextResponse || (result.content?.[0]?.type === 'text' && result.content.length === 1)) {
-          // Format as natural text with proper newlines
-          console.log(ResponseFormatter.format(result.content));
-        } else if (ResponseFormatter.isPureData(result.content)) {
-          // Pure data - use JSON formatting
-          if (options.jsonStyle === 'none') {
-            console.log(JSON.stringify(result.content, null, 2));
-          } else {
-            const { formatJson } = await import('../utils/highlighting.js');
-            console.log(formatJson(result.content, options.jsonStyle));
-          }
+        // Respect user's output format choice
+        if (options.outputFormat === 'json') {
+          // Raw JSON output - test different formatters to pick the best
+          const { formatJson } = await import('../utils/highlighting.js');
+          console.log(formatJson(result.content, 'cli-highlight')); // Let's test this one
         } else {
-          // Mixed content or unknown - use smart formatter
-          console.log(ResponseFormatter.format(result.content));
+          // Smart response formatting (default)
+          const { ResponseFormatter } = await import('../utils/response-formatter.js');
+
+          // Check if this is text content that should be formatted naturally
+          const isTextResponse = Array.isArray(result.content) &&
+                                result.content.every((item: any) => item?.type === 'text');
+
+          if (isTextResponse || (result.content?.[0]?.type === 'text' && result.content.length === 1)) {
+            // Format as natural text with proper newlines
+            console.log(ResponseFormatter.format(result.content));
+          } else if (ResponseFormatter.isPureData(result.content)) {
+            // Pure data - use JSON formatting
+            const { formatJson } = await import('../utils/highlighting.js');
+            console.log(formatJson(result.content, 'cli-highlight'));
+          } else {
+            // Mixed content or unknown - use smart formatter
+            console.log(ResponseFormatter.format(result.content));
+          }
         }
       }
     } else {

@@ -11,6 +11,7 @@ import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import { ToolFinder } from '../services/tool-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { TextUtils } from '../utils/text-utils.js';
+import chalk from 'chalk';
 
 interface MCPRequest {
   jsonrpc: string;
@@ -267,7 +268,6 @@ export class MCPServer {
 
     const { tools: results, groupedByMCP: mcpGroups, pagination, mcpFilter, isListing } = findResult;
 
-    const queryText = description ? `"${description}"` : 'all available tools';
     const filterText = mcpFilter ? ` (filtered to ${mcpFilter})` : '';
 
     // Enhanced pagination display
@@ -275,7 +275,15 @@ export class MCPServer {
       ` | Page ${pagination.page} of ${pagination.totalPages} (showing ${pagination.resultsInPage} of ${pagination.totalResults} results)` :
       ` (${pagination.totalResults} results)`;
 
-    let output = `🔍 Found tools for ${queryText}${filterText}${paginationInfo}:\n\n`;
+    let output: string;
+    if (description) {
+      // Search mode - highlight the search query with reverse colors for emphasis
+      const highlightedQuery = chalk.inverse(` ${description} `);
+      output = `🔍 Found tools for ${highlightedQuery}${filterText}${paginationInfo}:\n\n`;
+    } else {
+      // Listing mode - show all available tools
+      output = `🔍 Available tools${filterText}${paginationInfo}:\n\n`;
+    }
 
     // Handle no results case
     if (results.length === 0) {
@@ -688,13 +696,14 @@ export class MCPServer {
 }
 
 export class ParameterPredictor {
-  predictValue(paramName: string, paramType: string, toolContext: string, description?: string): any {
+  predictValue(paramName: string, paramType: string, toolContext: string, description?: string, toolName?: string): any {
     const name = paramName.toLowerCase();
     const desc = (description || '').toLowerCase();
+    const tool = (toolName || '').toLowerCase();
 
     // String type predictions
     if (paramType === 'string') {
-      return this.predictStringValue(name, desc, toolContext);
+      return this.predictStringValue(name, desc, toolContext, tool);
     }
 
     // Number type predictions
@@ -721,17 +730,42 @@ export class ParameterPredictor {
     return this.getDefaultForType(paramType);
   }
 
-  private predictStringValue(name: string, desc: string, context: string): string {
+  private predictStringValue(name: string, desc: string, context: string, tool?: string): string {
     // File and path patterns
     if (name.includes('path') || name.includes('file') || desc.includes('path') || desc.includes('file')) {
+      // Check if tool name suggests directory operations
+      const isDirectoryTool = tool && (
+        tool.includes('list_dir') ||
+        tool.includes('list_folder') ||
+        tool.includes('read_dir') ||
+        tool.includes('scan_dir') ||
+        tool.includes('get_dir')
+      );
+
+      // Check if parameter or description suggests directory
+      const isDirectoryParam = name.includes('dir') ||
+                              name.includes('folder') ||
+                              desc.includes('directory') ||
+                              desc.includes('folder');
+
+      // Smart detection: if it's just "path" but tool is clearly for directories
+      if (name === 'path' && isDirectoryTool) {
+        return context === 'filesystem' ? '/home/user/documents' : './';
+      }
+
       if (context === 'filesystem') {
-        if (name.includes('dir') || desc.includes('directory')) {
+        if (isDirectoryParam || isDirectoryTool) {
           return '/home/user/documents';
         }
         if (name.includes('config') || desc.includes('config')) {
           return '/etc/config.json';
         }
         return '/home/user/document.txt';
+      }
+
+      // Default based on whether it's likely a directory or file
+      if (isDirectoryParam || isDirectoryTool) {
+        return './';
       }
       return './file.txt';
     }

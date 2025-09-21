@@ -43,7 +43,7 @@ export class ParameterPrompter {
     });
 
     for (const param of sortedParams) {
-      const value = await this.promptForParameter(param, predictor, toolContext);
+      const value = await this.promptForParameter(param, predictor, toolContext, toolName);
       if (value !== null && value !== undefined && value !== '') {
         result[param.name] = this.convertValue(value, param.type);
       }
@@ -58,7 +58,8 @@ export class ParameterPrompter {
   private async promptForParameter(
     param: ParameterInfo,
     predictor: any,
-    toolContext: string
+    toolContext: string,
+    toolName: string
   ): Promise<string | null> {
     const icon = param.required ? '📄' : '📔';
     const status = param.required ? 'Required' : 'Optional';
@@ -75,7 +76,8 @@ export class ParameterPrompter {
       param.name,
       param.type,
       toolContext,
-      param.description
+      param.description,
+      toolName
     );
 
     let prompt = '   Enter value';
@@ -108,7 +110,7 @@ export class ParameterPrompter {
         return String(suggestion);
       } else {
         console.log(chalk.red('   This parameter is required. Please provide a value.'));
-        return await this.promptForParameter(param, predictor, toolContext);
+        return await this.promptForParameter(param, predictor, toolContext, toolName);
       }
     }
 

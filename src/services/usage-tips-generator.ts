@@ -186,7 +186,8 @@ export class UsageTipsGenerator {
         param.name,
         param.type,
         toolContext,
-        param.description
+        param.description,
+        tool.toolName
       );
     }
 
@@ -198,7 +199,8 @@ export class UsageTipsGenerator {
           param.name,
           param.type,
           toolContext,
-          param.description
+          param.description,
+          tool.toolName
         );
       }
     }
