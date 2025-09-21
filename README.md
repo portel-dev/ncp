@@ -274,25 +274,34 @@ The most powerful way to get started - import your existing MCP configurations:
 
 #### **Clipboard Import (Instant)**
 ```bash
-# 1. Copy any MCP JSON configuration
+# 1. Copy any MCP JSON configuration to clipboard
 # 2. Run the magic command
 ncp config import
 
-# NCP detects clipboard content automatically:
+# NCP automatically detects and displays your JSON:
+# ✅ Shows highlighted JSON in bordered box
 # ✅ Single MCP config → Prompts for name
 # ✅ Multiple MCPs → Imports all with names
-# ✅ Claude Desktop config → Extracts MCP servers
+# ✅ Detailed success/failure messages
 ```
 
-#### **Interactive Editor Mode**
-If clipboard is empty, NCP opens a template in your default editor:
+#### **File Import (Direct)**
 ```bash
-ncp config import              # Opens template with examples
-ncp config import --profile dev # Target specific profile
-ncp config import --dry-run    # Preview what would be imported
+# Import from any JSON config file
+ncp config import "/path/to/your/config.json"
+
+# Common examples:
+# Claude Desktop (macOS)
+ncp config import "~/Library/Application Support/Claude/claude_desktop_config.json"
+
+# Claude Desktop (Windows)
+ncp config import "%APPDATA%\Claude\claude_desktop_config.json"
+
+# VS Code or any other JSON MCP config
+ncp config import "./my-mcp-config.json"
 ```
 
-*[SCREENSHOT PLACEHOLDER: Split screen showing clipboard import vs editor template]*
+*[SCREENSHOT PLACEHOLDER: Split screen showing clipboard import with highlighted JSON vs file import]*
 
 ### **Semantic Discovery**
 NCP uses vector similarity search to find the right tools:

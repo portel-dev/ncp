@@ -396,9 +396,19 @@ export class ConfigManager {
   private cleanImportData(data: any): MCPImportData {
     const cleaned: MCPImportData = {};
 
+    // Check if this is a Claude Desktop config format with mcpServers wrapper
+    if (data.mcpServers && typeof data.mcpServers === 'object') {
+      data = data.mcpServers;
+    }
+
     for (const [key, value] of Object.entries(data)) {
       // Skip template comments and example sections
       if (key.startsWith('//') || key.includes('Example') || key.includes('Your MCPs')) {
+        continue;
+      }
+
+      // Skip NCP entries themselves to avoid circular references
+      if (key.toLowerCase().startsWith('ncp')) {
         continue;
       }
 
