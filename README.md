@@ -1,99 +1,200 @@
-# NCP - Natural Context Provider
-
-🧠 **N-to-1 MCP Orchestration for AI Assistants** | Consolidates N MCP servers into 1 intelligent interface
-
 [![npm version](https://img.shields.io/npm/v/@portel/ncp.svg)](https://www.npmjs.com/package/@portel/ncp)
 [![npm downloads](https://img.shields.io/npm/dm/@portel/ncp.svg)](https://www.npmjs.com/package/@portel/ncp)
 [![License: Elastic-2.0](https://img.shields.io/badge/License-Elastic--2.0-blue.svg)](https://www.elastic.co/licensing/elastic-license)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-blue.svg)](https://modelcontextprotocol.io/)
 
-## 📦 Quick Install
+# NCP - Natural Context Provider
 
+## 🎯 **One MCP to Rule Them All**
+
+*Tired of your AI assistant struggling with dozens of different MCP tools? Frustrated by slow responses and massive token costs?*
+
+**NCP** transforms the chaos of N scattered MCP servers into 1 intelligent orchestrator. Your AI gets a clean, unified interface that dramatically **reduces cognitive load**, **saves tokens**, and **speeds up responses**.
+
+---
+
+## 🚀 **60-Second Quick Start**
+
+### **Step 1: Install NCP Globally** 📦
 ```bash
 npm install -g @portel/ncp
 ```
 
-**[📥 View on npm](https://www.npmjs.com/package/@portel/ncp)** | **[🚀 GitHub Releases](https://github.com/portel-dev/ncp/releases)**
+### **Step 2A: Add MCPs Manually** ⚡
+```bash
+# Add filesystem tools
+ncp add filesystem npx @modelcontextprotocol/server-filesystem /tmp
 
-## What is NCP?
+# Add memory capabilities
+ncp add memory npx @modelcontextprotocol/server-memory
 
-NCP is a **Natural Context Provider** - an intelligent **N-to-1 orchestrator** that transforms how AI assistants interact with MCP tools. Instead of connecting to N individual MCP servers, AI assistants connect to 1 NCP interface and use natural language to discover the right tools from any underlying server.
-
-**The N-to-1 Advantage**: Where N (multiple MCPs) overwhelm AI with complexity, NCP provides 1 clean interface that makes everything accessible.
-
-**Key Benefits:**
-- 🧠 **Cognitive Load Reduction**: AI processes one unified interface instead of juggling dozens of MCP schemas
-- ⚡ **Faster AI Responses**: Reduced decision complexity leads to 3-5x faster tool selection
-- 📊 **Massive Token Savings**: Reduces context usage by 47-97% through intelligent tool consolidation
-- 🔍 **Semantic Discovery**: Find tools using natural language ("read a file", "send email")
-- 🏥 **Health-Aware Execution**: Automatic detection, recovery, and alternatives for failed tools
-- 🎯 **Universal Compatibility**: Works with Claude Desktop, VS Code, Cursor, and any MCP client
-
-## Why NCP? The N-to-1 Problem & Solution
-
-### The N Problem: Cognitive Overload
-```mermaid
-graph TB
-    AI[AI Assistant] --> MCP1[Filesystem MCP<br/>12 tools]
-    AI --> MCP2[Database MCP<br/>8 tools]
-    AI --> MCP3[Email MCP<br/>6 tools]
-    AI --> MCP4[Web MCP<br/>15 tools]
-    AI --> MCP5[Shell MCP<br/>10 tools]
-    AI --> MCP6[Cloud MCP<br/>20 tools]
+# Add web search
+ncp add web-search npx @mcptools/mcp-tavily
 ```
-**Result**: AI must simultaneously process 71 tool schemas, leading to slower responses and higher token usage.
 
-### The 1 Solution: N-to-1 Orchestration
-```mermaid
-graph TB
-    AI[AI Assistant] --> NCP[NCP Hub<br/>4 unified tools]
-    NCP --> MCP1[Filesystem MCP<br/>12 tools]
-    NCP --> MCP2[Database MCP<br/>8 tools]
-    NCP --> MCP3[Email MCP<br/>6 tools]
-    NCP --> MCP4[Web MCP<br/>15 tools]
-    NCP --> MCP5[Shell MCP<br/>10 tools]
-    NCP --> MCP6[Cloud MCP<br/>20 tools]
+*[SCREENSHOT PLACEHOLDER: Terminal showing successful MCP additions with NCP's helpful guidance messages]*
+
+### **Step 2B: Import Existing MCPs (Faster!)** 🚀
+Already have MCPs configured in Claude Desktop? Just copy and import them:
+
+```bash
+# Copy your existing claude_desktop_config.json
+# Then run this magic command:
+ncp config import
+
+# NCP will auto-detect clipboard content and import everything!
 ```
-**Result**: N complex MCP servers → 1 simple interface. AI sees just 2 tools (`find` and `run`), NCP handles everything behind the scenes.
 
-## Token Savings Analysis
+*[SCREENSHOT PLACEHOLDER: Terminal showing smart clipboard detection and successful import of multiple MCPs]*
 
-| Scenario | Without NCP | With NCP | Savings |
-|----------|-------------|----------|---------|
-| **Small Setup** (5 MCPs) | 15,000 tokens | 8,000 tokens | **47%** |
-| **Medium Setup** (15 MCPs) | 45,000 tokens | 12,000 tokens | **73%** |
-| **Large Setup** (30+ MCPs) | 90,000+ tokens | 15,000 tokens | **83%** |
-| **Enterprise Setup** (50+ MCPs) | 150,000+ tokens | 20,000 tokens | **87%** |
+### **Step 3: Connect NCP to Claude Desktop** 🔗
+Add this **single entry** to your `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "ncp": {
+      "command": "ncp",
+      "args": ["--profile", "all"]
+    }
+  }
+}
+```
 
-**Why Such Massive Savings?**
-- **Schema Consolidation**: 50+ tool schemas → 2 unified tools
-- **Lazy Loading**: Tools only loaded when actually needed
-- **Smart Caching**: Embeddings cached, no regeneration overhead
-- **Health Filtering**: Broken tools excluded from context automatically
+**🎉 Done!** Your AI now has intelligent access to ALL your MCP tools through one clean interface.
 
-## Table of Contents
+*[SCREENSHOT PLACEHOLDER: Before/After comparison - cluttered config with 15+ MCP entries vs clean single NCP entry]*
 
-- [Installation](#installation)
-  - [Claude Desktop](#claude-desktop)
-  - [VS Code](#vs-code)
-  - [Cursor](#cursor)
-- [Getting Started](#getting-started)
-- [Usage Examples](#usage-examples)
-- [Advanced Configuration](#advanced-configuration)
-- [CLI Commands](#cli-commands)
-- [Troubleshooting](#troubleshooting)
+---
 
-## Installation
+## ✨ **Watch the Magic Happen**
 
-### Step 1: Install NCP (Recommended)
+### **Before NCP: Cognitive Overload** 😵‍💫
+Your AI sees this overwhelming mess:
+```
+📁 filesystem-server (12 tools)
+📁 memory-server (8 tools)
+📁 web-search-server (6 tools)
+📁 email-server (15 tools)
+📁 calendar-server (9 tools)
+... and 20 more servers with 200+ tools
+```
+
+**Result**: Slow responses, poor tool choices, massive token usage
+
+### **After NCP: Intelligent Discovery** ✨
+Your AI simply asks NCP:
+```bash
+> "I need to find files containing 'config'"
+```
+
+And gets exactly what it needs:
+```
+🔍 Found tools for "file operations":
+└── filesystem (95.2% match)
+    ├── read_file - Read file contents
+    └── search_files - Search for files by pattern
+```
+
+*[SCREENSHOT PLACEHOLDER: NCP find command showing clean, organized results with confidence scores]*
+
+---
+
+## 💡 **Why NCP Transforms Your AI Experience**
+
+### **🧠 Reduces Cognitive Load**
+- **Before**: AI processes 200+ tool schemas → confusion & poor choices
+- **After**: AI sees just 2 tools (`find` & `run`) → smart routing behind the scenes
+
+### **💰 Massive Token Savings**
+| Setup Size | Without NCP | With NCP | Savings |
+|------------|-------------|----------|---------|
+| **Small** (5 MCPs) | 15,000 tokens | 8,000 tokens | **47%** |
+| **Medium** (15 MCPs) | 45,000 tokens | 12,000 tokens | **73%** |
+| **Large** (30+ MCPs) | 90,000+ tokens | 15,000 tokens | **83%** |
+
+### **⚡ Lightning Fast Responses**
+- **Before**: 3-8 seconds (analysis paralysis)
+- **After**: Sub-second responses (intelligent discovery)
+
+### **🔧 Memory & Process Efficiency**
+- **Lazy Loading**: MCPs only started when needed
+- **Health Monitoring**: Broken tools automatically excluded
+- **Smart Caching**: Vector embeddings cached for instant retrieval
+
+---
+
+## 📋 **Essential Commands**
+
+NCP's CLI is designed to guide you through the right workflow:
+
+*[SCREENSHOT PLACEHOLDER: `ncp --help` output showing the helpful command structure and Quick Start section]*
+
+### **MCP Management**
+```bash
+ncp add <name> <command> [args...]     # Add MCP server
+ncp remove <name>                      # Remove MCP server
+ncp list                               # Show all profiles & MCPs
+
+# Import existing configurations (powerful!)
+ncp config import                      # Smart clipboard/editor import
+ncp config import <file>               # Import from file
+ncp config validate                    # Check configuration health
+```
+
+*[SCREENSHOT PLACEHOLDER: `ncp list` output showing organized profile structure]*
+
+### **Discovery & Testing**
+```bash
+ncp find <query>                       # Natural language search
+ncp run <tool> --params <json>         # Execute specific tool
+```
+
+*[SCREENSHOT PLACEHOLDER: `ncp find "file operations"` showing semantic search results]*
+
+### **Profile Management**
+```bash
+# Create focused environments
+ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/code --profiles dev
+ncp add stripe npx stripe-cli --profiles prod --env API_KEY=sk_live_...
+```
+
+---
+
+## 🛠️ **Installation & Setup**
+
+### **Prerequisites**
+- Node.js 18+
+- Your favorite AI client that supports MCP (Claude Desktop, VS Code, Cursor)
+
+### **Method 1: Global Installation (Recommended)**
 ```bash
 npm install -g @portel/ncp
 ```
-*Global installation provides better performance and reliability for MCP integration.*
 
-### Step 2: Configure Claude Desktop
+### **Method 2: NPX (No Install)**
+```json
+{
+  "mcpServers": {
+    "ncp": {
+      "command": "npx",
+      "args": ["@portel/ncp", "--profile", "all"]
+    }
+  }
+}
+```
 
-Add this configuration to your `claude_desktop_config.json`:
+### **Verify Installation**
+```bash
+ncp --help                             # Should show helpful interface
+ncp find "test"                        # Should work (empty initially)
+```
+
+---
+
+## ⚙️ **Configuration**
+
+### **Claude Desktop Setup**
+Add to your config file:
 
 **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
@@ -102,339 +203,195 @@ Add this configuration to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "ncp": {
-      "command": "ncp"
+      "command": "ncp",
+      "args": ["--profile", "all"]
     }
   }
 }
 ```
 
-### VS Code
-
-For VS Code with MCP support, add to your settings:
-
+### **VS Code Setup**
+For VS Code with MCP support:
 ```json
 {
   "mcp.servers": {
     "ncp": {
-      "command": "ncp"
+      "command": "ncp",
+      "args": ["--profile", "all"]
     }
   }
 }
 ```
 
-### Cursor
-
-For Cursor IDE, add to your MCP configuration:
-
+### **Cursor Setup**
+For Cursor IDE:
 ```json
 {
   "mcpServers": {
     "ncp": {
-      "command": "ncp"
+      "command": "ncp",
+      "args": ["--profile", "all"]
     }
   }
 }
 ```
-
-### Alternative: NPX Method (No Install)
-If you prefer not to install globally:
-```json
-{
-  "mcpServers": {
-    "ncp": {
-      "command": "npx",
-      "args": ["@portel/ncp"]
-    }
-  }
-}
-```
-
-### CLI Usage
-
-After installation, you can use NCP directly from the command line:
-
-```bash
-# Discover tools
-ncp --find                              # Show MCP overview
-ncp --find "file operations"            # Search for file tools
-ncp --find "filesystem"                 # Show all filesystem tools
-
-# Execute tools
-ncp --run filesystem:read_file --params '{"path": "/tmp/test.txt"}'
-
-# Get help
-ncp --help
-```
-
-## Getting Started
-
-Once installed, restart your AI client and you can immediately start using NCP:
-
-1. **Ask your AI assistant**: *"What tools are available for file management?"*
-2. **Discover capabilities**: *"Find tools to send emails or notifications"*
-3. **Get specific help**: *"Show me database-related tools"*
-
-NCP will automatically search across all configured MCP servers and present the most relevant tools with confidence scores.
-
-### Performance Impact
-
-**Before NCP**: AI processes 50+ tools schemas → 3-8 second response times → 150k+ tokens per session
-**After NCP**: AI processes 4 unified tools → sub-second responses → 15k tokens per session
-
-**Real User Experience:**
-- ⚡ **3-5x faster tool selection** due to reduced cognitive complexity
-- 💰 **87% token cost reduction** for large MCP setups
-- 🧠 **Zero cognitive overhead** - AI doesn't need to understand MCP internals
-- 🔧 **Automatic fallbacks** - broken tools don't break your workflow
-
-## Usage Examples
-
-### Basic Tool Discovery
-
-```
-Human: Find tools to read files from my computer
-AI: I'll search for file reading tools using NCP...
-
-[NCP discovers and presents relevant tools from filesystem MCPs]
-```
-
-### Semantic Search
-
-```
-Human: What tools are available for sending notifications?
-AI: Let me search for notification-related tools...
-
-[NCP finds email, Slack, webhook, and other notification tools]
-```
-
-### Health-Aware Execution
-
-If a tool becomes unavailable, NCP automatically suggests alternatives:
-
-```
-Human: Use the file reader tool
-AI: The primary file reader is currently unavailable. Here are alternatives:
-1. filesystem-mcp file_read tool
-2. local-files read_file tool
-```
-
-## Advanced Configuration
-
-### Using Profiles
-
-For advanced users who want to organize MCP servers into different groups:
-
-```bash
-# Create a development profile
-ncp add stripe-dev stripe-cli --profiles dev --env API_KEY=sk_test_...
-
-# Create a production profile
-ncp add stripe-prod stripe-cli --profiles prod --env API_KEY=sk_live_...
-
-# Configure Claude Desktop to use specific profile
-```
-
-```json
-{
-  "mcpServers": {
-    "ncp-dev": {
-      "command": "npx",
-      "args": ["@portel/ncp", "--profile", "dev"]
-    }
-  }
-}
-```
-
-### Multi-Client Setup
-
-Install NCP across all your MCP clients automatically:
-
-```bash
-npx @portel/ncp install
-```
-
-This will detect and configure Claude Desktop, VS Code, and Cursor automatically.
-
-## CLI Commands
-
-### Essential Commands
-
-```bash
-# Check installation status
-npx @portel/ncp status
-
-# Install across all detected clients
-npx @portel/ncp install
-
-# Discover tools from command line
-npx @portel/ncp discover "file management tools"
-
-# Check health of MCP servers
-npx @portel/ncp health
-```
-
-### Profile Management
-
-```bash
-# Add MCP server to default profile
-npx @portel/ncp add <name> <command> [args...]
-
-# List all configured servers
-npx @portel/ncp list
-
-# Remove MCP server
-npx @portel/ncp remove <name>
-
-# Advanced: Add to specific profiles
-npx @portel/ncp add myapi api-server --profiles dev,test --env API_KEY=secret
-```
-
-### Health Monitoring
-
-```bash
-# Quick health summary
-npx @portel/ncp health
-
-# Detailed health information
-npx @portel/ncp health --verbose
-
-# Check specific profile
-npx @portel/ncp health --profile dev
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**"Command not found" errors:**
-- Ensure Node.js 18+ is installed
-- Try `npm install -g @portel/ncp` for global installation
-- On Windows, restart your terminal after installation
-
-**"No tools found" responses:**
-- Check that MCP servers are properly configured: `npx @portel/ncp list`
-- Verify server health: `npx @portel/ncp health --verbose`
-- Add MCP servers: `npx @portel/ncp add <name> <command>`
-
-**Performance issues:**
-- NCP automatically manages connections and health monitoring
-- Use `npx @portel/ncp health` to identify problematic servers
-- Unhealthy servers are automatically blacklisted and retried periodically
-
-### Configuration File Locations
-
-- **Claude Desktop (macOS):** `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Claude Desktop (Windows):** `%APPDATA%\Claude\claude_desktop_config.json`
-- **VS Code:** Settings → Extensions → MCP
-- **Cursor:** Settings → MCP Configuration
-
-### Getting Help
-
-- **Issues:** [GitHub Issues](https://github.com/portel-dev/ncp/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/portel-dev/ncp/discussions)
-- **Documentation:** [GitHub Wiki](https://github.com/portel-dev/ncp/wiki)
-
-## How It Works
-
-### Architecture Overview
-```mermaid
-sequenceDiagram
-    participant AI as AI Assistant
-    participant NCP as NCP Hub
-    participant Vector as Vector Search
-    participant Health as Health Monitor
-    participant MCP1 as Filesystem MCP
-    participant MCP2 as Database MCP
-    AI->>NCP: "Find tools to read files"
-    NCP->>Vector: Semantic search query
-    Vector-->>NCP: Ranked tool matches
-    NCP->>Health: Check tool availability
-    Health-->>NCP: Healthy tools only
-    NCP-->>AI: Filtered, ranked results
-    AI->>NCP: Execute file_read tool
-    NCP->>Health: Verify MCP1 status
-    Health-->>NCP: MCP1 healthy
-    NCP->>MCP1: Proxied tool call
-    MCP1-->>NCP: Tool response
-    NCP-->>AI: Formatted response
-```
-
-### Dual Architecture: Server + Client
-NCP operates as both an MCP server (to your AI client) and an MCP client (to downstream MCPs):
-
-```mermaid
-graph LR
-    subgraph "AI Client Layer"
-        Claude[Claude Desktop]
-        VSCode[VS Code]
-        Cursor[Cursor]
-    end
-    subgraph "NCP Hub Layer"
-        Server[MCP Server Interface]
-        Orchestrator[Intelligent Orchestrator]
-        Client[MCP Client Pool]
-    end
-    subgraph "MCP Ecosystem"
-        FS[Filesystem]
-        DB[Database]
-        Email[Email]
-        Web[Web APIs]
-        Shell[Shell]
-    end
-    Claude --> Server
-    VSCode --> Server
-    Cursor --> Server
-    Server --> Orchestrator
-    Orchestrator --> Client
-    Client --> FS
-    Client --> DB
-    Client --> Email
-    Client --> Web
-    Client --> Shell
-```
-
-### Core Components
-
-1. **Semantic Discovery Engine**: Uses vector embeddings with @xenova/transformers to match natural language queries to tool capabilities
-2. **Intelligent Orchestrator**: Routes tool calls with health-aware fallbacks and connection pooling
-3. **Health Monitor**: Continuously tracks MCP server status with automatic blacklisting and recovery
-4. **Connection Pool Manager**: Efficiently manages resources with lazy loading and automatic cleanup
-
-### Token Optimization Process
-
-```mermaid
-flowchart TD
-    Query["AI Query: read a file"] --> Semantic[Semantic Analysis]
-    Semantic --> Cache{Embeddings Cached?}
-    Cache -->|Yes| Search[Vector Search]
-    Cache -->|No| Generate[Generate Embeddings]
-    Generate --> Store[Cache Embeddings]
-    Store --> Search
-    Search --> Rank[Rank by Confidence]
-    Rank --> Health{Health Check}
-    Health -->|Healthy| Return[Return Top Results]
-    Health -->|Unhealthy| Alternative[Find Alternatives]
-    Alternative --> Return
-    Return --> Tokens[Minimal Token Usage]
-```
-
-**Result**: Instead of loading 50+ tool schemas (150k+ tokens), AI sees 4 unified tools (8k tokens) with intelligent routing behind the scenes.
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Write tests for your changes
-4. Implement your feature
-5. Ensure tests pass: `npm test`
-6. Submit a pull request
-
-## License
-
-This project is licensed under the [Elastic License v2.0](LICENSE).
 
 ---
 
-**Made with ❤️ for the AI development community**
+## 🎯 **Popular MCP Servers to Try**
+
+Get started with these excellent MCP servers:
+
+### **Development Tools**
+```bash
+ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/code
+ncp add memory npx @modelcontextprotocol/server-memory
+ncp add git npx mcp-git-server
+```
+
+### **Productivity & APIs**
+```bash
+ncp add web-search npx @mcptools/mcp-tavily
+ncp add github npx mcp-github-server
+ncp add postgres npx mcp-postgres
+```
+
+### **Create Environment-Specific Profiles**
+```bash
+# Development environment
+ncp add stripe npx stripe-cli --profiles dev --env API_KEY=sk_test_...
+
+# Production environment
+ncp add stripe npx stripe-cli --profiles prod --env API_KEY=sk_live_...
+```
+
+---
+
+## 🔧 **Advanced Features**
+
+### **Smart Configuration Import** 📥
+The most powerful way to get started - import your existing MCP configurations:
+
+#### **Clipboard Import (Instant)**
+```bash
+# 1. Copy any MCP JSON configuration
+# 2. Run the magic command
+ncp config import
+
+# NCP detects clipboard content automatically:
+# ✅ Single MCP config → Prompts for name
+# ✅ Multiple MCPs → Imports all with names
+# ✅ Claude Desktop config → Extracts MCP servers
+```
+
+#### **Interactive Editor Mode**
+If clipboard is empty, NCP opens a template in your default editor:
+```bash
+ncp config import              # Opens template with examples
+ncp config import --profile dev # Target specific profile
+ncp config import --dry-run    # Preview what would be imported
+```
+
+*[SCREENSHOT PLACEHOLDER: Split screen showing clipboard import vs editor template]*
+
+### **Semantic Discovery**
+NCP uses vector similarity search to find the right tools:
+```bash
+ncp find "send an email"        # → email:send_message (94.2%)
+ncp find "create database"      # → postgres:create_table (89.7%)
+ncp find "web scraping"         # → browser:extract_content (91.3%)
+```
+
+### **Health-Aware Execution**
+If a tool becomes unavailable, NCP automatically provides alternatives:
+```
+> Tool 'filesystem:read_file' is currently unavailable
+> 💡 Alternatives found:
+>   • local-files:read_file (88% similarity)
+>   • file-manager:get_content (82% similarity)
+```
+
+### **Profile-Based Organization**
+```bash
+ncp list --profile dev                 # Show development tools only
+ncp add server cmd --profiles dev,test # Deploy to multiple profiles
+```
+
+---
+
+## 🛟 **Troubleshooting**
+
+### **Common Issues**
+
+**"No tools found" responses:**
+```bash
+ncp list                               # Check configured MCPs
+ncp find "debug" --depth 2             # Detailed tool search
+```
+
+**Performance issues:**
+```bash
+ncp list --depth 1                     # Check MCP health status
+```
+
+**Configuration validation:**
+```bash
+ncp config validate                    # Check setup
+ncp config location                    # Show config files
+```
+
+*[SCREENSHOT PLACEHOLDER: `ncp config validate` output showing health checks]*
+
+### **Getting Help**
+- **Issues:** [GitHub Issues](https://github.com/portel-dev/ncp/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/portel-dev/ncp/discussions)
+
+---
+
+## 📚 **How It Works**
+
+NCP operates as both an **MCP server** (to your AI client) and an **MCP client** (to downstream MCPs):
+
+```mermaid
+graph TB
+    AI[AI Assistant] -->|"find file tools"| NCP[NCP Orchestrator]
+    NCP --> Vector[Vector Search Engine]
+    NCP --> Health[Health Monitor]
+    NCP --> Pool[Connection Pool]
+
+    Pool -->|manages| FS[Filesystem MCP]
+    Pool -->|manages| Mem[Memory MCP]
+    Pool -->|manages| Web[Web MCP]
+    Pool -->|manages| More[... N MCPs]
+
+    Vector -->|semantic matching| Results[Smart Results]
+    Results -->|with confidence scores| AI
+```
+
+**The Magic**: NCP maintains real connections to all your MCP servers, but presents them through one intelligent interface that speaks your AI's language.
+
+📚 **Want the deep technical details?** See [HOW_IT_WORKS.md](HOW_IT_WORKS.md) for token analysis, architecture diagrams, and performance benchmarks.
+
+---
+
+## 🤝 **Contributing**
+
+We'd love your help making NCP even better!
+
+- 🐛 **Bug reports**: [GitHub Issues](https://github.com/portel-dev/ncp/issues)
+- 💡 **Feature requests**: [GitHub Discussions](https://github.com/portel-dev/ncp/discussions)
+- 🔧 **Pull requests**: See [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
+## 📄 **License**
+
+**Elastic License 2.0** - See [LICENSE](LICENSE) for details.
+
+---
+
+**Ready to transform your AI experience? Install NCP now and taste the power of unified MCP orchestration! 🚀**
+
+```bash
+npm install -g @portel/ncp
+```

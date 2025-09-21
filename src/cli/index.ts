@@ -254,12 +254,14 @@ program.configureHelp({
 // Add Quick Start and Examples after all commands are defined
 program.addHelpText('after', `
 ${chalk.bold.white('Quick Start:')}
-  ${chalk.cyan('1')} Add your MCPs with ${chalk.green('ncp add')}
+  ${chalk.cyan('1a')} Import existing MCPs: ${chalk.green('ncp config import')} ${chalk.dim('(copy JSON → paste)')}
+  ${chalk.cyan('1b')} Or add manually: ${chalk.green('ncp add <name> <command>')}
   ${chalk.cyan('2')} Configure NCP in AI client settings
 
 ${chalk.bold.white('Examples:')}
-  $ ${chalk.yellow('ncp find "file operations"')}
+  $ ${chalk.yellow('ncp config import')} ${chalk.dim('                     # Smart clipboard/editor import')}
   $ ${chalk.yellow('ncp add filesystem npx @modelcontextprotocol/server-filesystem /tmp')}
+  $ ${chalk.yellow('ncp find "file operations"')}
   $ ${chalk.yellow('ncp run filesystem:read_file --params \'{"path": "/tmp/example.txt"}\'')}
   $ ${chalk.yellow('ncp list --depth 1')}`);
 
@@ -720,7 +722,7 @@ program
 // Config command group
 const configCmd = program
   .command('config')
-  .description('Manage NCP configuration');
+  .description('Manage NCP configuration (import, validate, edit)');
 
 configCmd
   .command('import [file]')
