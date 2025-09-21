@@ -69,7 +69,7 @@ export class NCPOrchestrator {
   private toolToMCP: Map<string, string> = new Map();
   private allTools: Array<{ name: string; description: string; mcpName: string }> = [];
   private profileName: string;
-  private readonly QUICK_PROBE_TIMEOUT = 5000;
+  private readonly QUICK_PROBE_TIMEOUT = 8000; // 8 seconds - allow for npm package downloads
   private readonly CONNECTION_TIMEOUT = 10000; // 10 seconds
   private readonly IDLE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
   private readonly CLEANUP_INTERVAL = 60 * 1000; // Check every minute
@@ -176,11 +176,11 @@ export class NCPOrchestrator {
           this.toolToMCP.set(prefixedToolName, config.name);
 
           // Prepare for discovery engine indexing
-          // Pass unprefixed name - RAG engine will add the prefix
+          // Pass unprefixed name and description - RAG engine will add the prefix
           discoveryTools.push({
             id: prefixedToolName,
             name: tool.name,  // Use unprefixed name here
-            description: prefixedDescription,
+            description: tool.description || 'No description available',  // Use unprefixed description
             mcpServer: config.name,
             inputSchema: {}
           });
@@ -191,7 +191,8 @@ export class NCPOrchestrator {
 
         logger.info(`Discovered ${tools.length} tools from ${config.name}`);
       } catch (error: any) {
-        logger.error(`Failed to discover tools from ${config.name}: ${error.message}`);
+        // Probe failures are expected - don't alarm users with error messages
+        logger.debug(`Failed to discover tools from ${config.name}: ${error.message}`);
       }
     }
   }
