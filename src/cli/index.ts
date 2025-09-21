@@ -25,6 +25,117 @@ if (noColor) {
   }
 }
 
+// Fuzzy matching helper for finding similar names
+function findSimilarNames(target: string, availableNames: string[], maxSuggestions = 3): string[] {
+  const targetLower = target.toLowerCase();
+
+  // Score each name based on similarity
+  const scored = availableNames.map(name => {
+    const nameLower = name.toLowerCase();
+    let score = 0;
+
+    // Exact match gets highest score
+    if (nameLower === targetLower) score += 100;
+
+    // Contains target or target contains name
+    if (nameLower.includes(targetLower)) score += 50;
+    if (targetLower.includes(nameLower)) score += 50;
+
+    // First few characters match
+    const minLen = Math.min(targetLower.length, nameLower.length);
+    for (let i = 0; i < minLen && i < 3; i++) {
+      if (targetLower[i] === nameLower[i]) score += 10;
+    }
+
+    // Similar length bonus
+    const lengthDiff = Math.abs(targetLower.length - nameLower.length);
+    if (lengthDiff <= 2) score += 5;
+
+    return { name, score };
+  });
+
+  // Filter out low scores and sort by score
+  return scored
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxSuggestions)
+    .map(item => item.name);
+}
+
+// Enhanced remove validation helper
+async function validateRemoveCommand(name: string, manager: ProfileManager, profiles: string[]): Promise<{
+  mcpExists: boolean;
+  suggestions: string[];
+  allMCPs: string[];
+}> {
+  const allMCPs = new Set<string>();
+
+  // Collect all MCP names from specified profiles
+  for (const profileName of profiles) {
+    const profile = await manager.getProfile(profileName);
+    if (profile?.mcpServers) {
+      Object.keys(profile.mcpServers).forEach(mcpName => allMCPs.add(mcpName));
+    }
+  }
+
+  const mcpList = Array.from(allMCPs);
+  const mcpExists = mcpList.includes(name);
+
+  let suggestions: string[] = [];
+  if (!mcpExists && mcpList.length > 0) {
+    suggestions = findSimilarNames(name, mcpList);
+  }
+
+  return {
+    mcpExists,
+    suggestions,
+    allMCPs: mcpList
+  };
+}
+
+// Simple validation helper for ADD command
+async function validateAddCommand(name: string, command: string, args: any[]): Promise<{
+  message: string;
+  suggestions: Array<{ command: string; description: string }>
+}> {
+  const suggestions: Array<{ command: string; description: string }> = [];
+
+  // Basic command format validation and helpful tips
+  if (command === 'npx' || command === 'npm') {
+    suggestions.push({
+      command: `${command} ${args.join(' ')}`,
+      description: 'NPM package execution - health monitor will validate if package exists and starts correctly'
+    });
+  } else if (command.startsWith('/') || command.startsWith('./') || command.includes('\\')) {
+    suggestions.push({
+      command: `${command} ${args.join(' ')}`,
+      description: 'Local executable - health monitor will validate if command works'
+    });
+  } else if (command.includes('@')) {
+    suggestions.push({
+      command: `npx -y ${command} ${args.join(' ')}`,
+      description: 'Consider using npx for npm packages'
+    });
+  } else {
+    // Generic command - might be system executable
+    suggestions.push({
+      command: `${command} ${args.join(' ')}`,
+      description: 'Custom command - health monitor will validate functionality'
+    });
+
+    // Offer helpful alternatives
+    suggestions.push({
+      command: `npx -y @modelcontextprotocol/server-${name}`,
+      description: 'If this is an official MCP server package'
+    });
+  }
+
+  return {
+    message: chalk.blue('💡 MCP will be validated by health monitor after adding'),
+    suggestions
+  };
+}
+
 // Simple emoji support detection for cross-platform compatibility
 const supportsEmoji = () => {
   // Windows Command Prompt and PowerShell often don't support emojis well
@@ -180,6 +291,25 @@ program
     const manager = new ProfileManager();
     await manager.initialize();
 
+    // Show helpful guidance without hard validation
+    const guidance = await validateAddCommand(name, command, args);
+    console.log(guidance.message);
+    if (guidance.suggestions.length > 0) {
+      console.log(chalk.dim('\n📋 Command format:'));
+      guidance.suggestions.forEach((suggestion, index) => {
+        if (index === 0) {
+          // Main command
+          console.log(`   ${chalk.cyan(suggestion.command)}`);
+          console.log(`   ${chalk.dim(suggestion.description)}`);
+        } else {
+          // Alternative suggestions
+          console.log(chalk.dim(`\n💡 Alternative: ${suggestion.command}`));
+          console.log(chalk.dim(`   ${suggestion.description}`));
+        }
+      });
+      console.log('');
+    }
+
     // Parse environment variables
     const env: Record<string, string> = {};
     if (options.env) {
@@ -230,12 +360,16 @@ program
 
 // List command
 program
-  .command('list')
-  .description('List all profiles and their MCPs')
+  .command('list [filter]')
+  .description('List all profiles and their MCPs with intelligent filtering')
   .option('--limit <number>', 'Maximum number of items to show (default: 20)')
   .option('--page <number>', 'Page number for pagination (default: 1)')
   .option('--depth <number>', 'Display depth: 0=profiles only, 1=profiles+MCPs+description, 2=profiles+MCPs+description+tools (default: 2)')
-  .action(async (options) => {
+  .option('--search <query>', 'Search in MCP names and descriptions')
+  .option('--profile <name>', 'Show only specific profile')
+  .option('--sort <field>', 'Sort by: name, tools, profiles (default: name)', 'name')
+  .option('--non-empty', 'Show only profiles with configured MCPs')
+  .action(async (filter, options) => {
     const limit = parseInt(options.limit || '20');
     const page = parseInt(options.page || '1');
     const depth = parseInt(options.depth || '2');
@@ -243,12 +377,38 @@ program
     const manager = new ProfileManager();
     await manager.initialize();
 
-    const profiles = manager.listProfiles();
+    let profiles = manager.listProfiles();
 
     if (profiles.length === 0) {
       console.log(chalk.yellow('📋 No profiles configured'));
       console.log(chalk.dim('💡 Use: ncp add <name> <command> to add an MCP server'));
       return;
+    }
+
+    // Apply profile filtering first
+    if (options.profile) {
+      const targetProfile = options.profile.toLowerCase();
+      profiles = profiles.filter(p => p.toLowerCase() === targetProfile);
+
+      if (profiles.length === 0) {
+        console.log(chalk.yellow(`⚠️  Profile "${options.profile}" not found`));
+
+        // Suggest similar profiles
+        const allProfiles = manager.listProfiles();
+        const suggestions = findSimilarNames(options.profile, allProfiles);
+        if (suggestions.length > 0) {
+          console.log(chalk.yellow('\n💡 Did you mean:'));
+          suggestions.forEach((suggestion, index) => {
+            console.log(`  ${index + 1}. ${chalk.cyan(suggestion)}`);
+          });
+        } else {
+          console.log(chalk.yellow('\n📋 Available profiles:'));
+          allProfiles.forEach((profile, index) => {
+            console.log(`  ${index + 1}. ${chalk.cyan(profile)}`);
+          });
+        }
+        return;
+      }
     }
 
     // Initialize orchestrator to get MCP descriptions and tool counts if needed
@@ -285,22 +445,118 @@ program
     }
 
     console.log(chalk.bold.white('\n📋 Configured Profiles:\n'));
+    // Collect and filter data first
+    const profileData: Array<{
+      name: string;
+      mcps: Record<string, any>;
+      filteredMcps: Record<string, any>;
+      originalCount: number;
+      filteredCount: number;
+    }> = [];
+
+    for (const profileName of profiles) {
+      const mcps = manager.getProfileMCPs(profileName) || {};
+      let filteredMcps = mcps;
+
+      // Apply MCP filtering
+      if (filter || options.search) {
+        const query = filter || options.search;
+        const queryLower = query.toLowerCase();
+
+        filteredMcps = Object.fromEntries(
+          Object.entries(mcps).filter(([mcpName, config]) => {
+            const description = mcpDescriptions[mcpName] || 'MCP server';
+            return (
+              mcpName.toLowerCase().includes(queryLower) ||
+              description.toLowerCase().includes(queryLower)
+            );
+          })
+        );
+      }
+
+      // Apply non-empty filter
+      if (options.nonEmpty && Object.keys(filteredMcps).length === 0) {
+        continue; // Skip empty profiles when --non-empty is used
+      }
+
+      profileData.push({
+        name: profileName,
+        mcps,
+        filteredMcps,
+        originalCount: Object.keys(mcps).length,
+        filteredCount: Object.keys(filteredMcps).length
+      });
+    }
+
+    // Check if filtering returned no results
+    if (profileData.length === 0) {
+      const queryInfo = filter || options.search;
+      console.log(chalk.yellow(`⚠️  No MCPs found${queryInfo ? ` matching "${queryInfo}"` : ''}`));
+
+      // Suggest available MCPs if search was used
+      if (queryInfo) {
+        const allMcps = new Set<string>();
+        for (const profile of manager.listProfiles()) {
+          const mcps = manager.getProfileMCPs(profile);
+          if (mcps) {
+            Object.keys(mcps).forEach(mcp => allMcps.add(mcp));
+          }
+        }
+
+        if (allMcps.size > 0) {
+          const suggestions = findSimilarNames(queryInfo, Array.from(allMcps));
+          if (suggestions.length > 0) {
+            console.log(chalk.yellow('\n💡 Did you mean:'));
+            suggestions.forEach((suggestion, index) => {
+              console.log(`  ${index + 1}. ${chalk.cyan(suggestion)}`);
+            });
+          } else {
+            console.log(chalk.yellow('\n📋 Available MCPs:'));
+            Array.from(allMcps).slice(0, 10).forEach((mcp, index) => {
+              console.log(`  ${index + 1}. ${chalk.cyan(mcp)}`);
+            });
+          }
+        }
+      }
+      return;
+    }
+
+    // Sort profiles if requested
+    if (options.sort !== 'name') {
+      profileData.sort((a, b) => {
+        switch (options.sort) {
+          case 'tools':
+            return b.filteredCount - a.filteredCount;
+          case 'profiles':
+            return a.name.localeCompare(b.name);
+          default:
+            return a.name.localeCompare(b.name);
+        }
+      });
+    }
+
+    // Display results
+    console.log(chalk.bold.white('📋 Configured Profiles:'));
+    if (filter || options.search) {
+      console.log(chalk.dim(`🔍 Filtered by: "${filter || options.search}"`));
+    }
+    console.log('');
 
     let totalMCPs = 0;
-    for (const profileName of profiles) {
-      const mcps = manager.getProfileMCPs(profileName);
-      const mcpCount = mcps ? Object.keys(mcps).length : 0;
-      totalMCPs += mcpCount;
+
+    for (const data of profileData) {
+      const { name: profileName, filteredMcps, filteredCount } = data;
+      totalMCPs += filteredCount;
 
       // Profile header with count
-      const countBadge = mcpCount > 0 ? chalk.green(`${mcpCount} MCPs`) : chalk.dim('empty');
+      const countBadge = filteredCount > 0 ? chalk.green(`${filteredCount} MCPs`) : chalk.dim('empty');
       console.log(`📦 ${chalk.bold.white(profileName)}`, chalk.dim(`(${countBadge})`));
 
       // Depth 0: profiles only - skip MCP details
       if (depth === 0) {
         // Already showing profile, nothing more needed
-      } else if (mcps && Object.keys(mcps).length > 0) {
-        const mcpEntries = Object.entries(mcps);
+      } else if (filteredMcps && Object.keys(filteredMcps).length > 0) {
+        const mcpEntries = Object.entries(filteredMcps);
         mcpEntries.forEach(([mcpName, config], index) => {
           const isLast = index === mcpEntries.length - 1;
           const connector = isLast ? '└──' : '├──';
@@ -412,6 +668,35 @@ program
     await manager.initialize();
 
     const profiles = options.profiles || ['all'];
+
+    // Validate if MCP exists and get suggestions
+    const validation = await validateRemoveCommand(name, manager, profiles);
+
+    if (!validation.mcpExists) {
+      console.log(chalk.yellow(`⚠️  MCP "${name}" not found in specified profiles`));
+
+      if (validation.suggestions.length > 0) {
+        console.log(chalk.yellow('\n💡 Did you mean:'));
+        validation.suggestions.forEach((suggestion, index) => {
+          console.log(`  ${index + 1}. ${chalk.cyan(suggestion)}`);
+        });
+        console.log(chalk.yellow('\n💡 Use the exact name from the list above'));
+      } else if (validation.allMCPs.length > 0) {
+        console.log(chalk.yellow('\n📋 Available MCPs in these profiles:'));
+        validation.allMCPs.forEach((mcp, index) => {
+          console.log(`  ${index + 1}. ${chalk.cyan(mcp)}`);
+        });
+      } else {
+        console.log(chalk.dim('\n📋 No MCPs found in specified profiles'));
+        console.log(chalk.dim('💡 Use \'ncp list\' to see all configured MCPs'));
+      }
+
+      console.log(chalk.yellow('\n⚠️  No changes made'));
+      return;
+    }
+
+    // MCP exists, proceed with removal
+    console.log(chalk.green('✅ MCP found, proceeding with removal...\n'));
 
     for (const profileName of profiles) {
       try {
