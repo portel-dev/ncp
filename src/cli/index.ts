@@ -790,6 +790,55 @@ program
   .option('--params <json>', 'Tool parameters as JSON string (optional - will prompt interactively if not provided)')
   .option('--no-prompt', 'Skip interactive prompting for missing parameters')
   .option('--output-format <format>', 'Output format: auto (smart rendering), json (raw JSON)', 'auto')
+  .option('-y, --yes', 'Automatically answer yes to prompts (e.g., open media files)')
+  .configureHelp({
+    formatHelp: (cmd, helper) => {
+      const indent = '  ';
+      let output = '\n';
+
+      // Header first - context before syntax
+      output += chalk.bold.white('NCP Run Command') + ' - ' + chalk.cyan('Direct MCP Tool Execution') + '\n\n';
+      output += chalk.dim('Execute MCP tools with intelligent parameter prompting and rich media support.') + '\n';
+      output += chalk.dim('Automatically handles parameter collection, validation, and response formatting.') + '\n\n';
+
+      // Then usage
+      output += chalk.bold.white('Usage:') + ' ' + helper.commandUsage(cmd) + '\n\n';
+
+      const visibleOptions = helper.visibleOptions(cmd);
+      if (visibleOptions.length) {
+        output += chalk.bold.white('Options:') + '\n';
+        visibleOptions.forEach(option => {
+          const flags = option.flags;
+          const description = helper.optionDescription(option);
+          const paddingNeeded = Math.max(0, 42 - flags.length);
+          const padding = ' '.repeat(paddingNeeded);
+          output += indent + chalk.cyan(flags) + padding + ' ' + chalk.white(description) + '\n';
+        });
+        output += '\n';
+      }
+
+      // Examples section
+      output += chalk.bold.white('Examples:') + '\n';
+      output += chalk.dim('  Basic execution:') + '\n';
+      output += indent + chalk.yellow('ncp run memory:create_entities') + chalk.gray('  # Interactive parameter prompting') + '\n';
+      output += indent + chalk.yellow('ncp run memory:create_entities --params \'{"entities":["item1"]}\'') + '\n\n';
+
+      output += chalk.dim('  Output control:') + '\n';
+      output += indent + chalk.yellow('ncp run tool --output-format json') + chalk.gray('  # Raw JSON output') + '\n';
+      output += indent + chalk.yellow('ncp run tool -y') + chalk.gray('  # Auto-open media files') + '\n\n';
+
+      output += chalk.dim('  Non-interactive:') + '\n';
+      output += indent + chalk.yellow('ncp run tool --no-prompt --params \'{}\'') + chalk.gray('  # Scripting/automation') + '\n\n';
+
+      // Media support note
+      output += chalk.bold.white('Media Support:') + '\n';
+      output += chalk.dim('  • Images and audio are displayed with metadata') + '\n';
+      output += chalk.dim('  • Use') + chalk.cyan(' -y ') + chalk.dim('to auto-open media in default applications') + '\n';
+      output += chalk.dim('  • Without') + chalk.cyan(' -y') + chalk.dim(', prompts before opening media files') + '\n\n';
+
+      return output;
+    }
+  })
   .action(async (tool, options) => {
     const profileName = program.getOptionValue('profile') || 'all';
 
@@ -951,14 +1000,14 @@ program
 
           if (isTextResponse || (result.content?.[0]?.type === 'text' && result.content.length === 1)) {
             // Format as natural text with proper newlines
-            console.log(ResponseFormatter.format(result.content));
+            console.log(ResponseFormatter.format(result.content, true, options.yes));
           } else if (ResponseFormatter.isPureData(result.content)) {
             // Pure data - use JSON formatting
             const { formatJson } = await import('../utils/highlighting.js');
             console.log(formatJson(result.content, 'cli-highlight'));
           } else {
             // Mixed content or unknown - use smart formatter
-            console.log(ResponseFormatter.format(result.content));
+            console.log(ResponseFormatter.format(result.content, true, options.yes));
           }
         }
       }

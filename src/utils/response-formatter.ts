@@ -6,6 +6,13 @@
 import chalk from 'chalk';
 import { marked } from 'marked';
 import TerminalRenderer from 'marked-terminal';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 // Configure marked with terminal renderer
 const terminalRenderer = new TerminalRenderer({
@@ -40,10 +47,13 @@ marked.setOptions({
 });
 
 export class ResponseFormatter {
+  private static autoOpenMode = false;
+
   /**
    * Format response intelligently based on content type
    */
-  static format(content: any, renderMarkdown: boolean = true): string {
+  static format(content: any, renderMarkdown: boolean = true, autoOpen: boolean = false): string {
+    this.autoOpenMode = autoOpen;
     // Handle null/undefined
     if (!content) {
       return chalk.gray('(No output)');
@@ -91,18 +101,32 @@ export class ResponseFormatter {
       return this.formatText(block.text || '', true);
     }
 
-    // Image block - show detailed info
+    // Image block - show detailed info and optionally open
     if (block.type === 'image') {
       const mimeType = block.mimeType || 'unknown';
       const size = block.data ? `${Math.round(block.data.length * 0.75 / 1024)}KB` : 'unknown size';
-      return chalk.cyan(`🖼️  Image (${mimeType}, ${size})`);
+      const output = chalk.cyan(`🖼️  Image (${mimeType}, ${size})`);
+
+      // Handle media opening if data is present
+      if (block.data) {
+        this.handleMediaFile(block.data, mimeType, 'image');
+      }
+
+      return output;
     }
 
-    // Audio block - show detailed info
+    // Audio block - show detailed info and optionally open
     if (block.type === 'audio') {
       const mimeType = block.mimeType || 'unknown';
       const size = block.data ? `${Math.round(block.data.length * 0.75 / 1024)}KB` : 'unknown size';
-      return chalk.magenta(`🔊 Audio (${mimeType}, ${size})`);
+      const output = chalk.magenta(`🔊 Audio (${mimeType}, ${size})`);
+
+      // Handle media opening if data is present
+      if (block.data) {
+        this.handleMediaFile(block.data, mimeType, 'audio');
+      }
+
+      return output;
     }
 
     // Resource link - show formatted link
@@ -325,5 +349,115 @@ export class ResponseFormatter {
 
     // Mixed or non-text content might be data
     return true;
+  }
+
+  /**
+   * Handle media file opening
+   */
+  private static async handleMediaFile(base64Data: string, mimeType: string, mediaType: 'image' | 'audio'): Promise<void> {
+    try {
+      // Get file extension from MIME type
+      const extension = this.getExtensionFromMimeType(mimeType, mediaType);
+
+      // Create temp file
+      const tempDir = os.tmpdir();
+      const fileName = `ncp-${mediaType}-${Date.now()}.${extension}`;
+      const filePath = path.join(tempDir, fileName);
+
+      // Write base64 data to file
+      const buffer = Buffer.from(base64Data, 'base64');
+      fs.writeFileSync(filePath, buffer);
+
+      // Handle opening based on mode
+      if (this.autoOpenMode) {
+        // Auto-open without asking
+        await this.openFile(filePath);
+        console.log(chalk.dim(`   → Opened in default application`));
+      } else {
+        // Ask user first
+        const { createInterface } = await import('readline');
+        const rl = createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+
+        const question = (query: string): Promise<string> => {
+          return new Promise(resolve => rl.question(query, resolve));
+        };
+
+        const answer = await question(chalk.blue(`   Open ${mediaType} in default application? (y/N): `));
+        rl.close();
+
+        if (answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes') {
+          await this.openFile(filePath);
+          console.log(chalk.dim(`   → Opened in default application`));
+        }
+      }
+
+      // Schedule cleanup after 5 minutes
+      setTimeout(() => {
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+      }, 5 * 60 * 1000); // 5 minutes
+
+    } catch (error) {
+      console.log(chalk.red(`   ⚠️  Failed to handle ${mediaType} file: ${error}`));
+    }
+  }
+
+  /**
+   * Get file extension from MIME type
+   */
+  private static getExtensionFromMimeType(mimeType: string, mediaType: 'image' | 'audio'): string {
+    const mimeToExt: Record<string, string> = {
+      // Images
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg',
+      'image/bmp': 'bmp',
+      'image/tiff': 'tiff',
+
+      // Audio
+      'audio/mp3': 'mp3',
+      'audio/mpeg': 'mp3',
+      'audio/wav': 'wav',
+      'audio/wave': 'wav',
+      'audio/ogg': 'ogg',
+      'audio/aac': 'aac',
+      'audio/m4a': 'm4a',
+      'audio/flac': 'flac'
+    };
+
+    return mimeToExt[mimeType.toLowerCase()] || (mediaType === 'image' ? 'png' : 'mp3');
+  }
+
+  /**
+   * Open file with default application
+   */
+  private static async openFile(filePath: string): Promise<void> {
+    const platform = process.platform;
+    let command: string;
+
+    switch (platform) {
+      case 'darwin': // macOS
+        command = `open "${filePath}"`;
+        break;
+      case 'win32': // Windows
+        command = `start "" "${filePath}"`;
+        break;
+      default: // Linux and others
+        command = `xdg-open "${filePath}"`;
+        break;
+    }
+
+    await execAsync(command);
   }
 }
