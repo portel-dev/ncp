@@ -165,7 +165,8 @@ const program = new Command();
 // Custom help configuration with colors and enhanced content
 program
   .name('ncp')
-  .description(`${chalk.bold.white('Natural Context Provider')} ${chalk.dim('v' + version)} - ${chalk.cyan('1 MCP to rule them all')}
+  .description(`
+${chalk.bold.white('Natural Context Provider')} ${chalk.dim('v' + version)} - ${chalk.cyan('1 MCP to rule them all')}
 ${chalk.dim('Orchestrates multiple MCP servers through a unified interface for AI assistants.')}
 ${chalk.dim('Reduces cognitive load and clutter, saving tokens and speeding up AI interactions.')}
 ${chalk.dim('Enables smart tool discovery across all configured servers with vector similarity search.')}`)
@@ -176,17 +177,18 @@ ${chalk.dim('Enables smart tool discovery across all configured servers with vec
 program.configureHelp({
   sortSubcommands: true,
   formatHelp: (cmd, helper) => {
-    // Calculate proper padding based on actual command names (without colors)
+    // Calculate proper padding based on actual command names and options separately
     const allCommands = cmd.commands.filter((cmd: any) => !cmd.hidden);
-    const maxCmdLength = Math.max(
-      ...allCommands.map(cmd => cmd.name().length),
-      ...cmd.options.map(option => option.flags.length)
-    );
-    const pad = maxCmdLength + 4; // Add extra space for alignment
+    const maxCmdLength = allCommands.length > 0 ? Math.max(...allCommands.map(cmd => cmd.name().length)) : 0;
+    const maxOptionLength = cmd.options.length > 0 ? Math.max(...cmd.options.map(option => option.flags.length)) : 0;
+
+    const cmdPad = maxCmdLength + 4; // Add extra space for command alignment
+    const optionPad = maxOptionLength + 4; // Add extra space for option alignment
     const helpWidth = helper.helpWidth || 80;
 
-    function formatItem(term: string, description?: string): string {
+    function formatItem(term: string, description?: string, padding?: number): string {
       if (description) {
+        const pad = padding || cmdPad;
         return term.padEnd(pad) + description;
       }
       return term;
@@ -203,10 +205,13 @@ program.configureHelp({
     if (cmd.options.length) {
       output += chalk.bold.white('Options:') + '\n';
       cmd.options.forEach(option => {
-        output += formatItem(
-          '  ' + chalk.cyan(option.flags),
-          chalk.white(option.description)
-        ) + '\n';
+        // Calculate padding based on raw flags, not styled version
+        const rawPadding = '  ' + option.flags;
+        const paddedRaw = rawPadding.padEnd(optionPad + 2);
+        const styledFlags = chalk.cyan(option.flags);
+        const description = chalk.white(option.description);
+
+        output += '  ' + styledFlags + ' '.repeat(paddedRaw.length - rawPadding.length) + description + '\n';
       });
       output += '\n';
     }
@@ -224,18 +229,21 @@ program.configureHelp({
         const executionCommands = ['run'];
 
         let cmdName = cmd.name();
+        let styledCmdName = cmdName;
         if (managementCommands.includes(cmd.name())) {
-          cmdName = chalk.cyan(cmd.name());
+          styledCmdName = chalk.cyan(cmd.name());
         } else if (discoveryCommands.includes(cmd.name())) {
-          cmdName = chalk.green.bold(cmd.name());
+          styledCmdName = chalk.green.bold(cmd.name());
         } else if (executionCommands.includes(cmd.name())) {
-          cmdName = chalk.yellow.bold(cmd.name());
+          styledCmdName = chalk.yellow.bold(cmd.name());
         }
 
-        output += formatItem(
-          '  ' + cmdName,
-          chalk.white(cmd.description())
-        ) + '\n';
+        // Calculate padding based on raw command name, not styled version
+        const rawPadding = '  ' + cmdName;
+        const paddedRaw = rawPadding.padEnd(cmdPad + 2);  // Use cmdPad + 2 for consistency
+        const description = chalk.white(cmd.description());
+
+        output += '  ' + styledCmdName + ' '.repeat(paddedRaw.length - rawPadding.length) + description + '\n';
       });
     }
 
@@ -928,12 +936,27 @@ program
       } else {
         console.log(OutputFormatter.success('Tool execution completed'));
 
-        // Use JSON syntax highlighting for better readability
-        if (options.jsonStyle === 'none') {
-          console.log(JSON.stringify(result.content, null, 2));
+        // Smart response formatting
+        const { ResponseFormatter } = await import('../utils/response-formatter.js');
+
+        // Check if this is text content that should be formatted naturally
+        const isTextResponse = Array.isArray(result.content) &&
+                              result.content.every((item: any) => item?.type === 'text');
+
+        if (isTextResponse || (result.content?.[0]?.type === 'text' && result.content.length === 1)) {
+          // Format as natural text with proper newlines
+          console.log(ResponseFormatter.format(result.content));
+        } else if (ResponseFormatter.isPureData(result.content)) {
+          // Pure data - use JSON formatting
+          if (options.jsonStyle === 'none') {
+            console.log(JSON.stringify(result.content, null, 2));
+          } else {
+            const { formatJson } = await import('../utils/highlighting.js');
+            console.log(formatJson(result.content, options.jsonStyle));
+          }
         } else {
-          const { formatJson } = await import('../utils/highlighting.js');
-          console.log(formatJson(result.content, options.jsonStyle));
+          // Mixed content or unknown - use smart formatter
+          console.log(ResponseFormatter.format(result.content));
         }
       }
     } else {
