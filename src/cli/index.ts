@@ -595,7 +595,8 @@ program
     }
 
     // Display results
-    console.log(chalk.bold.white('📋 Configured Profiles:'));
+    console.log('');
+    console.log(chalk.bold.white('Profiles ▶ MCPs'));
     if (filter || options.search) {
       console.log(chalk.dim(`🔍 Filtered by: "${filter || options.search}"`));
     }
