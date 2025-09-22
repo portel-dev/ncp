@@ -53,8 +53,7 @@ Add this **single entry** to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "ncp": {
-      "command": "ncp",
-      "args": ["--profile", "all"]
+      "command": "ncp"
     }
   }
 }
@@ -133,15 +132,15 @@ NCP's CLI is designed to guide you through the right workflow:
 ```bash
 ncp add <name> <command> [args...]     # Add MCP server
 ncp remove <name>                      # Remove MCP server
-ncp list                               # Show all profiles & MCPs
+ncp list                               # Show all configured MCPs
 
 # Import existing configurations (powerful!)
-ncp config import                      # Smart clipboard/editor import
+ncp config import                      # Smart clipboard import
 ncp config import <file>               # Import from file
 ncp config validate                    # Check configuration health
 ```
 
-*[SCREENSHOT PLACEHOLDER: `ncp list` output showing organized profile structure]*
+*[SCREENSHOT PLACEHOLDER: `ncp list` output showing organized MCP structure]*
 
 ### **Discovery & Testing**
 ```bash
@@ -151,12 +150,6 @@ ncp run <tool> --params <json>         # Execute specific tool
 
 *[SCREENSHOT PLACEHOLDER: `ncp find "file operations"` showing semantic search results]*
 
-### **Profile Management**
-```bash
-# Create focused environments
-ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/code --profiles dev
-ncp add stripe npx stripe-cli --profiles prod --env API_KEY=sk_live_...
-```
 
 ---
 
@@ -177,7 +170,7 @@ npm install -g @portel/ncp
   "mcpServers": {
     "ncp": {
       "command": "npx",
-      "args": ["@portel/ncp", "--profile", "all"]
+      "args": ["@portel/ncp"]
     }
   }
 }
@@ -195,16 +188,14 @@ ncp find "test"                        # Should work (empty initially)
 
 ### **Claude Desktop Setup**
 Add to your config file:
-
-**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+ - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+ - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
     "ncp": {
-      "command": "ncp",
-      "args": ["--profile", "all"]
+      "command": "ncp"
     }
   }
 }
@@ -216,8 +207,7 @@ For VS Code with MCP support:
 {
   "mcp.servers": {
     "ncp": {
-      "command": "ncp",
-      "args": ["--profile", "all"]
+      "command": "ncp"
     }
   }
 }
@@ -229,8 +219,7 @@ For Cursor IDE:
 {
   "mcpServers": {
     "ncp": {
-      "command": "ncp",
-      "args": ["--profile", "all"]
+      "command": "ncp"
     }
   }
 }
@@ -256,14 +245,6 @@ ncp add github npx mcp-github-server
 ncp add postgres npx mcp-postgres
 ```
 
-### **Create Environment-Specific Profiles**
-```bash
-# Development environment
-ncp add stripe npx stripe-cli --profiles dev --env API_KEY=sk_test_...
-
-# Production environment
-ncp add stripe npx stripe-cli --profiles prod --env API_KEY=sk_live_...
-```
 
 ---
 
@@ -320,11 +301,47 @@ If a tool becomes unavailable, NCP automatically provides alternatives:
 >   • file-manager:get_content (82% similarity)
 ```
 
-### **Profile-Based Organization**
+### **Profile-Based Organization** 🎯
+Not all fingers are equal - different clients and environments require different sets of tools. NCP provides profiles to organize your MCPs for specific purposes:
+
+#### **Why Profiles?**
+- **Development vs Production**: Different API keys and permissions
+- **Client-Specific**: Each AI client gets only the tools it needs
+- **Security**: Isolate sensitive tools from general use
+- **Performance**: Load only relevant MCPs for faster responses
+
+#### **Working with Profiles**
 ```bash
-ncp list --profile dev                 # Show development tools only
-ncp add server cmd --profiles dev,test # Deploy to multiple profiles
+# Add MCPs to specific profiles
+ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/code --profiles dev
+ncp add stripe npx stripe-cli --profiles dev --env API_KEY=sk_test_...
+ncp add stripe npx stripe-cli --profiles prod --env API_KEY=sk_live_...
+
+# List MCPs in specific profile
+ncp list --profile dev
+
+# Deploy to multiple profiles at once
+ncp add logger npx @mcp/logger --profiles dev,test,staging
 ```
+
+#### **Using Profiles in Your AI Client**
+```json
+{
+  "mcpServers": {
+    "ncp-dev": {
+      "command": "ncp",
+      "args": ["--profile", "dev"]
+    },
+    "ncp-prod": {
+      "command": "ncp",
+      "args": ["--profile", "prod"]
+    }
+  }
+}
+```
+
+**Note**: When no profile is specified, NCP uses the universal "all" profile by default.
+
 
 ---
 
