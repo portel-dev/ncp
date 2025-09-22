@@ -157,7 +157,7 @@ ncp run <tool> --params <json>         # Execute specific tool
 
 ### **Prerequisites**
 - Node.js 18+
-- Your favorite AI client that supports MCP (Claude Desktop, VS Code, Cursor)
+- Your favorite AI client that supports MCP (Claude Desktop, Cursor, VS Code with GitHub Copilot)
 
 ### **Method 1: Global Installation (Recommended)**
 ```bash
@@ -201,8 +201,8 @@ Add to your config file:
 }
 ```
 
-### **VS Code Setup**
-For VS Code with MCP support:
+### **VS Code Setup (with GitHub Copilot)**
+Requirements: VS Code 1.99+ with GitHub Copilot extension installed
 ```json
 {
   "mcp.servers": {
@@ -212,6 +212,8 @@ For VS Code with MCP support:
   }
 }
 ```
+
+**Note**: MCP support in VS Code requires GitHub Copilot. For organizations, the "MCP servers in Copilot" policy must be enabled by your administrator.
 
 ### **Cursor Setup**
 For Cursor IDE:
