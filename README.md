@@ -20,17 +20,24 @@
 npm install -g @portel/ncp
 ```
 
-### **Step 2A: Add MCPs Manually** ⚡
+### **Step 2A: Add Popular MCPs Manually** ⚡
 ```bash
-# Add filesystem tools
-ncp add filesystem npx @modelcontextprotocol/server-filesystem /tmp
+# Add the most popular MCPs (based on community usage):
 
-# Add memory capabilities
+# Sequential thinking (5,550+ downloads) - AI reasoning tool
+ncp add sequential-thinking npx @modelcontextprotocol/server-sequential-thinking
+
+# Memory capabilities - persistent storage
 ncp add memory npx @modelcontextprotocol/server-memory
 
-# Add web search
-ncp add web-search npx @mcptools/mcp-tavily
+# Brave search (680+ downloads) - web research
+ncp add brave-search npx @modelcontextprotocol/server-brave-search
+
+# Filesystem tools - secure file operations
+ncp add filesystem npx @modelcontextprotocol/server-filesystem /tmp
 ```
+
+**💡 Tip**: These are just popular examples! Browse [Smithery.ai](https://smithery.ai) (2,211+ servers) or [mcp.so](https://mcp.so) to discover MCPs for your specific needs.
 
 *[SCREENSHOT PLACEHOLDER: Terminal showing successful MCP additions with NCP's helpful guidance messages]*
 
@@ -157,11 +164,12 @@ ncp run <tool> --params <json>         # Execute specific tool
 
 ### **Prerequisites**
 - Node.js 18+
-- Your favorite AI client that supports MCP:
+- **Your favorite AI client that supports MCP:**
   - Claude Desktop
   - Claude Code (supports `ncp add` command!)
   - Cursor IDE
   - VS Code with GitHub Copilot extension
+  - *Or any other MCP-compatible client - refer to their documentation for setup*
 
 ### **Method 1: Global Installation (Recommended)**
 ```bash
@@ -207,6 +215,8 @@ Add this configuration:
 }
 ```
 
+*For detailed Claude Desktop MCP setup, refer to [Claude's official documentation](https://docs.claude.com/docs/claude-code/mcp)*
+
 ### **Claude Code Setup**
 Config file locations:
 - **Global:** `~/.claude.json` (highest priority)
@@ -223,6 +233,8 @@ Config file locations:
   }
 }
 ```
+
+*For detailed Claude Code MCP setup, refer to [Claude Code's official MCP documentation](https://docs.claude.com/en/docs/claude-code/mcp)*
 
 ### **VS Code Setup (with GitHub Copilot)**
 Requirements: VS Code 1.99+ with GitHub Copilot extension installed
@@ -244,6 +256,8 @@ Add this configuration:
 
 **Note**: MCP support in VS Code requires GitHub Copilot. For organizations, the "MCP servers in Copilot" policy must be enabled by your administrator.
 
+*For detailed VS Code MCP setup, refer to [VS Code's official MCP documentation](https://code.visualstudio.com/docs/copilot/chat/mcp-servers)*
+
 ### **Cursor IDE Setup**
 Config file locations:
 - **Global:** `~/.cursor/mcp.json` (all projects)
@@ -263,25 +277,39 @@ Add this configuration:
 }
 ```
 
+*For detailed Cursor IDE MCP setup, refer to [Cursor's official MCP documentation](https://docs.cursor.com/context/model-context-protocol)*
+
 ---
 
 ## 🎯 **Popular MCP Servers to Try**
 
-Get started with these excellent MCP servers:
+**Note**: These are examples of popular community-used MCPs. **Use your favorite MCP servers** that match your specific workflow needs!
 
-### **Development Tools**
+### **🔥 Most Downloaded (Based on Smithery.ai data)**
 ```bash
+# Top community favorites:
+ncp add sequential-thinking npx @modelcontextprotocol/server-sequential-thinking  # 5,550+ uses
+ncp add brave-search npx @modelcontextprotocol/server-brave-search              # 680+ uses
+ncp add memory npx @modelcontextprotocol/server-memory                          # Essential for AI
+```
+
+### **🛠️ Development Essentials**
+```bash
+# Popular development MCPs:
 ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/code
-ncp add memory npx @modelcontextprotocol/server-memory
-ncp add git npx mcp-git-server
+ncp add git npx @modelcontextprotocol/server-git --repository=./
+ncp add github npx @modelcontextprotocol/server-github
 ```
 
-### **Productivity & APIs**
+### **🌐 Productivity & Integrations**
 ```bash
-ncp add web-search npx @mcptools/mcp-tavily
-ncp add github npx mcp-github-server
-ncp add postgres npx mcp-postgres
+# Enterprise favorites:
+ncp add slack npx @modelcontextprotocol/server-slack
+ncp add postgres npx @modelcontextprotocol/server-postgres
+ncp add notion npx @modelcontextprotocol/server-notion
 ```
+
+**🔍 Discover More**: Explore thousands of MCPs at [Smithery.ai](https://smithery.ai) (2,211+ servers), [mcp.so](https://mcp.so), or [MCPServerFinder.com](https://mcpserverfinder.com) to find the perfect tools for your workflow!
 
 
 ---
