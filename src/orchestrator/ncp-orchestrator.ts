@@ -12,6 +12,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { DiscoveryEngine } from '../discovery/engine.js';
 import { MCPHealthMonitor } from '../utils/health-monitor.js';
+import { SearchEnhancer } from '../discovery/search-enhancer.js';
 import { mcpWrapper } from '../utils/mcp-wrapper.js';
 import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
@@ -358,8 +359,11 @@ export class NCPOrchestrator {
         return this.healthMonitor.getHealthyMCPs([result.mcpName]).length > 0;
       });
 
-      // Return up to the original limit after filtering
-      const finalResults = healthyResults.slice(0, limit);
+      // SORT by confidence (highest first) after our scoring adjustments
+      const sortedResults = healthyResults.sort((a, b) => b.confidence - a.confidence);
+
+      // Return up to the original limit after filtering and sorting
+      const finalResults = sortedResults.slice(0, limit);
 
       if (healthyResults.length < parsedResults.length) {
         logger.debug(`Health filtering: ${parsedResults.length - healthyResults.length} tools filtered out from disabled MCPs`);
@@ -947,20 +951,10 @@ export class NCPOrchestrator {
 
   /**
    * Apply universal term frequency scoring boost with action word weighting
-   * Boosts tools that have exact query terms in their names, with higher weight for action words
+   * Uses SearchEnhancer for clean, extensible term classification and semantic mapping
    */
   private adjustScoresUniversally(query: string, results: any[]): any[] {
     const queryTerms = query.toLowerCase().split(/\s+/).filter(term => term.length > 2); // Skip very short terms
-
-    // Common action words that indicate intent
-    const actionWords = new Set([
-      'save', 'write', 'create', 'make', 'add', 'insert', 'store', 'put',
-      'read', 'get', 'load', 'open', 'view', 'show', 'fetch', 'retrieve',
-      'edit', 'update', 'modify', 'change', 'alter', 'patch',
-      'delete', 'remove', 'clear', 'drop', 'destroy',
-      'list', 'find', 'search', 'query', 'filter',
-      'run', 'execute', 'start', 'stop', 'restart'
-    ]);
 
     return results.map(result => {
       const toolName = result.name.toLowerCase();
@@ -969,23 +963,37 @@ export class NCPOrchestrator {
       let nameBoost = 0;
       let descBoost = 0;
 
-      // Process each query term
+      // Process each query term with SearchEnhancer classification
       for (const term of queryTerms) {
-        const isActionWord = actionWords.has(term);
-        const baseNameWeight = isActionWord ? 0.4 : 0.2; // Action words get double weight
-        const baseDescWeight = isActionWord ? 0.2 : 0.1;
+        const termType = SearchEnhancer.classifyTerm(term);
+        const weight = SearchEnhancer.getTypeWeights(termType);
 
+        // Apply scoring based on term type
         if (toolName.includes(term)) {
-          nameBoost += baseNameWeight;
+          nameBoost += weight.name;
         }
         if (toolDescription.includes(term)) {
-          descBoost += baseDescWeight;
+          descBoost += weight.desc;
+        }
+
+        // Apply semantic action matching for ACTION terms
+        if (termType === 'ACTION') {
+          const semantics = SearchEnhancer.getActionSemantics(term);
+          for (const semanticMatch of semantics) {
+            if (toolName.includes(semanticMatch)) {
+              nameBoost += weight.name * 0.8; // 80% of full action weight for semantic matches
+            }
+            if (toolDescription.includes(semanticMatch)) {
+              descBoost += weight.desc * 0.8;
+            }
+          }
         }
       }
 
       // Apply diminishing returns to prevent excessive stacking
-      const finalNameBoost = nameBoost > 0 ? nameBoost * Math.pow(0.8, Math.max(0, nameBoost / 0.2 - 1)) : 0;
-      const finalDescBoost = descBoost > 0 ? descBoost * Math.pow(0.8, Math.max(0, descBoost / 0.1 - 1)) : 0;
+      const baseWeight = 0.15; // Base weight for diminishing returns calculation
+      const finalNameBoost = nameBoost > 0 ? nameBoost * Math.pow(0.8, Math.max(0, nameBoost / baseWeight - 1)) : 0;
+      const finalDescBoost = descBoost > 0 ? descBoost * Math.pow(0.8, Math.max(0, descBoost / (baseWeight / 2) - 1)) : 0;
 
       const totalBoost = 1 + finalNameBoost + finalDescBoost;
 
