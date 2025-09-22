@@ -59,18 +59,21 @@ export class ToolFinder {
     // Adjust search query based on MCP filter
     const searchQuery = detectedMCPFilter ? '' : query;
 
-    // Get all results for pagination calculation
-    const allResults = await this.orchestrator.find(searchQuery, 1000, depth >= 1);
+    // Get results with proper confidence-based ordering from orchestrator
+    // Request enough for pagination but not excessive amounts
+    const searchLimit = Math.min(1000, (page * limit) + 50); // Get enough for current page + buffer
+    const allResults = await this.orchestrator.find(searchQuery, searchLimit, depth >= 1);
 
     // Apply MCP filtering if detected
     const filteredResults = detectedMCPFilter ?
       allResults.filter(r => r.mcpName.toLowerCase() === detectedMCPFilter.toLowerCase()) :
       allResults;
 
+    // Results are already sorted by confidence from orchestrator - maintain that order
     // Calculate pagination
     const pagination = this.calculatePagination(filteredResults.length, page, limit);
 
-    // Get page results
+    // Get page results while preserving confidence-based order
     const pageResults = filteredResults.slice(pagination.startIndex, pagination.endIndex);
 
     // Group by MCP

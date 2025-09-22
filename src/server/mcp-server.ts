@@ -130,6 +130,7 @@ export class MCPServer {
         },
         serverInfo: {
           name: 'ncp-oss',
+          title: '1 MCP to rule them all',
           version: '1.0.0'
         }
       }
@@ -312,87 +313,78 @@ export class MCPServer {
     // Format output based on depth and mode
     if (depth === 0) {
       // Depth 0: Tool names only (no parameters, no descriptions)
-      Object.entries(mcpGroups).forEach(([mcpName, tools]) => {
-        tools.forEach((tool) => {
-          if (isListing) {
-            output += `# **${tool.toolName}**\n`;
-          } else {
-            const confidence = Math.round(tool.confidence * 100);
-            output += `# **${tool.toolName}** (${confidence}% match)\n`;
-          }
-        });
+      // Use original results array to maintain confidence-based ordering
+      results.forEach((tool) => {
+        if (isListing) {
+          output += `# **${tool.toolName}**\n`;
+        } else {
+          const confidence = Math.round(tool.confidence * 100);
+          output += `# **${tool.toolName}** (${confidence}% match)\n`;
+        }
       });
     } else if (depth === 1) {
       // Depth 1: Tool name + description only (no parameters)
-      let toolIndex = 0;
-      Object.entries(mcpGroups).forEach(([mcpName, tools]) => {
-        tools.forEach((tool) => {
-          if (toolIndex > 0) output += '---\n';
+      // Use original results array to maintain confidence-based ordering
+      results.forEach((tool, toolIndex) => {
+        if (toolIndex > 0) output += '---\n';
 
-          // Tool name
-          if (isListing) {
-            output += `# **${tool.toolName}**\n`;
-          } else {
-            const confidence = Math.round(tool.confidence * 100);
-            output += `# **${tool.toolName}** (${confidence}% match)\n`;
-          }
+        // Tool name
+        if (isListing) {
+          output += `# **${tool.toolName}**\n`;
+        } else {
+          const confidence = Math.round(tool.confidence * 100);
+          output += `# **${tool.toolName}** (${confidence}% match)\n`;
+        }
 
           // Tool description
-          if (tool.description) {
-            const cleanDescription = tool.description
-              .replace(/^[^:]+:\s*/, '') // Remove MCP prefix
-              .replace(/\s+/g, ' ') // Normalize whitespace
-              .trim();
-            output += `${cleanDescription}\n`;
-          }
+        if (tool.description) {
+          const cleanDescription = tool.description
+            .replace(/^[^:]+:\s*/, '') // Remove MCP prefix
+            .replace(/\s+/g, ' ') // Normalize whitespace
+            .trim();
+          output += `${cleanDescription}\n`;
+        }
 
-          // No parameters at depth 1
-
-          toolIndex++;
-        });
+        // No parameters at depth 1
       });
     } else {
       // Depth 2: Full details with parameter descriptions
-      let toolIndex = 0;
-      Object.entries(mcpGroups).forEach(([mcpName, tools]) => {
-        tools.forEach((tool) => {
-          if (toolIndex > 0) output += '---\n';
+      // Use original results array to maintain confidence-based ordering
+      results.forEach((tool, toolIndex) => {
+        if (toolIndex > 0) output += '---\n';
 
-          // Tool name
-          if (isListing) {
-            output += `# **${tool.toolName}**\n`;
-          } else {
-            const confidence = Math.round(tool.confidence * 100);
-            output += `# **${tool.toolName}** (${confidence}% match)\n`;
-          }
+        // Tool name
+        if (isListing) {
+          output += `# **${tool.toolName}**\n`;
+        } else {
+          const confidence = Math.round(tool.confidence * 100);
+          output += `# **${tool.toolName}** (${confidence}% match)\n`;
+        }
 
           // Tool description
-          if (tool.description) {
-            const cleanDescription = tool.description
-              .replace(/^[^:]+:\s*/, '') // Remove MCP prefix
-              .replace(/\s+/g, ' ') // Normalize whitespace
-              .trim();
-            output += `${cleanDescription}\n`;
-          }
+        if (tool.description) {
+          const cleanDescription = tool.description
+            .replace(/^[^:]+:\s*/, '') // Remove MCP prefix
+            .replace(/\s+/g, ' ') // Normalize whitespace
+            .trim();
+          output += `${cleanDescription}\n`;
+        }
 
-          // Parameters with descriptions inline
-          if (tool.schema) {
-            const params = this.parseParameters(tool.schema);
-            if (params.length > 0) {
-              params.forEach(param => {
-                const optionalText = param.required ? '' : ' *(optional)*';
-                const descText = param.description ? ` - ${param.description}` : '';
-                output += `### ${param.name}: ${param.type}${optionalText}${descText}\n`;
-              });
-            } else {
-              output += `*[no parameters]*\n`;
-            }
+        // Parameters with descriptions inline
+        if (tool.schema) {
+          const params = this.parseParameters(tool.schema);
+          if (params.length > 0) {
+            params.forEach(param => {
+              const optionalText = param.required ? '' : ' *(optional)*';
+              const descText = param.description ? ` - ${param.description}` : '';
+              output += `### ${param.name}: ${param.type}${optionalText}${descText}\n`;
+            });
           } else {
             output += `*[no parameters]*\n`;
           }
-
-          toolIndex++;
-        });
+        } else {
+          output += `*[no parameters]*\n`;
+        }
       });
     }
     output += '\n';
