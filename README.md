@@ -157,7 +157,11 @@ ncp run <tool> --params <json>         # Execute specific tool
 
 ### **Prerequisites**
 - Node.js 18+
-- Your favorite AI client that supports MCP (Claude Desktop, Cursor, VS Code with GitHub Copilot)
+- Your favorite AI client that supports MCP:
+  - Claude Desktop
+  - Claude Code (supports `ncp add` command!)
+  - Cursor IDE
+  - VS Code with GitHub Copilot extension
 
 ### **Method 1: Global Installation (Recommended)**
 ```bash
@@ -187,10 +191,29 @@ ncp find "test"                        # Should work (empty initially)
 ## ⚙️ **Configuration**
 
 ### **Claude Desktop Setup**
-Add to your config file:
- - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
- - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+Config file locations:
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux:** `~/.config/Claude/claude_desktop_config.json`
 
+Add this configuration:
+```json
+{
+  "mcpServers": {
+    "ncp": {
+      "command": "ncp"
+    }
+  }
+}
+```
+
+### **Claude Code Setup**
+Config file locations:
+- **Global:** `~/.claude.json` (highest priority)
+- **User:** `~/.claude/settings.json`
+- **Project:** `.claude/settings.local.json` (in project root)
+
+**Special Feature**: Claude Code can directly run `ncp add` commands!
 ```json
 {
   "mcpServers": {
@@ -203,9 +226,15 @@ Add to your config file:
 
 ### **VS Code Setup (with GitHub Copilot)**
 Requirements: VS Code 1.99+ with GitHub Copilot extension installed
+
+Config file locations:
+- **Workspace:** `.vscode/mcp.json` (in project root)
+- **Global:** Run command `MCP: Open User Configuration` to access
+
+Add this configuration:
 ```json
 {
-  "mcp.servers": {
+  "mcpServers": {
     "ncp": {
       "command": "ncp"
     }
@@ -215,8 +244,15 @@ Requirements: VS Code 1.99+ with GitHub Copilot extension installed
 
 **Note**: MCP support in VS Code requires GitHub Copilot. For organizations, the "MCP servers in Copilot" policy must be enabled by your administrator.
 
-### **Cursor Setup**
-For Cursor IDE:
+### **Cursor IDE Setup**
+Config file locations:
+- **Global:** `~/.cursor/mcp.json` (all projects)
+- **Project:** `.cursor/mcp.json` (in project root)
+- **Desktop:**
+  - macOS: `~/Library/Application Support/Cursor/cursor_desktop_config.json`
+  - Windows: `%APPDATA%\Cursor\cursor_desktop_config.json`
+
+Add this configuration:
 ```json
 {
   "mcpServers": {
