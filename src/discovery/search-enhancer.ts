@@ -25,7 +25,7 @@ export class SearchEnhancer {
    */
   private static readonly ACTION_SEMANTIC: ActionSemanticMapping = {
     // Write/Create actions
-    'save': ['write', 'create', 'store'],
+    'save': ['write', 'create', 'store', 'edit'],
     'make': ['create', 'write', 'add'],
     'store': ['write', 'save', 'put'],
     'put': ['write', 'store', 'add'],
