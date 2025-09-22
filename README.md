@@ -39,7 +39,7 @@ ncp add filesystem npx @modelcontextprotocol/server-filesystem /tmp
 
 **💡 Tip**: These are just popular examples! Browse [Smithery.ai](https://smithery.ai) (2,211+ servers) or [mcp.so](https://mcp.so) to discover MCPs for your specific needs.
 
-*[SCREENSHOT PLACEHOLDER: Terminal showing successful MCP additions with NCP's helpful guidance messages]*
+![NCP Add Commands](docs/images/ncp-add-commands.png)
 
 ### **Step 2B: Import Existing MCPs (Faster!)** 🚀
 Already have MCPs configured in Claude Desktop? Just copy and import them:
@@ -52,7 +52,7 @@ ncp config import
 # NCP will auto-detect clipboard content and import everything!
 ```
 
-*[SCREENSHOT PLACEHOLDER: Terminal showing smart clipboard detection and successful import of multiple MCPs]*
+![NCP Import Feature](docs/images/ncp-import-feature.png)
 
 ### **Step 3: Connect NCP to Claude Desktop** 🔗
 Add this **single entry** to your `claude_desktop_config.json`:
@@ -68,7 +68,7 @@ Add this **single entry** to your `claude_desktop_config.json`:
 
 **🎉 Done!** Your AI now has intelligent access to ALL your MCP tools through one clean interface.
 
-*[SCREENSHOT PLACEHOLDER: Before/After comparison - cluttered config with 15+ MCP entries vs clean single NCP entry]*
+![Before After Comparison](docs/images/before-after-comparison.png)
 
 ---
 
@@ -131,7 +131,7 @@ And gets exactly what it needs:
     └── search_files - Search for files by pattern
 ```
 
-*[SCREENSHOT PLACEHOLDER: NCP find command showing clean, organized results with confidence scores]*
+![NCP Find Overview](docs/images/ncp-find-overview.png)
 
 ---
 
@@ -163,7 +163,7 @@ And gets exactly what it needs:
 
 NCP's CLI gives you the same intelligent interface your AI uses - perfect for exploring and understanding your MCP ecosystem:
 
-*[SCREENSHOT PLACEHOLDER: `ncp --help` output showing the helpful command structure and Quick Start section]*
+![NCP Help Command](docs/images/ncp-help.png)
 
 ### **MCP Management**
 ```bash
@@ -177,7 +177,7 @@ ncp config import <file>               # Import from file
 ncp config validate                    # Check configuration health
 ```
 
-*[SCREENSHOT PLACEHOLDER: `ncp list` output showing organized MCP structure]*
+![NCP List Output](docs/images/ncp-list-output.png)
 
 ### **🚗 Interactive Testing & Discovery**
 Experience NCP's intelligence firsthand - these commands work exactly like your AI's interface:
@@ -199,7 +199,7 @@ ncp run memory:create_memory --params '{"content": "Test note"}'
 
 **💡 Test Drive Tip**: Use the same natural language queries you'd give your AI assistant - you'll see exactly how NCP's semantic discovery works!
 
-*[SCREENSHOT PLACEHOLDER: `ncp find "file operations"` showing semantic search results with confidence scores]*
+![NCP Find Search](docs/images/ncp-find-search.png)
 
 
 ---
@@ -392,7 +392,7 @@ ncp config import "%APPDATA%\Claude\claude_desktop_config.json"
 ncp config import "./my-mcp-config.json"
 ```
 
-*[SCREENSHOT PLACEHOLDER: Split screen showing clipboard import with highlighted JSON vs file import]*
+![NCP Import Methods](docs/images/ncp-import-methods.png)
 
 ### **Semantic Discovery**
 NCP uses vector similarity search to find the right tools:
@@ -476,7 +476,7 @@ ncp config validate                    # Check setup
 ncp config location                    # Show config files
 ```
 
-*[SCREENSHOT PLACEHOLDER: `ncp config validate` output showing health checks]*
+![NCP Config Validate](docs/images/ncp-config-validate.png)
 
 ### **Getting Help**
 - **Issues:** [GitHub Issues](https://github.com/portel-dev/ncp/issues)
