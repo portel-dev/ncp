@@ -68,7 +68,7 @@ export class ProfileManager {
   private async createDefaultProfile(): Promise<void> {
     const defaultProfile: Profile = {
       name: 'all',
-      description: 'Default profile with all configured MCP servers',
+      description: 'Universal profile with all configured MCP servers',
       mcpServers: {},
       metadata: {
         created: new Date().toISOString(),
@@ -86,6 +86,32 @@ export class ProfileManager {
   }
 
   async getProfile(name: string): Promise<Profile | undefined> {
+    // For 'all' profile, merge with MCPs from other profiles at runtime
+    if (name === 'all') {
+      const allProfile = this.profiles.get('all');
+      if (!allProfile) return undefined;
+
+      // Start with MCPs directly in the all profile
+      const mergedServers: Record<string, MCPConfig> = { ...allProfile.mcpServers };
+
+      // Add MCPs from all other profiles
+      for (const [profileName, profile] of this.profiles) {
+        if (profileName !== 'all') {
+          for (const [mcpName, mcpConfig] of Object.entries(profile.mcpServers)) {
+            // Only add if not already in merged (preserves direct 'all' additions)
+            if (!mergedServers[mcpName]) {
+              mergedServers[mcpName] = mcpConfig;
+            }
+          }
+        }
+      }
+
+      return {
+        ...allProfile,
+        mcpServers: mergedServers
+      };
+    }
+
     return this.profiles.get(name);
   }
 
@@ -133,8 +159,8 @@ export class ProfileManager {
     return Array.from(this.profiles.keys());
   }
 
-  getProfileMCPs(profileName: string): Record<string, MCPConfig> | undefined {
-    const profile = this.profiles.get(profileName);
+  async getProfileMCPs(profileName: string): Promise<Record<string, MCPConfig> | undefined> {
+    const profile = await this.getProfile(profileName);
     if (!profile?.mcpServers) return undefined;
 
     // Filter out invalid configurations (ensure they have command property)

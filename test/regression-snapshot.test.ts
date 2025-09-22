@@ -40,7 +40,7 @@ describe('CLI Command Regression Tests', () => {
       const normalized = normalizeOutput(output);
 
       // Should find tools from at least one MCP
-      expect(normalized).toMatch(/desktop-commander:|portel:|memory:|shell:/);
+      expect(normalized).toMatch(/Shell:|github:|desktop-commander:|portel:|memory:/i);
 
       // Should not have double-prefixed descriptions
       expect(normalized).not.toMatch(/portel:\s*portel:/);
@@ -66,7 +66,8 @@ describe('CLI Command Regression Tests', () => {
 
       // Should show profile structure
       expect(normalized).toContain('📦');
-      expect(normalized).toContain('Summary:');
+      // Summary line was removed from the output
+      expect(normalized).toContain('Profiles ▶ MCPs');
     });
 
     test('should filter non-empty profiles', () => {

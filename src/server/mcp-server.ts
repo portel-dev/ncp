@@ -280,10 +280,10 @@ export class MCPServer {
     if (description) {
       // Search mode - highlight the search query with reverse colors for emphasis
       const highlightedQuery = chalk.inverse(` ${description} `);
-      output = `🔍 Found tools for ${highlightedQuery}${filterText}${paginationInfo}:\n\n`;
+      output = `\n🔍 Found tools for ${highlightedQuery}${filterText}${paginationInfo}:\n\n`;
     } else {
       // Listing mode - show all available tools
-      output = `🔍 Available tools${filterText}${paginationInfo}:\n\n`;
+      output = `\n🔍 Available tools${filterText}${paginationInfo}:\n\n`;
     }
 
     // Handle no results case
@@ -387,7 +387,6 @@ export class MCPServer {
         }
       });
     }
-    output += '\n';
 
     // Add comprehensive usage guidance
     output += await UsageTipsGenerator.generate({

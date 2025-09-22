@@ -10,6 +10,18 @@ tsconfig.json
 .env
 .vscode/
 
+# Documentation and scripts (not needed in npm package)
+docs/
+scripts/
+*.md
+!README.md
+
+# Raw screenshots in project root
+./*.png
+./*.jpg
+./*.jpeg
+./*.gif
+
 # Test files
 test/
 tests/

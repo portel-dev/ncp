@@ -981,12 +981,16 @@ export class NCPOrchestrator {
           const semantics = SearchEnhancer.getActionSemantics(term);
           for (const semanticMatch of semantics) {
             if (toolName.includes(semanticMatch)) {
-              nameBoost += weight.name * 0.8; // 80% of full action weight for semantic matches
+              nameBoost += weight.name * 1.2; // 120% of full action weight for semantic matches (boosted)
             }
             if (toolDescription.includes(semanticMatch)) {
-              descBoost += weight.desc * 0.8;
+              descBoost += weight.desc * 1.2;
             }
           }
+
+          // Apply intent penalties for conflicting actions
+          const penalty = SearchEnhancer.getIntentPenalty(term, toolName);
+          nameBoost -= penalty;
         }
       }
 

@@ -37,7 +37,7 @@ export class UsageTipsGenerator {
       includeUpdateTip = true
     } = options;
 
-    let tips = '\n\n💡 **Usage Tips**:\n';
+    let tips = '\n💡 **Usage Tips**:\n';
 
     // Depth guidance
     tips += this.generateDepthTips(depth);

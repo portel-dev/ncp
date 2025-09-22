@@ -25,7 +25,7 @@ export class SearchEnhancer {
    */
   private static readonly ACTION_SEMANTIC: ActionSemanticMapping = {
     // Write/Create actions
-    'save': ['write', 'create', 'store', 'edit'],
+    'save': ['write', 'create', 'store', 'edit', 'modify', 'update'],
     'make': ['create', 'write', 'add'],
     'store': ['write', 'save', 'put'],
     'put': ['write', 'store', 'add'],
@@ -210,6 +210,33 @@ export class SearchEnhancer {
    */
   static updateTypeWeights(type: string, nameWeight: number, descWeight: number): void {
     this.SCORING_WEIGHTS[type] = { name: nameWeight, desc: descWeight };
+  }
+
+  /**
+   * Calculate intent penalty for conflicting actions
+   */
+  static getIntentPenalty(actionTerm: string, toolName: string): number {
+    const lowerToolName = toolName.toLowerCase();
+
+    // Penalize read-only tools when user wants to save/write
+    if ((actionTerm === 'save' || actionTerm === 'write') &&
+        (lowerToolName.includes('read') && !lowerToolName.includes('write') && !lowerToolName.includes('edit'))) {
+      return 0.3; // Penalty for read-only tools when intent is save/write
+    }
+
+    // Penalize write tools when user wants to read
+    if (actionTerm === 'read' &&
+        (lowerToolName.includes('write') && !lowerToolName.includes('read'))) {
+      return 0.2; // Penalty for write-only tools when intent is read
+    }
+
+    // Penalize delete tools when user wants to create/add
+    if ((actionTerm === 'create' || actionTerm === 'add') &&
+        lowerToolName.includes('delete')) {
+      return 0.3; // Penalty for delete tools when intent is create
+    }
+
+    return 0; // No penalty
   }
 
   /**
