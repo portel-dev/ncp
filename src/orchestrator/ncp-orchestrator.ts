@@ -6,6 +6,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -42,7 +43,7 @@ interface Profile {
   description: string;
   mcpServers: Record<string, {
     command: string;
-    args: string[];
+    args?: string[];
     env?: Record<string, string>;
   }>;
   metadata?: any;
@@ -52,6 +53,13 @@ interface MCPConnection {
   client: Client;
   transport: StdioClientTransport;
   tools: Array<{name: string; description: string}>;
+  serverInfo?: {
+    name: string;
+    title?: string;
+    version: string;
+    description?: string;
+    websiteUrl?: string;
+  };
   lastUsed: number;
   connectTime: number;
   executionCount: number;
@@ -61,6 +69,13 @@ interface MCPDefinition {
   name: string;
   config: MCPConfig;
   tools: Array<{name: string; description: string}>;
+  serverInfo?: {
+    name: string;
+    title?: string;
+    version: string;
+    description?: string;
+    websiteUrl?: string;
+  };
 }
 
 export class NCPOrchestrator {
@@ -83,18 +98,18 @@ export class NCPOrchestrator {
     this.healthMonitor = new MCPHealthMonitor();
   }
 
-  private loadProfile(): Profile | null {
-    const profilesDir = join(homedir(), '.ncp', 'profiles');
-    const profilePath = join(profilesDir, `${this.profileName}.json`);
-
-    if (!existsSync(profilePath)) {
-      logger.error(`Profile not found: ${profilePath}`);
-      return null;
-    }
-
+  private async loadProfile(): Promise<Profile | null> {
     try {
-      const profileData = readFileSync(profilePath, 'utf8');
-      return JSON.parse(profileData) as Profile;
+      const profileManager = new ProfileManager();
+      await profileManager.initialize();
+      const profile = await profileManager.getProfile(this.profileName);
+
+      if (!profile) {
+        logger.error(`Profile not found: ${this.profileName}`);
+        return null;
+      }
+
+      return profile;
     } catch (error: any) {
       logger.error(`Failed to load profile: ${error.message}`);
       return null;
@@ -105,7 +120,7 @@ export class NCPOrchestrator {
     const startTime = Date.now();
     logger.info(`Initializing NCP orchestrator with profile: ${this.profileName}`);
 
-    const profile = this.loadProfile();
+    const profile = await this.loadProfile();
     if (!profile) {
       logger.error('Failed to load profile');
       return;
@@ -149,18 +164,19 @@ export class NCPOrchestrator {
     for (const config of mcpConfigs) {
       try {
         logger.info(`Discovering tools from MCP: ${config.name}`);
-        const tools = await this.probeMCPTools(config);
+        const result = await this.probeMCPTools(config);
 
         // Store definition
         this.definitions.set(config.name, {
           name: config.name,
           config,
-          tools
+          tools: result.tools,
+          serverInfo: result.serverInfo
         });
 
         // Add to all tools and create mappings
         const discoveryTools = [];
-        for (const tool of tools) {
+        for (const tool of result.tools) {
           // Store with prefixed name for consistency with commercial version
           const prefixedToolName = `${config.name}:${tool.name}`;
           const prefixedDescription = `${config.name}: ${tool.description || 'No description available'}`;
@@ -189,7 +205,7 @@ export class NCPOrchestrator {
         // Index tools with discovery engine for vector search
         await this.discovery.indexMCPTools(config.name, discoveryTools);
 
-        logger.info(`Discovered ${tools.length} tools from ${config.name}`);
+        logger.info(`Discovered ${result.tools.length} tools from ${config.name}`);
       } catch (error: any) {
         // Probe failures are expected - don't alarm users with error messages
         logger.debug(`Failed to discover tools from ${config.name}: ${error.message}`);
@@ -198,7 +214,16 @@ export class NCPOrchestrator {
   }
 
   // Based on commercial NCP's probeMCPTools method
-  private async probeMCPTools(config: MCPConfig): Promise<Array<{name: string; description: string}>> {
+  private async probeMCPTools(config: MCPConfig): Promise<{
+    tools: Array<{name: string; description: string}>;
+    serverInfo?: {
+      name: string;
+      title?: string;
+      version: string;
+      description?: string;
+      websiteUrl?: string;
+    };
+  }> {
     if (!config.command) {
       throw new Error(`Invalid config for ${config.name}`);
     }
@@ -244,6 +269,9 @@ export class NCPOrchestrator {
         ]);
       });
 
+      // Capture server info after connection
+      const serverInfo = client!.getServerVersion();
+
       // Get tool list with filtered output
       const response = await withFilteredOutput(async () => {
         return await client!.listTools();
@@ -257,7 +285,16 @@ export class NCPOrchestrator {
       // Disconnect immediately
       await client.close();
 
-      return tools;
+      return {
+        tools,
+        serverInfo: serverInfo ? {
+          name: serverInfo.name || config.name,
+          title: serverInfo.title,
+          version: serverInfo.version || 'unknown',
+          description: serverInfo.title || serverInfo.name || undefined,
+          websiteUrl: serverInfo.websiteUrl
+        } : undefined
+      };
 
     } catch (error) {
       // Clean up on error
@@ -292,8 +329,11 @@ export class NCPOrchestrator {
       const doubleLimit = limit * 2; // Request double to account for filtered MCPs
       const vectorResults = await this.discovery.findRelevantTools(query, doubleLimit);
 
+      // Apply universal term frequency scoring boost
+      const adjustedResults = this.adjustScoresUniversally(query, vectorResults);
+
       // Parse and filter results
-      const parsedResults = vectorResults.map(result => {
+      const parsedResults = adjustedResults.map(result => {
         // Parse tool format: "mcp:tool" or just "tool"
         const parts = result.name.includes(':') ? result.name.split(':', 2) : [this.toolToMCP.get(result.name) || 'unknown', result.name];
         const mcpName = parts[0];
@@ -462,10 +502,20 @@ export class NCPOrchestrator {
         ]);
       });
 
+      // Capture server info after successful connection
+      const serverInfo = client.getServerVersion();
+
       const connection: MCPConnection = {
         client,
         transport,
         tools: [], // Will be populated if needed
+        serverInfo: serverInfo ? {
+          name: serverInfo.name || mcpName,
+          title: serverInfo.title,
+          version: serverInfo.version || 'unknown',
+          description: serverInfo.title || serverInfo.name || undefined,
+          websiteUrl: serverInfo.websiteUrl
+        } : undefined,
         lastUsed: Date.now(),
         connectTime: Date.now() - connectStart,
         executionCount: 1
@@ -510,7 +560,8 @@ export class NCPOrchestrator {
             name: mcpName,
             ...profile.mcpServers[mcpName]
           },
-          tools: data.tools || []
+          tools: data.tools || [],
+          serverInfo: data.serverInfo
         });
 
         // Add tools to allTools and create mappings
@@ -578,7 +629,8 @@ export class NCPOrchestrator {
       for (const [mcpName, definition] of this.definitions.entries()) {
         cache.mcps[mcpName] = {
           config: definition.config,
-          tools: definition.tools
+          tools: definition.tools,
+          serverInfo: definition.serverInfo
         };
       }
 
@@ -864,6 +916,84 @@ export class NCPOrchestrator {
 
     this.connections.clear();
     logger.info('NCP orchestrator cleanup completed');
+  }
+
+  /**
+   * Get server descriptions for all configured MCPs
+   */
+  getServerDescriptions(): Record<string, string> {
+    const descriptions: Record<string, string> = {};
+
+    // From active connections
+    for (const [mcpName, connection] of this.connections) {
+      if (connection.serverInfo?.description) {
+        descriptions[mcpName] = connection.serverInfo.description;
+      } else if (connection.serverInfo?.title) {
+        descriptions[mcpName] = connection.serverInfo.title;
+      }
+    }
+
+    // From cached definitions
+    for (const [mcpName, definition] of this.definitions) {
+      if (!descriptions[mcpName] && definition.serverInfo?.description) {
+        descriptions[mcpName] = definition.serverInfo.description;
+      } else if (!descriptions[mcpName] && definition.serverInfo?.title) {
+        descriptions[mcpName] = definition.serverInfo.title;
+      }
+    }
+
+    return descriptions;
+  }
+
+  /**
+   * Apply universal term frequency scoring boost with action word weighting
+   * Boosts tools that have exact query terms in their names, with higher weight for action words
+   */
+  private adjustScoresUniversally(query: string, results: any[]): any[] {
+    const queryTerms = query.toLowerCase().split(/\s+/).filter(term => term.length > 2); // Skip very short terms
+
+    // Common action words that indicate intent
+    const actionWords = new Set([
+      'save', 'write', 'create', 'make', 'add', 'insert', 'store', 'put',
+      'read', 'get', 'load', 'open', 'view', 'show', 'fetch', 'retrieve',
+      'edit', 'update', 'modify', 'change', 'alter', 'patch',
+      'delete', 'remove', 'clear', 'drop', 'destroy',
+      'list', 'find', 'search', 'query', 'filter',
+      'run', 'execute', 'start', 'stop', 'restart'
+    ]);
+
+    return results.map(result => {
+      const toolName = result.name.toLowerCase();
+      const toolDescription = (result.description || '').toLowerCase();
+
+      let nameBoost = 0;
+      let descBoost = 0;
+
+      // Process each query term
+      for (const term of queryTerms) {
+        const isActionWord = actionWords.has(term);
+        const baseNameWeight = isActionWord ? 0.4 : 0.2; // Action words get double weight
+        const baseDescWeight = isActionWord ? 0.2 : 0.1;
+
+        if (toolName.includes(term)) {
+          nameBoost += baseNameWeight;
+        }
+        if (toolDescription.includes(term)) {
+          descBoost += baseDescWeight;
+        }
+      }
+
+      // Apply diminishing returns to prevent excessive stacking
+      const finalNameBoost = nameBoost > 0 ? nameBoost * Math.pow(0.8, Math.max(0, nameBoost / 0.2 - 1)) : 0;
+      const finalDescBoost = descBoost > 0 ? descBoost * Math.pow(0.8, Math.max(0, descBoost / 0.1 - 1)) : 0;
+
+      const totalBoost = 1 + finalNameBoost + finalDescBoost;
+
+      return {
+        ...result,
+        confidence: result.confidence * totalBoost
+      };
+    });
   }
 }
 
