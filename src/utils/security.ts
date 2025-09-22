@@ -64,10 +64,86 @@ export function maskSensitiveData(text: string): string {
 
 /**
  * Formats command display with proper masking
+ * @param showAsTemplates - If true, shows template variables like {{API_KEY}} instead of masked values
  */
-export function formatCommandDisplay(command: string, args: string[] = []): string {
+export function formatCommandDisplay(command: string, args: string[] = [], showAsTemplates: boolean = true): string {
   const fullCommand = `${command} ${args.join(' ')}`.trim();
+
+  if (showAsTemplates) {
+    return maskSensitiveDataAsTemplates(fullCommand);
+  }
   return maskSensitiveData(fullCommand);
+}
+
+/**
+ * Masks sensitive data by replacing with template variable names
+ * This provides cleaner display without exposing any part of secrets
+ */
+export function maskSensitiveDataAsTemplates(text: string): string {
+  if (!text) return text;
+
+  let masked = text;
+
+  // Replace JWT tokens FIRST (before other patterns that might partially match)
+  masked = masked.replace(
+    /eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g,
+    '{{JWT_TOKEN}}'
+  );
+
+  // Replace Stripe API keys
+  masked = masked.replace(
+    /sk_test_[a-zA-Z0-9]{20,}/g,
+    '{{STRIPE_API_KEY}}'
+  );
+
+  masked = masked.replace(
+    /sk_live_[a-zA-Z0-9]{20,}/g,
+    '{{STRIPE_API_KEY}}'
+  );
+
+  // Replace API key parameters
+  masked = masked.replace(
+    /--api-key[=\s]+([a-zA-Z0-9_-]{16,})/gi,
+    '--api-key={{API_KEY}}'
+  );
+
+  // Replace key parameters (like Upstash keys)
+  masked = masked.replace(
+    /--key[=\s]+([a-zA-Z0-9_-]{16,})/gi,
+    '--key={{API_KEY}}'
+  );
+
+  // Replace token parameters
+  masked = masked.replace(
+    /--token[=\s]+([a-zA-Z0-9_-]{16,})/gi,
+    '--token={{TOKEN}}'
+  );
+
+  // Replace OAuth tokens
+  masked = masked.replace(
+    /--oauth-token[=\s]+([a-zA-Z0-9_-]{16,})/gi,
+    '--oauth-token={{OAUTH_TOKEN}}'
+  );
+
+  // Replace password parameters
+  masked = masked.replace(
+    /--password[=\s]+([^\s]+)/gi,
+    '--password={{PASSWORD}}'
+  );
+
+  // Replace UUID-like keys
+  masked = masked.replace(
+    /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi,
+    '{{UUID}}'
+  );
+
+  // Replace environment variable references that look like they contain secrets
+  masked = masked.replace(
+    /\$\{?([A-Z_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASS|PWD|API|AUTH)[A-Z_]*)\}?/g,
+    '{{$1}}'
+  );
+
+  return masked;
 }
 
 /**

@@ -6,3 +6,12 @@ dist/
 .vscode/
 *.tmp
 coverage/
+
+# Ignore image files in project root (temporary screenshots)
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+
+# Keep documentation images
+!docs/images/

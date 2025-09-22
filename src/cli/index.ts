@@ -10,7 +10,6 @@ import { MCPServer } from '../server/mcp-server.js';
 import { ConfigManager } from '../utils/config-manager.js';
 import { formatCommandDisplay } from '../utils/security.js';
 import { TextUtils } from '../utils/text-utils.js';
-import { MCPDescriptions } from '../services/mcp-descriptions.js';
 import { OutputFormatter } from '../services/output-formatter.js';
 import { ErrorHandler } from '../services/error-handler.js';
 
@@ -251,15 +250,33 @@ program.configureHelp({
   }
 });
 
+// Add help command
+program
+  .command('help [command]')
+  .description('Show help for NCP or a specific command')
+  .action((command) => {
+    if (command) {
+      const cmd = program.commands.find(cmd => cmd.name() === command);
+      if (cmd) {
+        cmd.help();
+      } else {
+        console.log(`Unknown command: ${command}`);
+        program.help();
+      }
+    } else {
+      program.help();
+    }
+  });
+
 // Add Quick Start and Examples after all commands are defined
 program.addHelpText('after', `
 ${chalk.bold.white('Quick Start:')}
-  ${chalk.cyan('1a')} Import existing MCPs: ${chalk.green('ncp config import')} ${chalk.dim('(copy JSON → paste)')}
+  ${chalk.cyan('1a')} Import existing MCPs: ${chalk.green('ncp config import')} ${chalk.dim('(copy JSON first)')}
   ${chalk.cyan('1b')} Or add manually: ${chalk.green('ncp add <name> <command>')}
   ${chalk.cyan('2')} Configure NCP in AI client settings
 
 ${chalk.bold.white('Examples:')}
-  $ ${chalk.yellow('ncp config import')} ${chalk.dim('                     # Smart clipboard/editor import')}
+  $ ${chalk.yellow('ncp config import config.json')} ${chalk.dim('              # Import from file')}
   $ ${chalk.yellow('ncp add filesystem npx @modelcontextprotocol/server-filesystem /tmp')}
   $ ${chalk.yellow('ncp find "file operations"')}
   $ ${chalk.yellow('ncp run filesystem:read_file --params \'{"path": "/tmp/example.txt"}\'')}
@@ -368,6 +385,51 @@ program
     console.log(chalk.dim('💡 Use: ncp find <query> to test tool discovery'));
   });
 
+// Lightweight function to read MCP info from cache without full orchestrator initialization
+async function loadMCPInfoFromCache(mcpDescriptions: Record<string, string>, mcpToolCounts: Record<string, number>, mcpVersions: Record<string, string>): Promise<boolean> {
+  const { readFileSync, existsSync } = await import('fs');
+  const { join } = await import('path');
+  const { homedir } = await import('os');
+
+  const cacheDir = join(homedir(), '.ncp', 'cache');
+  const cachePath = join(cacheDir, 'all-tools.json');
+
+  if (!existsSync(cachePath)) {
+    return false; // No cache available
+  }
+
+  try {
+    const cacheContent = readFileSync(cachePath, 'utf-8');
+    const cache = JSON.parse(cacheContent);
+
+    // Extract server info and tool counts from cache
+    for (const [mcpName, mcpData] of Object.entries(cache.mcps || {})) {
+      const data = mcpData as any;
+
+      // Extract server description (without version)
+      if (data.serverInfo?.description && data.serverInfo.description !== mcpName) {
+        mcpDescriptions[mcpName] = data.serverInfo.description;
+      } else if (data.serverInfo?.title) {
+        mcpDescriptions[mcpName] = data.serverInfo.title;
+      }
+
+      // Extract version separately
+      if (data.serverInfo?.version && data.serverInfo.version !== 'unknown') {
+        mcpVersions[mcpName] = data.serverInfo.version;
+      }
+
+      // Count tools
+      if (data.tools && Array.isArray(data.tools)) {
+        mcpToolCounts[mcpName] = data.tools.length;
+      }
+    }
+    return true; // Cache was successfully loaded
+  } catch (error) {
+    // Ignore cache reading errors - will just show without descriptions
+    return false;
+  }
+}
+
 // List command
 program
   .command('list [filter]')
@@ -425,36 +487,23 @@ program
     let orchestrator;
     let mcpDescriptions: Record<string, string> = {};
     let mcpToolCounts: Record<string, number> = {};
+    let mcpVersions: Record<string, string> = {};
 
     if (depth >= 1) {
       try {
-        const { NCPOrchestrator } = await import('../orchestrator/ncp-orchestrator.js');
-        orchestrator = new NCPOrchestrator('all'); // Use 'all' profile to get all MCPs
-        await orchestrator.initialize();
+        // Lightweight cache reading - no orchestrator initialization needed
+        const cacheLoaded = await loadMCPInfoFromCache(mcpDescriptions, mcpToolCounts, mcpVersions);
 
-        // Get descriptions and tool counts
-        const allTools = await orchestrator.find('', 1000, false); // Get all tools without details
-        const mcpStats: Record<string, { description: string, toolCount: number }> = {};
-
-        for (const tool of allTools) {
-          if (!mcpStats[tool.mcpName]) {
-            mcpStats[tool.mcpName] = { description: '', toolCount: 0 };
-          }
-          mcpStats[tool.mcpName].toolCount++;
-        }
-
-        // Generate descriptions based on MCP names
-        for (const mcpName of Object.keys(mcpStats)) {
-          mcpDescriptions[mcpName] = MCPDescriptions.getDescription(mcpName);
-          mcpToolCounts[mcpName] = mcpStats[mcpName].toolCount;
+        if (!cacheLoaded) {
+          // Show helpful message about building cache
+          console.log(chalk.dim('💡 No MCP cache found. Use `ncp find <query>` to discover tools and build cache.'));
         }
       } catch (error) {
-        // If orchestrator fails, continue without descriptions
+        // If cache reading fails, continue without descriptions
         console.log(chalk.dim('Note: Could not load MCP descriptions and tool counts'));
       }
     }
 
-    console.log(chalk.bold.white('\n📋 Configured Profiles:\n'));
     // Collect and filter data first
     const profileData: Array<{
       name: string;
@@ -465,7 +514,7 @@ program
     }> = [];
 
     for (const profileName of profiles) {
-      const mcps = manager.getProfileMCPs(profileName) || {};
+      const mcps = await manager.getProfileMCPs(profileName) || {};
       let filteredMcps = mcps;
 
       // Apply MCP filtering
@@ -475,7 +524,7 @@ program
 
         filteredMcps = Object.fromEntries(
           Object.entries(mcps).filter(([mcpName, config]) => {
-            const description = mcpDescriptions[mcpName] || 'MCP server';
+            const description = mcpDescriptions[mcpName] || mcpName;
             return (
               mcpName.toLowerCase().includes(queryLower) ||
               description.toLowerCase().includes(queryLower)
@@ -507,7 +556,7 @@ program
       if (queryInfo) {
         const allMcps = new Set<string>();
         for (const profile of manager.listProfiles()) {
-          const mcps = manager.getProfileMCPs(profile);
+          const mcps = await manager.getProfileMCPs(profile);
           if (mcps) {
             Object.keys(mcps).forEach(mcp => allMcps.add(mcp));
           }
@@ -574,13 +623,23 @@ program
 
           // MCP name with tool count (following profile count style)
           const toolCount = mcpToolCounts[mcpName];
-          const toolBadge = toolCount !== undefined ? chalk.dim(` (${chalk.green(`${toolCount} tools`)})`) : '';
-          console.log(`  ${connector} ${chalk.bold.cyanBright(mcpName)}${toolBadge}`);
+          const versionPart = mcpVersions[mcpName] ? chalk.magenta(`v${mcpVersions[mcpName]}`) : '';
 
-          // Depth 1+: Show description
-          if (depth >= 1) {
-            const description = mcpDescriptions[mcpName] || 'MCP server';
-            console.log(`  ${indent} ${chalk.white(description)}`);
+          // If not in cache, it means MCP hasn't connected successfully
+          const toolPart = toolCount !== undefined ? chalk.green(`${toolCount} tools`) : chalk.gray('not available');
+
+          const badge = versionPart && toolPart ? chalk.dim(` (${versionPart} | ${toolPart})`) :
+                       versionPart ? chalk.dim(` (${versionPart})`) :
+                       toolPart ? chalk.dim(` (${toolPart})`) : '';
+          console.log(`  ${connector} ${chalk.bold.cyanBright(mcpName)}${badge}`);
+
+          // Depth 1+: Show description if available and meaningful
+          if (depth >= 1 && mcpDescriptions[mcpName]) {
+            const description = mcpDescriptions[mcpName];
+            // Skip descriptions that just repeat the MCP name (no value added)
+            if (description.toLowerCase() !== mcpName.toLowerCase()) {
+              console.log(`  ${indent} ${chalk.white(description)}`);
+            }
           }
 
           // Depth 2: Show command with reverse colors and text wrapping
@@ -597,14 +656,8 @@ program
       console.log('');
     }
 
-    // Cleanup orchestrator
-    if (orchestrator) {
-      await orchestrator.cleanup();
-    }
+    // No cleanup needed for lightweight approach
 
-    // Summary footer
-    console.log(chalk.dim('─'.repeat(50)));
-    console.log(chalk.bold.white(`📊 Summary: ${profiles.length} profiles, ${totalMCPs} MCPs configured`));
   });
 
 
@@ -788,6 +841,7 @@ program
 // Run command (existing functionality)
 program
   .command('run <tool>')
+
   .description('Run a specific tool')
   .option('--params <json>', 'Tool parameters as JSON string (optional - will prompt interactively if not provided)')
   .option('--no-prompt', 'Skip interactive prompting for missing parameters')

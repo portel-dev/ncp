@@ -4,7 +4,6 @@
  */
 
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
-import { MCPDescriptions } from './mcp-descriptions.js';
 
 export interface FindOptions {
   query?: string;
@@ -173,7 +172,7 @@ export class ToolFinder {
         mcpSet.add(tool.mcpName);
         samples.push({
           mcpName: tool.mcpName,
-          description: MCPDescriptions.getDescription(tool.mcpName)
+          description: tool.mcpName // TODO: Get from MCP server info
         });
       }
     }
