@@ -321,45 +321,26 @@ ncp list --depth 1    # Check MCP health status
 ncp config validate   # Validate configuration
 ```
 
-## Configuration Examples
+## Advanced Configuration Patterns
 
-### Basic Setup
+### Multi-Environment Orchestration
 ```bash
-# Add common development MCPs
-ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/code
-ncp add memory npx @modelcontextprotocol/server-memory
-ncp add web-search npx @mcptools/mcp-tavily
+# Environment-specific MCP pools
+ncp add stripe-dev npx stripe-cli --env STRIPE_KEY=sk_test_...
+ncp add stripe-prod npx stripe-cli --env STRIPE_KEY=sk_live_...
 
-# Test the setup
-ncp find "file operations"
-ncp list
+# Conditional routing based on context
+ncp run "stripe:create_payment" --context="development"
 ```
 
-### Environment-Specific Profiles
+### High-Availability Setups
 ```bash
-# Development environment
-ncp add stripe npx stripe-cli --profiles dev --env API_KEY=sk_test_...
-ncp add database npx db-server --profiles dev --env HOST=localhost
+# Redundant MCP configurations
+ncp add filesystem-primary npx @modelcontextprotocol/server-filesystem ~/primary
+ncp add filesystem-backup npx @modelcontextprotocol/server-filesystem ~/backup
 
-# Production environment
-ncp add stripe npx stripe-cli --profiles prod --env API_KEY=sk_live_...
-ncp add database npx db-server --profiles prod --env HOST=prod.db.com
-
-# Use specific profile
-ncp --profile dev find "payment tools"
-```
-
-### Import from Existing Configurations
-```bash
-# From clipboard
-ncp config import
-
-# From Claude Desktop config
-ncp config import "~/Library/Application Support/Claude/claude_desktop_config.json"
-
-# Validate the import
-ncp config validate
-ncp list --depth 2
+# Automatic failover testing
+ncp config validate --check-redundancy
 ```
 
 ## Contributing to NCP
