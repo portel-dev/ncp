@@ -371,6 +371,37 @@ describe('NCPOrchestrator - Basic Tests', () => {
       expect(typeof result.success).toBe('boolean');
     });
 
+    it('should validate required parameters before execution', async () => {
+      // This test validates that the parameter validation method exists and works
+      // Create a mock orchestrator instance to test the validation method directly
+      const testOrchestrator = new (orchestrator.constructor as any)('test');
+
+      // Test the validation method with a mock schema
+      const mockSchema = {
+        type: 'object',
+        properties: {
+          required_param: { type: 'string', description: 'Required parameter' },
+          optional_param: { type: 'string', description: 'Optional parameter' }
+        },
+        required: ['required_param']
+      };
+
+      // Mock getToolSchema to return our test schema
+      jest.spyOn(testOrchestrator, 'getToolSchema' as any).mockReturnValue(mockSchema);
+
+      // Test validation with missing required parameter
+      const validationError = (testOrchestrator as any).validateToolParameters('test-mcp', 'test_tool', {});
+      expect(validationError).toContain('Missing required parameters: required_param');
+
+      // Test validation with valid parameters
+      const validationSuccess = (testOrchestrator as any).validateToolParameters('test-mcp', 'test_tool', { required_param: 'value' });
+      expect(validationSuccess).toBeNull();
+
+      // Test validation with null parameters
+      const validationNull = (testOrchestrator as any).validateToolParameters('test-mcp', 'test_tool', null);
+      expect(validationNull).toContain('Missing required parameters: required_param');
+    });
+
     it('should handle MCP name resolution from tool name', async () => {
       await orchestrator.initialize();
 

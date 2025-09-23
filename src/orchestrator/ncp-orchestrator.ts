@@ -425,6 +425,15 @@ export class NCPOrchestrator {
       // Get or create pooled connection
       const connection = await this.getOrCreateConnection(mcpName);
 
+      // Validate parameters before execution
+      const validationError = this.validateToolParameters(mcpName, actualToolName, parameters);
+      if (validationError) {
+        return {
+          success: false,
+          error: validationError
+        };
+      }
+
       // Execute tool with filtered output to suppress MCP server console messages
       const result = await withFilteredOutput(async () => {
         return await connection.client.callTool({
@@ -689,6 +698,33 @@ export class NCPOrchestrator {
 
     const schema = this.getToolSchema(mcpName, toolName);
     return ToolSchemaParser.parseParameters(schema);
+  }
+
+  /**
+   * Validate tool parameters before execution
+   */
+  private validateToolParameters(mcpName: string, toolName: string, parameters: any): string | null {
+    const schema = this.getToolSchema(mcpName, toolName);
+    if (!schema) {
+      // No schema available, allow execution (tool may not require validation)
+      return null;
+    }
+
+    const requiredParams = ToolSchemaParser.getRequiredParameters(schema);
+    const missingParams: string[] = [];
+
+    // Check for missing required parameters
+    for (const param of requiredParams) {
+      if (parameters === null || parameters === undefined || !(param.name in parameters) || parameters[param.name] === null || parameters[param.name] === undefined || parameters[param.name] === '') {
+        missingParams.push(param.name);
+      }
+    }
+
+    if (missingParams.length > 0) {
+      return `Missing required parameters: ${missingParams.join(', ')}. Use 'ncp find "${mcpName}:${toolName}" --depth 2' to see parameter details.`;
+    }
+
+    return null; // Validation passed
   }
 
   /**
