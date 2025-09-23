@@ -210,6 +210,9 @@ export class NCPOrchestrator {
       } catch (error: any) {
         // Probe failures are expected - don't alarm users with error messages
         logger.debug(`Failed to discover tools from ${config.name}: ${error.message}`);
+
+        // Update health monitor with the actual error for import feedback
+        this.healthMonitor.markUnhealthy(config.name, error.message);
       }
     }
   }

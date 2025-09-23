@@ -380,7 +380,7 @@ export class ConfigManager {
       return;
     }
 
-    // Actually import the MCPs (silently first)
+    // Actually import the MCPs
     const successful: Array<{name: string, config: MCPConfig}> = [];
     const failed: Array<{name: string, error: string}> = [];
 
@@ -394,13 +394,39 @@ export class ConfigManager {
       }
     }
 
-    // Now display results in ncp list style after successful import
+    // Import phase completed, now validate what actually works
     if (successful.length > 0) {
-      console.log('\n' + chalk.green(`✅ Successfully imported ${successful.length} MCP server(s):`));
-      console.log('');
+      // Show loading animation during validation
+      const spinner = this.createSpinner(`✅ Validating ${successful.length} imported MCP server(s)...`);
+      spinner.start();
 
-      // Show in ncp list format: all profile with rich data
-      await this.displayImportedMCPs(successful.map(s => s.name));
+      const discoveryResult = await this.discoverImportedMCPs(successful.map(s => s.name));
+
+      // Clear spinner and show final result
+      spinner.stop();
+      process.stdout.write('\r\x1b[K'); // Clear the line
+
+      // Show successfully working MCPs
+      if (discoveryResult.successful.length > 0) {
+        console.log('');
+        console.log(chalk.green(`✅ Successfully imported ${discoveryResult.successful.length} MCP server(s):`));
+        console.log('');
+
+        // Show profile header like ncp list
+        console.log(`📦 ${chalk.bold.white('all')} ${chalk.dim(`(${discoveryResult.successful.length} MCPs)`)}`);
+
+        // Show in ncp list format with rich data from fresh cache
+        await this.displayImportedMCPs(discoveryResult.successful);
+      }
+
+      // Show MCPs that failed with actual error messages
+      if (discoveryResult.failed.length > 0) {
+        console.log(chalk.red(`❌ ${discoveryResult.failed.length} MCP(s) failed to connect:`));
+        discoveryResult.failed.forEach(({ name, error }) => {
+          console.log(chalk.red(`   • ${name}: `) + chalk.dim(error));
+        });
+        console.log('');
+      }
     }
 
     if (failed.length > 0) {
@@ -420,6 +446,90 @@ export class ConfigManager {
   }
 
   /**
+   * Run discovery for imported MCPs to populate cache and check which ones work
+   * @returns Object with successful and failed MCPs with error details
+   */
+  private async discoverImportedMCPs(importedMcpNames: string[]): Promise<{successful: string[], failed: Array<{name: string, error: string}>}> {
+    const successful: string[] = [];
+    const failed: Array<{name: string, error: string}> = [];
+
+    try {
+      // Import health monitor to get real error messages
+      const { healthMonitor } = await import('./health-monitor.js');
+
+      // Get the imported MCP configurations for direct health checks
+      const profileManager = new ProfileManager();
+      await profileManager.initialize();
+      const profile = await profileManager.getProfile('all');
+
+      if (!profile) {
+        throw new Error('Profile not found');
+      }
+
+      // Perform direct health checks on imported MCPs
+      for (const mcpName of importedMcpNames) {
+        const mcpConfig = profile.mcpServers[mcpName];
+        if (!mcpConfig) {
+          failed.push({
+            name: mcpName,
+            error: 'MCP configuration not found in profile'
+          });
+          continue;
+        }
+
+        try {
+          // Direct health check using the health monitor
+          const health = await healthMonitor.checkMCPHealth(
+            mcpName,
+            mcpConfig.command,
+            mcpConfig.args || [],
+            mcpConfig.env
+          );
+
+          if (health.status === 'healthy') {
+            successful.push(mcpName);
+          } else {
+            failed.push({
+              name: mcpName,
+              error: health.lastError || health.disabledReason || 'Health check failed'
+            });
+          }
+        } catch (error) {
+          failed.push({
+            name: mcpName,
+            error: `Health check error: ${error instanceof Error ? error.message : 'Unknown error'}`
+          });
+        }
+      }
+
+      // If we have successful MCPs, run discovery to populate cache for display
+      if (successful.length > 0) {
+        try {
+          const { NCPOrchestrator } = await import('../orchestrator/ncp-orchestrator.js');
+          const orchestrator = new NCPOrchestrator();
+          await orchestrator.initialize();
+          await orchestrator.find('', 1000, false);
+          await orchestrator.cleanup();
+        } catch (error) {
+          // Discovery failure doesn't affect health check results, just cache population
+          console.log('Cache population failed, but health checks completed');
+        }
+      }
+
+    } catch (error) {
+      // If the entire process fails, all are considered failed
+      for (const mcpName of importedMcpNames) {
+        failed.push({
+          name: mcpName,
+          error: `Discovery failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        });
+      }
+    }
+
+    return { successful, failed };
+  }
+
+  /**
    * Display imported MCPs in ncp list style with rich data (descriptions, versions, tool counts)
    */
   private async displayImportedMCPs(importedMcpNames: string[]): Promise<void> {
@@ -428,13 +538,7 @@ export class ConfigManager {
     const mcpToolCounts: Record<string, number> = {};
     const mcpVersions: Record<string, string> = {};
 
-    const cacheLoaded = await this.loadMCPInfoFromCache(mcpDescriptions, mcpToolCounts, mcpVersions);
-
-    if (!cacheLoaded) {
-      // Show message about missing cache, like ncp list does
-      console.log(chalk.dim('💡 Run `ncp find <query>` to discover tools and populate descriptions.'));
-      console.log('');
-    }
+    await this.loadMCPInfoFromCache(mcpDescriptions, mcpToolCounts, mcpVersions);
 
     // Get the imported MCPs' configurations
     const profiles = this.profileManager.listProfiles();
@@ -473,38 +577,38 @@ export class ConfigManager {
       const connector = isLast ? '└──' : '├──';
       const indent = isLast ? '   ' : '│  ';
 
-      // MCP name with tool count and version (like ncp list)
-      const toolCount = mcpToolCounts[mcpName];
-      const versionPart = mcpVersions[mcpName] ? chalk.magenta(`v${mcpVersions[mcpName]}`) : '';
+      // MCP name with tool count and version (like ncp list) - handle case variations
+      const capitalizedName = mcpName.charAt(0).toUpperCase() + mcpName.slice(1);
+      const toolCount = mcpToolCounts[mcpName] ?? mcpToolCounts[capitalizedName];
+      const versionPart = (mcpVersions[mcpName] ?? mcpVersions[capitalizedName]) ?
+                         chalk.magenta(`v${mcpVersions[mcpName] ?? mcpVersions[capitalizedName]}`) : '';
       const toolPart = toolCount !== undefined ? chalk.green(`${toolCount} ${toolCount === 1 ? 'tool' : 'tools'}`) : '';
 
-      let nameDisplay = chalk.cyan(mcpName);
+      let nameDisplay = chalk.bold.cyanBright(mcpName);
 
-      // Format: (v1.0.0 | 4 tools) with version first, all inside parentheses
-      if (versionPart && toolPart) {
-        nameDisplay += chalk.dim(` (${versionPart} ${chalk.gray('|')} ${toolPart})`);
-      } else if (versionPart) {
-        nameDisplay += chalk.dim(` (${versionPart})`);
-      } else if (toolPart) {
-        nameDisplay += chalk.dim(` (${toolPart})`);
-      }
+      // Format: (v1.0.0 | 4 tools) with version first, all inside parentheses - like ncp list
+      const badge = versionPart && toolPart ? chalk.dim(` (${versionPart} | ${toolPart})`) :
+                   versionPart ? chalk.dim(` (${versionPart})`) :
+                   toolPart ? chalk.dim(` (${toolPart})`) : '';
 
-      // No indent for imported MCPs - they are at root level
-      console.log(chalk.gray(`${connector} `) + nameDisplay);
+      nameDisplay += badge;
+
+      // Indent properly under the profile (like ncp list)
+      console.log(`  ${connector} ${nameDisplay}`);
 
       // Description if available (depth >= 1)
       const description = mcpDescriptions[mcpName];
       if (description && description.toLowerCase() !== mcpName.toLowerCase()) {
-        console.log(chalk.gray(`${indent} `) + chalk.white(description));
+        console.log(`  ${indent} ${chalk.white(description)}`);
       }
 
       // Command with reverse colors (depth >= 2)
       const commandText = formatCommandDisplay(config.command, config.args);
-      const maxWidth = process.stdout.columns ? process.stdout.columns - 4 : 80;
-      const wrappedLines = TextUtils.wrapTextWithBackground(commandText, maxWidth, chalk.gray(`${indent} `), (text: string) => chalk.bgGray.black(text));
+      const maxWidth = process.stdout.columns ? process.stdout.columns - 6 : 80;
+      const wrappedLines = TextUtils.wrapTextWithBackground(commandText, maxWidth, `  ${indent} `, (text: string) => chalk.bgGray.black(text));
       console.log(wrappedLines);
 
-      if (!isLast) console.log(chalk.gray('│'));
+      if (!isLast) console.log(`  │`);
     });
 
     console.log('');
@@ -559,6 +663,29 @@ export class ConfigManager {
       // No cache available - just show basic info
       return false;
     }
+  }
+
+  /**
+   * Create a simple spinner for loading animation
+   */
+  private createSpinner(message: string) {
+    const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    let i = 0;
+    let intervalId: NodeJS.Timeout;
+
+    return {
+      start: () => {
+        intervalId = setInterval(() => {
+          process.stdout.write(`\r${chalk.dim(frames[i % frames.length])} ${message}`);
+          i++;
+        }, 100);
+      },
+      stop: () => {
+        if (intervalId) {
+          clearInterval(intervalId);
+        }
+      }
+    };
   }
 
   /**
