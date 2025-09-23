@@ -5,6 +5,8 @@ import clipboardy from 'clipboardy';
 import { ProfileManager } from '../profiles/profile-manager.js';
 import { OutputFormatter } from '../services/output-formatter.js';
 import { ErrorHandler } from '../services/error-handler.js';
+import { formatCommandDisplay } from '../utils/security.js';
+import { TextUtils } from '../utils/text-utils.js';
 
 interface MCPConfig {
   command: string;
@@ -78,7 +80,7 @@ export class ConfigManager {
       console.log(OutputFormatter.bullet(`${profile}.json`));
     });
     console.log('');
-    console.log(chalk.blue('💡 You can edit these files directly with your preferred editor'))
+    console.log(chalk.dim('💡 You can edit these files directly with your preferred editor'))
   }
 
   /**
@@ -171,12 +173,18 @@ export class ConfigManager {
    * Import from a JSON file
    */
   private async importFromFile(filePath: string, profileName: string, dryRun: boolean): Promise<void> {
-    if (!existsSync(filePath)) {
-      throw new Error(`File not found: ${filePath}`);
+    // Expand tilde to home directory
+    const { homedir } = await import('os');
+    const expandedPath = filePath.startsWith('~') ?
+      filePath.replace('~', homedir()) :
+      filePath;
+
+    if (!existsSync(expandedPath)) {
+      throw new Error(`Configuration file not found at: ${filePath}\n\nPlease check that the file exists and the path is correct.`);
     }
 
     try {
-      const content = readFileSync(filePath, 'utf-8');
+      const content = readFileSync(expandedPath, 'utf-8');
       const parsedData = JSON.parse(content);
 
       // Clean the data to handle Claude Desktop format and remove unwanted entries
@@ -340,18 +348,39 @@ export class ConfigManager {
     }
 
     if (dryRun) {
-      console.log(chalk.blue(`🔍 Dry run - would import ${mcpNames.length} MCPs to profile '${profileName}':`));
-      mcpNames.forEach(name => {
+      console.log('\n' + chalk.blue(`📥 Would import ${mcpNames.length} MCP server(s):`));
+      console.log('');
+
+      mcpNames.forEach((name, index) => {
         const config = mcpData[name];
-        console.log(`  • ${name}: ${config.command} ${config.args?.join(' ') || ''}`);
+        const isLast = index === mcpNames.length - 1;
+        const connector = isLast ? '└──' : '├──';
+        const indent = isLast ? '   ' : '│  ';
+
+        // MCP name (no indent - root level)
+        console.log(chalk.gray(`${connector} `) + chalk.cyan(name));
+
+        // Command line with reverse colors (like ncp list)
+        const fullCommand = formatCommandDisplay(config.command, config.args);
+        const maxWidth = process.stdout.columns ? process.stdout.columns - 4 : 80;
+        const wrappedLines = TextUtils.wrapTextWithBackground(fullCommand, maxWidth, chalk.gray(`${indent} `), (text: string) => chalk.bgGray.black(text));
+        console.log(wrappedLines);
+
+        // Environment variables if present
+        if (config.env && Object.keys(config.env).length > 0) {
+          const envCount = Object.keys(config.env).length;
+          console.log(chalk.gray(`${indent} `) + chalk.yellow(`${envCount} environment variable${envCount > 1 ? 's' : ''}`));
+        }
+
+        if (!isLast) console.log(chalk.gray('│'));
       });
+
+      console.log('');
+      console.log(chalk.dim('💡 Run without --dry-run to perform the import'));
       return;
     }
 
-    // Actually import the MCPs
-    console.log(chalk.blue(`🚀 Importing ${mcpNames.length} MCP server(s) to profile '${profileName}'...`));
-    console.log('');
-
+    // Actually import the MCPs (silently first)
     const successful: Array<{name: string, config: MCPConfig}> = [];
     const failed: Array<{name: string, error: string}> = [];
 
@@ -365,16 +394,13 @@ export class ConfigManager {
       }
     }
 
-    // Show results
+    // Now display results in ncp list style after successful import
     if (successful.length > 0) {
-      console.log(chalk.green(`✅ Successfully imported ${successful.length} MCP server(s):`));
-      successful.forEach(({ name, config }) => {
-        const commandDisplay = config.args && config.args.length > 0
-          ? `${config.command} ${config.args.join(' ')}`
-          : config.command;
-        console.log(`  ${chalk.cyan('•')} ${chalk.bold(name)} → ${chalk.dim(commandDisplay)}`);
-      });
+      console.log('\n' + chalk.green(`✅ Successfully imported ${successful.length} MCP server(s):`));
       console.log('');
+
+      // Show in ncp list format: all profile with rich data
+      await this.displayImportedMCPs(successful.map(s => s.name));
     }
 
     if (failed.length > 0) {
@@ -386,10 +412,152 @@ export class ConfigManager {
     }
 
     if (successful.length > 0) {
-      console.log(chalk.blue('💡 Next steps:'));
-      console.log(chalk.blue(`  🔍 Test discovery: ncp find "file tools"`));
-      console.log(chalk.blue(`  📋 List all MCPs: ncp list`));
-      console.log(chalk.blue(`  🎯 Update your AI client config to use NCP`));
+      console.log(chalk.dim('💡 Next steps:'));
+      console.log(chalk.dim('  •') + ' Test discovery: ' + chalk.cyan('ncp find "file tools"'));
+      console.log(chalk.dim('  •') + ' List all MCPs: ' + chalk.cyan('ncp list'));
+      console.log(chalk.dim('  •') + ' Update your AI client config to use NCP');
+    }
+  }
+
+  /**
+   * Display imported MCPs in ncp list style with rich data (descriptions, versions, tool counts)
+   */
+  private async displayImportedMCPs(importedMcpNames: string[]): Promise<void> {
+    // Load cache data for rich display
+    const mcpDescriptions: Record<string, string> = {};
+    const mcpToolCounts: Record<string, number> = {};
+    const mcpVersions: Record<string, string> = {};
+
+    const cacheLoaded = await this.loadMCPInfoFromCache(mcpDescriptions, mcpToolCounts, mcpVersions);
+
+    if (!cacheLoaded) {
+      // Show message about missing cache, like ncp list does
+      console.log(chalk.dim('💡 Run `ncp find <query>` to discover tools and populate descriptions.'));
+      console.log('');
+    }
+
+    // Get the imported MCPs' configurations
+    const profiles = this.profileManager.listProfiles();
+    const allMcps: Record<string, MCPConfig> = {};
+
+    // Collect all MCPs from all profiles to get the config
+    for (const profileName of profiles) {
+      try {
+        const profileConfig = await this.profileManager.getProfile(profileName);
+        if (profileConfig?.mcpServers) {
+          Object.assign(allMcps, profileConfig.mcpServers);
+        }
+      } catch (error) {
+        // Skip invalid profiles
+      }
+    }
+
+    // Filter to only show imported MCPs
+    const filteredMcps: Record<string, MCPConfig> = {};
+    for (const mcpName of importedMcpNames) {
+      if (allMcps[mcpName]) {
+        filteredMcps[mcpName] = allMcps[mcpName];
+      }
+    }
+
+    if (Object.keys(filteredMcps).length === 0) {
+      console.log(chalk.yellow('⚠ No imported MCPs found to display'));
+      return;
+    }
+
+    // Display without the "all" header - just show imported MCPs directly
+
+    const mcpEntries = Object.entries(filteredMcps);
+    mcpEntries.forEach(([mcpName, config], index) => {
+      const isLast = index === mcpEntries.length - 1;
+      const connector = isLast ? '└──' : '├──';
+      const indent = isLast ? '   ' : '│  ';
+
+      // MCP name with tool count and version (like ncp list)
+      const toolCount = mcpToolCounts[mcpName];
+      const versionPart = mcpVersions[mcpName] ? chalk.magenta(`v${mcpVersions[mcpName]}`) : '';
+      const toolPart = toolCount !== undefined ? chalk.green(`${toolCount} ${toolCount === 1 ? 'tool' : 'tools'}`) : '';
+
+      let nameDisplay = chalk.cyan(mcpName);
+
+      // Format: (v1.0.0 | 4 tools) with version first, all inside parentheses
+      if (versionPart && toolPart) {
+        nameDisplay += chalk.dim(` (${versionPart} ${chalk.gray('|')} ${toolPart})`);
+      } else if (versionPart) {
+        nameDisplay += chalk.dim(` (${versionPart})`);
+      } else if (toolPart) {
+        nameDisplay += chalk.dim(` (${toolPart})`);
+      }
+
+      // No indent for imported MCPs - they are at root level
+      console.log(chalk.gray(`${connector} `) + nameDisplay);
+
+      // Description if available (depth >= 1)
+      const description = mcpDescriptions[mcpName];
+      if (description && description.toLowerCase() !== mcpName.toLowerCase()) {
+        console.log(chalk.gray(`${indent} `) + chalk.white(description));
+      }
+
+      // Command with reverse colors (depth >= 2)
+      const commandText = formatCommandDisplay(config.command, config.args);
+      const maxWidth = process.stdout.columns ? process.stdout.columns - 4 : 80;
+      const wrappedLines = TextUtils.wrapTextWithBackground(commandText, maxWidth, chalk.gray(`${indent} `), (text: string) => chalk.bgGray.black(text));
+      console.log(wrappedLines);
+
+      if (!isLast) console.log(chalk.gray('│'));
+    });
+
+    console.log('');
+  }
+
+  /**
+   * Load MCP info from cache (copied from CLI list command)
+   */
+  private async loadMCPInfoFromCache(
+    mcpDescriptions: Record<string, string>,
+    mcpToolCounts: Record<string, number>,
+    mcpVersions: Record<string, string>
+  ): Promise<boolean> {
+    try {
+      const { readFileSync, existsSync } = await import('fs');
+      const { join } = await import('path');
+      const { homedir } = await import('os');
+
+      const cacheDir = join(homedir(), '.ncp', 'cache');
+      const cachePath = join(cacheDir, 'all-tools.json');
+
+      if (!existsSync(cachePath)) {
+        return false; // No cache available
+      }
+
+      const cacheContent = readFileSync(cachePath, 'utf-8');
+      const cache = JSON.parse(cacheContent);
+
+      // Extract server info and tool counts from cache
+      for (const [mcpName, mcpData] of Object.entries(cache.mcps || {})) {
+        const data = mcpData as any;
+
+        // Extract server description (without version)
+        if (data.serverInfo?.description && data.serverInfo.description !== mcpName) {
+          mcpDescriptions[mcpName] = data.serverInfo.description;
+        } else if (data.serverInfo?.title) {
+          mcpDescriptions[mcpName] = data.serverInfo.title;
+        }
+
+        // Extract version separately
+        if (data.serverInfo?.version && data.serverInfo.version !== 'unknown') {
+          mcpVersions[mcpName] = data.serverInfo.version;
+        }
+
+        // Count tools
+        if (data.tools && Array.isArray(data.tools)) {
+          mcpToolCounts[mcpName] = data.tools.length;
+        }
+      }
+      return true;
+    } catch (error) {
+      // No cache available - just show basic info
+      return false;
     }
   }
 

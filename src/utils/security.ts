@@ -14,12 +14,12 @@ export function maskSensitiveData(text: string): string {
 
   // Mask API keys (various patterns)
   masked = masked.replace(
-    /sk_test_[a-zA-Z0-9]{99}/g,
+    /sk_test_[a-zA-Z0-9]{50,}/g,
     (match) => `sk_test_*****${match.slice(-4)}`
   );
 
   masked = masked.replace(
-    /sk_live_[a-zA-Z0-9]{99}/g,
+    /sk_live_[a-zA-Z0-9]{50,}/g,
     (match) => `sk_live_*****${match.slice(-4)}`
   );
 
@@ -84,44 +84,27 @@ export function maskSensitiveDataAsTemplates(text: string): string {
 
   let masked = text;
 
-  // Replace JWT tokens FIRST (before other patterns that might partially match)
-  masked = masked.replace(
-    /eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g,
-    '{{JWT_TOKEN}}'
-  );
-
-  // Replace Stripe API keys
-  masked = masked.replace(
-    /sk_test_[a-zA-Z0-9]{20,}/g,
-    '{{STRIPE_API_KEY}}'
-  );
-
-  masked = masked.replace(
-    /sk_live_[a-zA-Z0-9]{20,}/g,
-    '{{STRIPE_API_KEY}}'
-  );
-
   // Replace API key parameters
   masked = masked.replace(
-    /--api-key[=\s]+([a-zA-Z0-9_-]{16,})/gi,
+    /--api-key[=\s]+([^\s]+)/gi,
     '--api-key={{API_KEY}}'
   );
 
   // Replace key parameters (like Upstash keys)
   masked = masked.replace(
-    /--key[=\s]+([a-zA-Z0-9_-]{16,})/gi,
+    /--key[=\s]+([^\s]+)/gi,
     '--key={{API_KEY}}'
   );
 
   // Replace token parameters
   masked = masked.replace(
-    /--token[=\s]+([a-zA-Z0-9_-]{16,})/gi,
+    /--token[=\s]+([^\s]+)/gi,
     '--token={{TOKEN}}'
   );
 
   // Replace OAuth tokens
   masked = masked.replace(
-    /--oauth-token[=\s]+([a-zA-Z0-9_-]{16,})/gi,
+    /--oauth-token[=\s]+([^\s]+)/gi,
     '--oauth-token={{OAUTH_TOKEN}}'
   );
 
@@ -131,10 +114,16 @@ export function maskSensitiveDataAsTemplates(text: string): string {
     '--password={{PASSWORD}}'
   );
 
-  // Replace UUID-like keys
+  // Replace secret parameters
   masked = masked.replace(
-    /[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi,
-    '{{UUID}}'
+    /--secret[=\s]+([^\s]+)/gi,
+    '--secret={{SECRET}}'
+  );
+
+  // Replace auth parameters
+  masked = masked.replace(
+    /--auth[=\s]+([^\s]+)/gi,
+    '--auth={{AUTH}}'
   );
 
   // Replace environment variable references that look like they contain secrets

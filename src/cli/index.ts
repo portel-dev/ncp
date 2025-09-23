@@ -99,38 +99,36 @@ async function validateAddCommand(name: string, command: string, args: any[]): P
 }> {
   const suggestions: Array<{ command: string; description: string }> = [];
 
+  const fullCommand = `${command} ${args.join(' ')}`.trim();
+
   // Basic command format validation and helpful tips
-  if (command === 'npx' || command === 'npm') {
+  if (command === 'npx' && args.length > 0) {
+    // Clean up the command format - avoid duplication
+    const cleanedArgs = args.filter(arg => arg !== '-y' || args.indexOf(arg) === 0);
     suggestions.push({
-      command: `${command} ${args.join(' ')}`,
+      command: fullCommand,
       description: 'NPM package execution - health monitor will validate if package exists and starts correctly'
     });
   } else if (command.startsWith('/') || command.startsWith('./') || command.includes('\\')) {
     suggestions.push({
-      command: `${command} ${args.join(' ')}`,
+      command: fullCommand,
       description: 'Local executable - health monitor will validate if command works'
     });
-  } else if (command.includes('@')) {
+  } else if (command.includes('@') && !command.startsWith('npx')) {
     suggestions.push({
-      command: `npx -y ${command} ${args.join(' ')}`,
+      command: `npx -y ${fullCommand}`,
       description: 'Consider using npx for npm packages'
     });
   } else {
-    // Generic command - might be system executable
+    // Show the command as provided
     suggestions.push({
-      command: `${command} ${args.join(' ')}`,
+      command: fullCommand,
       description: 'Custom command - health monitor will validate functionality'
-    });
-
-    // Offer helpful alternatives
-    suggestions.push({
-      command: `npx -y @modelcontextprotocol/server-${name}`,
-      description: 'If this is an official MCP server package'
     });
   }
 
   return {
-    message: chalk.blue('💡 MCP will be validated by health monitor after adding'),
+    message: chalk.dim('💡 MCP will be validated by health monitor after adding'),
     suggestions
   };
 }
@@ -313,7 +311,7 @@ program
   .option('--profiles <names...>', 'Profiles to add to (default: all)')
   .option('--env <vars...>', 'Environment variables (KEY=value)')
   .action(async (name, command, args, options) => {
-    console.log(chalk.blue(`📦 Adding MCP server: ${chalk.bold(name)}`));
+    console.log(`\n${chalk.blue(`📦 Adding MCP server: ${chalk.bold(name)}`)}`);
 
     const manager = new ProfileManager();
     await manager.initialize();
@@ -322,7 +320,7 @@ program
     const guidance = await validateAddCommand(name, command, args);
     console.log(guidance.message);
     if (guidance.suggestions.length > 0) {
-      console.log(chalk.dim('\n📋 Command format:'));
+      console.log('\n📋 Command validation:');
       guidance.suggestions.forEach((suggestion, index) => {
         if (index === 0) {
           // Main command
@@ -359,31 +357,35 @@ program
     };
 
     // Show what will be added
-    console.log(chalk.dim('📋 Configuration:'));
-    console.log(chalk.dim(`   Command: ${formatCommandDisplay(config.command, config.args)}`));
-    if (Object.keys(env).length > 0) {
-      console.log(chalk.dim(`   Environment: ${Object.keys(env).length} variables`));
-    }
-
     // Determine which profiles to add to
     const profiles = options.profiles || ['all'];
-    console.log(chalk.dim(`🎯 Target profiles: ${profiles.join(', ')}`));
+
+    console.log('\n📋 Profile configuration:');
+    console.log(`   ${chalk.cyan('Target profiles:')} ${profiles.join(', ')}`);
+    if (Object.keys(env).length > 0) {
+      console.log(`   ${chalk.cyan('Environment variables:')} ${Object.keys(env).length} configured`);
+      Object.entries(env).forEach(([key, value]) => {
+        console.log(chalk.dim(`     ${key}=${formatCommandDisplay(value)}`));
+      });
+    }
 
     console.log(''); // spacing
 
     for (const profileName of profiles) {
       try {
         await manager.addMCPToProfile(profileName, name, config);
-        console.log(OutputFormatter.success(`Added ${name} to profile: ${profileName}`));
+        console.log(`\n${OutputFormatter.success(`Added ${name} to profile: ${profileName}`)}`);
       } catch (error: any) {
         const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('profile', 'add', `${name} to ${profileName}`));
-        console.log(ErrorHandler.formatForConsole(errorResult));
+        console.log('\n' + ErrorHandler.formatForConsole(errorResult));
       }
     }
 
-    console.log(chalk.dim('\n💡 Use: ncp list to see your configured profiles'));
-    console.log(chalk.dim('💡 Use: ncp find <query> to test tool discovery'));
+    console.log(chalk.dim('\n💡 Next steps:'));
+    console.log(chalk.dim('  •') + ' View profiles: ' + chalk.cyan('ncp list'));
+    console.log(chalk.dim('  •') + ' Test discovery: ' + chalk.cyan('ncp find <query>'));
   });
+
 
 // Lightweight function to read MCP info from cache without full orchestrator initialization
 async function loadMCPInfoFromCache(mcpDescriptions: Record<string, string>, mcpToolCounts: Record<string, number>, mcpVersions: Record<string, string>): Promise<boolean> {
@@ -768,7 +770,7 @@ program
         console.log(OutputFormatter.success(`Removed ${name} from profile: ${profileName}`));
       } catch (error: any) {
         const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('profile', 'remove', `${name} from ${profileName}`));
-        console.log(ErrorHandler.formatForConsole(errorResult));
+        console.log('\n' + ErrorHandler.formatForConsole(errorResult));
       }
     }
   });
@@ -784,8 +786,14 @@ configCmd
   .option('--profile <name>', 'Target profile (default: all)')
   .option('--dry-run', 'Show what would be imported without actually importing')
   .action(async (file, options) => {
-    const manager = new ConfigManager();
-    await manager.importConfig(file, options.profile, options.dryRun);
+    try {
+      const manager = new ConfigManager();
+      await manager.importConfig(file, options.profile, options.dryRun);
+    } catch (error: any) {
+      const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('config', 'import', file || 'clipboard'));
+      console.log('\n' + ErrorHandler.formatForConsole(errorResult));
+      process.exit(1);
+    }
   });
 
 configCmd
@@ -912,7 +920,7 @@ program
         const matchingTools = await orchestrator.find(tool, 5, false);
 
         if (matchingTools.length === 0) {
-          console.log(OutputFormatter.error(`No tools found matching "${tool}"`));
+          console.log('\n' + OutputFormatter.error(`No tools found matching "${tool}"`));
           console.log(chalk.yellow('💡 Try \'ncp find\' to explore all available tools'));
           await orchestrator.cleanup();
           return;
@@ -939,7 +947,7 @@ program
           return;
         }
       } catch (error: any) {
-        console.log(OutputFormatter.error(`Error searching for tools: ${error.message}`));
+        console.log('\n' + OutputFormatter.error(`Error searching for tools: ${error.message}`));
         await orchestrator.cleanup();
         return;
       }
@@ -970,12 +978,12 @@ program
             prompter.close();
           } catch (error) {
             prompter.close();
-            console.log(OutputFormatter.error('Error during parameter input'));
+            console.log('\n' + OutputFormatter.error('Error during parameter input'));
             await orchestrator.cleanup();
             return;
           }
         } else if (requiredParams.length > 0 && options.prompt === false) {
-          console.log(OutputFormatter.error('This tool requires parameters'));
+          console.log('\n' + OutputFormatter.error('This tool requires parameters'));
           console.log(chalk.yellow(`💡 Use: ncp run ${tool} --params '{"param": "value"}'`));
           console.log(chalk.yellow(`💡 Or use: ncp find "${tool}" --depth 2 to see required parameters`));
           console.log(chalk.yellow(`💡 Or remove --no-prompt to use interactive prompting`));
@@ -1038,7 +1046,7 @@ program
 
         const context = ErrorHandler.createContext('mcp', 'run', tool, suggestions);
         const errorResult = ErrorHandler.handle(errorText, context);
-        console.log(ErrorHandler.formatForConsole(errorResult));
+        console.log('\n' + ErrorHandler.formatForConsole(errorResult));
       } else {
         console.log(OutputFormatter.success('Tool execution completed'));
 
@@ -1111,7 +1119,7 @@ program
 
       const context = ErrorHandler.createContext('mcp', 'run', tool, suggestions);
       const errorResult = ErrorHandler.handle(errorMessage, context);
-      console.log(ErrorHandler.formatForConsole(errorResult));
+      console.log('\n' + ErrorHandler.formatForConsole(errorResult));
     }
 
     await orchestrator.cleanup();
