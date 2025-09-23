@@ -358,7 +358,7 @@ export class PersistentRAGEngine {
 
     try {
       for (const tool of tools) {
-        const toolId = `${mcpName}:${tool.name}`;
+        const toolId = tool.id || `${mcpName}:${tool.name}`;
         const description = tool.description || tool.name;
         const hash = this.hashDescription(description);
         
@@ -512,15 +512,15 @@ export class PersistentRAGEngine {
         similarities.push({ toolId, similarity });
       }
       
-      // Git-specific boosting: if query contains git terms, heavily boost Shell tools
+      // Git-specific boosting: if query contains git terms, moderately boost Shell tools
       const queryLower = query.toLowerCase();
       const gitTerms = ['git', 'commit', 'push', 'pull', 'checkout', 'branch', 'merge', 'clone', 'status', 'log', 'diff', 'add', 'remote', 'fetch', 'rebase', 'stash', 'tag'];
       const hasGitTerms = gitTerms.some(term => queryLower.includes(term));
-      
+
       if (hasGitTerms) {
         for (const result of similarities) {
           if (result.toolId.startsWith('Shell:')) {
-            result.similarity = Math.min(0.95, result.similarity + 0.4); // Massive boost for Shell tools
+            result.similarity = Math.min(0.85, result.similarity + 0.15); // Moderate boost for Shell tools only when git terms are explicit
             logger.debug(`🔧 Git query detected, boosting ${result.toolId} similarity to ${result.similarity}`);
           }
         }
@@ -633,13 +633,13 @@ export class PersistentRAGEngine {
       },
       'script_execution': {
         tools: ['Shell:run_command'],
-        keywords: ['python script', 'bash script', 'shell script', 'run script', 'execute script', 'python file', 'py file', '.py', '.sh', '.bash', 'run python', 'execute python', 'run bash', 'execute bash', 'script execution', 'run a python script', 'run a bash script', 'execute a script', 'launch script', 'start script'],
-        boost: 8.0
+        keywords: ['python script', 'bash script', 'shell script', 'run python script', 'execute python script', 'run bash script', 'execute bash script', 'script execution', 'run a python script', 'run a bash script', 'execute a script'],
+        boost: 2.0  // Reduced boost and more specific keywords
       },
       'shell_commands': {
         tools: ['Shell:run_command', 'desktop-commander:start_process'],
-        keywords: ['npm', 'yarn', 'bun', 'pip', 'cargo', 'make', 'ls', 'cd', 'pwd', 'echo', 'mkdir', 'rm', 'cp', 'mv', 'chmod', 'chown', 'apt', 'brew', 'terminal command', 'shell command', 'command line', 'execute command', 'run command'],
-        boost: 4.0
+        keywords: ['npm install', 'yarn install', 'pip install', 'terminal command', 'shell command', 'command line interface'],
+        boost: 1.5  // Much lower boost and more specific keywords
       },
       'ncp_meta_operations': {
         tools: [
@@ -690,23 +690,11 @@ export class PersistentRAGEngine {
                          queryLower.includes('orchestrator') ||
                          queryLower.includes('connected');
     
-    // Special early return for high-confidence script execution
-    const scriptKeywords = ['python script', 'bash script', 'shell script', 'run script', 'execute script', 'run python', 'execute python', 'run bash', 'execute bash'];
-    for (const keyword of scriptKeywords) {
-      if (queryLower.includes(keyword)) {
-        // Force return Shell:run_command with high confidence
-        if (this.vectorDB.has('Shell:run_command')) {
-          return [{
-            toolId: 'Shell:run_command',
-            confidence: 0.95,
-            reason: `High-priority script execution: "${keyword}"`,
-            similarity: 0.95,
-            originalSimilarity: 0.95,
-            domain: 'script_execution'
-          }];
-        }
-      }
-    }
+    // Boost script execution tools but don't force them (let RAG compete)
+    const explicitScriptKeywords = ['python script', 'bash script', 'shell script', 'run python script', 'execute python script', 'run bash script', 'execute bash script'];
+    const hasExplicitScript = explicitScriptKeywords.some(keyword => queryLower.includes(keyword));
+
+    // Only boost for very explicit script execution queries, not general "run" or "execute"
     
     for (const [domain, pattern] of Object.entries(domainPatterns)) {
       for (const keyword of pattern.keywords) {

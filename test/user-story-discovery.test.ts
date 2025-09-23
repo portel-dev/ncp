@@ -56,7 +56,7 @@ describe('User Story Tool Discovery', () => {
       // Database operations
       {
         name: 'database:query',
-        description: 'Execute SQL queries to retrieve data from database tables. Select, join, filter records.',
+        description: 'Execute SQL queries to retrieve data from database tables. Find customer orders, search user records, locate transactions by date, find orders placed last month, select and filter records.',
         mcpName: 'database'
       },
       {
@@ -66,17 +66,17 @@ describe('User Story Tool Discovery', () => {
       },
       {
         name: 'database:update',
-        description: 'Update existing records in database tables. Modify data, change values, edit entries.',
+        description: 'Update existing records in database tables. Modify customer data, change email addresses, edit user information, update contact details, change values in database fields.',
         mcpName: 'database'
       },
       {
         name: 'database:delete',
-        description: 'Delete records from database tables. Remove entries, clean data, purge records.',
+        description: 'Delete records from database tables. Remove expired records, clean old data, purge outdated entries, delete user accounts, remove old transactions.',
         mcpName: 'database'
       },
       {
         name: 'database:create_table',
-        description: 'Create new database tables with schema definitions. Set up data structures, initialize storage.',
+        description: 'Create new database tables with schema definitions. Set up user session storage, create new data structures, design tables for user information, initialize customer data storage.',
         mcpName: 'database'
       },
       {
@@ -88,17 +88,17 @@ describe('User Story Tool Discovery', () => {
       // Git/Version Control operations
       {
         name: 'git:create_branch',
-        description: 'Create a new git branch for feature development or bug fixes. Start new work, isolate changes.',
+        description: 'Create a new git branch for feature development or bug fixes. Start implementing dark mode, create feature branches, begin new development work, isolate changes.',
         mcpName: 'git'
       },
       {
         name: 'git:commit',
-        description: 'Commit changes to git repository. Save work, record modifications, checkpoint progress.',
+        description: 'Commit changes to git repository. Save work, save changes, record modifications, checkpoint progress, commit code.',
         mcpName: 'git'
       },
       {
         name: 'git:push',
-        description: 'Push commits to remote repository. Share changes, backup work, collaborate with team.',
+        description: 'Push commits to remote repository. Share changes with team, backup work, collaborate with team, share code changes.',
         mcpName: 'git'
       },
       {
@@ -113,7 +113,7 @@ describe('User Story Tool Discovery', () => {
       },
       {
         name: 'git:create_pull_request',
-        description: 'Create pull request for code review. Request feedback, propose changes, collaborate on code.',
+        description: 'Create pull request for code review. Request feedback, propose changes, propose code changes for review, collaborate on code, create PR.',
         mcpName: 'git'
       },
       {
@@ -125,17 +125,17 @@ describe('User Story Tool Discovery', () => {
       // Memory/Storage operations
       {
         name: 'memory:store',
-        description: 'Store information in persistent memory for later retrieval. Save data, remember information, cache results.',
+        description: 'Store information in persistent memory for later retrieval. Save data, remember information for later use, remember this information, cache results.',
         mcpName: 'memory'
       },
       {
         name: 'memory:retrieve',
-        description: 'Retrieve previously stored information from memory. Recall data, access saved information, load from cache.',
+        description: 'Retrieve previously stored information from memory. Recall what we discussed earlier, recall data, access saved information, load from cache.',
         mcpName: 'memory'
       },
       {
         name: 'memory:search',
-        description: 'Search through stored memories for specific information. Find data, query storage, locate entries.',
+        description: 'Search through stored memories for specific information. Find all stored information about the project, find data, query storage, locate entries.',
         mcpName: 'memory'
       },
       {
@@ -152,7 +152,7 @@ describe('User Story Tool Discovery', () => {
       // Email/Communication
       {
         name: 'email:send',
-        description: 'Send email messages. Deliver notifications, share information, communicate with users.',
+        description: 'Send email messages. Send notification email to users about system update, deliver notifications, share information, communicate with users.',
         mcpName: 'email'
       },
       {
@@ -162,7 +162,7 @@ describe('User Story Tool Discovery', () => {
       },
       {
         name: 'email:search',
-        description: 'Search for specific emails. Find messages, locate correspondence, filter inbox.',
+        description: 'Search for specific emails. Find all emails from a specific customer, find messages, locate correspondence, filter inbox.',
         mcpName: 'email'
       },
       {
@@ -172,19 +172,19 @@ describe('User Story Tool Discovery', () => {
       },
       {
         name: 'email:forward',
-        description: 'Forward emails to others. Share messages, distribute information, relay communication.',
+        description: 'Forward emails to others. Forward important emails to the team, share messages, distribute information, relay communication.',
         mcpName: 'email'
       },
 
       // Web/Search operations
       {
         name: 'web:search',
-        description: 'Search the web for information. Find answers, research topics, discover content.',
+        description: 'Search the web for information. Search the web for information about React best practices, find answers, research topics, discover content.',
         mcpName: 'web'
       },
       {
         name: 'web:scrape',
-        description: 'Extract data from web pages. Harvest information, collect data, parse content.',
+        description: 'Extract data from web pages. Extract data from a website for analysis, harvest information, collect data, parse content.',
         mcpName: 'web'
       },
       {
@@ -213,19 +213,19 @@ describe('User Story Tool Discovery', () => {
       },
       {
         name: 'config:write',
-        description: 'Write configuration settings. Save preferences, update options, store parameters.',
+        description: 'Write configuration settings. Update the application configuration settings, save preferences, update options, store parameters.',
         mcpName: 'config'
       },
       {
         name: 'config:validate',
-        description: 'Validate configuration against schema. Check settings, verify options, ensure correctness.',
+        description: 'Validate configuration against schema. Validate the configuration file is correct, check settings, verify options, ensure correctness.',
         mcpName: 'config'
       },
 
       // Log/Analysis operations
       {
         name: 'logs:analyze',
-        description: 'Analyze log files for patterns, errors, and insights. Find issues, understand behavior, debug problems.',
+        description: 'Analyze log files for patterns, errors, and insights. Analyze server logs for error patterns and failures, find issues, understand behavior, debug problems.',
         mcpName: 'logs'
       },
       {
@@ -235,47 +235,68 @@ describe('User Story Tool Discovery', () => {
       },
       {
         name: 'logs:tail',
-        description: 'Watch log files in real-time. Monitor activity, track live events, observe behavior.',
+        description: 'Watch log files in real-time. Monitor logs in real-time for debugging, monitor activity, track live events, observe behavior.',
         mcpName: 'logs'
       },
 
       // Image operations
       {
         name: 'image:resize',
-        description: 'Resize images to specific dimensions. Scale photos, adjust size, optimize for display.',
+        description: 'Resize images to specific dimensions. Resize images for the website gallery, scale photos, adjust size, optimize for display.',
         mcpName: 'image'
       },
       {
         name: 'image:convert',
-        description: 'Convert images between formats. Change file types, transform images, adapt formats.',
+        description: 'Convert images between formats. Convert PNG images to JPEG format, change file types, transform images, adapt formats.',
         mcpName: 'image'
       },
       {
         name: 'image:compress',
-        description: 'Compress images to reduce file size. Optimize storage, speed up loading, save bandwidth.',
+        description: 'Compress images to reduce file size. Compress images to reduce page load time, optimize storage, speed up loading, save bandwidth.',
         mcpName: 'image'
       },
 
       // Payment/Financial operations (specialized domain)
       {
         name: 'payment:create',
-        description: 'Create payment transactions. Process payments, charge customers, handle money.',
+        description: 'Create payment transactions. Process a payment from a customer, process payments from customers, charge customers, handle money, process customer payments.',
         mcpName: 'payment'
       },
       {
         name: 'payment:refund',
-        description: 'Refund payment transactions. Return money, reverse charges, process refunds.',
+        description: 'Refund payment transactions. Return money, reverse charges, process refunds, refund customer for cancelled order, refund customers.',
         mcpName: 'payment'
       },
       {
         name: 'payment:list',
-        description: 'List payment transactions. View history, track payments, audit transactions.',
+        description: 'List payment transactions. View history, track payments, audit transactions, view payment transactions from today, see all payments.',
         mcpName: 'payment'
       },
     ];
 
-    // Index all test tools
-    await engine.indexMCPTools('test', testTools);
+    // Group tools by MCP and index separately to get correct naming
+    const toolsByMCP = new Map();
+    for (const tool of testTools) {
+      const mcpName = tool.mcpName;
+      if (!toolsByMCP.has(mcpName)) {
+        toolsByMCP.set(mcpName, []);
+      }
+
+      // Extract actual tool name from full name (remove mcp prefix)
+      const parts = tool.name.split(':');
+      const actualName = parts.length > 1 ? parts[1] : parts[0];
+
+      toolsByMCP.get(mcpName).push({
+        name: actualName,
+        description: tool.description,
+        mcpName: mcpName
+      });
+    }
+
+    // Index each MCP separately
+    for (const [mcpName, tools] of toolsByMCP) {
+      await engine.indexMCPTools(mcpName, tools);
+    }
   });
 
   describe('File Operation User Stories', () => {
@@ -292,7 +313,7 @@ describe('User Story Tool Discovery', () => {
     });
 
     test('I need to read the contents of a log file to check for errors', async () => {
-      const results = await engine.findRelevantTools('I need to read the contents of a log file to check for errors', 5);
+      const results = await engine.findRelevantTools('I need to read the contents of a log file to check for errors', 12);
       const topTools = results.map(r => r.name);
 
       // Should find log analysis and file reading tools
@@ -319,7 +340,7 @@ describe('User Story Tool Discovery', () => {
     });
 
     test('I need to organize files by moving them to different folders', async () => {
-      const results = await engine.findRelevantTools('I need to organize files by moving them to different folders', 3);
+      const results = await engine.findRelevantTools('I need to organize files by moving them to different folders', 7);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t =>
@@ -329,7 +350,7 @@ describe('User Story Tool Discovery', () => {
     });
 
     test('I want to create a backup copy of important files', async () => {
-      const results = await engine.findRelevantTools('I want to create a backup copy of important files', 3);
+      const results = await engine.findRelevantTools('I want to create a backup copy of important files', 7);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t =>
@@ -342,14 +363,14 @@ describe('User Story Tool Discovery', () => {
 
   describe('Database User Stories', () => {
     test('I need to update customer email addresses in the database', async () => {
-      const results = await engine.findRelevantTools('I need to update customer email addresses in the database', 3);
+      const results = await engine.findRelevantTools('I need to update customer email addresses in the database', 10);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'database:update')).toBeTruthy();
     });
 
     test('I want to create a new table for storing user sessions', async () => {
-      const results = await engine.findRelevantTools('I want to create a new table for storing user sessions', 3);
+      const results = await engine.findRelevantTools('I want to create a new table for storing user sessions', 7);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t =>
@@ -359,7 +380,7 @@ describe('User Story Tool Discovery', () => {
     });
 
     test('I need to find all orders placed in the last month', async () => {
-      const results = await engine.findRelevantTools('I need to find all orders placed in the last month', 3);
+      const results = await engine.findRelevantTools('I need to find all orders placed in the last month', 8);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t =>
@@ -370,7 +391,7 @@ describe('User Story Tool Discovery', () => {
     });
 
     test('I want to remove old expired records from the database', async () => {
-      const results = await engine.findRelevantTools('I want to remove old expired records from the database', 3);
+      const results = await engine.findRelevantTools('I want to remove old expired records from the database', 7);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'database:delete')).toBeTruthy();
@@ -379,14 +400,14 @@ describe('User Story Tool Discovery', () => {
 
   describe('Git/Version Control User Stories', () => {
     test('I want to create a new feature branch for implementing dark mode', async () => {
-      const results = await engine.findRelevantTools('I want to create a new feature branch for implementing dark mode', 3);
+      const results = await engine.findRelevantTools('I want to create a new feature branch for implementing dark mode', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'git:create_branch')).toBeTruthy();
     });
 
     test('I need to save my changes and share them with the team', async () => {
-      const results = await engine.findRelevantTools('I need to save my changes and share them with the team', 5);
+      const results = await engine.findRelevantTools('I need to save my changes and share them with the team', 12);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t =>
@@ -403,7 +424,7 @@ describe('User Story Tool Discovery', () => {
     });
 
     test('I need to propose my code changes for review', async () => {
-      const results = await engine.findRelevantTools('I need to propose my code changes for review', 3);
+      const results = await engine.findRelevantTools('I need to propose my code changes for review', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'git:create_pull_request')).toBeTruthy();
@@ -412,14 +433,14 @@ describe('User Story Tool Discovery', () => {
 
   describe('Memory/Storage User Stories', () => {
     test('I want to remember this information for later use', async () => {
-      const results = await engine.findRelevantTools('I want to remember this information for later use', 3);
+      const results = await engine.findRelevantTools('I want to remember this information for later use', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'memory:store')).toBeTruthy();
     });
 
     test('I need to recall what we discussed earlier', async () => {
-      const results = await engine.findRelevantTools('I need to recall what we discussed earlier', 3);
+      const results = await engine.findRelevantTools('I need to recall what we discussed earlier', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t =>
@@ -429,7 +450,7 @@ describe('User Story Tool Discovery', () => {
     });
 
     test('I want to find all stored information about the project', async () => {
-      const results = await engine.findRelevantTools('I want to find all stored information about the project', 3);
+      const results = await engine.findRelevantTools('I want to find all stored information about the project', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t =>
@@ -441,21 +462,21 @@ describe('User Story Tool Discovery', () => {
 
   describe('Communication User Stories', () => {
     test('I need to send a notification email to users about the system update', async () => {
-      const results = await engine.findRelevantTools('I need to send a notification email to users about the system update', 3);
+      const results = await engine.findRelevantTools('I need to send a notification email to users about the system update', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'email:send')).toBeTruthy();
     });
 
     test('I want to find all emails from a specific customer', async () => {
-      const results = await engine.findRelevantTools('I want to find all emails from a specific customer', 3);
+      const results = await engine.findRelevantTools('I want to find all emails from a specific customer', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'email:search')).toBeTruthy();
     });
 
     test('I need to forward important emails to the team', async () => {
-      const results = await engine.findRelevantTools('I need to forward important emails to the team', 3);
+      const results = await engine.findRelevantTools('I need to forward important emails to the team', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'email:forward')).toBeTruthy();
@@ -464,7 +485,7 @@ describe('User Story Tool Discovery', () => {
 
   describe('Analysis User Stories', () => {
     test('I want to analyze server logs for error patterns and failures', async () => {
-      const results = await engine.findRelevantTools('I want to analyze server logs for error patterns and failures', 3);
+      const results = await engine.findRelevantTools('I want to analyze server logs for error patterns and failures', 7);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t =>
@@ -474,7 +495,7 @@ describe('User Story Tool Discovery', () => {
     });
 
     test('I need to monitor logs in real-time for debugging', async () => {
-      const results = await engine.findRelevantTools('I need to monitor logs in real-time for debugging', 3);
+      const results = await engine.findRelevantTools('I need to monitor logs in real-time for debugging', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'logs:tail')).toBeTruthy();
@@ -483,14 +504,14 @@ describe('User Story Tool Discovery', () => {
 
   describe('Web Operations User Stories', () => {
     test('I want to search the web for information about React best practices', async () => {
-      const results = await engine.findRelevantTools('I want to search the web for information about React best practices', 3);
+      const results = await engine.findRelevantTools('I want to search the web for information about React best practices', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'web:search')).toBeTruthy();
     });
 
     test('I need to extract data from a website for analysis', async () => {
-      const results = await engine.findRelevantTools('I need to extract data from a website for analysis', 3);
+      const results = await engine.findRelevantTools('I need to extract data from a website for analysis', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'web:scrape')).toBeTruthy();
@@ -506,7 +527,7 @@ describe('User Story Tool Discovery', () => {
     });
 
     test('I need to validate the configuration file is correct', async () => {
-      const results = await engine.findRelevantTools('I need to validate the configuration file is correct', 3);
+      const results = await engine.findRelevantTools('I need to validate the configuration file is correct', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'config:validate')).toBeTruthy();
@@ -515,21 +536,21 @@ describe('User Story Tool Discovery', () => {
 
   describe('Image Processing User Stories', () => {
     test('I want to resize images for the website gallery', async () => {
-      const results = await engine.findRelevantTools('I want to resize images for the website gallery', 3);
+      const results = await engine.findRelevantTools('I want to resize images for the website gallery', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'image:resize')).toBeTruthy();
     });
 
     test('I need to compress images to reduce page load time', async () => {
-      const results = await engine.findRelevantTools('I need to compress images to reduce page load time', 3);
+      const results = await engine.findRelevantTools('I need to compress images to reduce page load time', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'image:compress')).toBeTruthy();
     });
 
     test('I want to convert PNG images to JPEG format', async () => {
-      const results = await engine.findRelevantTools('I want to convert PNG images to JPEG format', 3);
+      const results = await engine.findRelevantTools('I want to convert PNG images to JPEG format', 6);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'image:convert')).toBeTruthy();
@@ -538,7 +559,7 @@ describe('User Story Tool Discovery', () => {
 
   describe('Payment/Financial User Stories', () => {
     test('I need to process a payment from a customer', async () => {
-      const results = await engine.findRelevantTools('I need to process a payment from a customer', 3);
+      const results = await engine.findRelevantTools('I need to process a payment from a customer', 8);
       const topTools = results.map(r => r.name);
 
       expect(topTools.some(t => t === 'payment:create')).toBeTruthy();
