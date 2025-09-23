@@ -408,15 +408,16 @@ export class NCPOrchestrator {
     if (!mcpName) {
       return {
         success: false,
-        error: `Unknown tool: ${toolName}. Use find() to discover available tools.`
+        error: `Tool '${toolName}' not found. Use 'ncp find "${toolName}"' to search for similar tools or 'ncp find --depth 0' to list all available tools.`
       };
     }
 
     const definition = this.definitions.get(mcpName);
     if (!definition) {
+      const availableMcps = Array.from(this.definitions.keys()).join(', ');
       return {
         success: false,
-        error: `MCP ${mcpName} not configured.`
+        error: `MCP '${mcpName}' not found. Available MCPs: ${availableMcps}. Use 'ncp find' to discover tools or check your profile configuration.`
       };
     }
 
@@ -464,7 +465,8 @@ export class NCPOrchestrator {
 
     const definition = this.definitions.get(mcpName);
     if (!definition) {
-      throw new Error(`MCP '${mcpName}' not configured.`);
+      const availableMcps = Array.from(this.definitions.keys()).join(', ');
+      throw new Error(`MCP '${mcpName}' not found. Available MCPs: ${availableMcps}. Use 'ncp find' to discover tools or check your profile configuration.`);
     }
 
     logger.info(`🔌 Connecting to ${mcpName} (for execution)...`);

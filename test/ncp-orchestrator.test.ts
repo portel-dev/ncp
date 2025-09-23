@@ -450,7 +450,7 @@ describe('NCPOrchestrator - Basic Tests', () => {
       const result = await orchestrator.run('nonexistent:tool', {});
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('not configured');
+      expect(result.error).toContain('not found');
     });
 
     it('should handle connection errors and mark MCP unhealthy', async () => {

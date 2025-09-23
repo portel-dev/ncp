@@ -111,8 +111,8 @@ export class ErrorHandler {
       const toolName = this.extractToolName(error);
       return `Tool "${toolName}" not found`;
     }
-    if (error.includes('MCP not configured')) {
-      return 'MCP server not configured';
+    if (error.includes('MCP') && error.includes('not found')) {
+      return 'MCP server not found in current profile';
     }
     if (error.includes('not in allowed directories')) {
       return 'Access denied - path not in allowed directories';
