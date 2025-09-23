@@ -405,6 +405,7 @@ export class ConfigManager {
       // Clear spinner and show final result
       spinner.stop();
       process.stdout.write('\r\x1b[K'); // Clear the line
+      console.log(''); // Add newline after spinner
 
       // Show successfully working MCPs
       if (discoveryResult.successful.length > 0) {
