@@ -7,6 +7,9 @@ dist/
 *.tmp
 coverage/
 
+# Scripts directory (development files not for release)
+scripts/
+
 # Ignore image files in project root (temporary screenshots)
 /*.png
 /*.jpg
