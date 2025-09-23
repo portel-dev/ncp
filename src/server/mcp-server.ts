@@ -142,13 +142,13 @@ export class MCPServer {
     const tools: MCPTool[] = [
       {
         name: 'find',
-        description: 'Intelligent tool discovery using vector search and action-intent matching. Lead queries with ACTION verbs (save, read, create, delete) for best results. System expands "save" to find write/create/edit tools, applies intent penalties to filter out conflicting capabilities. Use MCP names ("filesystem", "github") to filter, or action-focused queries ("save file", "read data") for cross-MCP search.',
+        description: 'Intelligent tool discovery using vector search. Describe your task as a user story for best results: "I want to save configuration to a file", "I need to analyze logs for errors", "I want to create a git branch". More context improves matching accuracy. Use MCP names to filter results to specific servers.',
         inputSchema: {
           type: 'object',
           properties: {
             description: {
               type: 'string',
-              description: 'Search query: Use MCP name ("filesystem", "portel", "memory") to filter to specific MCP, or descriptive terms ("file operations", "write file") for cross-MCP search. Omit to see MCP overview.'
+              description: 'Search query as user story ("I want to...") or MCP name to filter. Omit to see MCP overview.'
             },
             limit: {
               type: 'number',
