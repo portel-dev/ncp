@@ -17,6 +17,7 @@ import { mcpWrapper } from '../utils/mcp-wrapper.js';
 import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
+import { compareTwoStrings } from 'string-similarity';
 
 interface DiscoveryResult {
   toolName: string;
@@ -406,9 +407,18 @@ export class NCPOrchestrator {
     }
 
     if (!mcpName) {
+      const similarTools = this.findSimilarTools(toolName);
+      let errorMessage = `Tool '${toolName}' not found.`;
+
+      if (similarTools.length > 0) {
+        errorMessage += ` Did you mean: ${similarTools.join(', ')}?`;
+      }
+
+      errorMessage += ` Use 'ncp find "${toolName}"' to search for similar tools or 'ncp find --depth 0' to list all available tools.`;
+
       return {
         success: false,
-        error: `Tool '${toolName}' not found. Use 'ncp find "${toolName}"' to search for similar tools or 'ncp find --depth 0' to list all available tools.`
+        error: errorMessage
       };
     }
 
@@ -732,6 +742,23 @@ export class NCPOrchestrator {
    */
   getToolContext(toolIdentifier: string): string {
     return ToolContextResolver.getContext(toolIdentifier);
+  }
+
+  /**
+   * Find similar tool names using fuzzy matching
+   */
+  private findSimilarTools(targetTool: string, maxSuggestions: number = 3): string[] {
+    const allTools = Array.from(this.toolToMCP.keys());
+    const similarities = allTools.map(tool => ({
+      tool,
+      similarity: compareTwoStrings(targetTool.toLowerCase(), tool.toLowerCase())
+    }));
+
+    return similarities
+      .filter(item => item.similarity > 0.4) // Only suggest if reasonably similar
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, maxSuggestions)
+      .map(item => item.tool);
   }
 
   /**
