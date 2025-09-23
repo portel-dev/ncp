@@ -762,6 +762,26 @@ export class NCPOrchestrator {
   }
 
   /**
+   * Get MCP health status summary
+   */
+  getMCPHealthStatus(): { total: number; healthy: number; unhealthy: number; mcps: Array<{name: string; healthy: boolean}> } {
+    const allMCPs = Array.from(this.definitions.keys());
+    const healthyMCPs = this.healthMonitor.getHealthyMCPs(allMCPs);
+
+    const mcpStatus = allMCPs.map(mcp => ({
+      name: mcp,
+      healthy: healthyMCPs.includes(mcp)
+    }));
+
+    return {
+      total: allMCPs.length,
+      healthy: healthyMCPs.length,
+      unhealthy: allMCPs.length - healthyMCPs.length,
+      mcps: mcpStatus
+    };
+  }
+
+  /**
    * Get all resources from active MCPs
    */
   async getAllResources(): Promise<Array<any>> {

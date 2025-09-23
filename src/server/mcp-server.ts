@@ -286,6 +286,22 @@ export class MCPServer {
       output = `\n🔍 Available tools${filterText}${paginationInfo}:\n\n`;
     }
 
+    // Add MCP health status summary
+    const healthStatus = this.orchestrator.getMCPHealthStatus();
+    if (healthStatus.total > 0) {
+      const healthIcon = healthStatus.unhealthy > 0 ? '⚠️' : '✅';
+      output += `${healthIcon} **MCPs**: ${healthStatus.healthy}/${healthStatus.total} healthy`;
+
+      if (healthStatus.unhealthy > 0) {
+        const unhealthyNames = healthStatus.mcps
+          .filter(mcp => !mcp.healthy)
+          .map(mcp => mcp.name)
+          .join(', ');
+        output += ` (${unhealthyNames} unavailable)`;
+      }
+      output += '\n\n';
+    }
+
     // Handle no results case
     if (results.length === 0) {
       output = `❌ No tools found for "${description}"\n\n`;
