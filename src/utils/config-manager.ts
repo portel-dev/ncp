@@ -173,8 +173,6 @@ export class ConfigManager {
    * Import from a JSON file
    */
   private async importFromFile(filePath: string, profileName: string, dryRun: boolean): Promise<void> {
-    console.log(''); // Add newline separation after command
-
     // Expand tilde to home directory
     const { homedir } = await import('os');
     const expandedPath = filePath.startsWith('~') ?
