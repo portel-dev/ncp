@@ -200,7 +200,7 @@ export class NCPOrchestrator {
             name: tool.name,  // Use unprefixed name here
             description: tool.description || 'No description available',  // Use unprefixed description
             mcpServer: config.name,
-            inputSchema: {}
+            inputSchema: tool.inputSchema || {}
           });
         }
 
@@ -220,7 +220,7 @@ export class NCPOrchestrator {
 
   // Based on commercial NCP's probeMCPTools method
   private async probeMCPTools(config: MCPConfig): Promise<{
-    tools: Array<{name: string; description: string}>;
+    tools: Array<{name: string; description: string; inputSchema?: any}>;
     serverInfo?: {
       name: string;
       title?: string;
