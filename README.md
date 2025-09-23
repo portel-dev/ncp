@@ -414,4 +414,4 @@ Help make NCP even better:
 
 Elastic License 2.0 - [Full License](LICENSE)
 
-**TLDR:** Free for personal use, simple commercial licensing available.
+**TLDR:** Free for all use including commercial. Cannot be offered as a hosted service to third parties.

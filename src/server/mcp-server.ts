@@ -129,9 +129,9 @@ export class MCPServer {
           tools: {}
         },
         serverInfo: {
-          name: 'ncp-oss',
-          title: '1 MCP to rule them all',
-          version: '1.0.0'
+          name: 'ncp',
+          title: 'Natural Context Provider - Unified MCP Orchestrator',
+          version: '1.0.4'
         }
       }
     };
@@ -142,7 +142,7 @@ export class MCPServer {
     const tools: MCPTool[] = [
       {
         name: 'find',
-        description: 'AI-powered intelligent tool discovery with vector similarity search and bidirectional domain mapping. Understands natural language queries and maps user intent to actual tool capabilities. FEATURES: Vector RAG search finds semantically similar tools; Domain-to-capability mapping connects queries like "git-commit" to tools that can execute git commands; Cross-MCP intelligent search; Bidirectional mapping where terminal tools advertise git/development capabilities; Context-aware scoring that distinguishes actual capabilities from incidental mentions. USAGE: Search with MCP name ("filesystem", "portel", "memory") to filter to specific MCP, or use natural language ("file operations", "git commit", "terminal command") for intelligent cross-MCP discovery. Returns tools ranked by relevance with confidence scores. Call with NO PARAMETERS for MCP overview.',
+        description: 'Intelligent tool discovery using vector search and action-intent matching. Lead queries with ACTION verbs (save, read, create, delete) for best results. System expands "save" to find write/create/edit tools, applies intent penalties to filter out conflicting capabilities. Use MCP names ("filesystem", "github") to filter, or action-focused queries ("save file", "read data") for cross-MCP search.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -173,13 +173,13 @@ export class MCPServer {
       },
       {
         name: 'run',
-        description: 'Intelligent tool execution with automatic discovery and failure recovery. Accepts both exact tool names and natural language queries. FEATURES: Single-word intelligent search automatically finds matching tools when exact name not provided; Shows multiple options with confidence scores for user selection; Automatic alternative suggestions when tools are unavailable or fail; Domain-aware tool discovery that connects intent to capabilities; Graceful failure recovery with contextual alternatives; Works with tool names, partial names, or natural language descriptions. USAGE: Use exact tool name (mcp_name:tool_name) for direct execution, or natural language ("git-commit", "read file") for intelligent discovery. System will find best matches and guide you to working tools.',
+        description: 'Execute tools from managed MCP servers. Requires exact format "mcp_name:tool_name" with required parameters. System provides suggestions if tool not found and automatic fallbacks when tools fail.',
         inputSchema: {
           type: 'object',
           properties: {
             tool: {
               type: 'string',
-              description: 'Tool to execute. Accepts: (1) Exact tool name "mcp_name:tool_name" for direct execution, (2) Partial/natural language queries like "git-commit", "read file", "terminal command" for intelligent discovery, (3) Single words like "commit" that trigger automatic tool search with ranked suggestions. System will find best matches and guide you to appropriate tools.'
+              description: 'Tool to execute. Format: "mcp_name:tool_name"'
             },
             parameters: {
               type: 'object',
