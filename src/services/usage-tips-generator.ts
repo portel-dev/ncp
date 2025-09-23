@@ -108,13 +108,22 @@ export class UsageTipsGenerator {
    * Generate search-related tips
    */
   private static generateSearchTips(description: string, mcpFilter: string | null): string {
+    let tips = '';
+
     if (!description) {
-      return `• **Search examples**: \`ncp find "filesystem"\` (MCP filter) or \`ncp find "write file"\` (cross-MCP search)\n`;
+      tips = `• **Search examples**: \`ncp find "filesystem"\` (MCP filter) or \`ncp find "write file"\` (cross-MCP search)\n`;
     } else if (mcpFilter) {
-      return `• **Broader search**: Remove MCP name from query for cross-MCP results\n`;
+      tips = `• **Broader search**: Remove MCP name from query for cross-MCP results\n`;
     } else {
-      return `• **Filter to MCP**: Use MCP name like \`ncp find "filesystem"\` to see only that MCP's tools\n`;
+      tips = `• **Filter to MCP**: Use MCP name like \`ncp find "filesystem"\` to see only that MCP's tools\n`;
     }
+
+    // Add confidence threshold guidance for search queries
+    if (description) {
+      tips += `• **Precision control**: \`--confidence_threshold 0.1\` (show all), \`0.5\` (strict), \`0.7\` (very precise)\n`;
+    }
+
+    return tips;
   }
 
   /**

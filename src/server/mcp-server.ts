@@ -160,7 +160,7 @@ export class MCPServer {
             },
             confidence_threshold: {
               type: 'number',
-              description: 'Minimum confidence level for search results (0.0-1.0, default: 0.3). Lower values show more loosely related tools.'
+              description: 'Minimum confidence level for search results (0.0-1.0, default: 0.3). Examples: 0.1=show all, 0.3=balanced, 0.5=strict, 0.7=very precise. Lower values show more loosely related tools, higher values show only close matches.'
             },
             depth: {
               type: 'number',
