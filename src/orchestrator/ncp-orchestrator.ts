@@ -168,11 +168,14 @@ export class NCPOrchestrator {
         logger.info(`Discovering tools from MCP: ${config.name}`);
         const result = await this.probeMCPTools(config);
 
-        // Store definition
+        // Store definition with schema fallback applied
         this.definitions.set(config.name, {
           name: config.name,
           config,
-          tools: result.tools,
+          tools: result.tools.map(tool => ({
+            ...tool,
+            inputSchema: tool.inputSchema || {}
+          })),
           serverInfo: result.serverInfo
         });
 
@@ -284,7 +287,7 @@ export class NCPOrchestrator {
       const tools = response.tools.map(t => ({
         name: t.name,
         description: t.description || '',
-        inputSchema: t.inputSchema
+        inputSchema: t.inputSchema || {}
       }));
 
       // Disconnect immediately

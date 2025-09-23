@@ -1193,4 +1193,213 @@ describe('NCPOrchestrator - Basic Tests', () => {
       expect(Array.isArray(tools)).toBe(true);
     });
   });
+
+  describe('Parameter Schema Preservation Tests', () => {
+    it('should preserve tool parameter schemas during discovery pipeline', async () => {
+      const profileWithSchemas = {
+        name: 'schema-test',
+        description: 'Test profile for schema preservation',
+        mcpServers: {
+          'test-mcp': {
+            command: 'echo',
+            args: ['test']
+          }
+        }
+      };
+
+      // Mock the profile loading
+      jest.spyOn(JSON, 'parse').mockReturnValueOnce(profileWithSchemas);
+      jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('mock-profile-content');
+
+      const orchestrator = new NCPOrchestrator('schema-test');
+
+      // Mock probeMCPTools to return tools WITH schemas
+      const mockProbeMCPTools = jest.spyOn(orchestrator as any, 'probeMCPTools');
+      mockProbeMCPTools.mockResolvedValue({
+        tools: [
+          {
+            name: 'write_file',
+            description: 'Write content to a file',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                path: { type: 'string', description: 'File path' },
+                content: { type: 'string', description: 'File content' },
+                mode: { type: 'string', description: 'Write mode', enum: ['write', 'append'] }
+              },
+              required: ['path', 'content']
+            }
+          },
+          {
+            name: 'read_file',
+            description: 'Read file contents',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                path: { type: 'string', description: 'File path to read' }
+              },
+              required: ['path']
+            }
+          }
+        ],
+        serverInfo: {
+          name: 'test-mcp',
+          version: '1.0.0'
+        }
+      });
+
+      await orchestrator.initialize();
+
+      // Verify schemas are preserved in tool definitions
+      const definition = (orchestrator as any).definitions.get('test-mcp');
+      expect(definition).toBeDefined();
+      expect(definition.tools).toHaveLength(2);
+
+      // Check that inputSchema is preserved, not empty
+      const writeFileTool = definition.tools.find((t: any) => t.name === 'write_file');
+      expect(writeFileTool).toBeDefined();
+      expect(writeFileTool.inputSchema).toBeDefined();
+      expect(writeFileTool.inputSchema.type).toBe('object');
+      expect(writeFileTool.inputSchema.properties).toHaveProperty('path');
+      expect(writeFileTool.inputSchema.properties).toHaveProperty('content');
+      expect(writeFileTool.inputSchema.required).toEqual(['path', 'content']);
+
+      const readFileTool = definition.tools.find((t: any) => t.name === 'read_file');
+      expect(readFileTool).toBeDefined();
+      expect(readFileTool.inputSchema).toBeDefined();
+      expect(readFileTool.inputSchema.properties).toHaveProperty('path');
+      expect(readFileTool.inputSchema.required).toEqual(['path']);
+    });
+
+    it('should handle tools with missing schemas gracefully', async () => {
+      const profileWithMixedSchemas = {
+        name: 'mixed-schema-test',
+        description: 'Test profile for mixed schema scenarios',
+        mcpServers: {
+          'mixed-mcp': {
+            command: 'echo',
+            args: ['test']
+          }
+        }
+      };
+
+      jest.spyOn(JSON, 'parse').mockReturnValueOnce(profileWithMixedSchemas);
+      jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('mock-profile-content');
+
+      const orchestrator = new NCPOrchestrator('mixed-schema-test');
+
+      // Mock probeMCPTools to return tools with mixed schema availability
+      const mockProbeMCPTools = jest.spyOn(orchestrator as any, 'probeMCPTools');
+      mockProbeMCPTools.mockResolvedValue({
+        tools: [
+          {
+            name: 'tool_with_schema',
+            description: 'Tool with complete schema',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                param: { type: 'string' }
+              },
+              required: ['param']
+            }
+          },
+          {
+            name: 'tool_without_schema',
+            description: 'Tool without schema',
+            // No inputSchema property
+          },
+          {
+            name: 'tool_with_null_schema',
+            description: 'Tool with null schema',
+            inputSchema: null
+          }
+        ],
+        serverInfo: {
+          name: 'mixed-mcp',
+          version: '1.0.0'
+        }
+      });
+
+      await orchestrator.initialize();
+
+      const definition = (orchestrator as any).definitions.get('mixed-mcp');
+      expect(definition).toBeDefined();
+      expect(definition.tools).toHaveLength(3);
+
+      // Tool with schema should preserve it
+      const toolWithSchema = definition.tools.find((t: any) => t.name === 'tool_with_schema');
+      expect(toolWithSchema.inputSchema).toBeDefined();
+      expect(toolWithSchema.inputSchema.properties).toHaveProperty('param');
+
+      // Tool without schema should get empty object (our fallback)
+      const toolWithoutSchema = definition.tools.find((t: any) => t.name === 'tool_without_schema');
+      expect(toolWithoutSchema.inputSchema).toEqual({});
+
+      // Tool with null schema should get empty object (our fallback)
+      const toolWithNullSchema = definition.tools.find((t: any) => t.name === 'tool_with_null_schema');
+      expect(toolWithNullSchema.inputSchema).toEqual({});
+    });
+
+    it('should never show *[no parameters]* for tools with actual parameters', async () => {
+      // This is a regression test for the critical bug where tools with parameters
+      // were incorrectly showing "*[no parameters]*" in the UI
+
+      const profileWithParameterizedTools = {
+        name: 'parameterized-test',
+        description: 'Test profile for parameterized tools',
+        mcpServers: {
+          'param-mcp': {
+            command: 'echo',
+            args: ['test']
+          }
+        }
+      };
+
+      jest.spyOn(JSON, 'parse').mockReturnValueOnce(profileWithParameterizedTools);
+      jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('mock-profile-content');
+
+      const orchestrator = new NCPOrchestrator('parameterized-test');
+
+      // Mock probeMCPTools to return a tool that SHOULD have parameters
+      const mockProbeMCPTools = jest.spyOn(orchestrator as any, 'probeMCPTools');
+      mockProbeMCPTools.mockResolvedValue({
+        tools: [
+          {
+            name: 'write_file',
+            description: 'Write or append to file contents',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                path: { type: 'string', description: 'File path' },
+                content: { type: 'string', description: 'Content to write' },
+                mode: { type: 'string', description: 'Write mode', enum: ['rewrite', 'append'] }
+              },
+              required: ['path', 'content']
+            }
+          }
+        ],
+        serverInfo: {
+          name: 'param-mcp',
+          version: '1.0.0'
+        }
+      });
+
+      await orchestrator.initialize();
+
+      // Use getToolSchema to verify schema is accessible
+      const schema = (orchestrator as any).getToolSchema('param-mcp', 'write_file');
+      expect(schema).toBeDefined();
+      expect(schema.properties).toHaveProperty('path');
+      expect(schema.properties).toHaveProperty('content');
+      expect(schema.required).toContain('path');
+      expect(schema.required).toContain('content');
+
+      // Verify tool parameters can be parsed correctly
+      const params = orchestrator.getToolParameters('param-mcp:write_file');
+      expect(params).toHaveLength(3); // path, content, mode
+      expect(params.some(p => p.name === 'path' && p.required === true)).toBe(true);
+      expect(params.some(p => p.name === 'content' && p.required === true)).toBe(true);
+      expect(params.some(p => p.name === 'mode' && p.required === false)).toBe(true);
+    });
+  });
 });
