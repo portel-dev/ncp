@@ -468,7 +468,7 @@ export class NCPOrchestrator {
 
       return {
         success: false,
-        error: error.message || 'Tool execution failed'
+        error: this.enhanceErrorMessage(error, actualToolName, mcpName)
       };
     }
   }
@@ -779,6 +779,41 @@ export class NCPOrchestrator {
       unhealthy: allMCPs.length - healthyMCPs.length,
       mcps: mcpStatus
     };
+  }
+
+  /**
+   * Enhance generic error messages with better context
+   */
+  private enhanceErrorMessage(error: any, toolName: string, mcpName: string): string {
+    const errorMessage = error.message || error.toString() || 'Unknown error';
+
+    // Handle common error patterns with better context
+    if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('connection refused')) {
+      return `MCP '${mcpName}' connection failed. The MCP server may be down or not properly configured. Try restarting the MCP or check your profile configuration.`;
+    }
+
+    if (errorMessage.includes('ENOENT') || errorMessage.includes('command not found')) {
+      return `MCP '${mcpName}' command not found. The MCP executable may not be installed or not in your PATH. Check your profile configuration and ensure the MCP is properly installed.`;
+    }
+
+    if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
+      return `Tool '${toolName}' execution timed out. The operation may be taking longer than expected. Try again or check if the MCP server is responding properly.`;
+    }
+
+    if (errorMessage.includes('permission') || errorMessage.includes('EACCES')) {
+      return `Permission denied when executing '${toolName}'. Check file permissions or run with appropriate privileges.`;
+    }
+
+    if (errorMessage.includes('not found') && errorMessage.includes('method')) {
+      return `Tool '${toolName}' is not supported by MCP '${mcpName}'. Use 'ncp find' to see available tools for this MCP.`;
+    }
+
+    if (errorMessage.includes('Invalid') && errorMessage.includes('parameter')) {
+      return `Invalid parameters for '${toolName}'. ${errorMessage}. Use 'ncp find "${mcpName}:${toolName}" --depth 2' to see parameter requirements.`;
+    }
+
+    // If none of the patterns match, return the original error with context
+    return `Tool '${toolName}' execution failed: ${errorMessage}`;
   }
 
   /**
