@@ -396,6 +396,8 @@ export class ConfigManager {
 
     // Import phase completed, now validate what actually works
     if (successful.length > 0) {
+      console.log(''); // Add newline before spinner starts
+
       // Show loading animation during validation
       const spinner = this.createSpinner(`✅ Validating ${successful.length} imported MCP server(s)...`);
       spinner.start();
@@ -405,11 +407,9 @@ export class ConfigManager {
       // Clear spinner and show final result
       spinner.stop();
       process.stdout.write('\r\x1b[K'); // Clear the line
-      console.log(''); // Add newline after spinner
 
       // Show successfully working MCPs
       if (discoveryResult.successful.length > 0) {
-        console.log('');
         console.log(chalk.green(`✅ Successfully imported ${discoveryResult.successful.length} MCP server(s):`));
         console.log('');
 
