@@ -4,7 +4,7 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { homedir } from 'os';
+import { getCacheDirectory } from '../utils/ncp-paths.js';
 import { join } from 'path';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
@@ -565,7 +565,7 @@ export class NCPOrchestrator {
 
   private async loadFromCache(profile: Profile): Promise<boolean> {
     try {
-      const cacheDir = join(homedir(), '.ncp', 'cache');
+      const cacheDir = getCacheDirectory();
       const cachePath = join(cacheDir, `${this.profileName}-tools.json`);
 
       if (!existsSync(cachePath)) {
@@ -643,7 +643,7 @@ export class NCPOrchestrator {
 
   private async saveToCache(profile: Profile): Promise<void> {
     try {
-      const cacheDir = join(homedir(), '.ncp', 'cache');
+      const cacheDir = getCacheDirectory();
       const cachePath = join(cacheDir, `${this.profileName}-tools.json`);
 
       // Ensure cache directory exists

@@ -390,10 +390,10 @@ program
 // Lightweight function to read MCP info from cache without full orchestrator initialization
 async function loadMCPInfoFromCache(mcpDescriptions: Record<string, string>, mcpToolCounts: Record<string, number>, mcpVersions: Record<string, string>): Promise<boolean> {
   const { readFileSync, existsSync } = await import('fs');
+  const { getCacheDirectory } = await import('../utils/ncp-paths.js');
   const { join } = await import('path');
-  const { homedir } = await import('os');
 
-  const cacheDir = join(homedir(), '.ncp', 'cache');
+  const cacheDir = getCacheDirectory();
   const cachePath = join(cacheDir, 'all-tools.json');
 
   if (!existsSync(cachePath)) {

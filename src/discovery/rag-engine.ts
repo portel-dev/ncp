@@ -3,12 +3,13 @@
  * Uses transformer.js for embeddings with persistent caching
  */
 
-import * as os from 'os';
 import * as path from 'path';
+import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
 import { existsSync } from 'fs';
 import { logger } from '../utils/logger.js';
+import { EnhancementSystem } from './enhancement-system.js';
 
 // Import transformer.js (will be added to dependencies)
 declare const pipeline: any;
@@ -170,11 +171,13 @@ export class PersistentRAGEngine {
   private isInitialized = false;
   private indexingQueue: Array<{ mcpName: string; tools: any[] }> = [];
   private isIndexing = false;
+  private enhancementSystem: EnhancementSystem;
 
   constructor() {
-    const ncpDir = path.join(os.homedir(), '.ncp');
+    const ncpDir = getNcpBaseDirectory();
     this.dbPath = path.join(ncpDir, 'embeddings.json');
     this.metadataPath = path.join(ncpDir, 'embeddings-metadata.json');
+    this.enhancementSystem = new EnhancementSystem();
     this.ensureDirectoryExists(ncpDir);
   }
 
@@ -528,8 +531,8 @@ export class PersistentRAGEngine {
       
       // Enhanced filtering with domain awareness
       const inferredDomains = this.inferQueryDomains(queryLower);
-      
-      // Sort by similarity and apply domain boosting
+
+      // Sort by similarity and apply enhancement system
       const results = similarities
         .sort((a, b) => b.similarity - a.similarity)
         .slice(0, maxResults * 2) // Get more candidates for domain filtering
@@ -537,24 +540,48 @@ export class PersistentRAGEngine {
         .map(result => {
           const toolData = this.vectorDB.get(result.toolId);
           let boostedSimilarity = result.similarity;
-          
-          // Boost similarity if the tool's domain matches inferred query domains
+          let enhancementReasons: string[] = [];
+
+          // Apply dual enhancement system
+          if (toolData) {
+            const enhancements = this.enhancementSystem.enhance(
+              query,
+              result.toolId,
+              toolData.description
+            );
+
+            for (const enhancement of enhancements) {
+              boostedSimilarity += enhancement.boost;
+              enhancementReasons.push(`${enhancement.type}: ${enhancement.reason}`);
+
+              logger.debug(`🚀 Enhanced ${result.toolId}: +${enhancement.boost.toFixed(3)} (${enhancement.type})`);
+            }
+          }
+
+          // Legacy domain boosting (will be replaced by enhancement system over time)
           if (toolData?.mcpDomain && inferredDomains.length > 0) {
             const domainMatch = inferredDomains.some(domain =>
               toolData.mcpDomain!.toLowerCase().includes(domain.toLowerCase()) ||
               domain.toLowerCase().includes(toolData.mcpDomain!.toLowerCase())
             );
             if (domainMatch) {
-              boostedSimilarity = Math.min(0.98, result.similarity + 0.15);
+              boostedSimilarity = Math.min(0.98, boostedSimilarity + 0.15);
+              enhancementReasons.push(`legacy: domain match (${toolData.mcpDomain})`);
             }
           }
           
+          const baseReason = toolData?.mcpDomain ?
+            `${toolData.mcpDomain} tool (RAG)` :
+            'Semantic similarity (RAG)';
+
+          const enhancedReason = enhancementReasons.length > 0 ?
+            `${baseReason} + ${enhancementReasons.join(', ')}` :
+            baseReason;
+
           return {
             toolId: result.toolId,
             confidence: Math.min(0.95, boostedSimilarity),
-            reason: toolData?.mcpDomain ? 
-              `${toolData.mcpDomain} tool (RAG)` : 
-              'Semantic similarity (RAG)',
+            reason: enhancedReason,
             similarity: boostedSimilarity,
             originalSimilarity: result.similarity,
             domain: toolData?.mcpDomain || 'unknown'

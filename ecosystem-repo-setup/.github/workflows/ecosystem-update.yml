@@ -1,0 +1,132 @@
+name: Ecosystem Update
+
+on:
+  schedule:
+    # Weekly build every Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Build mode'
+        required: true
+        default: 'incremental'
+        type: choice
+        options:
+        - incremental
+        - full-rebuild
+        - discovery-only
+
+jobs:
+  ecosystem-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 480  # 8 hours max
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git python3-pip
+
+    - name: Configure Git
+      run: |
+        git config --global user.name 'Ecosystem Builder Bot'
+        git config --global user.email 'ecosystem-bot@ncp.dev'
+
+    - name: Run ecosystem build
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        BUILD_MODE: ${{ github.event.inputs.mode || 'incremental' }}
+      run: |
+        if [ "$BUILD_MODE" = "discovery-only" ]; then
+          npm run ecosystem:discover
+        elif [ "$BUILD_MODE" = "full-rebuild" ]; then
+          npm run clean
+          npm run ecosystem:build
+        else
+          npm run ecosystem:build
+        fi
+
+    - name: Generate release artifacts
+      run: |
+        npm run ecosystem:release
+
+    - name: Archive build results
+      uses: actions/upload-artifact@v4
+      with:
+        name: ecosystem-build-${{ github.run_number }}
+        path: |
+          generated/
+          data/ecosystem-*.json
+        retention-days: 30
+
+    - name: Create release (if significant changes)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # Only create release if we have significant changes
+        if [ -f "generated/release-ready.flag" ]; then
+          npm run ecosystem:release -- --create-github-release
+        fi
+
+    - name: Cleanup temporary files
+      run: npm run clean
+
+    - name: Notify NCP repository
+      env:
+        NCP_REPO_WEBHOOK: ${{ secrets.NCP_REPO_WEBHOOK }}
+      run: |
+        if [ -n "$NCP_REPO_WEBHOOK" ] && [ -f "generated/release-ready.flag" ]; then
+          curl -X POST "$NCP_REPO_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "event": "ecosystem-updated",
+              "version": "'$(cat generated/version.txt)'",
+              "stats": '$(cat generated/stats.json)'
+            }'
+        fi
+
+  validate-ecosystem:
+    needs: ecosystem-update
+    runs-on: ubuntu-latest
+    if: success()
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: ecosystem-build-${{ github.run_number }}
+
+    - name: Validate generated profiles
+      run: npm run test:profiles
+
+    - name: Run integration tests
+      run: npm test

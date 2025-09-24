@@ -5,8 +5,8 @@
 
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import * as os from 'os';
 import { existsSync } from 'fs';
+import { getProfilesDirectory } from '../utils/ncp-paths.js';
 
 interface MCPConfig {
   command: string;
@@ -29,8 +29,8 @@ export class ProfileManager {
   private profiles: Map<string, Profile> = new Map();
 
   constructor() {
-    // Store profiles in user's home directory
-    this.profilesDir = path.join(os.homedir(), '.ncp', 'profiles');
+    // Use centralized path utility to determine local vs global .ncp directory
+    this.profilesDir = getProfilesDirectory();
   }
 
   async initialize(): Promise<void> {
