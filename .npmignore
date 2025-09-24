@@ -22,12 +22,17 @@ scripts/
 ./*.jpeg
 ./*.gif
 
-# Test files
+# Test files and scripts
 test/
 tests/
 __tests__/
 *.test.js
 *.test.ts
+*.sh
+
+# TypeScript source files (redundant - we have compiled JS)
+*.ts
+!*.d.ts
 
 # Coverage reports
 coverage/
