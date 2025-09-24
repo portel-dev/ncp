@@ -6,8 +6,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { spawn } from 'child_process';
 
-// Simple config schema
-const configSchema = {
+// Simple config schema (compatible format)
+export const configSchema = {
   type: "object",
   properties: {
     profile: {
@@ -19,8 +19,7 @@ const configSchema = {
 };
 
 // Main server creation function that Smithery expects
-export default function createServer(options: { config: any }) {
-  const { config = {} } = options;
+export default function createServer({ config }: { config: any }) {
 
   const server = new McpServer({
     name: "Natural Context Provider",
@@ -127,8 +126,10 @@ async function executeNCP(args: string[], profile?: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const ncpArgs = profile && profile !== 'default' ? ['--profile', profile, ...args] : args;
 
+    // Add timeout and better error handling
     const child = spawn('npx', ['@portel/ncp', ...ncpArgs], {
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 30000 // 30 second timeout
     });
 
     let stdout = '';
@@ -156,5 +157,3 @@ async function executeNCP(args: string[], profile?: string): Promise<string> {
   });
 }
 
-// Export config schema for Smithery
-export { configSchema };
