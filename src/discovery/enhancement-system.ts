@@ -32,7 +32,7 @@ export class EnhancementSystem {
    * These are objective facts about tool capabilities
    */
   private domainCapabilities: Record<string, DomainCapability> = {
-    // Shell/Terminal factual capabilities
+    // Shell/Terminal factual capabilities (EXPANDED from 127 MCP ecosystem)
     'shell': {
       domains: [
         'git version control operations',
@@ -42,10 +42,54 @@ export class EnhancementSystem {
         'network operations (curl, wget, ssh)',
         'text processing (grep, sed, awk)',
         'process management (ps, kill, top)',
-        'system administration'
+        'system administration',
+        // NEW from ecosystem insights
+        'ffmpeg video processing',
+        'imagemagick image conversion',
+        'docker container management',
+        'kubernetes cluster operations',
+        'terraform infrastructure provisioning',
+        'database CLI tools (psql, mysql, mongo)',
+        'cloud CLI tools (aws, gcloud, azure)',
+        'build tools (make, cmake, gradle)',
+        'testing frameworks (jest, pytest)',
+        'linters and formatters (eslint, prettier)',
+        'performance monitoring (htop, iostat)',
+        'log analysis (tail, journalctl)',
+        'cron job management',
+        'systemd service control'
       ],
-      confidence: 0.7, // Not all shells have all tools
-      context: 'unix-like systems'
+      confidence: 0.75, // Higher confidence with more comprehensive mapping
+      context: 'unix-like systems with developer tools'
+    },
+
+    'shell-mcp': {
+      domains: [
+        'git version control operations',
+        'file system management',
+        'archive operations (tar, zip, gzip)',
+        'package management (npm, yarn, pip, cargo)',
+        'network operations (curl, wget, ssh)',
+        'text processing (grep, sed, awk)',
+        'process management (ps, kill, top)',
+        'system administration',
+        'ffmpeg video processing',
+        'imagemagick image conversion',
+        'docker container management',
+        'kubernetes cluster operations',
+        'terraform infrastructure provisioning',
+        'database CLI tools (psql, mysql, mongo)',
+        'cloud CLI tools (aws, gcloud, azure)',
+        'build tools (make, cmake, gradle)',
+        'testing frameworks (jest, pytest)',
+        'linters and formatters (eslint, prettier)',
+        'performance monitoring (htop, iostat)',
+        'log analysis (tail, journalctl)',
+        'cron job management',
+        'systemd service control'
+      ],
+      confidence: 0.75,
+      context: 'unix-like systems with developer tools'
     },
 
     'terminal': {
@@ -112,6 +156,97 @@ export class EnhancementSystem {
       ],
       confidence: 1.0,
       context: 'software development'
+    },
+
+    // NEW: Expanded MCP types from 127 MCP ecosystem
+    'postgres': {
+      domains: [
+        'SQL query execution',
+        'transaction management',
+        'stored procedures and functions',
+        'JSON/JSONB operations',
+        'full-text search',
+        'materialized views',
+        'replication and backup',
+        'user and role management'
+      ],
+      confidence: 0.95,
+      context: 'PostgreSQL database operations'
+    },
+
+    'postgres-mcp': {
+      domains: [
+        'SQL query execution',
+        'transaction management',
+        'stored procedures and functions',
+        'JSON/JSONB operations',
+        'full-text search',
+        'materialized views',
+        'replication and backup',
+        'user and role management'
+      ],
+      confidence: 0.95,
+      context: 'PostgreSQL database operations'
+    },
+
+    'docker': {
+      domains: [
+        'container image building',
+        'container lifecycle management',
+        'volume management',
+        'network configuration',
+        'docker compose orchestration',
+        'registry operations',
+        'health checks',
+        'resource limits'
+      ],
+      confidence: 0.95,
+      context: 'Docker containerization'
+    },
+
+    'docker-mcp': {
+      domains: [
+        'container image building',
+        'container lifecycle management',
+        'volume management',
+        'network configuration',
+        'docker compose orchestration',
+        'registry operations',
+        'health checks',
+        'resource limits'
+      ],
+      confidence: 0.95,
+      context: 'Docker containerization'
+    },
+
+    'github': {
+      domains: [
+        'repository management',
+        'pull request operations',
+        'issue tracking',
+        'GitHub Actions workflows',
+        'releases and tags',
+        'code review',
+        'team collaboration',
+        'webhooks'
+      ],
+      confidence: 0.95,
+      context: 'GitHub platform operations'
+    },
+
+    'github-mcp': {
+      domains: [
+        'repository management',
+        'pull request operations',
+        'issue tracking',
+        'GitHub Actions workflows',
+        'releases and tags',
+        'code review',
+        'team collaboration',
+        'webhooks'
+      ],
+      confidence: 0.95,
+      context: 'GitHub platform operations'
     }
   };
 
@@ -120,18 +255,39 @@ export class EnhancementSystem {
    * These handle cases where users describe needs differently than tools
    */
   private semanticBridges: Record<string, SemanticBridge> = {
-    // Version control bridges
+    // Version control bridges (EXPANDED)
     'save my changes': {
-      targetTools: ['git:commit'],
+      targetTools: ['git:commit', 'github:commit', 'shell:run_command'],
       reason: 'In coding context, saving changes typically means committing to version control',
-      confidence: 0.8,
+      confidence: 0.85,
       context: 'code development'
     },
 
+    'commit my code': {
+      targetTools: ['git:commit', 'github:commit', 'shell:run_command'],
+      reason: 'Committing code uses git operations directly or through shell',
+      confidence: 0.9,
+      context: 'version control'
+    },
+
+    'push to github': {
+      targetTools: ['git:push', 'github:push', 'shell:run_command'],
+      reason: 'Pushing to GitHub can use git commands or GitHub API',
+      confidence: 0.9,
+      context: 'code sharing'
+    },
+
+    'create pull request': {
+      targetTools: ['github:create_pull_request', 'shell:run_command'],
+      reason: 'Creating PRs uses GitHub API or gh CLI tool',
+      confidence: 0.9,
+      context: 'code collaboration'
+    },
+
     'share my code': {
-      targetTools: ['git:push', 'git:create_pull_request'],
+      targetTools: ['git:push', 'github:create_pull_request', 'shell:run_command'],
       reason: 'Sharing code usually means pushing to remote or creating PR',
-      confidence: 0.75,
+      confidence: 0.8,
       context: 'collaborative development'
     },
 
@@ -143,18 +299,39 @@ export class EnhancementSystem {
       context: 'data protection'
     },
 
-    // Media processing bridges
+    // Media processing bridges (EXPANDED)
     'compress video': {
-      targetTools: ['shell:run_command'],
+      targetTools: ['shell:run_command', 'shell-mcp:run_command'],
       reason: 'Video compression typically requires ffmpeg via command line',
       confidence: 0.85,
       context: 'media processing'
     },
 
-    'convert image format': {
-      targetTools: ['image:convert', 'shell:run_command'],
-      reason: 'Image conversion can use dedicated tools or ImageMagick via shell',
+    'convert video format': {
+      targetTools: ['shell:run_command', 'shell-mcp:run_command'],
+      reason: 'Video format conversion uses ffmpeg through shell commands',
+      confidence: 0.85,
+      context: 'media processing'
+    },
+
+    'process videos': {
+      targetTools: ['shell:run_command', 'shell-mcp:run_command'],
+      reason: 'Video processing typically uses ffmpeg through shell',
       confidence: 0.8,
+      context: 'media processing'
+    },
+
+    'convert image format': {
+      targetTools: ['shell:run_command', 'shell-mcp:run_command'],
+      reason: 'Image conversion can use ImageMagick via shell',
+      confidence: 0.8,
+      context: 'image processing'
+    },
+
+    'resize images': {
+      targetTools: ['shell:run_command', 'shell-mcp:run_command'],
+      reason: 'Image resizing uses ImageMagick through shell commands',
+      confidence: 0.85,
       context: 'image processing'
     },
 
