@@ -175,6 +175,129 @@ export class SemanticEnhancementEngine {
       ],
       confidenceScore: 0.9,
       applicableContext: 'OpenAI API and language model operations'
+    },
+
+    // Communication capability inference
+    'slack': {
+      implicitDomains: [
+        'team messaging and communication',
+        'channel management and organization',
+        'file sharing and document collaboration',
+        'workflow automation and bot integration',
+        'user and workspace management',
+        'notification and alert systems',
+        'thread discussions and replies',
+        'emoji reactions and status updates',
+        'direct messaging and group chats',
+        'integration with external tools and services'
+      ],
+      confidenceScore: 0.95,
+      applicableContext: 'team collaboration and workplace communication'
+    },
+
+    'discord': {
+      implicitDomains: [
+        'community messaging and voice chat',
+        'server and channel management',
+        'user roles and permission management',
+        'bot development and automation',
+        'voice and video communication',
+        'screen sharing and streaming',
+        'community moderation tools',
+        'gaming integration and rich presence',
+        'webhook integrations and notifications'
+      ],
+      confidenceScore: 0.9,
+      applicableContext: 'community management and gaming communication'
+    },
+
+    'gmail': {
+      implicitDomains: [
+        'email sending and receiving operations',
+        'inbox management and organization',
+        'email filtering and label management',
+        'attachment handling and file sharing',
+        'contact management and address books',
+        'calendar integration and scheduling',
+        'thread management and conversations',
+        'search and archival operations',
+        'spam detection and security filtering'
+      ],
+      confidenceScore: 0.95,
+      applicableContext: 'professional email communication and management'
+    },
+
+    // Financial capability inference
+    'stripe': {
+      implicitDomains: [
+        'payment processing and transactions',
+        'subscription billing and recurring payments',
+        'customer management and profiles',
+        'invoice generation and management',
+        'dispute handling and chargeback management',
+        'financial reporting and analytics',
+        'tax calculation and compliance',
+        'multi-currency support and conversion',
+        'fraud detection and security measures',
+        'webhook events and payment notifications',
+        'marketplace and platform payments',
+        'PCI compliance and secure tokenization'
+      ],
+      confidenceScore: 0.95,
+      applicableContext: 'e-commerce and online payment processing'
+    },
+
+    // Calendar capability inference
+    'calendar': {
+      implicitDomains: [
+        'event creation and scheduling',
+        'meeting management and invitations',
+        'calendar sharing and permissions',
+        'recurring event management',
+        'reminder and notification systems',
+        'availability checking and conflict resolution',
+        'time zone management and conversion',
+        'calendar synchronization across platforms',
+        'resource booking and room management',
+        'integration with email and communication tools'
+      ],
+      confidenceScore: 0.9,
+      applicableContext: 'scheduling and time management'
+    },
+
+    // Productivity capability inference
+    'google-sheets': {
+      implicitDomains: [
+        'spreadsheet data manipulation and analysis',
+        'formula calculation and data processing',
+        'chart creation and data visualization',
+        'collaborative editing and sharing',
+        'data import and export operations',
+        'cell formatting and conditional styling',
+        'pivot table creation and analysis',
+        'data validation and input constraints',
+        'automation with Google Apps Script',
+        'integration with other Google Workspace tools'
+      ],
+      confidenceScore: 0.9,
+      applicableContext: 'data analysis and collaborative spreadsheet work'
+    },
+
+    // Enhanced cloud capability inference
+    'cloudflare': {
+      implicitDomains: [
+        'DNS management and domain configuration',
+        'CDN and content delivery optimization',
+        'DDoS protection and security filtering',
+        'SSL certificate management',
+        'website performance optimization',
+        'worker scripts and edge computing',
+        'load balancing and traffic distribution',
+        'firewall rules and access control',
+        'analytics and performance monitoring'
+      ],
+      confidenceScore: 0.9,
+      applicableContext: 'web performance and security services'
     }
   };
 
@@ -252,6 +375,116 @@ export class SemanticEnhancementEngine {
       resolutionRationale: 'Model training requires machine learning framework operations',
       confidenceScore: 0.85,
       domainContext: 'machine learning and model development'
+    },
+
+    // Communication semantic resolutions
+    'send a message to my team': {
+      targetOperations: ['slack:send_message', 'discord:send_message', 'teams:send_message', 'gmail:send_email'],
+      resolutionRationale: 'Team messaging requires communication platform operations',
+      confidenceScore: 0.9,
+      domainContext: 'team communication and collaboration'
+    },
+
+    'message my team': {
+      targetOperations: ['slack:send_message', 'discord:send_message', 'teams:send_message'],
+      resolutionRationale: 'Messaging teams uses workplace communication tools',
+      confidenceScore: 0.85,
+      domainContext: 'workplace communication'
+    },
+
+    'notify the team': {
+      targetOperations: ['slack:send_message', 'discord:send_message', 'teams:send_message', 'gmail:send_email'],
+      resolutionRationale: 'Team notifications require communication channels',
+      confidenceScore: 0.8,
+      domainContext: 'team coordination and alerts'
+    },
+
+    // Cloud operations semantic resolutions
+    'list my EC2 instances': {
+      targetOperations: ['aws:list_ec2_instances', 'aws:describe_instances', 'shell:run_command'],
+      resolutionRationale: 'EC2 instance listing requires AWS cloud operations',
+      confidenceScore: 0.95,
+      domainContext: 'AWS cloud infrastructure management'
+    },
+
+    'list my S3 buckets': {
+      targetOperations: ['aws:list_s3_buckets', 'aws:list_buckets', 'shell:run_command'],
+      resolutionRationale: 'S3 bucket listing requires AWS storage operations',
+      confidenceScore: 0.95,
+      domainContext: 'AWS cloud storage management'
+    },
+
+    'show my cloud resources': {
+      targetOperations: ['aws:list_ec2_instances', 'aws:list_s3_buckets', 'azure:list_resources', 'gcp:list_instances'],
+      resolutionRationale: 'Cloud resource viewing requires cloud platform API operations',
+      confidenceScore: 0.85,
+      domainContext: 'multi-cloud infrastructure management'
+    },
+
+    // Financial operations semantic resolutions
+    'process a customer payment': {
+      targetOperations: ['stripe:create_charge', 'stripe:create_payment_intent', 'stripe:process_payment'],
+      resolutionRationale: 'Customer payment processing requires payment gateway operations',
+      confidenceScore: 0.9,
+      domainContext: 'e-commerce payment processing'
+    },
+
+    'charge a customer': {
+      targetOperations: ['stripe:create_charge', 'stripe:create_payment_intent'],
+      resolutionRationale: 'Customer charging requires payment processing operations',
+      confidenceScore: 0.9,
+      domainContext: 'payment and billing'
+    },
+
+    'collect payment': {
+      targetOperations: ['stripe:create_charge', 'stripe:create_payment_intent', 'stripe:create_invoice'],
+      resolutionRationale: 'Payment collection requires financial transaction operations',
+      confidenceScore: 0.85,
+      domainContext: 'revenue collection and billing'
+    },
+
+    // Calendar operations semantic resolutions
+    'schedule a team meeting': {
+      targetOperations: ['calendar:create_event', 'calendar:schedule_meeting', 'gmail:create_event'],
+      resolutionRationale: 'Meeting scheduling requires calendar management operations',
+      confidenceScore: 0.9,
+      domainContext: 'team coordination and scheduling'
+    },
+
+    'book a meeting': {
+      targetOperations: ['calendar:create_event', 'calendar:schedule_meeting'],
+      resolutionRationale: 'Meeting booking requires calendar scheduling operations',
+      confidenceScore: 0.85,
+      domainContext: 'appointment and meeting management'
+    },
+
+    'create a calendar event': {
+      targetOperations: ['calendar:create_event', 'gmail:create_event'],
+      resolutionRationale: 'Event creation requires calendar management operations',
+      confidenceScore: 0.95,
+      domainContext: 'schedule and event management'
+    },
+
+    // Productivity tools semantic resolutions
+    'update the quarterly report spreadsheet': {
+      targetOperations: ['google-sheets:update_sheet', 'google-sheets:write_sheet', 'google-sheets:update_cells'],
+      resolutionRationale: 'Spreadsheet updating requires sheet manipulation operations',
+      confidenceScore: 0.9,
+      domainContext: 'business reporting and data management'
+    },
+
+    'update spreadsheet': {
+      targetOperations: ['google-sheets:update_sheet', 'google-sheets:write_sheet'],
+      resolutionRationale: 'Spreadsheet updates require sheet data operations',
+      confidenceScore: 0.85,
+      domainContext: 'data management and analysis'
+    },
+
+    'edit the report': {
+      targetOperations: ['google-sheets:update_sheet', 'notion:update_page', 'gdrive:update_file'],
+      resolutionRationale: 'Report editing requires document manipulation operations',
+      confidenceScore: 0.8,
+      domainContext: 'document and report management'
     }
   };
 
@@ -351,16 +584,36 @@ export class SemanticEnhancementEngine {
 
   /**
    * Check if user query matches a semantic pattern
-   * Uses fuzzy keyword matching with majority threshold
+   * Uses improved fuzzy keyword matching with flexible thresholds
    */
   private matchesSemanticPattern(userQuery: string, semanticPattern: string): boolean {
     const patternKeywords = semanticPattern.toLowerCase().split(/\s+/);
-    const matchingKeywords = patternKeywords.filter(keyword =>
-      userQuery.includes(keyword)
-    );
+    const queryWords = userQuery.toLowerCase().split(/\s+/);
 
-    // Require majority of keywords to match (60% threshold)
-    const matchThreshold = Math.ceil(patternKeywords.length * 0.6);
+    // Enhanced matching: exact matches, partial matches, and synonyms
+    const matchingKeywords = patternKeywords.filter(keyword => {
+      // Direct inclusion check
+      if (userQuery.includes(keyword)) return true;
+
+      // Check if any query word contains or is contained in the pattern keyword
+      return queryWords.some(queryWord =>
+        queryWord.includes(keyword) || keyword.includes(queryWord)
+      );
+    });
+
+    // Dynamic threshold based on pattern length
+    let matchThreshold;
+    if (patternKeywords.length <= 2) {
+      // For short patterns, require all keywords to match
+      matchThreshold = patternKeywords.length;
+    } else if (patternKeywords.length <= 4) {
+      // For medium patterns, require 60% match
+      matchThreshold = Math.ceil(patternKeywords.length * 0.6);
+    } else {
+      // For long patterns, require 50% match
+      matchThreshold = Math.ceil(patternKeywords.length * 0.5);
+    }
+
     return matchingKeywords.length >= matchThreshold;
   }
 
