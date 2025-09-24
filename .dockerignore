@@ -1,0 +1,21 @@
+# Development files
+node_modules
+.git
+.env
+*.log
+.DS_Store
+
+# Build output (will be generated during build)
+dist
+
+# NCP runtime files
+.ncp/cache
+.ncp/embeddings.json
+.ncp/embeddings-metadata.json
+
+# Testing and development
+test/
+tests/
+*.test.js
+*.test.ts
+coverage/
