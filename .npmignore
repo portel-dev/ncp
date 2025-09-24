@@ -41,3 +41,15 @@ coverage/
 jest.config.js
 webpack.config.js
 rollup.config.js
+
+# NCP runtime files - these are generated and should not be in npm package
+.ncp/
+
+# Testing and development files from dist/
+dist/testing/
+
+# Development configuration files
+ecosystem-repo-setup/
+profiles/
+test-*.js
+2025-*.txt
