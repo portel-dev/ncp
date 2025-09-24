@@ -3,7 +3,7 @@
   "version": "1.0.4",
   "description": "Natural Context Provider - N-to-1 MCP Orchestration for AI Assistants",
   "main": "dist/index.js",
-  "module": "dist/index.js",
+  "module": "src/smithery-wrapper.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
