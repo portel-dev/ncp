@@ -19,7 +19,8 @@ scripts/
 # Keep documentation images
 !docs/images/**
 
-# NCP generated files
+# NCP generated files - exclude ALL cache and runtime files
 .ncp/cache/
 .ncp/embeddings.json
 .ncp/embeddings-metadata.json
+.ncp/profiles/tier-*.json
