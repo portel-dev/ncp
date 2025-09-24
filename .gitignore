@@ -18,3 +18,8 @@ scripts/
 
 # Keep documentation images
 !docs/images/**
+
+# NCP generated files
+.ncp/cache/
+.ncp/embeddings.json
+.ncp/embeddings-metadata.json
