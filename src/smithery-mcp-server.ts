@@ -19,7 +19,7 @@ export default function createServer({
   config: z.infer<typeof configSchema>;
 }) {
   const server = new McpServer({
-    name: "NCP - Natural Context Provider",
+    name: "Natural Context Provider",
     version: "1.0.4",
   });
 
@@ -39,7 +39,7 @@ export default function createServer({
         return {
           content: [{ type: "text", text: result }],
         };
-      } catch (error) {
+      } catch (error: any) {
         return {
           content: [{ type: "text", text: `Error: ${error.message}` }],
         };
@@ -67,7 +67,7 @@ export default function createServer({
         return {
           content: [{ type: "text", text: result }],
         };
-      } catch (error) {
+      } catch (error: any) {
         return {
           content: [{ type: "text", text: `Error: ${error.message}` }],
         };

@@ -10,6 +10,7 @@ import * as crypto from 'crypto';
 import { existsSync } from 'fs';
 import { logger } from '../utils/logger.js';
 import { EnhancementSystem } from './enhancement-system.js';
+import { applyEcosystemEnhancements } from './enhanced-domain-mappings.js';
 
 // Import transformer.js (will be added to dependencies)
 declare const pipeline: any;
@@ -178,7 +179,13 @@ export class PersistentRAGEngine {
     this.dbPath = path.join(ncpDir, 'embeddings.json');
     this.metadataPath = path.join(ncpDir, 'embeddings-metadata.json');
     this.enhancementSystem = new EnhancementSystem();
+
+    // Apply expanded ecosystem enhancements based on 127 MCP analysis
+    applyEcosystemEnhancements(this.enhancementSystem);
+
     this.ensureDirectoryExists(ncpDir);
+
+    logger.info('RAG Engine initialized with ecosystem enhancements');
   }
 
   /**
