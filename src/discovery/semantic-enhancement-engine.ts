@@ -281,7 +281,7 @@ export class SemanticEnhancementEngine {
 
     // 1. CAPABILITY INFERENCE: Check domain knowledge for this tool type
     const inferenceRule = this.capabilityInferenceRules[mcpName] ||
-                         this.capabilityInferenceRules[toolName?.toLowerCase()];
+                         (toolName ? this.capabilityInferenceRules[toolName.toLowerCase()] : undefined);
 
     if (inferenceRule) {
       // Check if query relates to any implicit domain capabilities

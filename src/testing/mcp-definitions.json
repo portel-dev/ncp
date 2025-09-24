@@ -446,6 +446,250 @@
           }
         }
       }
+    },
+
+    "neo4j": {
+      "name": "neo4j",
+      "version": "1.0.0",
+      "description": "Neo4j graph database server with schema management and read/write cypher operations",
+      "category": "database",
+      "tools": {
+        "cypher": {
+          "name": "cypher",
+          "description": "Execute Cypher query against Neo4j graph database",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {"type": "string", "description": "Cypher query to execute"},
+              "parameters": {"type": "object", "description": "Query parameters"}
+            },
+            "required": ["query"]
+          }
+        }
+      }
+    },
+
+    "sqlite": {
+      "name": "sqlite",
+      "version": "1.0.0",
+      "description": "SQLite local database operations for lightweight data storage and queries",
+      "category": "database",
+      "tools": {
+        "query": {
+          "name": "query",
+          "description": "Execute SQL query against SQLite database",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "sql": {"type": "string", "description": "SQL query to execute"},
+              "database_path": {"type": "string", "description": "Path to SQLite database file"}
+            },
+            "required": ["sql"]
+          }
+        }
+      }
+    },
+
+    "mongodb": {
+      "name": "mongodb",
+      "version": "1.0.0",
+      "description": "MongoDB document database operations with aggregation and indexing",
+      "category": "database",
+      "tools": {
+        "find": {
+          "name": "find",
+          "description": "Find documents in MongoDB collection",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "collection": {"type": "string", "description": "Collection name"},
+              "filter": {"type": "object", "description": "Query filter"},
+              "limit": {"type": "integer", "description": "Max results to return"}
+            },
+            "required": ["collection"]
+          }
+        },
+        "insert": {
+          "name": "insert",
+          "description": "Insert documents into MongoDB collection",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "collection": {"type": "string", "description": "Collection name"},
+              "documents": {"type": "array", "description": "Documents to insert"}
+            },
+            "required": ["collection", "documents"]
+          }
+        }
+      }
+    },
+
+    "slack": {
+      "name": "slack",
+      "version": "1.0.0",
+      "description": "Slack integration for messaging, channel management, and team communication",
+      "category": "communication",
+      "tools": {
+        "send_message": {
+          "name": "send_message",
+          "description": "Send message to Slack channel or user",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "channel": {"type": "string", "description": "Channel or user ID"},
+              "text": {"type": "string", "description": "Message text"},
+              "attachments": {"type": "array", "description": "Message attachments"}
+            },
+            "required": ["channel", "text"]
+          }
+        }
+      }
+    },
+
+    "notion": {
+      "name": "notion",
+      "version": "1.0.0",
+      "description": "Notion workspace management for documents, databases, and collaborative content",
+      "category": "productivity",
+      "tools": {
+        "create_page": {
+          "name": "create_page",
+          "description": "Create new page in Notion workspace",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "parent": {"type": "string", "description": "Parent page or database ID"},
+              "title": {"type": "string", "description": "Page title"},
+              "content": {"type": "array", "description": "Page content blocks"}
+            },
+            "required": ["parent", "title"]
+          }
+        }
+      }
+    },
+
+    "filesystem": {
+      "name": "filesystem",
+      "version": "1.0.0",
+      "description": "Local file system operations including reading, writing, and directory management",
+      "category": "file-operations",
+      "tools": {
+        "read_file": {
+          "name": "read_file",
+          "description": "Read contents of a file",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {"type": "string", "description": "File path to read"},
+              "encoding": {"type": "string", "description": "File encoding", "default": "utf8"}
+            },
+            "required": ["path"]
+          }
+        },
+        "write_file": {
+          "name": "write_file",
+          "description": "Write content to a file",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {"type": "string", "description": "File path to write"},
+              "content": {"type": "string", "description": "Content to write"},
+              "mode": {"type": "string", "description": "Write mode", "default": "w"}
+            },
+            "required": ["path", "content"]
+          }
+        }
+      }
+    },
+
+    "playwright": {
+      "name": "playwright",
+      "version": "1.0.0",
+      "description": "Browser automation and web scraping with cross-browser support",
+      "category": "web-automation",
+      "tools": {
+        "navigate": {
+          "name": "navigate",
+          "description": "Navigate browser to URL",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "url": {"type": "string", "description": "URL to navigate to"},
+              "browser": {"type": "string", "description": "Browser type", "default": "chromium"}
+            },
+            "required": ["url"]
+          }
+        },
+        "screenshot": {
+          "name": "screenshot",
+          "description": "Take screenshot of current page",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {"type": "string", "description": "Screenshot save path"},
+              "full_page": {"type": "boolean", "description": "Capture full page"}
+            },
+            "required": ["path"]
+          }
+        }
+      }
+    },
+
+    "kubernetes": {
+      "name": "kubernetes",
+      "version": "1.0.0",
+      "description": "Kubernetes cluster management and container orchestration",
+      "category": "cloud-infrastructure",
+      "tools": {
+        "deploy": {
+          "name": "deploy",
+          "description": "Deploy application to Kubernetes cluster",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "manifest": {"type": "string", "description": "Kubernetes manifest YAML"},
+              "namespace": {"type": "string", "description": "Target namespace"},
+              "context": {"type": "string", "description": "Kubectl context"}
+            },
+            "required": ["manifest"]
+          }
+        },
+        "scale": {
+          "name": "scale",
+          "description": "Scale Kubernetes deployment replicas",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "deployment": {"type": "string", "description": "Deployment name"},
+              "replicas": {"type": "integer", "description": "Number of replicas"},
+              "namespace": {"type": "string", "description": "Namespace"}
+            },
+            "required": ["deployment", "replicas"]
+          }
+        }
+      }
+    },
+
+    "elasticsearch": {
+      "name": "elasticsearch",
+      "version": "1.0.0",
+      "description": "Elasticsearch search and analytics engine operations",
+      "category": "search",
+      "tools": {
+        "search": {
+          "name": "search",
+          "description": "Search documents in Elasticsearch index",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "index": {"type": "string", "description": "Index name"},
+              "query": {"type": "object", "description": "Elasticsearch query DSL"},
+              "size": {"type": "integer", "description": "Max results"}
+            },
+            "required": ["index", "query"]
+          }
+        }
+      }
     }
   }
 }
