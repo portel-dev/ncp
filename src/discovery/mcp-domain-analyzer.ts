@@ -4,7 +4,6 @@
  */
 
 import { logger } from '../utils/logger.js';
-import { EnhancementSystem } from './enhancement-system.js';
 
 interface MCPServerInfo {
   name: string;

@@ -1,0 +1,451 @@
+{
+  "mcps": {
+    "shell": {
+      "name": "shell",
+      "version": "1.0.0",
+      "description": "Execute shell commands and system operations",
+      "category": "system-operations",
+      "tools": {
+        "run_command": {
+          "name": "run_command",
+          "description": "Execute shell commands with environment control and output capture",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "Shell command to execute"
+              },
+              "working_directory": {
+                "type": "string",
+                "description": "Working directory for command execution"
+              },
+              "environment": {
+                "type": "object",
+                "description": "Environment variables"
+              }
+            },
+            "required": ["command"]
+          }
+        }
+      }
+    },
+    "git": {
+      "name": "git",
+      "version": "1.0.0",
+      "description": "Git version control operations including commits, branches, and repository management",
+      "category": "developer-tools",
+      "tools": {
+        "commit": {
+          "name": "commit",
+          "description": "Create a git commit with specified message and files",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "Commit message"
+              },
+              "files": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Files to include in commit"
+              },
+              "add_all": {
+                "type": "boolean",
+                "description": "Add all modified files"
+              }
+            },
+            "required": ["message"]
+          }
+        },
+        "push": {
+          "name": "push",
+          "description": "Push commits to remote repository",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "remote": {
+                "type": "string",
+                "description": "Remote repository name",
+                "default": "origin"
+              },
+              "branch": {
+                "type": "string",
+                "description": "Branch to push"
+              },
+              "force": {
+                "type": "boolean",
+                "description": "Force push"
+              }
+            }
+          }
+        },
+        "pull": {
+          "name": "pull",
+          "description": "Pull changes from remote repository",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "remote": {
+                "type": "string",
+                "description": "Remote repository name",
+                "default": "origin"
+              },
+              "branch": {
+                "type": "string",
+                "description": "Branch to pull from"
+              }
+            }
+          }
+        }
+      }
+    },
+    "postgres": {
+      "name": "postgres",
+      "version": "1.0.0",
+      "description": "PostgreSQL database operations including queries, schema management, and data manipulation",
+      "category": "database",
+      "tools": {
+        "query": {
+          "name": "query",
+          "description": "Execute SQL query against PostgreSQL database",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "sql": {
+                "type": "string",
+                "description": "SQL query to execute"
+              },
+              "parameters": {
+                "type": "array",
+                "description": "Query parameters for prepared statements"
+              },
+              "database": {
+                "type": "string",
+                "description": "Database name"
+              }
+            },
+            "required": ["sql"]
+          }
+        },
+        "insert": {
+          "name": "insert",
+          "description": "Insert data into PostgreSQL table",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "table": {
+                "type": "string",
+                "description": "Table name"
+              },
+              "data": {
+                "type": "object",
+                "description": "Data to insert"
+              },
+              "returning": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Columns to return"
+              }
+            },
+            "required": ["table", "data"]
+          }
+        }
+      }
+    },
+    "github": {
+      "name": "github",
+      "version": "1.0.0",
+      "description": "GitHub API integration for repository management, file operations, issues, and pull requests",
+      "category": "developer-tools",
+      "tools": {
+        "create_repository": {
+          "name": "create_repository",
+          "description": "Create a new GitHub repository",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Repository name"
+              },
+              "description": {
+                "type": "string",
+                "description": "Repository description"
+              },
+              "private": {
+                "type": "boolean",
+                "description": "Make repository private"
+              },
+              "initialize": {
+                "type": "boolean",
+                "description": "Initialize with README"
+              }
+            },
+            "required": ["name"]
+          }
+        },
+        "create_issue": {
+          "name": "create_issue",
+          "description": "Create a new issue in GitHub repository",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "Issue title"
+              },
+              "body": {
+                "type": "string",
+                "description": "Issue description"
+              },
+              "labels": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Issue labels"
+              },
+              "repository": {
+                "type": "string",
+                "description": "Repository name (owner/repo)"
+              }
+            },
+            "required": ["title", "repository"]
+          }
+        }
+      }
+    },
+    "openai": {
+      "name": "openai",
+      "version": "1.0.0",
+      "description": "OpenAI API integration for language models, embeddings, and AI operations",
+      "category": "ai-ml",
+      "tools": {
+        "completion": {
+          "name": "completion",
+          "description": "Generate text completion using OpenAI language models",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "prompt": {
+                "type": "string",
+                "description": "Input prompt for completion"
+              },
+              "model": {
+                "type": "string",
+                "description": "OpenAI model to use",
+                "default": "gpt-4"
+              },
+              "max_tokens": {
+                "type": "integer",
+                "description": "Maximum tokens to generate"
+              },
+              "temperature": {
+                "type": "number",
+                "description": "Sampling temperature"
+              }
+            },
+            "required": ["prompt"]
+          }
+        },
+        "generate": {
+          "name": "generate",
+          "description": "Generate content using OpenAI models with advanced parameters",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "messages": {
+                "type": "array",
+                "description": "Chat messages for conversation"
+              },
+              "system_prompt": {
+                "type": "string",
+                "description": "System instruction"
+              },
+              "model": {
+                "type": "string",
+                "description": "Model identifier"
+              }
+            },
+            "required": ["messages"]
+          }
+        }
+      }
+    },
+    "stripe": {
+      "name": "stripe",
+      "version": "1.0.0",
+      "description": "Complete payment processing for online businesses including charges, subscriptions, and refunds",
+      "category": "financial",
+      "tools": {
+        "charge": {
+          "name": "charge",
+          "description": "Process a payment charge using Stripe",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "amount": {
+                "type": "integer",
+                "description": "Amount in cents"
+              },
+              "currency": {
+                "type": "string",
+                "description": "Currency code",
+                "default": "usd"
+              },
+              "source": {
+                "type": "string",
+                "description": "Payment source (card token)"
+              },
+              "description": {
+                "type": "string",
+                "description": "Charge description"
+              }
+            },
+            "required": ["amount", "source"]
+          }
+        },
+        "refund": {
+          "name": "refund",
+          "description": "Process a refund for a Stripe charge",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "charge_id": {
+                "type": "string",
+                "description": "Stripe charge ID to refund"
+              },
+              "amount": {
+                "type": "integer",
+                "description": "Refund amount in cents (partial refund)"
+              },
+              "reason": {
+                "type": "string",
+                "description": "Refund reason"
+              }
+            },
+            "required": ["charge_id"]
+          }
+        }
+      }
+    },
+    "aws": {
+      "name": "aws",
+      "version": "1.0.0",
+      "description": "Amazon Web Services integration for EC2, S3, Lambda, and cloud resource management",
+      "category": "cloud-infrastructure",
+      "tools": {
+        "deploy": {
+          "name": "deploy",
+          "description": "Deploy application to AWS infrastructure",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "service": {
+                "type": "string",
+                "description": "AWS service (ec2, lambda, ecs)"
+              },
+              "region": {
+                "type": "string",
+                "description": "AWS region"
+              },
+              "config": {
+                "type": "object",
+                "description": "Deployment configuration"
+              }
+            },
+            "required": ["service", "region"]
+          }
+        },
+        "s3_upload": {
+          "name": "s3_upload",
+          "description": "Upload files to Amazon S3 bucket",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "bucket": {
+                "type": "string",
+                "description": "S3 bucket name"
+              },
+              "key": {
+                "type": "string",
+                "description": "Object key (path)"
+              },
+              "file_path": {
+                "type": "string",
+                "description": "Local file path to upload"
+              },
+              "public": {
+                "type": "boolean",
+                "description": "Make object public"
+              }
+            },
+            "required": ["bucket", "key", "file_path"]
+          }
+        }
+      }
+    },
+    "docker": {
+      "name": "docker",
+      "version": "1.0.0",
+      "description": "Container management including Docker operations, image building, and deployment",
+      "category": "system-operations",
+      "tools": {
+        "build": {
+          "name": "build",
+          "description": "Build Docker image from Dockerfile",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "tag": {
+                "type": "string",
+                "description": "Image tag"
+              },
+              "dockerfile": {
+                "type": "string",
+                "description": "Path to Dockerfile"
+              },
+              "context": {
+                "type": "string",
+                "description": "Build context path"
+              },
+              "build_args": {
+                "type": "object",
+                "description": "Build arguments"
+              }
+            },
+            "required": ["tag"]
+          }
+        },
+        "run": {
+          "name": "run",
+          "description": "Run Docker container",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "image": {
+                "type": "string",
+                "description": "Docker image to run"
+              },
+              "ports": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Port mappings"
+              },
+              "volumes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Volume mounts"
+              },
+              "environment": {
+                "type": "object",
+                "description": "Environment variables"
+              }
+            },
+            "required": ["image"]
+          }
+        }
+      }
+    }
+  }
+}

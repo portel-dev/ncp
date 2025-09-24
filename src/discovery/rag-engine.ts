@@ -9,8 +9,7 @@ import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
 import { existsSync } from 'fs';
 import { logger } from '../utils/logger.js';
-import { EnhancementSystem } from './enhancement-system.js';
-import { applyEcosystemEnhancements } from './enhanced-domain-mappings.js';
+import { SemanticEnhancementEngine } from './semantic-enhancement-engine.js';
 
 // Import transformer.js (will be added to dependencies)
 declare const pipeline: any;
@@ -172,20 +171,20 @@ export class PersistentRAGEngine {
   private isInitialized = false;
   private indexingQueue: Array<{ mcpName: string; tools: any[] }> = [];
   private isIndexing = false;
-  private enhancementSystem: EnhancementSystem;
+  private semanticEnhancementEngine: SemanticEnhancementEngine;
 
   constructor() {
     const ncpDir = getNcpBaseDirectory();
     this.dbPath = path.join(ncpDir, 'embeddings.json');
     this.metadataPath = path.join(ncpDir, 'embeddings-metadata.json');
-    this.enhancementSystem = new EnhancementSystem();
 
-    // Apply expanded ecosystem enhancements based on 127 MCP analysis
-    applyEcosystemEnhancements(this.enhancementSystem);
+    // Initialize semantic enhancement engine with industry-standard architecture
+    this.semanticEnhancementEngine = new SemanticEnhancementEngine();
 
     this.ensureDirectoryExists(ncpDir);
 
-    logger.info('RAG Engine initialized with ecosystem enhancements');
+    logger.info('RAG Engine initialized with Semantic Enhancement Engine');
+    logger.debug(`Enhancement statistics: ${JSON.stringify(this.semanticEnhancementEngine.getEnhancementStatistics())}`);
   }
 
   /**
@@ -549,19 +548,19 @@ export class PersistentRAGEngine {
           let boostedSimilarity = result.similarity;
           let enhancementReasons: string[] = [];
 
-          // Apply dual enhancement system
+          // Apply semantic enhancement engine (capability inference + intent resolution)
           if (toolData) {
-            const enhancements = this.enhancementSystem.enhance(
+            const semanticEnhancements = this.semanticEnhancementEngine.applySemanticalEnhancement(
               query,
               result.toolId,
               toolData.description
             );
 
-            for (const enhancement of enhancements) {
-              boostedSimilarity += enhancement.boost;
-              enhancementReasons.push(`${enhancement.type}: ${enhancement.reason}`);
+            for (const enhancement of semanticEnhancements) {
+              boostedSimilarity += enhancement.relevanceBoost;
+              enhancementReasons.push(`${enhancement.enhancementType}: ${enhancement.enhancementReason}`);
 
-              logger.debug(`🚀 Enhanced ${result.toolId}: +${enhancement.boost.toFixed(3)} (${enhancement.type})`);
+              logger.debug(`🚀 Semantic enhancement ${result.toolId}: +${enhancement.relevanceBoost.toFixed(3)} (${enhancement.enhancementType})`);
             }
           }
 
