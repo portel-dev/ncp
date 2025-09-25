@@ -159,9 +159,9 @@ describe('Focused Ecosystem Discovery', () => {
       });
     }
 
-    // Index each MCP's tools separately
+    // Index each MCP's tools using proper method that creates IDs
     for (const [mcpName, tools] of toolsByMCP) {
-      await engine['ragEngine'].indexMCP(mcpName, tools);
+      await engine.indexMCPTools(mcpName, tools);
     }
   });
 
@@ -201,7 +201,7 @@ describe('Focused Ecosystem Discovery', () => {
 
       expect(results.length).toBeGreaterThan(0);
 
-      const commitTool = results.find((t: any) => t.name === 'git:commit_changes');
+      const commitTool = results.find((t: any) => t.name === 'git-test:commit_changes');
       expect(commitTool).toBeDefined();
       expect(results.indexOf(commitTool!)).toBeLessThan(4);
     });
@@ -214,7 +214,7 @@ describe('Focused Ecosystem Discovery', () => {
 
       expect(results.length).toBeGreaterThan(0);
 
-      const writeFileTool = results.find((t: any) => t.name === 'filesystem:write_file');
+      const writeFileTool = results.find((t: any) => t.name === 'filesystem-test:write_file');
       expect(writeFileTool).toBeDefined();
       expect(results.indexOf(writeFileTool!)).toBeLessThan(4);
     });
@@ -227,7 +227,7 @@ describe('Focused Ecosystem Discovery', () => {
 
       expect(results.length).toBeGreaterThan(0);
 
-      const screenshotTool = results.find((t: any) => t.name === 'playwright:take_screenshot');
+      const screenshotTool = results.find((t: any) => t.name === 'playwright-test:take_screenshot');
       expect(screenshotTool).toBeDefined();
       expect(results.indexOf(screenshotTool!)).toBeLessThan(4);
     });
@@ -240,7 +240,7 @@ describe('Focused Ecosystem Discovery', () => {
 
       expect(results.length).toBeGreaterThan(0);
 
-      const ec2Tool = results.find((t: any) => t.name === 'aws:create_ec2_instance');
+      const ec2Tool = results.find((t: any) => t.name === 'aws-test:create_ec2_instance');
       expect(ec2Tool).toBeDefined();
       expect(results.indexOf(ec2Tool!)).toBeLessThan(5);
     });
@@ -253,7 +253,7 @@ describe('Focused Ecosystem Discovery', () => {
 
       expect(results.length).toBeGreaterThan(0);
 
-      const runTool = results.find((t: any) => t.name === 'docker:run_container');
+      const runTool = results.find((t: any) => t.name === 'docker-test:run_container');
       expect(runTool).toBeDefined();
       expect(results.indexOf(runTool!)).toBeLessThan(4);
     });
@@ -266,7 +266,7 @@ describe('Focused Ecosystem Discovery', () => {
 
       expect(results.length).toBeGreaterThan(0);
 
-      const messageTool = results.find((t: any) => t.name === 'slack:send_message');
+      const messageTool = results.find((t: any) => t.name === 'slack-test:send_message');
       expect(messageTool).toBeDefined();
       expect(results.indexOf(messageTool!)).toBeLessThan(4);
     });
@@ -343,14 +343,14 @@ describe('Focused Ecosystem Discovery', () => {
     it('should have indexed all test ecosystem tools', async () => {
       // Verify we can find tools from all major domains
       const domains = [
-        { query: 'database query', expectedTool: 'postgres:query' },
-        { query: 'payment processing', expectedTool: 'stripe:create_payment' },
-        { query: 'git commit', expectedTool: 'git:commit_changes' },
-        { query: 'read file', expectedTool: 'filesystem:read_file' },
-        { query: 'web automation click', expectedTool: 'playwright:click_element' },
-        { query: 'cloud server deployment', expectedTool: 'aws:create_ec2_instance' },
-        { query: 'docker container', expectedTool: 'docker:run_container' },
-        { query: 'team messaging', expectedTool: 'slack:send_message' }
+        { query: 'database query', expectedTool: 'postgres-test:query' },
+        { query: 'payment processing', expectedTool: 'stripe-test:create_payment' },
+        { query: 'git commit', expectedTool: 'git-test:commit_changes' },
+        { query: 'read file', expectedTool: 'filesystem-test:read_file' },
+        { query: 'web automation click', expectedTool: 'playwright-test:click_element' },
+        { query: 'cloud server deployment', expectedTool: 'aws-test:create_ec2_instance' },
+        { query: 'docker container', expectedTool: 'docker-test:run_container' },
+        { query: 'team messaging', expectedTool: 'slack-test:send_message' }
       ];
 
       for (const domain of domains) {
@@ -368,8 +368,8 @@ describe('Focused Ecosystem Discovery', () => {
       expect(results.length).toBeGreaterThan(0);
 
       // Should prioritize specific refund tool over general payment tool
-      const refundTool = results.find((t: any) => t.name === 'stripe:refund_payment');
-      const createTool = results.find((t: any) => t.name === 'stripe:create_payment');
+      const refundTool = results.find((t: any) => t.name === 'stripe-test:refund_payment');
+      const createTool = results.find((t: any) => t.name === 'stripe-test:create_payment');
 
       expect(refundTool).toBeDefined();
       if (createTool) {

@@ -238,9 +238,14 @@ export class DiscoveryEngine {
   async indexMCPTools(mcpName: string, tools: any[]): Promise<void> {
     // Index individual tools for fallback
     for (const tool of tools) {
-      await this.indexTool(tool);
+      // Create tool with proper ID format for discovery
+      const toolWithId = {
+        ...tool,
+        id: `${mcpName}:${tool.name}`
+      };
+      await this.indexTool(toolWithId);
     }
-    
+
     // Index in RAG engine for semantic discovery
     await this.ragEngine.indexMCP(mcpName, tools);
   }
