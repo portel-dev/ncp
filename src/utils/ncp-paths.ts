@@ -11,7 +11,7 @@ let _ncpBaseDir: string | null = null;
 
 /**
  * Determines the base .ncp directory to use
- * Checks for local NCP installation first, falls back to global ~/.ncp
+ * Only uses local .ncp if directory already exists, otherwise falls back to global ~/.ncp
  */
 export function getNcpBaseDirectory(): string {
   if (_ncpBaseDir) return _ncpBaseDir;
@@ -21,27 +21,18 @@ export function getNcpBaseDirectory(): string {
   const root = path.parse(currentDir).root;
 
   while (currentDir !== root) {
-    const packageJsonPath = path.join(currentDir, 'package.json');
-    if (existsSync(packageJsonPath)) {
-      try {
-        const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+    const localNcpDir = path.join(currentDir, '.ncp');
 
-        // If this is an NCP project (has ncp in name or dependencies), use local .ncp
-        if (packageJson.name?.includes('ncp') ||
-            packageJson.dependencies?.['@portel/ncp'] ||
-            packageJson.devDependencies?.['@portel/ncp'] ||
-            packageJson.name === '@portel/ncp') {
-          _ncpBaseDir = path.join(currentDir, '.ncp');
-          return _ncpBaseDir;
-        }
-      } catch {
-        // Invalid package.json, continue searching
-      }
+    // Only use local .ncp if the directory already exists
+    if (existsSync(localNcpDir)) {
+      _ncpBaseDir = localNcpDir;
+      return _ncpBaseDir;
     }
+
     currentDir = path.dirname(currentDir);
   }
 
-  // Fallback to global ~/.ncp directory
+  // Fallback to global ~/.ncp directory (will be created if needed)
   _ncpBaseDir = path.join(os.homedir(), '.ncp');
   return _ncpBaseDir;
 }
