@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.1](https://github.com/portel-dev/ncp/compare/1.1.0...1.2.1) (2025-09-25)
+
+### Bug Fixes
+
+* configure proper semantic versioning based on conventional commits ([2a6feda](https://github.com/portel-dev/ncp/commit/2a6fedaa78d09fdf091d8e59c69b6d86c8507ee2))
+* critical packaging fixes for npm package integrity ([de5fa8f](https://github.com/portel-dev/ncp/commit/de5fa8f7eb100eb48d466dde27b5d3584e681607))
+* remove unused production dependencies ([4e3ffb2](https://github.com/portel-dev/ncp/commit/4e3ffb248cd41ad0a5cdb56118b1fd22ff91c469))
+* resolve discovery engine tool indexing and test issues ([7dbc42f](https://github.com/portel-dev/ncp/commit/7dbc42fabd9c9c29ccc887842a09d80898d58cd1))
+
 ## [1.2.0](https://github.com/portel-dev/ncp/compare/1.1.0...1.2.0) (2025-09-25)
 
 ### Bug Fixes
