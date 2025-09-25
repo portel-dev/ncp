@@ -14,6 +14,9 @@
 🚀 **NEW:** Project-level configuration - each project can define its own MCPs automatically
 
 **Result:** Same tools, same capabilities, but your AI becomes **focused**, **efficient**, and **cost-effective** again.
+
+> **What's MCP?** The [Model Context Protocol](https://modelcontextprotocol.io) by Anthropic lets AI assistants connect to external tools and data sources. Think of MCPs as "plugins" that give your AI superpowers like file access, web search, databases, and more.
+
 ---
 
 ## 😤 **The MCP Paradox: More Tools = Less Productivity**
@@ -112,6 +115,12 @@ With NCP's orchestration:
 
 ---
 
+## 📋 **Prerequisites**
+
+- **Node.js 18+** ([Download here](https://nodejs.org/))
+- **npm** (included with Node.js) or **npx** for running packages
+- **Command line access** (Terminal on Mac/Linux, Command Prompt/PowerShell on Windows)
+
 ## 🚀 **2-Minute Setup for Existing MCP Users**
 
 ### **Step 1: Import Your Existing MCPs** ⚡
@@ -119,14 +128,19 @@ With NCP's orchestration:
 Already have MCPs? Don't start over - import everything instantly:
 
 ```bash
-# Install NCP
+# Install NCP globally (recommended)
 npm install -g @portel/ncp
 
-# Copy your claude_desktop_config.json to clipboard, then:
+# Copy your claude_desktop_config.json content to clipboard:
+# 1. Open your claude_desktop_config.json file (see locations above)
+# 2. Select all content (Ctrl+A / Cmd+A) and copy (Ctrl+C / Cmd+C)
+# 3. Then run:
 ncp config import
 
-# ✨ Magic! NCP auto-detects and imports ALL your MCPs
+# ✨ Magic! NCP auto-detects and imports ALL your MCPs from clipboard
 ```
+
+> **Note:** All commands below assume global installation (`npm install -g`). For npx usage, see the [Alternative Installation](#alternative-installation-with-npx) section.
 
 ![NCP Import Feature](docs/images/ncp-import.png)
 
@@ -189,6 +203,59 @@ ncp run filesystem:read_file --params '{"path": "/tmp/test.txt"}'
 
 **Why this matters:** You can debug and test tools directly, just like your AI would use them.
 
+### **✅ Verify Everything Works**
+
+```bash
+# 1. Check NCP is installed correctly
+ncp --version
+
+# 2. Confirm your MCPs are imported
+ncp list
+
+# 3. Test tool discovery
+ncp find "file"
+
+# 4. Test a simple tool (if you have filesystem MCP)
+ncp run filesystem:read_file --params '{"path": "/tmp/test.txt"}' --dry-run
+```
+
+**✅ Success indicators:**
+- NCP shows version number
+- `ncp list` shows your imported MCPs
+- `ncp find` returns relevant tools
+- Your AI client shows only NCP in its tool list
+
+---
+
+## 🔄 **Alternative Installation with npx**
+
+Prefer not to install globally? Use `npx` for any client configuration:
+
+```bash
+# All the above commands work with npx - just replace 'ncp' with 'npx @portel/ncp':
+
+# Import MCPs
+npx @portel/ncp config import
+
+# Add MCPs
+npx @portel/ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/Documents
+
+# Find tools
+npx @portel/ncp find "file operations"
+
+# Configure client (example: Claude Desktop)
+{
+  "mcpServers": {
+    "ncp": {
+      "command": "npx",
+      "args": ["@portel/ncp"]
+    }
+  }
+}
+```
+
+> **When to use npx:** Perfect for trying NCP, CI/CD environments, or when you can't install packages globally.
+
 ---
 
 ## 💡 **Why NCP Transforms Your AI Experience**
@@ -226,11 +293,11 @@ ncp add sequential-thinking npx @modelcontextprotocol/server-sequential-thinking
 ncp add memory npx @modelcontextprotocol/server-memory
 
 # File and development tools
-ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/Documents
-ncp add github npx @modelcontextprotocol/server-github
+ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/Documents  # Path: directory to access
+ncp add github npx @modelcontextprotocol/server-github                       # No path needed
 
 # Search and productivity
-ncp add brave-search npx @modelcontextprotocol/server-brave-search
+ncp add brave-search npx @modelcontextprotocol/server-brave-search           # No path needed
 ```
 
 ![NCP Add Command](docs/images/ncp-add.png)
@@ -272,6 +339,13 @@ ncp add puppeteer npx @hisma/server-puppeteer
 ## ⚙️ **Configuration for Different AI Clients**
 
 ### **Claude Desktop** (Most Popular)
+
+**Configuration File Location:**
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux:** `~/.config/Claude/claude_desktop_config.json`
+
+Replace your entire `claude_desktop_config.json` with:
 ```json
 {
   "mcpServers": {
@@ -282,6 +356,8 @@ ncp add puppeteer npx @hisma/server-puppeteer
 }
 ```
 
+**📌 Important:** Restart Claude Desktop after saving the config file.
+
 ### **Claude Code**
 NCP works automatically! Just run:
 ```bash
@@ -289,7 +365,13 @@ ncp add <your-mcps>
 ```
 
 ### **VS Code with GitHub Copilot**
-Add to your VS Code settings:
+
+**Settings File Location:**
+- **macOS:** `~/Library/Application Support/Code/User/settings.json`
+- **Windows:** `%APPDATA%\Code\User\settings.json`
+- **Linux:** `~/.config/Code/User/settings.json`
+
+Add to your VS Code `settings.json`:
 ```json
 {
   "mcp.servers": {
@@ -299,6 +381,8 @@ Add to your VS Code settings:
   }
 }
 ```
+
+**📌 Important:** Restart VS Code after saving the settings file.
 
 ### **Cursor IDE**
 ```json
