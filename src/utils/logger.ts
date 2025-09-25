@@ -15,15 +15,12 @@ export class Logger {
   private constructor() {
     // Check if running CLI commands (list, find, run, add, remove, config, etc.)
     this.isCLIMode = process.argv.some(arg =>
-      ['list', 'find', 'run', 'add', 'remove', 'config', '--help'].includes(arg)
+      ['list', 'find', 'run', 'add', 'remove', 'config', '--help', 'help', '--version', '-v', '-h', 'import'].includes(arg)
     );
 
-    // Detect if running as MCP server (no CLI commands and either explicit --server or no args)
-    this.isMCPMode = !this.isCLIMode && (
-      process.argv.includes('--server') ||
-      process.env.NCP_MODE === 'mcp' ||
-      (!process.stdout.isTTY && !process.env.NCP_DEBUG)
-    );
+    // Detect if running as MCP server - more reliable detection
+    // MCP server mode: default when no CLI commands are provided
+    this.isMCPMode = !this.isCLIMode || process.env.NCP_MODE === 'mcp';
 
     // Enable debug mode ONLY if explicitly requested
     this.debugMode = process.env.NCP_DEBUG === 'true' ||
@@ -39,11 +36,13 @@ export class Logger {
   
   /**
    * Log informational messages
-   * Suppressed in MCP mode and CLI mode unless debugging
+   * Completely suppressed in MCP mode unless debugging
    */
   info(message: string): void {
-    if ((!this.isMCPMode && !this.isCLIMode) || this.debugMode) {
-      console.error(`[NCP] ${message}`);
+    if (!this.isMCPMode || this.debugMode) {
+      if (!this.isMCPMode) {
+        console.error(`[NCP] ${message}`);
+      }
     }
   }
   
@@ -87,21 +86,25 @@ export class Logger {
   
   /**
    * Log warnings
-   * Suppressed in MCP mode and CLI mode unless debugging
+   * Completely suppressed in MCP mode unless debugging
    */
   warn(message: string): void {
-    if ((!this.isMCPMode && !this.isCLIMode) || this.debugMode) {
-      console.error(`[NCP WARN] ${message}`);
+    if (!this.isMCPMode || this.debugMode) {
+      if (!this.isMCPMode) {
+        console.error(`[NCP WARN] ${message}`);
+      }
     }
   }
   
   /**
    * Log progress updates
-   * Suppressed in MCP mode and CLI mode unless debugging
+   * Completely suppressed in MCP mode unless debugging
    */
   progress(message: string): void {
-    if ((!this.isMCPMode && !this.isCLIMode) || this.debugMode) {
-      console.error(`[NCP] ${message}`);
+    if (!this.isMCPMode || this.debugMode) {
+      if (!this.isMCPMode) {
+        console.error(`[NCP] ${message}`);
+      }
     }
   }
   
