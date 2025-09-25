@@ -281,7 +281,7 @@ ${chalk.bold.white('Examples:')}
   $ ${chalk.yellow('ncp list --depth 1')}`);
 
 // Check if we should run as MCP server
-// MCP server mode: ncp --profile <name> (no other commands)
+// MCP server mode: default when no CLI commands are provided, or when --profile is specified
 const profileIndex = process.argv.indexOf('--profile');
 const hasCommands = process.argv.includes('find') ||
   process.argv.includes('add') ||
@@ -291,13 +291,13 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('config') ||
   process.argv.includes('help');
 
-const isOnlyProfileFlag = profileIndex !== -1 &&
-  process.argv.length <= 4 &&
-  !hasCommands;
+// Default to MCP server mode when no CLI commands are provided
+// This ensures compatibility with Claude Desktop and other MCP clients that expect server mode by default
+const shouldRunAsServer = !hasCommands;
 
-if (isOnlyProfileFlag) {
-  // Running as MCP server: ncp --profile <name>
-  const profileName = process.argv[profileIndex + 1] || 'all';
+if (shouldRunAsServer) {
+  // Running as MCP server: ncp (defaults to 'all' profile) or ncp --profile <name>
+  const profileName = profileIndex !== -1 ? (process.argv[profileIndex + 1] || 'all') : 'all';
 
   const server = new MCPServer(profileName);
   server.run().catch(console.error);
