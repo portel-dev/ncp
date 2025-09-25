@@ -142,13 +142,13 @@ export class MCPServer {
     const tools: MCPTool[] = [
       {
         name: 'find',
-        description: 'Intelligent tool discovery using vector search. Describe your task as a user story for best results: "I want to save configuration to a file", "I need to analyze logs for errors", "I want to create a git branch". More context improves matching accuracy. Use MCP names to filter results to specific servers.',
+        description: 'Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task as user story for best results: "I want to save configuration to a file", "I need to analyze logs for errors". (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools with depth control (0=tool names only, 1=tool names + descriptions, 2=full details with parameters).',
         inputSchema: {
           type: 'object',
           properties: {
             description: {
               type: 'string',
-              description: 'Search query as user story ("I want to...") or MCP name to filter. Omit to see MCP overview.'
+              description: 'SEARCH MODE: Search query as user story ("I want to save a file") or MCP name to filter results. LISTING MODE: Omit this parameter entirely to browse all available MCPs and tools with pagination.'
             },
             limit: {
               type: 'number',
@@ -164,7 +164,7 @@ export class MCPServer {
             },
             depth: {
               type: 'number',
-              description: 'Tree depth level: 0=MCPs only (quick overview), 1=MCPs+Tools (names only), 2=Full details with parameters (recommended for AI - default)',
+              description: 'Information depth level: 0=Tool names only, 1=Tool names + descriptions, 2=Full details with parameters (default, recommended for AI). Higher depth shows more complete information.',
               enum: [0, 1, 2],
               default: 2
             }
