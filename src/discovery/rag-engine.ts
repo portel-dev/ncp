@@ -279,9 +279,29 @@ export class PersistentRAGEngine {
       await this.clearCache();
     }
 
+    // Store original console.warn before try block
+    const originalConsoleWarn = console.warn;
+
     try {
+      // Configure transformers environment to suppress content-length warnings
+      process.env.TRANSFORMERS_VERBOSITY = 'error';  // Suppress info/warning logs
+
+      // Temporarily suppress the specific content-length warning
+      console.warn = (...args: any[]) => {
+        const message = args.join(' ');
+        if (message.includes('Unable to determine content-length') ||
+            message.includes('Will expand buffer when needed')) {
+          return; // Suppress this specific warning
+        }
+        originalConsoleWarn.apply(console, args);
+      };
+
       // Dynamically import transformer.js
-      const { pipeline } = await import('@xenova/transformers');
+      const { pipeline, env } = await import('@xenova/transformers');
+
+      // Configure transformers to suppress download warnings
+      env.allowLocalModels = false;
+      env.allowRemoteModels = true;
       
       // Load sentence transformer model
       logger.info('📥 Loading embedding model (all-MiniLM-L6-v2)...');
@@ -298,6 +318,9 @@ export class PersistentRAGEngine {
         }
       );
 
+      // Restore original console.warn after model loading
+      console.warn = originalConsoleWarn;
+
       // Load cached embeddings (if cache was valid)
       if (cacheValid) {
         await this.loadPersistedEmbeddings();
@@ -313,9 +336,12 @@ export class PersistentRAGEngine {
       this.processIndexingQueue();
 
     } catch (error) {
+      // Restore original console.warn in case of error
+      console.warn = originalConsoleWarn;
+
       logger.warn(`⚠️ RAG engine failed to initialize: ${error}`);
       logger.info('🔄 Falling back to keyword-based discovery');
-      
+
       // Mark as initialized but without model (fallback mode)
       this.isInitialized = true;
       this.model = null;
