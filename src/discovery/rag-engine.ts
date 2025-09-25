@@ -7,7 +7,7 @@ import * as path from 'path';
 import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync, statSync } from 'fs';
 import { logger } from '../utils/logger.js';
 import { SemanticEnhancementEngine } from './semantic-enhancement-engine.js';
 
@@ -968,7 +968,7 @@ export class PersistentRAGEngine {
    */
   private ensureDirectoryExists(dirPath: string): void {
     if (!existsSync(dirPath)) {
-      require('fs').mkdirSync(dirPath, { recursive: true });
+      mkdirSync(dirPath, { recursive: true });
     }
   }
 
@@ -993,7 +993,7 @@ export class PersistentRAGEngine {
     // Calculate cache size
     try {
       if (existsSync(this.dbPath)) {
-        const size = require('fs').statSync(this.dbPath).size;
+        const size = statSync(this.dbPath).size;
         stats.cacheSize = `${Math.round(size / 1024)} KB`;
       }
     } catch {
