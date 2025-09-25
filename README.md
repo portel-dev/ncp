@@ -358,6 +358,8 @@ Replace your entire `claude_desktop_config.json` with:
 
 **📌 Important:** Restart Claude Desktop after saving the config file.
 
+> **Note:** Configuration file locations are current as of this writing. For the most up-to-date setup instructions, please refer to the [official Claude Desktop documentation](https://claude.ai/docs).
+
 ### **Claude Code**
 NCP works automatically! Just run:
 ```bash
@@ -384,6 +386,8 @@ Add to your VS Code `settings.json`:
 
 **📌 Important:** Restart VS Code after saving the settings file.
 
+> **Disclaimer:** Configuration paths and methods are accurate as of this writing. VS Code and its extensions may change these locations or integration methods. Please consult the [official VS Code documentation](https://code.visualstudio.com/docs) for the most current information.
+
 ### **Cursor IDE**
 ```json
 {
@@ -396,6 +400,8 @@ Add to your VS Code `settings.json`:
   }
 }
 ```
+
+> **Disclaimer:** Configuration format and location may vary by Cursor IDE version. Please refer to [Cursor's official documentation](https://cursor.sh/docs) for the most up-to-date setup instructions.
 
 ---
 
