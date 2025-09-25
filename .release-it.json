@@ -1,5 +1,4 @@
 {
-  "increment": "minor",
   "git": {
     "commitMessage": "release: v${version}",
     "tagName": "${version}"

@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.0](https://github.com/portel-dev/ncp/compare/1.1.0...1.2.0) (2025-09-25)
+
+### Bug Fixes
+
+* critical packaging fixes for npm package integrity ([de5fa8f](https://github.com/portel-dev/ncp/commit/de5fa8f7eb100eb48d466dde27b5d3584e681607))
+
 ## 1.1.0 (2025-09-25)
 
 ### Features
