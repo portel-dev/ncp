@@ -11,6 +11,8 @@
 
 **NCP transforms N scattered MCP servers into 1 intelligent orchestrator.** Your AI sees just 2 simple tools instead of 50+ complex ones, while NCP handles all the routing, discovery, and execution behind the scenes.
 
+🚀 **NEW:** Project-level configuration - each project can define its own MCPs automatically
+
 **Result:** Same tools, same capabilities, but your AI becomes **focused**, **efficient**, and **cost-effective** again.
 ---
 
@@ -337,6 +339,41 @@ ncp add --profile prod database npx production-db-server
 
 # Use specific profile
 ncp --profile dev find "file tools"
+```
+
+### **🚀 Project-Level Configuration**
+**New:** Configure MCPs per project with automatic detection - perfect for teams and Cloud IDEs:
+
+```bash
+# In any project directory, create local MCP configuration:
+mkdir .ncp
+ncp add filesystem npx @modelcontextprotocol/server-filesystem ./
+ncp add github npx @modelcontextprotocol/server-github
+
+# NCP automatically detects and uses project-local configuration
+ncp find "save file"  # Uses only project MCPs
+```
+
+**How it works:**
+- 📁 **Local `.ncp` directory exists** → Uses project configuration
+- 🏠 **No local `.ncp` directory** → Falls back to global `~/.ncp`
+- 🎯 **Zero profile management needed** → Everything goes to default `all.json`
+
+**Perfect for:**
+- 🤖 **Claude Code projects** (project-specific MCP tooling)
+- 👥 **Team consistency** (ship `.ncp` folder with your repo)
+- 🔧 **Project-specific tooling** (each project defines its own MCPs)
+- 📦 **Environment isolation** (no global MCP conflicts)
+
+```bash
+# Example project structures:
+frontend-app/
+  .ncp/profiles/all.json   # → playwright, lighthouse, browser-context
+  src/
+
+api-backend/
+  .ncp/profiles/all.json   # → postgres, redis, docker, kubernetes
+  server/
 ```
 
 ### **Import from Anywhere**
