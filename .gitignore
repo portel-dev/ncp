@@ -19,8 +19,16 @@ scripts/
 # Keep documentation images
 !docs/images/**
 
-# NCP generated files - exclude ALL cache and runtime files
-.ncp/cache/
-.ncp/embeddings.json
-.ncp/embeddings-metadata.json
-.ncp/profiles/tier-*.json
+# User runtime data (created when users run NCP)
+.ncp/
+~/.ncp/
+
+# Development artifacts (use ncp-dev-workspace instead)
+/profiles/
+/ecosystem-repo-setup/
+test-*.js
+experiment-*.js
+*-ecosystem.json
+
+# AI context files (local only)
+*.local.md
