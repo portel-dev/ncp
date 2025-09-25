@@ -1,0 +1,19 @@
+{
+  "increment": "minor",
+  "git": {
+    "commitMessage": "release: v${version}",
+    "tagName": "${version}"
+  },
+  "github": {
+    "release": true
+  },
+  "npm": {
+    "publish": true
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": "conventionalcommits",
+      "infile": "CHANGELOG.md"
+    }
+  }
+}

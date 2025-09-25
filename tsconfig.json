@@ -21,6 +21,8 @@
   "exclude": [
     "node_modules",
     "dist",
-    "test"
+    "test",
+    "src/testing/**/*",
+    "src/smithery-standalone.ts"
   ]
 }
