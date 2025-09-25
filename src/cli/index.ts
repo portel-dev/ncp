@@ -159,6 +159,9 @@ const version = packageJson.version;
 
 const program = new Command();
 
+// Set version
+program.version(version, '-v, --version', 'output the current version');
+
 // Custom help configuration with colors and enhanced content
 program
   .name('ncp')
@@ -289,7 +292,12 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('remove') ||
   process.argv.includes('run') ||
   process.argv.includes('config') ||
-  process.argv.includes('help');
+  process.argv.includes('help') ||
+  process.argv.includes('--help') ||
+  process.argv.includes('-h') ||
+  process.argv.includes('--version') ||
+  process.argv.includes('-v') ||
+  process.argv.includes('import');
 
 // Default to MCP server mode when no CLI commands are provided
 // This ensures compatibility with Claude Desktop and other MCP clients that expect server mode by default
