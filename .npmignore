@@ -9,6 +9,10 @@ tsconfig.json
 .DS_Store
 .env
 .vscode/
+.github/
+.dockerignore
+.release-it.json
+smithery.yaml
 
 # Documentation and scripts (not needed in npm package)
 docs/
@@ -47,9 +51,10 @@ rollup.config.js
 
 # Testing and development files from dist/
 dist/testing/
+dist/smithery-*
 
-# Development configuration files
+# Development configuration files - CRITICAL: Use leading slash to avoid excluding dist/profiles/
 ecosystem-repo-setup/
-profiles/
+/profiles/
 test-*.js
 2025-*.txt

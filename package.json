@@ -23,7 +23,9 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
-    "prepublishOnly": "npm run build",
+    "test:package": "node scripts/test-package-locally.cjs",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build && npm run test && npm run test:package",
     "release": "release-it",
     "release:dry": "release-it --dry-run"
   },
