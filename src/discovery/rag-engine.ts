@@ -382,6 +382,36 @@ export class PersistentRAGEngine {
   }
 
   /**
+   * Fast indexing for startup - loads from embeddings cache if available
+   * This is called during optimized cache loading to avoid regenerating embeddings
+   */
+  async indexMCPFromCache(mcpName: string, tools: any[]): Promise<void> {
+    if (!this.isInitialized) {
+      // Queue for later processing
+      this.indexingQueue.push({ mcpName, tools });
+      return;
+    }
+
+    // Fast path: check if all tools are already in vectorDB
+    let allCached = true;
+    for (const tool of tools) {
+      const toolId = tool.id || `${mcpName}:${tool.name}`;
+      if (!this.vectorDB.has(toolId)) {
+        allCached = false;
+        break;
+      }
+    }
+
+    if (allCached) {
+      logger.debug(`⚡ All ${tools.length} tools for ${mcpName} already cached`);
+      return;
+    }
+
+    // Fallback to normal indexing if not all cached
+    await this.performIndexing(mcpName, tools);
+  }
+
+  /**
    * Perform actual indexing of tools
    */
   private async performIndexing(mcpName: string, tools: any[]): Promise<void> {

@@ -404,7 +404,8 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('--version') ||
   process.argv.includes('-v') ||
   process.argv.includes('import') ||
-  process.argv.includes('analytics');
+  process.argv.includes('analytics') ||
+  process.argv.includes('visual');
 
 // Default to MCP server mode when no CLI commands are provided
 // This ensures compatibility with Claude Desktop and other MCP clients that expect server mode by default
@@ -1049,9 +1050,9 @@ analyticsCmd
   .command('dashboard')
   .description('Show comprehensive analytics dashboard')
   .option('--period <days>', 'Period in days (default: 30)')
+  .option('--visual', 'Enhanced visual dashboard with charts and graphs')
   .action(async (options) => {
     const { NCPLogParser } = await import('../analytics/log-parser.js');
-    const { AnalyticsFormatter } = await import('../analytics/analytics-formatter.js');
 
     console.log(chalk.dim('📊 Analyzing NCP usage data...'));
 
@@ -1064,16 +1065,23 @@ analyticsCmd
       return;
     }
 
-    const dashboard = AnalyticsFormatter.formatDashboard(report);
-    console.log(dashboard);
+    if (options.visual) {
+      const { VisualAnalyticsFormatter } = await import('../analytics/visual-formatter.js');
+      const dashboard = await VisualAnalyticsFormatter.formatVisualDashboard(report);
+      console.log(dashboard);
+    } else {
+      const { AnalyticsFormatter } = await import('../analytics/analytics-formatter.js');
+      const dashboard = AnalyticsFormatter.formatDashboard(report);
+      console.log(dashboard);
+    }
   });
 
 analyticsCmd
   .command('performance')
   .description('Show performance-focused analytics')
-  .action(async () => {
+  .option('--visual', 'Enhanced visual performance report with gauges and charts')
+  .action(async (options) => {
     const { NCPLogParser } = await import('../analytics/log-parser.js');
-    const { AnalyticsFormatter } = await import('../analytics/analytics-formatter.js');
 
     console.log(chalk.dim('⚡ Analyzing performance metrics...'));
 
@@ -1085,8 +1093,37 @@ analyticsCmd
       return;
     }
 
-    const performance = AnalyticsFormatter.formatPerformanceReport(report);
-    console.log(performance);
+    if (options.visual) {
+      const { VisualAnalyticsFormatter } = await import('../analytics/visual-formatter.js');
+      const performance = await VisualAnalyticsFormatter.formatVisualPerformance(report);
+      console.log(performance);
+    } else {
+      const { AnalyticsFormatter } = await import('../analytics/analytics-formatter.js');
+      const performance = AnalyticsFormatter.formatPerformanceReport(report);
+      console.log(performance);
+    }
+  });
+
+analyticsCmd
+  .command('visual')
+  .description('Show enhanced visual analytics with charts and graphs')
+  .action(async () => {
+    const { NCPLogParser } = await import('../analytics/log-parser.js');
+    const { VisualAnalyticsFormatter } = await import('../analytics/visual-formatter.js');
+
+    console.log(chalk.dim('🎨 Generating visual analytics...'));
+
+    const parser = new NCPLogParser();
+    const report = await parser.parseAllLogs();
+
+    if (report.totalSessions === 0) {
+      console.log(chalk.yellow('📊 No analytics data available yet'));
+      console.log(chalk.dim('💡 Analytics data is automatically collected when MCPs are used through NCP'));
+      return;
+    }
+
+    const dashboard = await VisualAnalyticsFormatter.formatVisualDashboard(report);
+    console.log(dashboard);
   });
 
 analyticsCmd

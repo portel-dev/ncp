@@ -259,6 +259,24 @@ export class DiscoveryEngine {
   }
 
   /**
+   * Fast indexing for optimized cache loading
+   */
+  async indexMCPToolsFromCache(mcpName: string, tools: any[]): Promise<void> {
+    // Index individual tools for fallback
+    for (const tool of tools) {
+      // Create tool with proper ID format for discovery
+      const toolWithId = {
+        ...tool,
+        id: `${mcpName}:${tool.name}`
+      };
+      await this.indexTool(toolWithId);
+    }
+
+    // Use fast indexing (from cache) in RAG engine
+    await this.ragEngine.indexMCPFromCache(mcpName, tools);
+  }
+
+  /**
    * Get RAG engine statistics
    */
   getRagStats() {

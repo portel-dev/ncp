@@ -18,6 +18,8 @@ import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import { compareTwoStrings } from 'string-similarity';
+import { CachePatcher } from '../cache/cache-patcher.js';
+import { spinner } from '../utils/progress-spinner.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -93,11 +95,15 @@ export class NCPOrchestrator {
   private cleanupTimer?: NodeJS.Timeout;
   private discovery: DiscoveryEngine;
   private healthMonitor: MCPHealthMonitor;
+  private cachePatcher: CachePatcher;
+  private showProgress: boolean;
 
-  constructor(profileName: string = 'default') {
+  constructor(profileName: string = 'default', showProgress: boolean = false) {
     this.profileName = profileName;
     this.discovery = new DiscoveryEngine();
     this.healthMonitor = new MCPHealthMonitor();
+    this.cachePatcher = new CachePatcher();
+    this.showProgress = showProgress;
   }
 
   private async loadProfile(): Promise<Profile | null> {
@@ -131,12 +137,19 @@ export class NCPOrchestrator {
     // Initialize discovery engine first
     await this.discovery.initialize();
 
-    // Try to load from cache first
-    const cacheLoaded = await this.loadFromCache(profile);
+    // Use new optimized cache loading with profile hash validation
+    const cacheLoaded = await this.loadFromOptimizedCache(profile);
 
     if (!cacheLoaded) {
-      // No cache - discover tools from MCPs
-      logger.info('No cache found, discovering tools...');
+      // No cache or cache invalid - discover tools from MCPs
+      logger.info('Cache invalid or missing, discovering tools...');
+
+      if (this.showProgress) {
+        const mcpCount = Object.keys(profile.mcpServers).length;
+        spinner.start(`Indexing tools for the first time (${mcpCount} MCPs)`);
+        spinner.updateSubMessage('Initializing discovery engine...');
+      }
+
       const mcpConfigs: MCPConfig[] = Object.entries(profile.mcpServers).map(([name, config]) => ({
         name,
         command: config.command,
@@ -146,8 +159,17 @@ export class NCPOrchestrator {
 
       await this.discoverMCPTools(mcpConfigs);
 
+      if (this.showProgress) {
+        spinner.updateMessage('Saving cache for future use...');
+        spinner.updateSubMessage('Writing tool metadata and embeddings...');
+      }
+
       // Save to cache for next time
       await this.saveToCache(profile);
+
+      if (this.showProgress) {
+        spinner.success(`Indexed ${this.allTools.length} tools from ${this.definitions.size} MCPs`);
+      }
     }
 
     // Start cleanup timer for idle connections
@@ -163,9 +185,17 @@ export class NCPOrchestrator {
   private async discoverMCPTools(mcpConfigs: MCPConfig[]): Promise<void> {
     this.allTools = [];
 
-    for (const config of mcpConfigs) {
+    for (let i = 0; i < mcpConfigs.length; i++) {
+      const config = mcpConfigs[i];
       try {
         logger.info(`Discovering tools from MCP: ${config.name}`);
+
+        if (this.showProgress) {
+          const progress = `${i + 1}/${mcpConfigs.length}`;
+          spinner.updateMessage(`Indexing tools for the first time (${progress})`);
+          spinner.updateSubMessage(`Connecting to ${config.name}...`);
+        }
+
         const result = await this.probeMCPTools(config);
 
         // Store definition with schema fallback applied
@@ -207,6 +237,10 @@ export class NCPOrchestrator {
           });
         }
 
+        if (this.showProgress) {
+          spinner.updateSubMessage(`Indexing ${result.tools.length} tools from ${config.name}...`);
+        }
+
         // Index tools with discovery engine for vector search
         await this.discovery.indexMCPTools(config.name, discoveryTools);
 
@@ -214,6 +248,10 @@ export class NCPOrchestrator {
       } catch (error: any) {
         // Probe failures are expected - don't alarm users with error messages
         logger.debug(`Failed to discover tools from ${config.name}: ${error.message}`);
+
+        if (this.showProgress) {
+          spinner.updateSubMessage(`Skipped ${config.name} (connection failed)`);
+        }
 
         // Update health monitor with the actual error for import feedback
         this.healthMonitor.markUnhealthy(config.name, error.message);
@@ -563,6 +601,133 @@ export class NCPOrchestrator {
     }
   }
 
+  /**
+   * New optimized cache loading with profile hash validation
+   * This is the key optimization - skips re-indexing when profile hasn't changed
+   */
+  private async loadFromOptimizedCache(profile: Profile): Promise<boolean> {
+    try {
+      // 1. Validate cache integrity first
+      const integrity = await this.cachePatcher.validateAndRepairCache();
+      if (!integrity.valid) {
+        logger.warn('Cache integrity check failed - rebuilding required');
+        return false;
+      }
+
+      // 2. Check if cache is valid using profile hash validation
+      const currentProfileHash = this.cachePatcher.generateProfileHash(profile);
+      const cacheIsValid = await this.cachePatcher.validateCacheWithProfile(currentProfileHash);
+
+      if (!cacheIsValid) {
+        logger.info('Cache invalid or missing - profile changed');
+        return false;
+      }
+
+      // 3. Load tool metadata cache directly
+      const toolMetadataCache = await this.cachePatcher.loadToolMetadataCache();
+
+      if (!toolMetadataCache.mcps || Object.keys(toolMetadataCache.mcps).length === 0) {
+        logger.info('Tool metadata cache empty');
+        return false;
+      }
+
+      logger.info(`✅ Using valid cache (${Object.keys(toolMetadataCache.mcps).length} MCPs, hash: ${currentProfileHash.substring(0, 8)}...)`);
+
+      // 4. Load MCPs and tools from cache directly (no re-indexing)
+      this.allTools = [];
+      let loadedMCPCount = 0;
+      let loadedToolCount = 0;
+
+      for (const [mcpName, mcpData] of Object.entries(toolMetadataCache.mcps)) {
+        try {
+          // Validate MCP data structure
+          if (!mcpData.tools || !Array.isArray(mcpData.tools)) {
+            logger.warn(`Skipping ${mcpName}: invalid tools data in cache`);
+            continue;
+          }
+
+          // Check if MCP still exists in current profile
+          if (!profile.mcpServers[mcpName]) {
+            logger.debug(`Skipping ${mcpName}: removed from profile`);
+            continue;
+          }
+
+          this.definitions.set(mcpName, {
+            name: mcpName,
+            config: {
+              name: mcpName,
+              ...profile.mcpServers[mcpName]
+            },
+            tools: mcpData.tools.map(tool => ({
+              ...tool,
+              inputSchema: tool.inputSchema || {}
+            })),
+            serverInfo: mcpData.serverInfo || { name: mcpName, version: '1.0.0' }
+          });
+
+          // Build allTools array and tool mappings
+          const discoveryTools = [];
+          for (const tool of mcpData.tools) {
+            try {
+              const prefixedToolName = `${mcpName}:${tool.name}`;
+              const prefixedDescription = tool.description.startsWith(`${mcpName}:`)
+                ? tool.description
+                : `${mcpName}: ${tool.description || 'No description available'}`;
+
+              this.allTools.push({
+                name: prefixedToolName,
+                description: prefixedDescription,
+                mcpName: mcpName
+              });
+
+              // Create tool mappings
+              this.toolToMCP.set(tool.name, mcpName);
+              this.toolToMCP.set(prefixedToolName, mcpName);
+
+              discoveryTools.push({
+                id: prefixedToolName,
+                name: tool.name,
+                description: prefixedDescription,
+                mcpServer: mcpName,
+                inputSchema: tool.inputSchema || {}
+              });
+
+              loadedToolCount++;
+            } catch (toolError: any) {
+              logger.warn(`Error loading tool ${tool.name} from ${mcpName}: ${toolError.message}`);
+            }
+          }
+
+          // Use fast indexing (load from embeddings cache, don't regenerate)
+          if (discoveryTools.length > 0) {
+            // Ensure discovery engine is fully initialized before indexing
+            await this.discovery.initialize();
+            await this.discovery.indexMCPToolsFromCache(mcpName, discoveryTools);
+            loadedMCPCount++;
+          }
+
+        } catch (mcpError: any) {
+          logger.warn(`Error loading MCP ${mcpName} from cache: ${mcpError.message}`);
+        }
+      }
+
+      if (loadedMCPCount === 0) {
+        logger.warn('No valid MCPs loaded from cache');
+        return false;
+      }
+
+      logger.info(`⚡ Loaded ${loadedToolCount} tools from ${loadedMCPCount} MCPs (optimized cache)`);
+      return true;
+
+    } catch (error: any) {
+      logger.warn(`Optimized cache load failed: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Legacy cache loading (kept for fallback)
+   */
   private async loadFromCache(profile: Profile): Promise<boolean> {
     try {
       const cacheDir = getCacheDirectory();
@@ -645,34 +810,43 @@ export class NCPOrchestrator {
 
   private async saveToCache(profile: Profile): Promise<void> {
     try {
-      const cacheDir = getCacheDirectory();
-      const cachePath = join(cacheDir, `${this.profileName}-tools.json`);
-
-      // Ensure cache directory exists
-      const { mkdirSync } = await import('fs');
-      mkdirSync(cacheDir, { recursive: true });
-
-      const cache = {
-        timestamp: Date.now(),
-        profile: this.profileName,
-        mcps: {} as any
-      };
-
-      // Save all MCP definitions
-      for (const [mcpName, definition] of this.definitions.entries()) {
-        cache.mcps[mcpName] = {
-          config: definition.config,
-          tools: definition.tools,
-          serverInfo: definition.serverInfo
-        };
-      }
-
-      const { writeFileSync } = await import('fs');
-      writeFileSync(cachePath, JSON.stringify(cache, null, 2));
-      logger.info(`💾 Saved ${this.allTools.length} tools to cache`);
+      // Use new optimized cache saving with profile hash
+      await this.saveToOptimizedCache(profile);
 
     } catch (error: any) {
       logger.warn(`Cache save failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * New optimized cache saving with profile hash and structured format
+   */
+  private async saveToOptimizedCache(profile: Profile): Promise<void> {
+    try {
+      logger.info('💾 Saving tools to optimized cache...');
+
+      // Save all MCP definitions to tool metadata cache
+      for (const [mcpName, definition] of this.definitions.entries()) {
+        const mcpConfig = profile.mcpServers[mcpName];
+        if (mcpConfig) {
+          await this.cachePatcher.patchAddMCP(
+            mcpName,
+            mcpConfig,
+            definition.tools,
+            definition.serverInfo
+          );
+        }
+      }
+
+      // Update profile hash
+      const profileHash = this.cachePatcher.generateProfileHash(profile);
+      await this.cachePatcher.updateProfileHash(profileHash);
+
+      logger.info(`💾 Saved ${this.allTools.length} tools to optimized cache with profile hash: ${profileHash.substring(0, 8)}...`);
+
+    } catch (error: any) {
+      logger.error(`Optimized cache save failed: ${error.message}`);
+      throw error;
     }
   }
 

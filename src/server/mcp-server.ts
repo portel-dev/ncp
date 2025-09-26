@@ -44,9 +44,9 @@ interface MCPTool {
 export class MCPServer {
   private orchestrator: NCPOrchestrator;
 
-  constructor(profileName: string = 'default') {
+  constructor(profileName: string = 'default', showProgress: boolean = false) {
     // Profile-aware orchestrator using real MCP connections
-    this.orchestrator = new NCPOrchestrator(profileName);
+    this.orchestrator = new NCPOrchestrator(profileName, showProgress);
   }
 
   async initialize(): Promise<void> {
