@@ -17,6 +17,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { mcpWrapper } from '../utils/mcp-wrapper.js';
 import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
+import { UpdateChecker } from '../utils/update-checker.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -405,7 +406,8 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('-v') ||
   process.argv.includes('import') ||
   process.argv.includes('analytics') ||
-  process.argv.includes('visual');
+  process.argv.includes('visual') ||
+  process.argv.includes('update');
 
 // Default to MCP server mode when no CLI commands are provided
 // This ensures compatibility with Claude Desktop and other MCP clients that expect server mode by default
@@ -1494,6 +1496,79 @@ program
 
     await orchestrator.cleanup();
   });
+
+// Update command
+program
+  .command('update')
+  .description('Update NCP to the latest version')
+  .option('--check', 'Check for updates without installing')
+  .configureHelp({
+    formatHelp: () => {
+      let output = '\n';
+      output += chalk.bold.white('NCP Update Command') + ' - ' + chalk.cyan('Version Management') + '\n\n';
+      output += chalk.dim('Keep NCP up to date with the latest features and bug fixes.') + '\n\n';
+      output += chalk.bold.white('Usage:') + '\n';
+      output += '  ' + chalk.yellow('ncp update') + '          # Update to latest version\n';
+      output += '  ' + chalk.yellow('ncp update --check') + '   # Check for updates without installing\n\n';
+      output += chalk.bold.white('Examples:') + '\n';
+      output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp update --check') + '\n';
+      output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp update') + '\n\n';
+      return output;
+    }
+  })
+  .action(async (options) => {
+    try {
+      const updateChecker = new UpdateChecker();
+
+      if (options.check) {
+        // Check for updates only
+        console.log(chalk.blue('🔍 Checking for updates...'));
+        const result = await updateChecker.checkForUpdates(true);
+
+        if (result.hasUpdate) {
+          console.log(chalk.yellow('📦 Update Available!'));
+          console.log(chalk.dim(`   Current: ${result.currentVersion}`));
+          console.log(chalk.green(`   Latest:  ${result.latestVersion}`));
+          console.log();
+          console.log(chalk.cyan('   Run: ncp update'));
+        } else {
+          console.log(chalk.green('✅ You are using the latest version!'));
+          console.log(chalk.dim(`   Version: ${result.currentVersion}`));
+        }
+      } else {
+        // Perform update
+        const result = await updateChecker.checkForUpdates(true);
+
+        if (result.hasUpdate) {
+          console.log(chalk.yellow('📦 Update Available!'));
+          console.log(chalk.dim(`   Current: ${result.currentVersion}`));
+          console.log(chalk.green(`   Latest:  ${result.latestVersion}`));
+          console.log();
+
+          const success = await updateChecker.performUpdate();
+          if (!success) {
+            process.exit(1);
+          }
+        } else {
+          console.log(chalk.green('✅ You are already using the latest version!'));
+          console.log(chalk.dim(`   Version: ${result.currentVersion}`));
+        }
+      }
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to check for updates:'), error);
+      process.exit(1);
+    }
+  });
+
+// Check for updates on CLI startup (non-intrusive)
+(async () => {
+  try {
+    const updateChecker = new UpdateChecker();
+    await updateChecker.showUpdateNotification();
+  } catch {
+    // Silently fail - don't interrupt normal CLI usage
+  }
+})();
 
 program.parse();
 }
