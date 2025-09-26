@@ -1,0 +1,132 @@
+name: MCP Server Support Request
+description: Request support for a new MCP server in NCP
+title: "[MCP]: Add support for "
+labels: ["mcp-server", "enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Request support for a new MCP server in NCP's discovery and management system.
+
+  - type: input
+    id: server-name
+    attributes:
+      label: MCP Server Name
+      description: What is the name of the MCP server?
+      placeholder: "e.g., @modelcontextprotocol/server-slack"
+    validations:
+      required: true
+
+  - type: input
+    id: repository
+    attributes:
+      label: Repository URL
+      description: Link to the MCP server's repository
+      placeholder: "https://github.com/..."
+    validations:
+      required: true
+
+  - type: input
+    id: npm-package
+    attributes:
+      label: NPM Package (if available)
+      description: NPM package name if the server is published
+      placeholder: "e.g., @modelcontextprotocol/server-slack"
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Server Description
+      description: What does this MCP server do?
+      placeholder: Brief description of the server's functionality
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Server Category
+      description: What category best describes this server?
+      options:
+        - Database (SQL, NoSQL, etc.)
+        - Cloud Services (AWS, Azure, GCP)
+        - Development Tools (Git, Docker, etc.)
+        - Communication (Slack, Discord, etc.)
+        - File System
+        - Web/API Services
+        - Productivity Tools
+        - System Administration
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: server-status
+    attributes:
+      label: Server Status
+      description: Please verify the server status
+      options:
+        - label: The server is actively maintained
+          required: true
+        - label: The server has clear documentation
+          required: true
+        - label: The server follows MCP protocol specifications
+          required: true
+
+  - type: textarea
+    id: tools
+    attributes:
+      label: Available Tools
+      description: List the main tools/functions this server provides
+      placeholder: |
+        - send_message: Send messages to channels
+        - create_channel: Create new channels
+        - list_channels: Get available channels
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: Use Cases
+      description: When would users want to use this MCP server?
+      placeholder: |
+        - Automating Slack notifications
+        - Managing team communication
+        - Integrating with CI/CD pipelines
+
+  - type: input
+    id: priority-score
+    attributes:
+      label: Priority Justification
+      description: Why should this server be prioritized?
+      placeholder: "Popular tool with X GitHub stars, requested by Y users, fills gap in Z domain"
+
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Configuration Requirements
+      description: What configuration is needed to use this server?
+      placeholder: |
+        Required:
+        - API_TOKEN: Slack bot token
+        - WORKSPACE_ID: Slack workspace identifier
+
+        Optional:
+        - DEFAULT_CHANNEL: Default channel for messages
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Can you help with implementation?
+      options:
+        - label: I can help test the integration
+        - label: I can provide configuration examples
+        - label: I can help with documentation
+        - label: I maintain or contribute to this MCP server
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Information
+      description: Any other relevant information
+      placeholder: Links to documentation, similar integrations, special considerations

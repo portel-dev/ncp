@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📚 Documentation & Guides
+    url: https://github.com/portel-dev/ncp/blob/main/README.md
+    about: Check our comprehensive documentation and guides first
+  - name: 💬 Discussions
+    url: https://github.com/portel-dev/ncp/discussions
+    about: Ask questions, share ideas, and discuss NCP with the community
+  - name: 🔒 Security Issues
+    url: https://github.com/portel-dev/ncp/security/policy
+    about: Please report security vulnerabilities responsibly via our security policy
