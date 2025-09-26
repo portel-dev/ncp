@@ -412,7 +412,9 @@ export class PersistentRAGEngine {
           try {
             const mcpDomain = this.getMCPDomain(mcpName);
             const capabilityEnhancements = this.getCapabilityEnhancements(tool.name, description);
-            const enhancedDescription = `${mcpDomain} context: ${description}${capabilityEnhancements}`;
+            // Include the tool identifier for exact searches: git:commit, filesystem:read_file, etc.
+            const toolIdentifier = `${mcpName}:${tool.name}`;
+            const enhancedDescription = `${toolIdentifier} ${mcpDomain} context: ${description}${capabilityEnhancements}`;
             
             const embedding = await this.model(enhancedDescription, { 
               pooling: 'mean', 

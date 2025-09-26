@@ -15,9 +15,11 @@ export class DiscoveryEngine {
   }
   
   async initialize(currentConfig?: any): Promise<void> {
+    const startTime = Date.now();
     logger.info('[Discovery] Initializing RAG-powered discovery engine...');
     await this.ragEngine.initialize(currentConfig);
-    logger.info('[Discovery] RAG engine ready for semantic discovery');
+    const endTime = Date.now();
+    logger.info(`[Discovery] RAG engine ready for semantic discovery in ${endTime - startTime}ms`);
   }
   
   async findBestTool(description: string): Promise<{
@@ -68,9 +70,15 @@ export class DiscoveryEngine {
     reason: string;
   }>> {
     try {
+      const startTime = Date.now();
+      logger.debug(`[Discovery] Starting search for: "${description}"`);
+
       // Use RAG for semantic discovery
       const results = await this.ragEngine.discover(description, limit);
-      
+
+      const endTime = Date.now();
+      logger.debug(`[Discovery] Search completed in ${endTime - startTime}ms, found ${results.length} results`);
+
       return results.map(result => ({
         name: result.toolId,
         confidence: result.confidence,

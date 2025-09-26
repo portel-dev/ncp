@@ -828,7 +828,7 @@ configCmd
     await manager.showConfigLocations();
   });
 
-// Find command (existing functionality)
+// Find command (CLI-optimized version for fast discovery)
 program
   .command('find [query]')
   .description('Find tools matching a query or list all tools')
@@ -839,7 +839,6 @@ program
   .action(async (query, options) => {
     const profileName = program.getOptionValue('profile') || 'all';
     const server = new MCPServer(profileName);
-
     await server.initialize();
 
     const limit = parseInt(options.limit || '5');

@@ -581,6 +581,8 @@ export class NCPOrchestrator {
         return false;
       }
 
+      logger.info(`Using cached tools (${Object.keys(cache.mcps).length} MCPs)`)
+
       // Load MCPs and tools from cache
       for (const [mcpName, mcpData] of Object.entries(cache.mcps)) {
         const data = mcpData as any;
@@ -762,6 +764,27 @@ export class NCPOrchestrator {
       .sort((a, b) => b.similarity - a.similarity)
       .slice(0, maxSuggestions)
       .map(item => item.tool);
+  }
+
+  /**
+   * Generate hash for each MCP configuration
+   */
+  private generateConfigHashes(profile: Profile): Record<string, string> {
+    const hashes: Record<string, string> = {};
+    const crypto = require('crypto');
+
+    for (const [mcpName, config] of Object.entries(profile.mcpServers)) {
+      // Hash command + args + env for change detection
+      const configString = JSON.stringify({
+        command: config.command,
+        args: config.args || [],
+        env: config.env || {}
+      });
+
+      hashes[mcpName] = crypto.createHash('sha256').update(configString).digest('hex');
+    }
+
+    return hashes;
   }
 
   /**

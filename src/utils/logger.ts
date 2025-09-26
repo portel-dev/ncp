@@ -36,13 +36,11 @@ export class Logger {
   
   /**
    * Log informational messages
-   * Completely suppressed in MCP mode unless debugging
+   * Completely suppressed in MCP mode and CLI mode unless debugging
    */
   info(message: string): void {
-    if (!this.isMCPMode || this.debugMode) {
-      if (!this.isMCPMode) {
-        console.error(`[NCP] ${message}`);
-      }
+    if (this.debugMode) {
+      console.error(`[NCP] ${message}`);
     }
   }
   
@@ -50,10 +48,10 @@ export class Logger {
    * Log only essential startup messages in MCP mode
    */
   mcpInfo(message: string): void {
-    if (!this.isMCPMode) {
+    if (this.debugMode) {
       console.error(`[NCP] ${message}`);
     }
-    // In MCP mode, stay completely silent unless debugging
+    // In MCP mode and CLI mode, stay completely silent unless debugging
   }
   
   /**
@@ -86,25 +84,21 @@ export class Logger {
   
   /**
    * Log warnings
-   * Completely suppressed in MCP mode unless debugging
+   * Completely suppressed in MCP mode and CLI mode unless debugging
    */
   warn(message: string): void {
-    if (!this.isMCPMode || this.debugMode) {
-      if (!this.isMCPMode) {
-        console.error(`[NCP WARN] ${message}`);
-      }
+    if (this.debugMode) {
+      console.error(`[NCP WARN] ${message}`);
     }
   }
   
   /**
    * Log progress updates
-   * Completely suppressed in MCP mode unless debugging
+   * Completely suppressed in MCP mode and CLI mode unless debugging
    */
   progress(message: string): void {
-    if (!this.isMCPMode || this.debugMode) {
-      if (!this.isMCPMode) {
-        console.error(`[NCP] ${message}`);
-      }
+    if (this.debugMode) {
+      console.error(`[NCP] ${message}`);
     }
   }
   
