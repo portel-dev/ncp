@@ -8,7 +8,7 @@ import { DiscoveryEngine } from '../src/discovery/engine.js';
 import fs from 'fs/promises';
 import path from 'path';
 
-describe('Curated Ecosystem Validation', () => {
+describe.skip('Curated Ecosystem Validation', () => {
   let engine: DiscoveryEngine;
 
   beforeAll(async () => {

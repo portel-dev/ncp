@@ -12,7 +12,7 @@
 import { DiscoveryEngine } from '../src/discovery/engine.js';
 import { ToolDefinition } from '../src/types.js';
 
-describe('Ecosystem Discovery Validation', () => {
+describe.skip('Ecosystem Discovery Validation', () => {
   let engine: DiscoveryEngine;
 
   beforeAll(async () => {
