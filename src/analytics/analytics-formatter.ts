@@ -93,6 +93,24 @@ export class AnalyticsFormatter {
       output.push('');
     }
 
+    // Hourly Usage Pattern
+    if (Object.keys(report.hourlyUsage).length > 0) {
+      output.push(chalk.bold.white('⏰ HOURLY USAGE PATTERN'));
+      output.push('');
+
+      const maxHourlyUsage = Math.max(...Object.values(report.hourlyUsage));
+
+      for (let hour = 0; hour < 24; hour++) {
+        const usage = report.hourlyUsage[hour] || 0;
+        if (usage > 0) {
+          const bar = this.createProgressBar(usage, maxHourlyUsage, 25);
+          const hourLabel = `${hour.toString().padStart(2, '0')}:00`;
+          output.push(`   ${hourLabel} ${bar} ${usage} sessions`);
+        }
+      }
+      output.push('');
+    }
+
     // Daily Usage Pattern
     if (Object.keys(report.dailyUsage).length > 1) {
       output.push(chalk.bold.white('📅 DAILY USAGE'));
