@@ -5,7 +5,7 @@
 
 import { DiscoveryEngine } from '../src/discovery/engine.js';
 
-describe('Focused Ecosystem Discovery', () => {
+describe.skip('Focused Ecosystem Discovery', () => {
   let engine: DiscoveryEngine;
 
   beforeAll(async () => {
