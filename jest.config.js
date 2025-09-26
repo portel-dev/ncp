@@ -30,7 +30,8 @@ export default {
   extensionsToTreatAsEsm: ['.ts'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
-    '@xenova/transformers': '<rootDir>/test/__mocks__/transformers.js'
+    '@xenova/transformers': '<rootDir>/test/__mocks__/transformers.js',
+    '^chalk$': '<rootDir>/test/__mocks__/chalk.js'
   },
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
   testTimeout: 15000,
