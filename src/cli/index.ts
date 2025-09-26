@@ -12,6 +12,11 @@ import { formatCommandDisplay } from '../utils/security.js';
 import { TextUtils } from '../utils/text-utils.js';
 import { OutputFormatter } from '../services/output-formatter.js';
 import { ErrorHandler } from '../services/error-handler.js';
+import { CachePatcher } from '../cache/cache-patcher.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { mcpWrapper } from '../utils/mcp-wrapper.js';
+import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -157,6 +162,107 @@ const packageJsonPath = join(__dirname, '../../package.json');
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 const version = packageJson.version;
 
+// Discovery function for single MCP - extracted from NCPOrchestrator.probeMCPTools
+async function discoverSingleMCP(name: string, command: string, args: string[] = [], env: Record<string, string> = {}): Promise<{
+  tools: Array<{name: string; description: string; inputSchema?: any}>;
+  serverInfo?: {
+    name: string;
+    title?: string;
+    version: string;
+    description?: string;
+    websiteUrl?: string;
+  };
+}> {
+  const config = { name, command, args, env };
+
+  if (!config.command) {
+    throw new Error(`Invalid config for ${config.name}`);
+  }
+
+  let client: Client | null = null;
+  let transport: StdioClientTransport | null = null;
+  const DISCOVERY_TIMEOUT = 8000; // 8 seconds
+
+  try {
+    // Create wrapper command for discovery phase
+    const wrappedCommand = mcpWrapper.createWrapper(
+      config.name,
+      config.command,
+      config.args || []
+    );
+
+    // Create temporary connection for discovery
+    const silentEnv = {
+      ...process.env,
+      ...(config.env || {}),
+      MCP_SILENT: 'true',
+      QUIET: 'true',
+      NO_COLOR: 'true'
+    };
+
+    transport = new StdioClientTransport({
+      command: wrappedCommand.command,
+      args: wrappedCommand.args,
+      env: silentEnv as Record<string, string>
+    });
+
+    client = new Client(
+      { name: 'ncp-oss', version: '1.0.0' },
+      { capabilities: {} }
+    );
+
+    // Connect with timeout and filtered output
+    await withFilteredOutput(async () => {
+      await Promise.race([
+        client!.connect(transport!),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Discovery timeout')), DISCOVERY_TIMEOUT)
+        )
+      ]);
+    });
+
+    // Capture server info after connection
+    const serverInfo = client!.getServerVersion();
+
+    // Get tool list with filtered output
+    const response = await withFilteredOutput(async () => {
+      return await client!.listTools();
+    });
+
+    const tools = response.tools.map(t => ({
+      name: t.name,
+      description: t.description || '',
+      inputSchema: t.inputSchema || {}
+    }));
+
+    // Disconnect immediately
+    await client.close();
+
+    return {
+      tools,
+      serverInfo: serverInfo ? {
+        name: serverInfo.name || config.name,
+        title: serverInfo.title,
+        version: serverInfo.version || 'unknown',
+        description: serverInfo.title || serverInfo.name || undefined,
+        websiteUrl: serverInfo.websiteUrl
+      } : undefined
+    };
+
+  } catch (error: any) {
+    // Clean up connections
+    try {
+      if (client) {
+        await client.close();
+      }
+    } catch (closeError) {
+      // Ignore close errors
+    }
+
+    throw new Error(`Failed to discover tools from ${config.name}: ${error.message}`);
+  }
+}
+
 const program = new Command();
 
 // Set version
@@ -297,7 +403,8 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('-h') ||
   process.argv.includes('--version') ||
   process.argv.includes('-v') ||
-  process.argv.includes('import');
+  process.argv.includes('import') ||
+  process.argv.includes('analytics');
 
 // Default to MCP server mode when no CLI commands are provided
 // This ensures compatibility with Claude Desktop and other MCP clients that expect server mode by default
@@ -379,10 +486,55 @@ program
 
     console.log(''); // spacing
 
+    // Initialize cache patcher
+    const cachePatcher = new CachePatcher();
+
     for (const profileName of profiles) {
       try {
+        // 1. Update profile
         await manager.addMCPToProfile(profileName, name, config);
         console.log(`\n${OutputFormatter.success(`Added ${name} to profile: ${profileName}`)}`);
+
+        // 2. Discover tools from this MCP only
+        console.log(chalk.dim('🔍 Discovering tools and updating cache...'));
+        const discoveryStart = Date.now();
+
+        try {
+          const discoveryResult = await discoverSingleMCP(name, command, args, env);
+          const discoveryTime = Date.now() - discoveryStart;
+
+          console.log(`${chalk.green('✅')} Found ${discoveryResult.tools.length} tools in ${discoveryTime}ms`);
+
+          if (discoveryResult.tools.length > 0) {
+            // Show first few tools
+            const toolsToShow = discoveryResult.tools.slice(0, 3);
+            console.log(chalk.dim('   Tools:'));
+            toolsToShow.forEach(tool => {
+              const shortDesc = tool.description?.length > 50
+                ? tool.description.substring(0, 50) + '...'
+                : tool.description;
+              console.log(chalk.dim(`   • ${tool.name}: ${shortDesc}`));
+            });
+            if (discoveryResult.tools.length > 3) {
+              console.log(chalk.dim(`   • ... and ${discoveryResult.tools.length - 3} more`));
+            }
+          }
+
+          // 3. Patch tool metadata cache
+          await cachePatcher.patchAddMCP(name, config, discoveryResult.tools, discoveryResult.serverInfo);
+
+          // 4. Update profile hash
+          const profile = await manager.getProfile(profileName);
+          const profileHash = cachePatcher.generateProfileHash(profile);
+          await cachePatcher.updateProfileHash(profileHash);
+
+          console.log(`${chalk.green('✅')} Cache updated for ${name}`);
+
+        } catch (discoveryError: any) {
+          console.log(`${chalk.yellow('⚠️')} Could not discover tools: ${discoveryError.message}`);
+          console.log(chalk.dim('   Profile updated, but cache not built. Run "ncp find <query>" to build cache later.'));
+        }
+
       } catch (error: any) {
         const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('profile', 'add', `${name} to ${profileName}`));
         console.log('\n' + ErrorHandler.formatForConsole(errorResult));
@@ -772,10 +924,39 @@ program
     // MCP exists, proceed with removal
     console.log(chalk.green('✅ MCP found, proceeding with removal...\n'));
 
+    // Initialize cache patcher
+    const cachePatcher = new CachePatcher();
+
     for (const profileName of profiles) {
       try {
+        // 1. Remove from profile
         await manager.removeMCPFromProfile(profileName, name);
         console.log(OutputFormatter.success(`Removed ${name} from profile: ${profileName}`));
+
+        // 2. Clean up caches
+        console.log(chalk.dim('🔧 Cleaning up caches...'));
+
+        try {
+          // Remove from tool metadata cache
+          await cachePatcher.patchRemoveMCP(name);
+
+          // Remove from embeddings cache
+          await cachePatcher.patchRemoveEmbeddings(name);
+
+          // Update profile hash
+          const profile = await manager.getProfile(profileName);
+          if (profile) {
+            const profileHash = cachePatcher.generateProfileHash(profile);
+            await cachePatcher.updateProfileHash(profileHash);
+          }
+
+          console.log(`${chalk.green('✅')} Cache cleaned for ${name}`);
+
+        } catch (cacheError: any) {
+          console.log(`${chalk.yellow('⚠️')} Could not clean cache: ${cacheError.message}`);
+          console.log(chalk.dim('   Profile updated successfully. Cache will rebuild on next discovery.'));
+        }
+
       } catch (error: any) {
         const errorResult = ErrorHandler.handle(error, ErrorHandler.createContext('profile', 'remove', `${name} from ${profileName}`));
         console.log('\n' + ErrorHandler.formatForConsole(errorResult));
@@ -838,7 +1019,10 @@ program
   .option('--confidence_threshold <number>', 'Minimum confidence level (0.0-1.0, default: 0.3). Examples: 0.1=show all, 0.5=strict, 0.7=very precise')
   .action(async (query, options) => {
     const profileName = program.getOptionValue('profile') || 'all';
-    const server = new MCPServer(profileName);
+
+    // Use MCPServer for rich formatted output
+    const { MCPServer } = await import('../server/mcp-server.js');
+    const server = new MCPServer(profileName, true); // Enable progress for first-time indexing
     await server.initialize();
 
     const limit = parseInt(options.limit || '5');
@@ -854,6 +1038,82 @@ program
     const formattedOutput = formatFindOutput(result.result.content[0].text);
     console.log(formattedOutput);
     await server.cleanup();
+  });
+
+// Analytics command group
+const analyticsCmd = program
+  .command('analytics')
+  .description('View NCP usage analytics and performance metrics');
+
+analyticsCmd
+  .command('dashboard')
+  .description('Show comprehensive analytics dashboard')
+  .option('--period <days>', 'Period in days (default: 30)')
+  .action(async (options) => {
+    const { NCPLogParser } = await import('../analytics/log-parser.js');
+    const { AnalyticsFormatter } = await import('../analytics/analytics-formatter.js');
+
+    console.log(chalk.dim('📊 Analyzing NCP usage data...'));
+
+    const parser = new NCPLogParser();
+    const report = await parser.parseAllLogs();
+
+    if (report.totalSessions === 0) {
+      console.log(chalk.yellow('📊 No analytics data available yet'));
+      console.log(chalk.dim('💡 Analytics data is automatically collected when MCPs are used through NCP'));
+      return;
+    }
+
+    const dashboard = AnalyticsFormatter.formatDashboard(report);
+    console.log(dashboard);
+  });
+
+analyticsCmd
+  .command('performance')
+  .description('Show performance-focused analytics')
+  .action(async () => {
+    const { NCPLogParser } = await import('../analytics/log-parser.js');
+    const { AnalyticsFormatter } = await import('../analytics/analytics-formatter.js');
+
+    console.log(chalk.dim('⚡ Analyzing performance metrics...'));
+
+    const parser = new NCPLogParser();
+    const report = await parser.parseAllLogs();
+
+    if (report.totalSessions === 0) {
+      console.log(chalk.yellow('📊 No performance data available yet'));
+      return;
+    }
+
+    const performance = AnalyticsFormatter.formatPerformanceReport(report);
+    console.log(performance);
+  });
+
+analyticsCmd
+  .command('export')
+  .description('Export analytics data to CSV')
+  .option('--output <file>', 'Output file (default: ncp-analytics.csv)')
+  .action(async (options) => {
+    const { NCPLogParser } = await import('../analytics/log-parser.js');
+    const { AnalyticsFormatter } = await import('../analytics/analytics-formatter.js');
+    const { writeFileSync } = await import('fs');
+
+    console.log(chalk.dim('📊 Generating analytics export...'));
+
+    const parser = new NCPLogParser();
+    const report = await parser.parseAllLogs();
+
+    if (report.totalSessions === 0) {
+      console.log(chalk.yellow('📊 No data to export'));
+      return;
+    }
+
+    const csv = AnalyticsFormatter.formatCSV(report);
+    const filename = options.output || 'ncp-analytics.csv';
+
+    writeFileSync(filename, csv, 'utf-8');
+    console.log(chalk.green(`✅ Analytics exported to ${filename}`));
+    console.log(chalk.dim(`📊 Exported ${report.totalSessions} sessions across ${report.uniqueMCPs} MCPs`));
   });
 
 // Run command (existing functionality)
