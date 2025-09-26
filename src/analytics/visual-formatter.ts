@@ -95,7 +95,7 @@ export class VisualAnalyticsFormatter {
     }
 
     // Value Delivered Section with Visual Impact
-    output.push(chalk.bold.white('💰 VALUE IMPACT VISUALIZATION'));
+    output.push(chalk.bold.white('💰 VALUE IMPACT VISUALIZATION (ESTIMATES)'));
     output.push('');
 
     // Calculate savings
@@ -122,7 +122,7 @@ export class VisualAnalyticsFormatter {
     output.push('');
 
     // Environmental Impact with Visual Scale
-    output.push(chalk.bold.white('🌱 ENVIRONMENTAL IMPACT SCALE'));
+    output.push(chalk.bold.white('🌱 ENVIRONMENTAL IMPACT SCALE (ROUGH ESTIMATES)'));
     output.push('');
 
     const sessionsWithoutNCP = report.totalSessions * report.uniqueMCPs;

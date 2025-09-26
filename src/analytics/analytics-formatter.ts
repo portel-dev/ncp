@@ -37,7 +37,7 @@ export class AnalyticsFormatter {
     output.push('');
 
     // Value Proposition Section
-    output.push(chalk.bold.white('💰 VALUE DELIVERED'));
+    output.push(chalk.bold.white('💰 VALUE DELIVERED (ESTIMATES)'));
     output.push('');
 
     // Calculate token savings (estimated)
@@ -46,10 +46,10 @@ export class AnalyticsFormatter {
     const tokenSavings = estimatedTokensWithoutNCP - estimatedTokensWithNCP;
     const costSavings = (tokenSavings / 1000) * 0.002; // $0.002 per 1K tokens
 
-    output.push(`💎 ${chalk.bold.green(tokenSavings.toLocaleString())} estimated tokens saved`);
-    output.push(`💵 ${chalk.bold.green('~$' + costSavings.toFixed(2))} estimated cost savings`);
-    output.push(`🔄 ${chalk.bold.green('1')} unified interface vs ${chalk.bold.red(report.uniqueMCPs)} separate MCPs`);
-    output.push(`🧠 ${chalk.bold.green((((report.uniqueMCPs - 1) / report.uniqueMCPs) * 100).toFixed(1) + '%')} cognitive load reduction`);
+    output.push(`💎 ${chalk.bold.green('~' + (tokenSavings / 1000000).toFixed(1) + 'M')} tokens saved ${chalk.dim('(est. 100 tokens/MCP call)')}`);
+    output.push(`💵 ${chalk.bold.green('~$' + costSavings.toFixed(2))} cost savings ${chalk.dim('(based on GPT-4 pricing)')}`);
+    output.push(`🔄 ${chalk.bold.green('1')} unified interface vs ${chalk.bold.red(report.uniqueMCPs)} separate MCPs ${chalk.dim('(measured)')}`);
+    output.push(`🧠 ${chalk.bold.green((((report.uniqueMCPs - 1) / report.uniqueMCPs) * 100).toFixed(1) + '%')} cognitive load reduction ${chalk.dim('(calculated)')}`);
     output.push('');
 
     // Performance Section
@@ -116,7 +116,7 @@ export class AnalyticsFormatter {
     }
 
     // Environmental Impact
-    output.push(chalk.bold.white('🌱 ENVIRONMENTAL IMPACT'));
+    output.push(chalk.bold.white('🌱 ENVIRONMENTAL IMPACT (ROUGH ESTIMATES)'));
     output.push('');
 
     // Rough estimates based on compute reduction
@@ -125,9 +125,10 @@ export class AnalyticsFormatter {
     const estimatedEnergyKWh = (computeReduction * 0.0002); // Very rough estimate
     const estimatedCO2kg = estimatedEnergyKWh * 0.5; // Rough CO2 per kWh
 
-    output.push(`⚡ ${chalk.green('~' + estimatedEnergyKWh.toFixed(1) + ' kWh')} energy saved through aggregation`);
-    output.push(`🌍 ${chalk.green('~' + estimatedCO2kg.toFixed(1) + ' kg CO₂')} emissions avoided`);
-    output.push(`🔌 ${chalk.green(computeReduction.toLocaleString())} fewer individual connections`);
+    output.push(`⚡ ${chalk.green('~' + estimatedEnergyKWh.toFixed(1) + ' kWh')} energy saved ${chalk.dim('(rough est: 0.2Wh per connection)')}`);
+    output.push(`🌍 ${chalk.green('~' + estimatedCO2kg.toFixed(1) + ' kg CO₂')} emissions avoided ${chalk.dim('(0.5kg CO₂/kWh avg grid)')}`);
+    output.push(`🔌 ${chalk.green(computeReduction.toLocaleString())} fewer connections ${chalk.dim('(measured: actual reduction)')}`);
+    output.push(chalk.dim('   ⚠️  Environmental estimates are order-of-magnitude approximations'));
     output.push('');
 
     // Footer with tips
