@@ -1,11 +1,47 @@
+# Dependencies
 node_modules/
 dist/
-*.log
-.DS_Store
-.env
-.vscode/
-*.tmp
 coverage/
+
+# Local configuration
+.env
+.env.local
+*.local.*
+.claude.local.md
+
+# Cache and temp files
+.ncp/
+*.cache
+*.tmp
+*.temp
+*.backup.*
+
+# AI and draft content
+*.prd.md
+*.draft.md
+*.ai.md
+*.notes.md
+*.temp.md
+
+# Test and script files
+*.test.js
+*.script.js
+!jest.config.js
+!test/**/*.test.ts
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Scripts directory (development files not for release)
 scripts/
@@ -30,5 +66,5 @@ test-*.js
 experiment-*.js
 *-ecosystem.json
 
-# AI context files (local only)
-*.local.md
+# Date-prefixed AI exports
+2025-*.txt

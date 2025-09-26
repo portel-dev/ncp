@@ -72,7 +72,7 @@ ncp-production-clean/
 
 **Files in root to remove:**
 ```
-❌ 2025-09-24-how-to-make-ncp-popular.txt → Delete (AI generated)
+❌ 2025-09-24-how-to-make-ncp-popular.txt → move to ../ncp-dev-workspace (AI generated)
 ❌ MCP_EXPANSION_SUMMARY.md → docs/expansion.draft.md
 ❌ mcp-expansion-strategy.md → docs/strategy.draft.md
 ❌ HOW-IT-WORKS.md → docs/guides/how-it-works.md

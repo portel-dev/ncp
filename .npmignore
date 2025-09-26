@@ -1,24 +1,36 @@
-# Source files - only publish compiled dist
+# Source files (only dist/ is published)
 src/
+test/
+scripts/
+docs/
+coverage/
+.github/
+
+# Configuration files
+.gitignore
+.npmignore
 tsconfig.json
+jest.config.js
+.release-it.json
+
+# Documentation (except essentials)
+*.prd.md
+*.draft.md
+*.ai.md
+*.notes.md
+*.temp.md
+CONTRIBUTING.md
+CHANGELOG.md
+
+# Local files
+.ncp/
+*.local.*
+.env*
 
 # Development files
-.git
-.gitignore
-*.log
-.DS_Store
-.env
-.vscode/
-.github/
-.dockerignore
-.release-it.json
-smithery.yaml
-
-# Documentation and scripts (not needed in npm package)
-docs/
-scripts/
-*.md
-!README.md
+*.test.js
+*.script.js
+*.backup.*
 
 # Raw screenshots in project root
 ./*.png
@@ -26,35 +38,22 @@ scripts/
 ./*.jpeg
 ./*.gif
 
-# Test files and scripts
-test/
-tests/
-__tests__/
-*.test.js
-*.test.ts
-*.sh
-
 # TypeScript source files (redundant - we have compiled JS)
 *.ts
 !*.d.ts
 
-# Coverage reports
-coverage/
-
 # Build configuration
-jest.config.js
 webpack.config.js
 rollup.config.js
 
-# NCP runtime files - these are generated and should not be in npm package
-.ncp/
-
-# Testing and development files from dist/
-dist/testing/
-dist/smithery-*
-
-# Development configuration files - CRITICAL: Use leading slash to avoid excluding dist/profiles/
+# Development artifacts
 ecosystem-repo-setup/
 /profiles/
 test-*.js
 2025-*.txt
+
+# IDE and system files
+.DS_Store
+*.log
+.vscode/
+.idea/
