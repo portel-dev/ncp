@@ -13,6 +13,9 @@ describe('User Story Tool Discovery', () => {
     engine = new DiscoveryEngine();
     await engine.initialize();
 
+    // Clear any existing cached tools to ensure clean test environment
+    await engine['ragEngine'].clearCache();
+
     // Create a curated test profile with known tools
     // This gives us predictable, stable tests independent of actual MCP configurations
     const testTools = [
