@@ -1,72 +1,11 @@
-# NCP Technical Guide
+# NCP Technical Deep Dive
 
-## The N-to-1 Problem & Solution
+> **For overview and setup:** See the [README](README.md)
+> **This guide covers:** Architecture, algorithms, and implementation details
 
-### The N Problem: Cognitive Overload
+## Core Architecture
 
-When AI assistants connect directly to multiple MCP servers, they face cognitive overload:
-
-```mermaid
-graph TB
-    AI[AI Assistant] --> MCP1[Filesystem MCP<br/>12 tools]
-    AI --> MCP2[Database MCP<br/>8 tools]
-    AI --> MCP3[Email MCP<br/>6 tools]
-    AI --> MCP4[Web MCP<br/>15 tools]
-    AI --> MCP5[Shell MCP<br/>10 tools]
-    AI --> MCP6[Cloud MCP<br/>20 tools]
-```
-
-**Problems:**
-- **Schema Complexity**: Each MCP exposes 5-15+ tools with detailed schemas
-- **Context Explosion**: 50+ tools = 150k+ tokens in context
-- **Decision Paralysis**: AI must analyze dozens of similar tools
-- **Response Delays**: 3-8 second response times due to analysis overhead
-
-**Example**: A typical setup with filesystem, git, web, email, and database MCPs presents 71+ tool schemas to the AI simultaneously.
-
-### The 1 Solution: N-to-1 Orchestration
-
-```mermaid
-graph TB
-    AI[AI Assistant] --> NCP[NCP Hub<br/>2 unified tools]
-    NCP --> MCP1[Filesystem MCP<br/>12 tools]
-    NCP --> MCP2[Database MCP<br/>8 tools]
-    NCP --> MCP3[Email MCP<br/>6 tools]
-    NCP --> MCP4[Web MCP<br/>15 tools]
-    NCP --> MCP5[Shell MCP<br/>10 tools]
-    NCP --> MCP6[Cloud MCP<br/>20 tools]
-```
-
-NCP consolidates complexity behind a simple interface:
-- **Unified Schema**: AI sees just 2 tools (`find` and `run`)
-- **Smart Routing**: NCP handles tool discovery and execution
-- **Context Reduction**: 150k+ tokens → 8k tokens
-- **Fast Responses**: Sub-second tool selection
-
-**Result**: N complex MCP servers → 1 simple interface. AI sees just 2 tools (`find` and `run`), NCP handles everything behind the scenes.
-
-## Token Savings Analysis
-
-### Real-World Measurements
-
-| Setup Size | Tools Exposed | Context Without NCP | Context With NCP | Token Savings |
-|------------|---------------|-------------------|------------------|---------------|
-| **Small** (5 MCPs) | 25-30 tools | ~15,000 tokens | ~8,000 tokens | **47%** |
-| **Medium** (15 MCPs) | 75-90 tools | ~45,000 tokens | ~12,000 tokens | **73%** |
-| **Large** (30 MCPs) | 150+ tools | ~90,000 tokens | ~15,000 tokens | **83%** |
-| **Enterprise** (50+ MCPs) | 250+ tools | ~150,000 tokens | ~20,000 tokens | **87%** |
-
-### Why Such Massive Savings?
-
-1. **Schema Consolidation**: 50+ detailed tool schemas → 2 simple schemas
-2. **Lazy Loading**: Tools only loaded when actually needed, not preemptively
-3. **Smart Caching**: Vector embeddings cached locally, no regeneration overhead
-4. **Health Filtering**: Broken/unavailable tools excluded from context automatically
-5. **Semantic Compression**: Natural language queries vs. formal tool specifications
-
-## Architecture Deep Dive
-
-### Dual Architecture: Server + Client
+### Dual Role Design: Server + Client
 
 NCP operates as both an **MCP server** (to your AI client) and an **MCP client** (to downstream MCPs):
 
@@ -101,13 +40,11 @@ graph LR
     Client --> Shell
 ```
 
-### Core Components
+## Semantic Discovery Engine
 
-#### 1. Semantic Discovery Engine
-- **Vector Embeddings**: Uses @xenova/transformers for semantic matching
-- **Query Processing**: Converts natural language to tool capabilities
-- **Confidence Scoring**: Ranks tools by relevance (0-1 scale)
-- **Cache Management**: Persistent embeddings for fast repeated searches
+### Vector Similarity Algorithm
+
+NCP uses **@xenova/transformers** for semantic matching between queries and tool capabilities:
 
 ```typescript
 interface DiscoveryResult {
@@ -117,27 +54,17 @@ interface DiscoveryResult {
   description: string;
   schema: ToolSchema;
 }
+
+interface ToolEmbedding {
+  tool: string;
+  mcp: string;
+  vector: number[];
+  description: string;
+  keywords: string[];
+}
 ```
 
-#### 2. Intelligent Orchestrator
-- **Health-Aware Routing**: Automatic failover to healthy alternatives
-- **Connection Pooling**: Efficient resource management
-- **Load Balancing**: Distributes requests across available MCPs
-- **Error Recovery**: Graceful handling of MCP failures
-
-#### 3. Health Monitor
-- **Continuous Monitoring**: Tracks MCP server status in real-time
-- **Automatic Blacklisting**: Removes unhealthy servers from routing
-- **Recovery Detection**: Automatically re-enables recovered servers
-- **Performance Metrics**: Latency and success rate tracking
-
-#### 4. Connection Pool Manager
-- **Lazy Loading**: MCPs only loaded when needed
-- **Resource Cleanup**: Automatic connection management
-- **Memory Optimization**: Efficient use of system resources
-- **Concurrent Execution**: Parallel tool execution when possible
-
-### Token Optimization Process
+### Search Process Flow
 
 ```mermaid
 flowchart TD
@@ -152,57 +79,19 @@ flowchart TD
     Health -->|Healthy| Return[Return Top Results]
     Health -->|Unhealthy| Alternative[Find Alternatives]
     Alternative --> Return
-    Return --> Tokens[Minimal Token Usage]
+    Return --> Execute[Route Execution]
 ```
 
-**Process Flow:**
-1. **Request Interception**: AI sends natural language query to NCP
-2. **Semantic Analysis**: Vector search finds relevant tools
-3. **Health Filtering**: Only healthy MCPs included in results
-4. **Schema Simplification**: Complex schemas abstracted to simple interface
-5. **Response Optimization**: Minimal context returned to AI
+### Why Vector Embeddings Work
 
-**Result**: Instead of loading 50+ tool schemas (150k+ tokens), AI sees 2 unified tools (8k tokens) with intelligent routing behind the scenes.
+1. **Semantic Understanding**: "read a file" matches `file_read`, `get_content`, `load_document`
+2. **Intent Recognition**: "send email" finds email tools even if query doesn't contain exact keywords
+3. **Confidence Scoring**: Ranks tools by relevance (0-1 scale) for best matches first
+4. **Cache Efficiency**: Embeddings computed once, reused for instant searches
 
-## Performance Characteristics
+## Health Monitoring System
 
-### Response Time Improvements
-- **Without NCP**: 3-8 seconds (analysis overhead)
-- **With NCP**: 0.5-1.5 seconds (direct semantic search)
-- **Improvement**: 3-5x faster tool selection
-
-### Memory Usage
-- **Schema Storage**: 95% reduction in AI context memory
-- **Cache Efficiency**: Embeddings cached for instant retrieval
-- **Resource Management**: Automatic cleanup prevents memory leaks
-
-### Scalability
-- **Horizontal**: Support for 100+ MCP servers
-- **Vertical**: Efficient single-machine resource usage
-- **Network**: Minimal bandwidth usage through smart caching
-
-## Advanced Features
-
-### Profile System
-Organize MCPs by environment, project, or use case:
-
-```json
-{
-  "profiles": {
-    "development": {
-      "stripe": { "env": { "API_KEY": "sk_test_..." } },
-      "database": { "args": ["--host", "localhost"] }
-    },
-    "production": {
-      "stripe": { "env": { "API_KEY": "sk_live_..." } },
-      "database": { "args": ["--host", "prod.db.com"] }
-    }
-  }
-}
-```
-
-### Health-Aware Execution
-Automatic failover and recovery:
+### Real-Time Health Tracking
 
 ```typescript
 interface HealthStatus {
@@ -214,29 +103,14 @@ interface HealthStatus {
 }
 ```
 
-### Vector Similarity Search
-Semantic tool discovery using embeddings:
+### Monitoring Strategy
+- **Continuous Polling**: Background health checks every 30 seconds
+- **Automatic Blacklisting**: Remove unhealthy servers from routing
+- **Recovery Detection**: Automatically re-enable recovered servers
+- **Graceful Degradation**: Find alternatives when primary tools fail
 
-```typescript
-interface ToolEmbedding {
-  tool: string;
-  mcp: string;
-  vector: number[];
-  description: string;
-  keywords: string[];
-}
-```
+## Tool Execution Flow
 
-## Integration Patterns
-
-### MCP Client Compatibility
-NCP maintains full compatibility with:
-- **Claude Desktop**: Native MCP protocol support
-- **VS Code**: MCP extension integration
-- **Cursor**: Built-in MCP support
-- **Custom Clients**: Standard JSON-RPC 2.0 protocol
-
-### Tool Execution Flow
 ```mermaid
 sequenceDiagram
     participant AI as AI Assistant
@@ -259,113 +133,173 @@ sequenceDiagram
     NCP-->>AI: Formatted response
 ```
 
-1. AI sends natural language query
-2. NCP performs semantic search
-3. Best matching tools returned with confidence scores
-4. AI selects tool and sends execution request
-5. NCP routes to appropriate MCP server
-6. Results returned with error handling
+## Connection Pool Management
 
-### Error Handling Strategy
-- **Graceful Degradation**: Partial failures don't break workflow
-- **Automatic Retry**: Transient failures handled transparently
+### Efficient Resource Handling
+- **Lazy Loading**: MCPs only loaded when needed
+- **Resource Cleanup**: Automatic connection management
+- **Memory Optimization**: Efficient use of system resources
+- **Concurrent Execution**: Parallel tool execution when possible
+
+### Process Isolation
+Each MCP runs in a separate process for:
+- **Security**: Isolated credential spaces
+- **Stability**: One MCP failure doesn't affect others
+- **Resource Control**: Memory and CPU limits per MCP
+
+## Performance Characteristics
+
+### Latency Optimization
+- **Cold Start**: First semantic search ~200ms (embedding generation)
+- **Warm Cache**: Subsequent searches ~10-50ms (vector lookup only)
+- **Tool Execution**: Direct proxy with minimal overhead
+
+### Memory Usage
+- **Embedding Cache**: ~50KB per 100 tools
+- **Connection Pool**: ~10MB per active MCP
+- **Total Overhead**: <100MB for typical 50-MCP setup
+
+### Scalability Limits
+- **Tested**: Up to 100 MCP servers simultaneously
+- **Theoretical**: 1000+ servers (limited by system resources)
+- **Network**: Minimal bandwidth usage through smart caching
+
+## Profile System Implementation
+
+### Configuration Structure
+```json
+{
+  "profiles": {
+    "development": {
+      "stripe": {
+        "command": "npx stripe-cli",
+        "env": { "API_KEY": "sk_test_..." }
+      },
+      "database": {
+        "command": "npx db-server",
+        "args": ["--host", "localhost"]
+      }
+    },
+    "production": {
+      "stripe": {
+        "command": "npx stripe-cli",
+        "env": { "API_KEY": "sk_live_..." }
+      },
+      "database": {
+        "command": "npx db-server",
+        "args": ["--host", "prod.db.com"]
+      }
+    }
+  }
+}
+```
+
+### Profile Resolution
+1. **Project-local**: `.ncp/profiles/` directory in current project
+2. **Global fallback**: `~/.ncp/profiles/` in user home directory
+3. **Environment override**: `NCP_PROFILE` environment variable
+
+## Error Handling & Recovery
+
+### Failure Categories
+- **Transient**: Network timeouts, temporary unavailability
+- **Permanent**: MCP server crashes, configuration errors
+- **Partial**: Some tools work, others fail
+
+### Recovery Strategies
+- **Automatic Retry**: 3 attempts with exponential backoff
 - **Alternative Routing**: Backup tools suggested when primary fails
+- **Graceful Degradation**: Partial failures don't break workflow
 - **User Notification**: Clear error messages with actionable advice
 
-## Security Considerations
+## Security Model
 
-### API Key Management
-- **Environment Isolation**: Separate credentials per profile
-- **No Storage**: Credentials passed through, never persisted
-- **Process Isolation**: Each MCP runs in separate process
+### Credential Isolation
+- **Environment Separation**: Different API keys per profile
+- **No Persistence**: Credentials passed through, never stored
+- **Process Boundaries**: Each MCP isolated from others
 
 ### Network Security
-- **Local Communication**: All MCP communication over localhost
-- **No External Calls**: NCP doesn't make external network requests
-- **Process Sandboxing**: MCPs isolated from each other
+- **Local Only**: All MCP communication over localhost/stdio
+- **No External Calls**: NCP doesn't make outbound network requests
+- **Process Sandboxing**: MCPs can't access each other's resources
 
-### Access Control
-- **Profile Permissions**: Fine-grained access control per profile
-- **Tool Filtering**: Restrict access to specific tools/MCPs
-- **Audit Logging**: Optional request/response logging
+### Audit & Logging
+- **Request Logging**: Optional detailed request/response logs
+- **Health Metrics**: Performance and availability tracking
+- **Error Reporting**: Structured error logs with context
 
-## Troubleshooting Guide
+## Advanced Configuration
 
-### Common Issues
-
-#### High Memory Usage
-- **Cause**: Too many MCPs loaded simultaneously
-- **Solution**: Use profiles to segment MCPs
-- **Prevention**: Configure lazy loading
-
-#### Slow Response Times
-- **Cause**: Unhealthy MCPs in pool
-- **Solution**: Run `ncp list --depth 1` to check health
-- **Prevention**: Enable automatic health monitoring
-
-#### Tool Discovery Failures
-- **Cause**: Embedding cache corruption or no MCPs configured
-- **Solution**: Check `ncp list` and ensure MCPs are properly added
-- **Prevention**: Regular configuration validation
-
-### Debug Mode
-Enable detailed logging:
+### High-Availability Patterns
 ```bash
-DEBUG=ncp:* ncp find "file tools"
-```
-
-### Performance Monitoring
-Real-time health checking:
-```bash
-ncp list --depth 1    # Check MCP health status
-ncp config validate   # Validate configuration
-```
-
-## Advanced Configuration Patterns
-
-### Multi-Environment Orchestration
-```bash
-# Environment-specific MCP pools
-ncp add stripe-dev npx stripe-cli --env STRIPE_KEY=sk_test_...
-ncp add stripe-prod npx stripe-cli --env STRIPE_KEY=sk_live_...
-
-# Conditional routing based on context
-ncp run "stripe:create_payment" --context="development"
-```
-
-### High-Availability Setups
-```bash
-# Redundant MCP configurations
+# Redundant MCP setups for critical tools
 ncp add filesystem-primary npx @modelcontextprotocol/server-filesystem ~/primary
 ncp add filesystem-backup npx @modelcontextprotocol/server-filesystem ~/backup
 
-# Automatic failover testing
-ncp config validate --check-redundancy
+# Load balancing configuration
+ncp config set load_balancing.strategy "round_robin"
+ncp config set load_balancing.health_check_interval 30000
 ```
 
-## Contributing to NCP
-
-### Development Setup
+### Performance Tuning
 ```bash
-git clone https://github.com/portel-dev/ncp
-cd ncp
-npm install
-npm run dev
+# Adjust cache sizes
+ncp config set cache.embeddings.max_size 10000
+ncp config set cache.health.ttl 60000
+
+# Connection pool tuning
+ncp config set pool.max_connections 100
+ncp config set pool.idle_timeout 300000
 ```
 
-### Testing Strategy
-- **Unit Tests**: Core component testing
-- **Integration Tests**: End-to-end MCP workflows
-- **Performance Tests**: Token usage and response time validation
-- **Compatibility Tests**: Cross-platform MCP client testing
+## Debugging & Monitoring
 
-### Architecture Principles
-1. **Simplicity**: Simple interface hiding complex orchestration
+### Debug Mode
+```bash
+# Enable detailed logging
+DEBUG=ncp:* ncp find "file tools"
+DEBUG=ncp:health ncp list --depth 1
+DEBUG=ncp:discovery ncp run filesystem:read_file
+```
+
+### Performance Monitoring
+```bash
+# Health status overview
+ncp list --depth 1                    # See all MCP health
+ncp config validate                    # Validate configuration
+ncp health --detailed                  # Detailed health report
+
+# Cache statistics
+ncp stats --cache                      # Embedding cache performance
+ncp stats --health                     # Health check statistics
+```
+
+## Implementation Notes
+
+### Technology Stack
+- **Runtime**: Node.js 18+ with ES modules
+- **AI Models**: @xenova/transformers for embeddings
+- **Protocol**: JSON-RPC 2.0 over stdio/SSE
+- **Storage**: File-based configuration, in-memory caching
+
+### Key Dependencies
+```json
+{
+  "@xenova/transformers": "^2.6.0",    // Vector embeddings
+  "citty": "^0.1.3",                   // CLI framework
+  "consola": "^3.2.3",                 // Logging
+  "ofetch": "^1.3.3"                   // HTTP client
+}
+```
+
+### Development Philosophy
+1. **Simplicity**: Complex orchestration behind simple interface
 2. **Performance**: Sub-second response times required
-3. **Reliability**: Graceful handling of MCP failures
-4. **Scalability**: Support for 100+ MCPs
+3. **Reliability**: Graceful handling of any MCP failure
+4. **Scalability**: Linear scaling to 100+ MCPs
 5. **Compatibility**: Full MCP protocol compliance
 
 ---
 
-**The Magic**: NCP maintains real connections to all your MCP servers, but presents them through one intelligent interface that speaks your AI's language, dramatically reducing cognitive load and token costs while improving performance.
+**The Result**: Your AI experiences a clean, fast interface while NCP handles all the complexity of managing multiple MCP servers, health monitoring, semantic routing, and error recovery behind the scenes.
