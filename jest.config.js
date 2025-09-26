@@ -37,5 +37,7 @@ export default {
   testTimeout: 15000,
   verbose: true,
   forceExit: true,
-  detectOpenHandles: false
+  detectOpenHandles: false,
+  workerIdleMemoryLimit: '512MB',
+  maxWorkers: 1
 };

@@ -31,10 +31,28 @@ afterEach(() => {
   }
 });
 
+// Clean up after each test
+afterEach(async () => {
+  // Clear all timers
+  jest.clearAllTimers();
+  jest.clearAllMocks();
+
+  // Force garbage collection if available
+  if (global.gc) {
+    global.gc();
+  }
+});
+
 // Global cleanup after all tests
 afterAll(async () => {
   // Clear all timers
   jest.clearAllTimers();
+  jest.clearAllMocks();
+
+  // Force close any open handles
+  if (process.stdout && typeof process.stdout.destroy === 'function') {
+    // Don't actually destroy stdout, just ensure it's flushed
+  }
 
   // Force garbage collection if available
   if (global.gc) {
@@ -42,5 +60,5 @@ afterAll(async () => {
   }
 
   // Give a small delay for cleanup
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise(resolve => setTimeout(resolve, 50));
 });
