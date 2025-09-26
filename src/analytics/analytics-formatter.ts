@@ -24,7 +24,7 @@ export class AnalyticsFormatter {
     output.push('');
 
     const days = Math.ceil((report.timeRange.end.getTime() - report.timeRange.start.getTime()) / (1000 * 60 * 60 * 24));
-    const period = days <= 1 ? 'today' : `last ${days} days`;
+    const period = days <= 1 ? 'today' : `${days} day${days === 1 ? '' : 's'}`;
 
     output.push(`⚡ ${chalk.green(report.totalSessions.toLocaleString())} total MCP sessions (${period})`);
     output.push(`🎯 ${chalk.green(report.uniqueMCPs)} unique MCPs orchestrated through NCP`);

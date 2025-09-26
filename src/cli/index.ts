@@ -1049,7 +1049,10 @@ const analyticsCmd = program
 analyticsCmd
   .command('dashboard')
   .description('Show comprehensive analytics dashboard')
-  .option('--period <days>', 'Period in days (default: 30)')
+  .option('--period <days>', 'Show data for last N days (e.g., --period 7)')
+  .option('--from <date>', 'Start date (YYYY-MM-DD format)')
+  .option('--to <date>', 'End date (YYYY-MM-DD format)')
+  .option('--today', 'Show only today\'s data')
   .option('--visual', 'Enhanced visual dashboard with charts and graphs')
   .action(async (options) => {
     const { NCPLogParser } = await import('../analytics/log-parser.js');
@@ -1057,11 +1060,24 @@ analyticsCmd
     console.log(chalk.dim('📊 Analyzing NCP usage data...'));
 
     const parser = new NCPLogParser();
-    const report = await parser.parseAllLogs();
+
+    // Parse time range options
+    const parseOptions: any = {};
+
+    if (options.today) {
+      parseOptions.today = true;
+    } else if (options.period) {
+      parseOptions.period = parseInt(options.period);
+    } else if (options.from || options.to) {
+      if (options.from) parseOptions.from = new Date(options.from);
+      if (options.to) parseOptions.to = new Date(options.to);
+    }
+
+    const report = await parser.parseAllLogs(parseOptions);
 
     if (report.totalSessions === 0) {
-      console.log(chalk.yellow('📊 No analytics data available yet'));
-      console.log(chalk.dim('💡 Analytics data is automatically collected when MCPs are used through NCP'));
+      console.log(chalk.yellow('📊 No analytics data available for the specified time range'));
+      console.log(chalk.dim('💡 Try a different time range or check if MCPs have been used through NCP'));
       return;
     }
 
@@ -1079,6 +1095,10 @@ analyticsCmd
 analyticsCmd
   .command('performance')
   .description('Show performance-focused analytics')
+  .option('--period <days>', 'Show data for last N days (e.g., --period 7)')
+  .option('--from <date>', 'Start date (YYYY-MM-DD format)')
+  .option('--to <date>', 'End date (YYYY-MM-DD format)')
+  .option('--today', 'Show only today\'s data')
   .option('--visual', 'Enhanced visual performance report with gauges and charts')
   .action(async (options) => {
     const { NCPLogParser } = await import('../analytics/log-parser.js');
@@ -1086,10 +1106,22 @@ analyticsCmd
     console.log(chalk.dim('⚡ Analyzing performance metrics...'));
 
     const parser = new NCPLogParser();
-    const report = await parser.parseAllLogs();
+
+    // Parse time range options
+    const parseOptions: any = {};
+    if (options.today) {
+      parseOptions.today = true;
+    } else if (options.period) {
+      parseOptions.period = parseInt(options.period);
+    } else if (options.from || options.to) {
+      if (options.from) parseOptions.from = new Date(options.from);
+      if (options.to) parseOptions.to = new Date(options.to);
+    }
+
+    const report = await parser.parseAllLogs(parseOptions);
 
     if (report.totalSessions === 0) {
-      console.log(chalk.yellow('📊 No performance data available yet'));
+      console.log(chalk.yellow('📊 No performance data available for the specified time range'));
       return;
     }
 
@@ -1107,18 +1139,34 @@ analyticsCmd
 analyticsCmd
   .command('visual')
   .description('Show enhanced visual analytics with charts and graphs')
-  .action(async () => {
+  .option('--period <days>', 'Show data for last N days (e.g., --period 7)')
+  .option('--from <date>', 'Start date (YYYY-MM-DD format)')
+  .option('--to <date>', 'End date (YYYY-MM-DD format)')
+  .option('--today', 'Show only today\'s data')
+  .action(async (options) => {
     const { NCPLogParser } = await import('../analytics/log-parser.js');
     const { VisualAnalyticsFormatter } = await import('../analytics/visual-formatter.js');
 
     console.log(chalk.dim('🎨 Generating visual analytics...'));
 
     const parser = new NCPLogParser();
-    const report = await parser.parseAllLogs();
+
+    // Parse time range options
+    const parseOptions: any = {};
+    if (options.today) {
+      parseOptions.today = true;
+    } else if (options.period) {
+      parseOptions.period = parseInt(options.period);
+    } else if (options.from || options.to) {
+      if (options.from) parseOptions.from = new Date(options.from);
+      if (options.to) parseOptions.to = new Date(options.to);
+    }
+
+    const report = await parser.parseAllLogs(parseOptions);
 
     if (report.totalSessions === 0) {
-      console.log(chalk.yellow('📊 No analytics data available yet'));
-      console.log(chalk.dim('💡 Analytics data is automatically collected when MCPs are used through NCP'));
+      console.log(chalk.yellow('📊 No analytics data available for the specified time range'));
+      console.log(chalk.dim('💡 Try a different time range or check if MCPs have been used through NCP'));
       return;
     }
 
@@ -1130,6 +1178,10 @@ analyticsCmd
   .command('export')
   .description('Export analytics data to CSV')
   .option('--output <file>', 'Output file (default: ncp-analytics.csv)')
+  .option('--period <days>', 'Export data for last N days (e.g., --period 7)')
+  .option('--from <date>', 'Start date (YYYY-MM-DD format)')
+  .option('--to <date>', 'End date (YYYY-MM-DD format)')
+  .option('--today', 'Export only today\'s data')
   .action(async (options) => {
     const { NCPLogParser } = await import('../analytics/log-parser.js');
     const { AnalyticsFormatter } = await import('../analytics/analytics-formatter.js');
@@ -1138,10 +1190,22 @@ analyticsCmd
     console.log(chalk.dim('📊 Generating analytics export...'));
 
     const parser = new NCPLogParser();
-    const report = await parser.parseAllLogs();
+
+    // Parse time range options
+    const parseOptions: any = {};
+    if (options.today) {
+      parseOptions.today = true;
+    } else if (options.period) {
+      parseOptions.period = parseInt(options.period);
+    } else if (options.from || options.to) {
+      if (options.from) parseOptions.from = new Date(options.from);
+      if (options.to) parseOptions.to = new Date(options.to);
+    }
+
+    const report = await parser.parseAllLogs(parseOptions);
 
     if (report.totalSessions === 0) {
-      console.log(chalk.yellow('📊 No data to export'));
+      console.log(chalk.yellow('📊 No data to export for the specified time range'));
       return;
     }
 

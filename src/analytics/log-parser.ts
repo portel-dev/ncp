@@ -165,8 +165,14 @@ export class NCPLogParser {
 
   /**
    * Parse all log files and generate analytics report
+   * @param options - Filter options for time range
    */
-  async parseAllLogs(): Promise<AnalyticsReport> {
+  async parseAllLogs(options?: {
+    from?: Date;
+    to?: Date;
+    period?: number; // days
+    today?: boolean;
+  }): Promise<AnalyticsReport> {
     const sessions: MCPSession[] = [];
 
     try {
@@ -176,9 +182,62 @@ export class NCPLogParser {
 
       console.log(`📊 Parsing ${logFiles.length} log files...`);
 
+      // Calculate date range
+      let fromDate: Date | undefined;
+      let toDate: Date | undefined;
+
+      if (options?.today) {
+        // Today only
+        fromDate = new Date();
+        fromDate.setHours(0, 0, 0, 0);
+        toDate = new Date();
+        toDate.setHours(23, 59, 59, 999);
+      } else if (options?.period) {
+        // Last N days
+        toDate = new Date();
+        fromDate = new Date();
+        fromDate.setDate(fromDate.getDate() - options.period);
+        fromDate.setHours(0, 0, 0, 0);
+      } else if (options?.from || options?.to) {
+        // Custom range
+        fromDate = options.from;
+        toDate = options.to || new Date();
+
+        // If toDate is provided, set to end of that day
+        if (options?.to) {
+          toDate = new Date(options.to);
+          toDate.setHours(23, 59, 59, 999);
+        }
+
+        // If fromDate is provided, set to start of that day
+        if (options?.from) {
+          fromDate = new Date(options.from);
+          fromDate.setHours(0, 0, 0, 0);
+        }
+      }
+
       for (const logFile of logFiles) {
         const fileSessions = this.parseLogFile(logFile);
-        sessions.push(...fileSessions);
+
+        // Filter sessions by date range if specified
+        const filteredSessions = fromDate || toDate
+          ? fileSessions.filter(session => {
+              if (fromDate && session.startTime < fromDate) return false;
+              if (toDate && session.startTime > toDate) return false;
+              return true;
+            })
+          : fileSessions;
+
+        sessions.push(...filteredSessions);
+      }
+
+      if (fromDate || toDate) {
+        const rangeDesc = options?.today
+          ? 'today'
+          : options?.period
+          ? `last ${options.period} days`
+          : `${fromDate?.toLocaleDateString() || 'start'} to ${toDate?.toLocaleDateString() || 'now'}`;
+        console.log(`📅 Filtering for ${rangeDesc}: ${sessions.length} sessions`);
       }
 
       return this.generateReport(sessions);
