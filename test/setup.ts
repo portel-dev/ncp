@@ -30,3 +30,17 @@ afterEach(() => {
     }
   }
 });
+
+// Global cleanup after all tests
+afterAll(async () => {
+  // Clear all timers
+  jest.clearAllTimers();
+
+  // Force garbage collection if available
+  if (global.gc) {
+    global.gc();
+  }
+
+  // Give a small delay for cleanup
+  await new Promise(resolve => setTimeout(resolve, 100));
+});
