@@ -21,6 +21,10 @@ jest.config.js
 *.temp.md
 CONTRIBUTING.md
 CHANGELOG.md
+CODE_OF_CONDUCT.md
+HOW-IT-WORKS.md
+SECURITY.md
+.dockerignore
 
 # Local files
 .ncp/
