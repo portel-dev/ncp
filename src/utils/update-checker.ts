@@ -37,7 +37,7 @@ export class UpdateChecker {
     } catch {
       // Fallback for installed package
       this.packageName = '@portel/ncp';
-      this.packageVersion = '1.2.1'; // Will be replaced in build
+      this.packageVersion = '1.3.0'; // Will be replaced in build
     }
 
     // Cache file location
