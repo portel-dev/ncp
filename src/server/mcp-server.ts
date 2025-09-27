@@ -5,7 +5,6 @@
 
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
 import { logger } from '../utils/logger.js';
-import { updater } from '../utils/updater.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import { ToolFinder } from '../services/tool-finder.js';
@@ -43,6 +42,9 @@ interface MCPTool {
 
 export class MCPServer {
   private orchestrator: NCPOrchestrator;
+  private initializationPromise: Promise<void> | null = null;
+  private isInitialized: boolean = false;
+  private initializationProgress: { current: number; total: number; currentMCP: string } | null = null;
 
   constructor(profileName: string = 'default', showProgress: boolean = false) {
     // Profile-aware orchestrator using real MCP connections
@@ -51,8 +53,20 @@ export class MCPServer {
 
   async initialize(): Promise<void> {
     logger.info('Starting NCP MCP server');
-    await this.orchestrator.initialize();
-    logger.info('NCP MCP server ready');
+
+    // Start initialization in the background, don't await it
+    this.initializationPromise = this.orchestrator.initialize().then(() => {
+      this.isInitialized = true;
+      this.initializationProgress = null;
+      logger.info('NCP MCP server indexing complete');
+    }).catch((error) => {
+      logger.error('Failed to initialize orchestrator:', error);
+      this.isInitialized = true; // Mark as initialized even on error to unblock
+      this.initializationProgress = null;
+    });
+
+    // Don't wait for indexing to complete - return immediately
+    logger.info('NCP MCP server ready (indexing in background)');
   }
 
   async handleRequest(request: any): Promise<MCPResponse | undefined> {
@@ -138,7 +152,8 @@ export class MCPServer {
   }
 
   private async handleListTools(request: MCPRequest): Promise<MCPResponse> {
-    // NCP core 2-method architecture
+    // Always return tools immediately, even if indexing is in progress
+    // This prevents MCP connection failures during startup
     const tools: MCPTool[] = [
       {
         name: 'find',
@@ -253,6 +268,40 @@ export class MCPServer {
   }
 
   public async handleFind(request: MCPRequest, args: any): Promise<MCPResponse> {
+    // Check if indexing is still in progress
+    if (!this.isInitialized && this.initializationPromise) {
+      // Get indexing progress from orchestrator
+      const progress = this.orchestrator.getIndexingProgress();
+
+      if (progress && progress.total > 0) {
+        const percentComplete = Math.round((progress.current / progress.total) * 100);
+        const remainingTime = progress.estimatedTimeRemaining ?
+          ` (~${Math.ceil(progress.estimatedTimeRemaining / 1000)}s remaining)` : '';
+
+        const progressMessage = `⏳ **Indexing in progress**: ${progress.current}/${progress.total} MCPs (${percentComplete}%)${remainingTime}\n` +
+          `Currently indexing: ${progress.currentMCP || 'initializing...'}\n\n` +
+          `Tools will be available as indexing completes. Please try again in a moment.`;
+
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            content: [{ type: 'text', text: progressMessage }]
+          }
+        };
+      }
+
+      // Wait briefly for initialization to complete (max 2 seconds)
+      try {
+        await Promise.race([
+          this.initializationPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+        ]);
+      } catch {
+        // Continue even if timeout - show what's available so far
+      }
+    }
+
     const description = args?.description || '';
     const page = Math.max(1, args?.page || 1);
     const limit = args?.limit || (description ? 5 : 20);
@@ -548,6 +597,39 @@ export class MCPServer {
   }
 
   private async handleRun(request: MCPRequest, args: any): Promise<MCPResponse> {
+    // Check if indexing is still in progress
+    if (!this.isInitialized && this.initializationPromise) {
+      const progress = this.orchestrator.getIndexingProgress();
+
+      if (progress && progress.total > 0) {
+        const percentComplete = Math.round((progress.current / progress.total) * 100);
+        const remainingTime = progress.estimatedTimeRemaining ?
+          ` (~${Math.ceil(progress.estimatedTimeRemaining / 1000)}s remaining)` : '';
+
+        const progressMessage = `⏳ **Indexing in progress**: ${progress.current}/${progress.total} MCPs (${percentComplete}%)${remainingTime}\n` +
+          `Currently indexing: ${progress.currentMCP || 'initializing...'}\n\n` +
+          `Tool execution will be available once indexing completes. Please try again in a moment.`;
+
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            content: [{ type: 'text', text: progressMessage }]
+          }
+        };
+      }
+
+      // Wait briefly for initialization to complete (max 2 seconds)
+      try {
+        await Promise.race([
+          this.initializationPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+        ]);
+      } catch {
+        // Continue even if timeout - try to execute with what's available
+      }
+    }
+
     if (!args?.tool) {
       return {
         jsonrpc: '2.0',

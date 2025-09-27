@@ -23,9 +23,11 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
+    "test:critical": "jest test/mcp-server-protocol.test.ts test/mcp-timeout-scenarios.test.ts --verbose",
+    "test:pre-publish": "npm run test:critical && npm run test",
     "test:package": "node scripts/test-package-locally.cjs",
-    "prepack": "npm run build",
-    "prepublishOnly": "npm run build",
+    "prepack": "npm run build && npm run test:pre-publish",
+    "prepublishOnly": "npm run build && npm run test:pre-publish",
     "release": "release-it",
     "release:dry": "release-it --dry-run"
   },

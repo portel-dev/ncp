@@ -22,7 +22,6 @@
     "node_modules",
     "dist",
     "test",
-    "src/testing/**/*",
-    "src/smithery-standalone.ts"
+    "src/testing/**/*"
   ]
 }
