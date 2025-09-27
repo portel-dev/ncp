@@ -46,6 +46,10 @@ SECURITY.md
 *.ts
 !*.d.ts
 
+# Source maps and declaration maps (not needed by end users)
+*.js.map
+*.d.ts.map
+
 # Build configuration
 webpack.config.js
 rollup.config.js
