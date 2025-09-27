@@ -31,7 +31,8 @@ export default {
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
     '@xenova/transformers': '<rootDir>/test/__mocks__/transformers.js',
-    '^chalk$': '<rootDir>/test/__mocks__/chalk.js'
+    '^chalk$': '<rootDir>/test/__mocks__/chalk.js',
+    '../utils/updater.js': '<rootDir>/test/__mocks__/updater.js'
   },
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
   testTimeout: 15000,

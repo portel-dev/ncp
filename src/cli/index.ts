@@ -1280,7 +1280,7 @@ program
     const profileName = program.getOptionValue('profile') || 'all';
 
     const { NCPOrchestrator } = await import('../orchestrator/ncp-orchestrator.js');
-    const orchestrator = new NCPOrchestrator(profileName);
+    const orchestrator = new NCPOrchestrator(profileName, true); // Enable progress for CLI
 
     await orchestrator.initialize();
 

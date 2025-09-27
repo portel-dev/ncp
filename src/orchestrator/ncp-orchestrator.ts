@@ -97,6 +97,8 @@ export class NCPOrchestrator {
   private healthMonitor: MCPHealthMonitor;
   private cachePatcher: CachePatcher;
   private showProgress: boolean;
+  private indexingProgress: { current: number; total: number; currentMCP: string; estimatedTimeRemaining?: number } | null = null;
+  private indexingStartTime: number = 0;
 
   constructor(profileName: string = 'default', showProgress: boolean = false) {
     this.profileName = profileName;
@@ -126,11 +128,13 @@ export class NCPOrchestrator {
 
   async initialize(): Promise<void> {
     const startTime = Date.now();
+    this.indexingStartTime = startTime;
     logger.info(`Initializing NCP orchestrator with profile: ${this.profileName}`);
 
     const profile = await this.loadProfile();
     if (!profile) {
       logger.error('Failed to load profile');
+      this.indexingProgress = null;
       return;
     }
 
@@ -144,18 +148,24 @@ export class NCPOrchestrator {
       // No cache or cache invalid - discover tools from MCPs
       logger.info('Cache invalid or missing, discovering tools...');
 
-      if (this.showProgress) {
-        const mcpCount = Object.keys(profile.mcpServers).length;
-        spinner.start(`Indexing tools for the first time (${mcpCount} MCPs)`);
-        spinner.updateSubMessage('Initializing discovery engine...');
-      }
-
       const mcpConfigs: MCPConfig[] = Object.entries(profile.mcpServers).map(([name, config]) => ({
         name,
         command: config.command,
         args: config.args,
         env: config.env || {}
       }));
+
+      // Initialize progress tracking
+      this.indexingProgress = {
+        current: 0,
+        total: mcpConfigs.length,
+        currentMCP: 'initializing...'
+      };
+
+      if (this.showProgress) {
+        spinner.start(`Indexing tools for the first time (${mcpConfigs.length} MCPs)`);
+        spinner.updateSubMessage('Initializing discovery engine...');
+      }
 
       await this.discoverMCPTools(mcpConfigs);
 
@@ -171,6 +181,9 @@ export class NCPOrchestrator {
         spinner.success(`Indexed ${this.allTools.length} tools from ${this.definitions.size} MCPs`);
       }
     }
+
+    // Clear progress tracking once complete
+    this.indexingProgress = null;
 
     // Start cleanup timer for idle connections
     this.cleanupTimer = setInterval(
@@ -190,9 +203,30 @@ export class NCPOrchestrator {
       try {
         logger.info(`Discovering tools from MCP: ${config.name}`);
 
+        // Update indexing progress
+        if (this.indexingProgress) {
+          this.indexingProgress.current = i + 1;
+          this.indexingProgress.currentMCP = config.name;
+
+          // Estimate remaining time based on average time per MCP so far
+          const elapsedTime = Date.now() - this.indexingStartTime;
+          const averageTimePerMCP = elapsedTime / (i + 1);
+          const remainingMCPs = mcpConfigs.length - (i + 1);
+          this.indexingProgress.estimatedTimeRemaining = remainingMCPs * averageTimePerMCP;
+        }
+
         if (this.showProgress) {
           const progress = `${i + 1}/${mcpConfigs.length}`;
-          spinner.updateMessage(`Indexing tools for the first time (${progress})`);
+          const percentage = Math.round(((i + 1) / mcpConfigs.length) * 100);
+
+          // Add time estimate to match MCP interface
+          let timeDisplay = '';
+          if (this.indexingProgress?.estimatedTimeRemaining) {
+            const remainingSeconds = Math.ceil(this.indexingProgress.estimatedTimeRemaining / 1000);
+            timeDisplay = ` (~${remainingSeconds}s remaining)`;
+          }
+
+          spinner.updateMessage(`Indexing tools for the first time (${progress}) ${percentage}%${timeDisplay}`);
           spinner.updateSubMessage(`Connecting to ${config.name}...`);
         }
 
@@ -238,7 +272,13 @@ export class NCPOrchestrator {
         }
 
         if (this.showProgress) {
-          spinner.updateSubMessage(`Indexing ${result.tools.length} tools from ${config.name}...`);
+          // Add time estimate to indexing sub-message for parity
+          let timeDisplay = '';
+          if (this.indexingProgress?.estimatedTimeRemaining) {
+            const remainingSeconds = Math.ceil(this.indexingProgress.estimatedTimeRemaining / 1000);
+            timeDisplay = ` (~${remainingSeconds}s remaining)`;
+          }
+          spinner.updateSubMessage(`Indexing ${result.tools.length} tools from ${config.name}...${timeDisplay}`);
         }
 
         // Index tools with discovery engine for vector search
@@ -959,6 +999,13 @@ export class NCPOrchestrator {
     }
 
     return hashes;
+  }
+
+  /**
+   * Get current indexing progress
+   */
+  getIndexingProgress(): { current: number; total: number; currentMCP: string; estimatedTimeRemaining?: number } | null {
+    return this.indexingProgress;
   }
 
   /**

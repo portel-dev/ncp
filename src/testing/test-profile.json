@@ -1,0 +1,20 @@
+{
+  "name": "test",
+  "description": "Minimal test profile for fast testing",
+  "mcpServers": {
+    "test-filesystem": {
+      "command": "node",
+      "args": ["test/mock-mcps/filesystem-server.js"],
+      "env": {}
+    },
+    "test-github": {
+      "command": "node",
+      "args": ["test/mock-mcps/github-server.js"],
+      "env": {}
+    }
+  },
+  "metadata": {
+    "createdAt": "2024-09-27T00:00:00.000Z",
+    "updatedAt": "2024-09-27T00:00:00.000Z"
+  }
+}
