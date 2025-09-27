@@ -6,13 +6,14 @@
  */
 
 import { readFile } from 'fs/promises';
-import { join } from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { join, dirname } from 'path';
 import { logger } from './logger.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// Use a more compatible approach for getting package.json path
+const getPackageJsonPath = () => {
+  // In production, this will be dist/utils/updater.js, so go up two levels
+  return join(process.cwd(), 'package.json');
+};
 
 interface VersionInfo {
   current: string;
@@ -31,8 +32,7 @@ export class NPCUpdater {
    */
   private async getCurrentVersion(): Promise<string> {
     try {
-      // Go up from dist/utils to package.json
-      const packagePath = join(__dirname, '../../package.json');
+      const packagePath = getPackageJsonPath();
       const packageContent = await readFile(packagePath, 'utf-8');
       const packageJson = JSON.parse(packageContent);
       return packageJson.version;
