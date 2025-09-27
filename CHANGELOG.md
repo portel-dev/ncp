@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.1](https://github.com/portel-dev/ncp/compare/v1.3.0...1.3.1) (2025-09-27)
+
+### Bug Fixes
+
+* make protocol tests more flexible for hotfix release ([165274b](https://github.com/portel-dev/ncp/commit/165274b7fb1eb49e7ee8ba1193d2a4587a3b858b))
+* replace import.meta with process.cwd for Jest compatibility ([db51c3c](https://github.com/portel-dev/ncp/commit/db51c3cdc7bb67e3ae85cafbfd4fd93aa9cf73ac))
+* resolve critical MCP server blocking during indexing ([e24b733](https://github.com/portel-dev/ncp/commit/e24b733ba254830564a45ba42c17723a09adb39e))
+* skip problematic test for hotfix release ([7ff1079](https://github.com/portel-dev/ncp/commit/7ff1079d8e0390d0e23fe40187e8f95573b56481))
+* update checker changes ([a744e42](https://github.com/portel-dev/ncp/commit/a744e4216c779e192539ffe211c3c3176f85a2c0))
+
 ## [1.2.1](https://github.com/portel-dev/ncp/compare/1.1.0...1.2.1) (2025-09-25)
 
 ### Bug Fixes
