@@ -115,11 +115,6 @@ export class MCPServer {
         case 'resources/read':
           return this.handleReadResource(request);
 
-        case 'resources/subscribe':
-          return this.handleSubscribeResource(request);
-
-        case 'resources/unsubscribe':
-          return this.handleUnsubscribeResource(request);
 
         default:
           return {
@@ -153,13 +148,8 @@ export class MCPServer {
         protocolVersion: '2024-11-05',
         capabilities: {
           tools: {},
-          resources: {
-            subscribe: true,
-            listChanged: true
-          },
-          prompts: {
-            listChanged: true
-          }
+          resources: {},
+          prompts: {}
         },
         serverInfo: {
           name: 'ncp',
@@ -902,81 +892,6 @@ export class MCPServer {
     }
   }
 
-  /**
-   * Handle resources/subscribe request - subscribe to resource changes
-   */
-  private async handleSubscribeResource(request: MCPRequest): Promise<MCPResponse> {
-    try {
-      if (!request.params?.uri) {
-        return {
-          jsonrpc: '2.0',
-          id: request.id,
-          error: {
-            code: -32602,
-            message: 'Missing required parameter: uri'
-          }
-        };
-      }
-
-      const resourceUri = request.params.uri;
-      await this.orchestrator.subscribeToResource(resourceUri);
-
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {}
-      };
-    } catch (error: any) {
-      logger.error(`Error subscribing to resource: ${error.message}`);
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32603,
-          message: 'Internal error subscribing to resource',
-          data: error.message
-        }
-      };
-    }
-  }
-
-  /**
-   * Handle resources/unsubscribe request - unsubscribe from resource changes
-   */
-  private async handleUnsubscribeResource(request: MCPRequest): Promise<MCPResponse> {
-    try {
-      if (!request.params?.uri) {
-        return {
-          jsonrpc: '2.0',
-          id: request.id,
-          error: {
-            code: -32602,
-            message: 'Missing required parameter: uri'
-          }
-        };
-      }
-
-      const resourceUri = request.params.uri;
-      await this.orchestrator.unsubscribeFromResource(resourceUri);
-
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {}
-      };
-    } catch (error: any) {
-      logger.error(`Error unsubscribing from resource: ${error.message}`);
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32603,
-          message: 'Internal error unsubscribing from resource',
-          data: error.message
-        }
-      };
-    }
-  }
 }
 
 export class ParameterPredictor {
