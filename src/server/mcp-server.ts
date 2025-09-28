@@ -106,8 +106,20 @@ export class MCPServer {
         case 'prompts/list':
           return this.handleListPrompts(request);
 
+        case 'prompts/get':
+          return this.handleGetPrompt(request);
+
         case 'resources/list':
           return this.handleListResources(request);
+
+        case 'resources/read':
+          return this.handleReadResource(request);
+
+        case 'resources/subscribe':
+          return this.handleSubscribeResource(request);
+
+        case 'resources/unsubscribe':
+          return this.handleUnsubscribeResource(request);
 
         default:
           return {
@@ -140,7 +152,14 @@ export class MCPServer {
       result: {
         protocolVersion: '2024-11-05',
         capabilities: {
-          tools: {}
+          tools: {},
+          resources: {
+            subscribe: true,
+            listChanged: true
+          },
+          prompts: {
+            listChanged: true
+          }
         },
         serverInfo: {
           name: 'ncp',
@@ -781,6 +800,182 @@ export class MCPServer {
     process.stdin.on('end', () => {
       this.shutdown();
     });
+  }
+
+  /**
+   * Handle prompts/get request - get a specific prompt by name
+   */
+  private async handleGetPrompt(request: MCPRequest): Promise<MCPResponse> {
+    try {
+      if (!request.params?.name) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32602,
+            message: 'Missing required parameter: name'
+          }
+        };
+      }
+
+      const promptName = request.params.name;
+      const prompt = await this.orchestrator.getPrompt(promptName, request.params.arguments);
+
+      if (!prompt) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32603,
+            message: `Prompt not found: ${promptName}`
+          }
+        };
+      }
+
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: prompt
+      };
+    } catch (error: any) {
+      logger.error(`Error getting prompt: ${error.message}`);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32603,
+          message: 'Internal error getting prompt',
+          data: error.message
+        }
+      };
+    }
+  }
+
+  /**
+   * Handle resources/read request - read a specific resource by URI
+   */
+  private async handleReadResource(request: MCPRequest): Promise<MCPResponse> {
+    try {
+      if (!request.params?.uri) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32602,
+            message: 'Missing required parameter: uri'
+          }
+        };
+      }
+
+      const resourceUri = request.params.uri;
+      const resource = await this.orchestrator.readResource(resourceUri);
+
+      if (!resource) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32603,
+            message: `Resource not found: ${resourceUri}`
+          }
+        };
+      }
+
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          contents: resource.contents || []
+        }
+      };
+    } catch (error: any) {
+      logger.error(`Error reading resource: ${error.message}`);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32603,
+          message: 'Internal error reading resource',
+          data: error.message
+        }
+      };
+    }
+  }
+
+  /**
+   * Handle resources/subscribe request - subscribe to resource changes
+   */
+  private async handleSubscribeResource(request: MCPRequest): Promise<MCPResponse> {
+    try {
+      if (!request.params?.uri) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32602,
+            message: 'Missing required parameter: uri'
+          }
+        };
+      }
+
+      const resourceUri = request.params.uri;
+      await this.orchestrator.subscribeToResource(resourceUri);
+
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {}
+      };
+    } catch (error: any) {
+      logger.error(`Error subscribing to resource: ${error.message}`);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32603,
+          message: 'Internal error subscribing to resource',
+          data: error.message
+        }
+      };
+    }
+  }
+
+  /**
+   * Handle resources/unsubscribe request - unsubscribe from resource changes
+   */
+  private async handleUnsubscribeResource(request: MCPRequest): Promise<MCPResponse> {
+    try {
+      if (!request.params?.uri) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32602,
+            message: 'Missing required parameter: uri'
+          }
+        };
+      }
+
+      const resourceUri = request.params.uri;
+      await this.orchestrator.unsubscribeFromResource(resourceUri);
+
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {}
+      };
+    } catch (error: any) {
+      logger.error(`Error unsubscribing from resource: ${error.message}`);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32603,
+          message: 'Internal error unsubscribing from resource',
+          data: error.message
+        }
+      };
+    }
   }
 }
 

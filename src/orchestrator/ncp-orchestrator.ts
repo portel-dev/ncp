@@ -20,6 +20,7 @@ import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import { compareTwoStrings } from 'string-similarity';
 import { CachePatcher } from '../cache/cache-patcher.js';
 import { spinner } from '../utils/progress-spinner.js';
+import { InternalNCPMCPServer } from '../server/internal-ncp-mcp.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -99,6 +100,7 @@ export class NCPOrchestrator {
   private showProgress: boolean;
   private indexingProgress: { current: number; total: number; currentMCP: string; estimatedTimeRemaining?: number } | null = null;
   private indexingStartTime: number = 0;
+  private internalMCP: InternalNCPMCPServer;
 
   constructor(profileName: string = 'default', showProgress: boolean = false) {
     this.profileName = profileName;
@@ -106,6 +108,7 @@ export class NCPOrchestrator {
     this.healthMonitor = new MCPHealthMonitor();
     this.cachePatcher = new CachePatcher();
     this.showProgress = showProgress;
+    this.internalMCP = new InternalNCPMCPServer();
   }
 
   private async loadProfile(): Promise<Profile | null> {
@@ -126,6 +129,62 @@ export class NCPOrchestrator {
     }
   }
 
+  /**
+   * Register internal NCP MCP tools (always available)
+   */
+  private async registerInternalMCP(): Promise<void> {
+    try {
+      logger.info('[NCPOrchestrator] Registering internal NCP MCP tools...');
+
+      // Get internal MCP tools
+      const internalTools = this.internalMCP.getTools();
+
+      // Create internal MCP definition
+      const internalMCPDefinition: MCPDefinition = {
+        name: 'ncp-internal',
+        config: {
+          name: 'ncp-internal',
+          command: 'internal', // Special marker for internal MCP
+          args: [],
+          env: {}
+        },
+        tools: internalTools.map(tool => ({
+          name: tool.name,
+          description: tool.description
+        })),
+        serverInfo: {
+          name: 'ncp-internal',
+          title: 'NCP Internal Analytics',
+          version: '1.0.0',
+          description: 'Internal NCP analytics and management tools'
+        }
+      };
+
+      // Register the internal MCP
+      this.definitions.set('ncp-internal', internalMCPDefinition);
+
+      // Add tools to allTools array for discovery
+      for (const tool of internalTools) {
+        this.allTools.push({
+          name: tool.name,
+          description: tool.description,
+          mcpName: 'ncp-internal'
+        });
+
+        // Map tool name to MCP for quick lookup
+        this.toolToMCP.set(tool.name, 'ncp-internal');
+      }
+
+      // Index tools in discovery engine
+      await this.discovery.indexMCPTools('ncp-internal', internalTools);
+
+      logger.info(`[NCPOrchestrator] Registered ${internalTools.length} internal NCP tools`);
+
+    } catch (error) {
+      logger.error(`[NCPOrchestrator] Failed to register internal MCP: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   async initialize(): Promise<void> {
     const startTime = Date.now();
     this.indexingStartTime = startTime;
@@ -140,6 +199,9 @@ export class NCPOrchestrator {
 
     // Initialize discovery engine first
     await this.discovery.initialize();
+
+    // Register internal NCP MCP tools (always available)
+    await this.registerInternalMCP();
 
     // Use new optimized cache loading with profile hash validation
     const cacheLoaded = await this.loadFromOptimizedCache(profile);
@@ -476,6 +538,11 @@ export class NCPOrchestrator {
   }
 
   async run(toolName: string, parameters: any): Promise<ExecutionResult> {
+    // Check if it's an internal NCP tool
+    if (toolName.startsWith('ncp:')) {
+      return await this.executeInternalTool(toolName, parameters);
+    }
+
     // Parse tool format: "mcp:tool" or just "tool"
     let mcpName: string;
     let actualToolName: string;
@@ -550,6 +617,44 @@ export class NCPOrchestrator {
       return {
         success: false,
         error: this.enhanceErrorMessage(error, actualToolName, mcpName)
+      };
+    }
+  }
+
+  /**
+   * Execute internal NCP tool
+   */
+  private async executeInternalTool(toolName: string, parameters: any): Promise<ExecutionResult> {
+    try {
+      // Create a mock MCP request for the internal server
+      const internalRequest = {
+        jsonrpc: '2.0',
+        id: 'internal-execution',
+        method: 'tools/call',
+        params: {
+          name: toolName,
+          arguments: parameters
+        }
+      };
+
+      const response = await this.internalMCP.handleRequest(internalRequest);
+
+      if (response.error) {
+        return {
+          success: false,
+          error: response.error.message
+        };
+      }
+
+      return {
+        success: true,
+        content: response.result?.content?.[0]?.text || 'Internal tool executed successfully'
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: `Internal tool execution failed: ${error instanceof Error ? error.message : String(error)}`
       };
     }
   }
@@ -1220,6 +1325,183 @@ export class NCPOrchestrator {
   }
 
   /**
+   * Get a specific prompt from an MCP with prefixed name parsing
+   */
+  async getPrompt(name: string, args?: any): Promise<any> {
+    // Parse prefixed name: "mcp:prompt" format
+    let mcpName: string;
+    let promptName: string;
+
+    if (name.includes(':')) {
+      [mcpName, promptName] = name.split(':', 2);
+    } else {
+      throw new Error(`Prompt name must be prefixed with MCP name: ${name}`);
+    }
+
+    if (!mcpName || !promptName) {
+      throw new Error(`Invalid prompt name format: ${name}. Expected format: mcp:prompt`);
+    }
+
+    try {
+      // Get or create pooled connection
+      const connection = await this.getOrCreateConnection(mcpName);
+
+      // Call getPrompt on the MCP
+      const result = await withFilteredOutput(async () => {
+        return await connection.client.getPrompt({
+          name: promptName,
+          arguments: args || {}
+        });
+      });
+
+      // Mark MCP as healthy on successful execution
+      this.healthMonitor.markHealthy(mcpName);
+
+      return result;
+
+    } catch (error: any) {
+      logger.error(`Prompt retrieval failed for ${name}:`, error);
+
+      // Mark MCP as unhealthy on failure
+      this.healthMonitor.markUnhealthy(mcpName, error.message);
+
+      throw new Error(`Failed to get prompt '${promptName}' from MCP '${mcpName}': ${error.message}`);
+    }
+  }
+
+  /**
+   * Read a specific resource from an MCP with prefixed URI parsing
+   */
+  async readResource(uri: string): Promise<any> {
+    // Parse prefixed URI: "mcp:resource" format
+    let mcpName: string;
+    let resourceUri: string;
+
+    if (uri.includes(':')) {
+      [mcpName, resourceUri] = uri.split(':', 2);
+    } else {
+      throw new Error(`Resource URI must be prefixed with MCP name: ${uri}`);
+    }
+
+    if (!mcpName || !resourceUri) {
+      throw new Error(`Invalid resource URI format: ${uri}. Expected format: mcp:resource`);
+    }
+
+    try {
+      // Get or create pooled connection
+      const connection = await this.getOrCreateConnection(mcpName);
+
+      // Call readResource on the MCP
+      const result = await withFilteredOutput(async () => {
+        return await connection.client.readResource({
+          uri: resourceUri
+        });
+      });
+
+      // Mark MCP as healthy on successful execution
+      this.healthMonitor.markHealthy(mcpName);
+
+      return result;
+
+    } catch (error: any) {
+      logger.error(`Resource read failed for ${uri}:`, error);
+
+      // Mark MCP as unhealthy on failure
+      this.healthMonitor.markUnhealthy(mcpName, error.message);
+
+      throw new Error(`Failed to read resource '${resourceUri}' from MCP '${mcpName}': ${error.message}`);
+    }
+  }
+
+  /**
+   * Subscribe to resource updates from an MCP with prefixed URI parsing
+   */
+  async subscribeToResource(uri: string): Promise<any> {
+    // Parse prefixed URI: "mcp:resource" format
+    let mcpName: string;
+    let resourceUri: string;
+
+    if (uri.includes(':')) {
+      [mcpName, resourceUri] = uri.split(':', 2);
+    } else {
+      throw new Error(`Resource URI must be prefixed with MCP name: ${uri}`);
+    }
+
+    if (!mcpName || !resourceUri) {
+      throw new Error(`Invalid resource URI format: ${uri}. Expected format: mcp:resource`);
+    }
+
+    try {
+      // Get or create pooled connection
+      const connection = await this.getOrCreateConnection(mcpName);
+
+      // Call subscribeResource on the MCP
+      const result = await withFilteredOutput(async () => {
+        return await connection.client.subscribeResource({
+          uri: resourceUri
+        });
+      });
+
+      // Mark MCP as healthy on successful execution
+      this.healthMonitor.markHealthy(mcpName);
+
+      return result;
+
+    } catch (error: any) {
+      logger.error(`Resource subscription failed for ${uri}:`, error);
+
+      // Mark MCP as unhealthy on failure
+      this.healthMonitor.markUnhealthy(mcpName, error.message);
+
+      throw new Error(`Failed to subscribe to resource '${resourceUri}' from MCP '${mcpName}': ${error.message}`);
+    }
+  }
+
+  /**
+   * Unsubscribe from resource updates from an MCP with prefixed URI parsing
+   */
+  async unsubscribeFromResource(uri: string): Promise<any> {
+    // Parse prefixed URI: "mcp:resource" format
+    let mcpName: string;
+    let resourceUri: string;
+
+    if (uri.includes(':')) {
+      [mcpName, resourceUri] = uri.split(':', 2);
+    } else {
+      throw new Error(`Resource URI must be prefixed with MCP name: ${uri}`);
+    }
+
+    if (!mcpName || !resourceUri) {
+      throw new Error(`Invalid resource URI format: ${uri}. Expected format: mcp:resource`);
+    }
+
+    try {
+      // Get or create pooled connection
+      const connection = await this.getOrCreateConnection(mcpName);
+
+      // Call unsubscribeResource on the MCP
+      const result = await withFilteredOutput(async () => {
+        return await connection.client.unsubscribeResource({
+          uri: resourceUri
+        });
+      });
+
+      // Mark MCP as healthy on successful execution
+      this.healthMonitor.markHealthy(mcpName);
+
+      return result;
+
+    } catch (error: any) {
+      logger.error(`Resource unsubscription failed for ${uri}:`, error);
+
+      // Mark MCP as unhealthy on failure
+      this.healthMonitor.markUnhealthy(mcpName, error.message);
+
+      throw new Error(`Failed to unsubscribe from resource '${resourceUri}' from MCP '${mcpName}': ${error.message}`);
+    }
+  }
+
+  /**
    * Clean up idle connections (like commercial version)
    */
   private async cleanupIdleConnections(): Promise<void> {
@@ -1256,6 +1538,8 @@ export class NCPOrchestrator {
       logger.error(`Error disconnecting ${mcpName}:`, error);
     }
   }
+
+
 
   async cleanup(): Promise<void> {
     logger.info('Shutting down NCP Orchestrator...');
