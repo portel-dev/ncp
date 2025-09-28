@@ -25,6 +25,7 @@ CODE_OF_CONDUCT.md
 HOW-IT-WORKS.md
 SECURITY.md
 .dockerignore
+CLAUDE.md
 
 # Local files
 .ncp/

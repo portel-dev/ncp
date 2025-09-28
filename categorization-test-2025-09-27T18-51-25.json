@@ -1,0 +1,55 @@
+{
+  "timestamp": "2025-09-27T18:51:25.741Z",
+  "categories": [
+    "development",
+    "communication",
+    "productivity",
+    "data",
+    "cloud",
+    "content",
+    "automation",
+    "security"
+  ],
+  "results": {
+    "development": {
+      "searchResults": 0,
+      "mcpScores": [],
+      "topMCPs": []
+    },
+    "communication": {
+      "searchResults": 0,
+      "mcpScores": [],
+      "topMCPs": []
+    },
+    "productivity": {
+      "searchResults": 0,
+      "mcpScores": [],
+      "topMCPs": []
+    },
+    "data": {
+      "searchResults": 0,
+      "mcpScores": [],
+      "topMCPs": []
+    },
+    "cloud": {
+      "searchResults": 0,
+      "mcpScores": [],
+      "topMCPs": []
+    },
+    "content": {
+      "searchResults": 0,
+      "mcpScores": [],
+      "topMCPs": []
+    },
+    "automation": {
+      "searchResults": 0,
+      "mcpScores": [],
+      "topMCPs": []
+    },
+    "security": {
+      "searchResults": 0,
+      "mcpScores": [],
+      "topMCPs": []
+    }
+  }
+}

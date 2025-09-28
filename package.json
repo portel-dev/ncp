@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0",
+    "@types/uuid": "^10.0.0",
     "@xenova/transformers": "^2.17.2",
     "asciichart": "^1.5.25",
     "blessed-contrib": "^4.11.0",
@@ -61,12 +62,14 @@
     "cli-highlight": "^2.1.11",
     "clipboardy": "^4.0.0",
     "commander": "^14.0.1",
+    "cron": "^4.3.3",
     "env-paths": "^3.0.0",
     "json-colorizer": "^3.0.1",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "prettyjson": "^1.2.5",
-    "string-similarity": "^4.0.4"
+    "string-similarity": "^4.0.4",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@agent-infra/mcp-server-browser": "^1.2.23",

@@ -102,13 +102,13 @@ export class NCPOrchestrator {
   private indexingStartTime: number = 0;
   private internalMCP: InternalNCPMCPServer;
 
-  constructor(profileName: string = 'default', showProgress: boolean = false) {
+  constructor(profileName: string = 'default', showProgress: boolean = false, notificationCallback?: (notification: any) => void) {
     this.profileName = profileName;
     this.discovery = new DiscoveryEngine();
     this.healthMonitor = new MCPHealthMonitor();
     this.cachePatcher = new CachePatcher();
     this.showProgress = showProgress;
-    this.internalMCP = new InternalNCPMCPServer();
+    this.internalMCP = new InternalNCPMCPServer(notificationCallback);
   }
 
   private async loadProfile(): Promise<Profile | null> {
@@ -539,7 +539,7 @@ export class NCPOrchestrator {
 
   async run(toolName: string, parameters: any): Promise<ExecutionResult> {
     // Check if it's an internal NCP tool
-    if (toolName.startsWith('ncp:')) {
+    if (toolName.startsWith('ncp_')) {
       return await this.executeInternalTool(toolName, parameters);
     }
 
@@ -648,7 +648,7 @@ export class NCPOrchestrator {
 
       return {
         success: true,
-        content: response.result?.content?.[0]?.text || 'Internal tool executed successfully'
+        content: response.result?.content || [{ type: 'text', text: 'Internal tool executed successfully' }]
       };
 
     } catch (error) {
@@ -1035,6 +1035,17 @@ export class NCPOrchestrator {
   }
 
   /**
+   * Get internal NCP MCP tools for direct exposure (used by MCPServer)
+   */
+  getInternalMCPTools(): Array<{ name: string; description: string; inputSchema: any }> {
+    return this.internalMCP.getTools().map(tool => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema
+    }));
+  }
+
+  /**
    * Validate tool parameters before execution
    */
   private validateToolParameters(mcpName: string, toolName: string, parameters: any): string | null {
@@ -1159,6 +1170,23 @@ export class NCPOrchestrator {
    */
   async getAllResources(): Promise<Array<any>> {
     const resources: Array<any> = [];
+
+    // Add internal NCP timer resources first
+    try {
+      const internalResources = this.internalMCP.getResources();
+      if (internalResources && Array.isArray(internalResources)) {
+        const enrichedInternalResources = internalResources.map(resource => ({
+          ...resource,
+          name: `ncp-internal:${resource.name}`, // Add internal prefix
+          _source: 'ncp-internal'
+        }));
+        resources.push(...enrichedInternalResources);
+      }
+    } catch (error) {
+      logger.warn(`Failed to get internal NCP resources: ${error}`);
+    }
+
+    // Add external MCP resources
     const allMCPs = Array.from(this.definitions.keys());
     const healthyMCPs = this.healthMonitor.getHealthyMCPs(allMCPs);
 

@@ -45,10 +45,55 @@ export class MCPServer {
   private initializationPromise: Promise<void> | null = null;
   private isInitialized: boolean = false;
   private initializationProgress: { current: number; total: number; currentMCP: string } | null = null;
+  private clientDisconnected: boolean = false;
 
   constructor(profileName: string = 'default', showProgress: boolean = false) {
     // Profile-aware orchestrator using real MCP connections
-    this.orchestrator = new NCPOrchestrator(profileName, showProgress);
+    // Pass notification callback to orchestrator
+    this.orchestrator = new NCPOrchestrator(profileName, showProgress, this.sendNotification.bind(this));
+  }
+
+  /**
+   * Send MCP notification to the client
+   */
+  private sendNotification(notification: { method: string; jsonrpc: string; params?: any }): void {
+    try {
+      const notificationMessage = JSON.stringify(notification) + '\n';
+      const success = this.safeWrite(notificationMessage);
+
+      if (success) {
+        logger.info(`[MCPServer] Sent notification: ${notification.method}`);
+      } else {
+        logger.warn(`[MCPServer] Failed to send notification: ${notification.method}`);
+      }
+    } catch (error) {
+      logger.error(`[MCPServer] Error sending notification: ${error}`);
+    }
+  }
+
+  /**
+   * Safe write to stdout that handles EPIPE errors gracefully
+   */
+  private safeWrite(data: string): boolean {
+    if (this.clientDisconnected) {
+      return false;
+    }
+
+    try {
+      process.stdout.write(data);
+      return true;
+    } catch (error: any) {
+      if (error.code === 'EPIPE') {
+        // Client disconnected - mark as disconnected and stop trying to write
+        this.clientDisconnected = true;
+        logger.info('Client disconnected (EPIPE), stopping output');
+        return false;
+      } else {
+        // Other write errors - log but don't mark as disconnected
+        logger.error(`Error writing to stdout: ${error.message}`);
+        return false;
+      }
+    }
   }
 
   async initialize(): Promise<void> {
@@ -148,7 +193,10 @@ export class MCPServer {
         protocolVersion: '2024-11-05',
         capabilities: {
           tools: {},
-          resources: {},
+          resources: {
+            subscribe: true,
+            listChanged: true
+          },
           prompts: {}
         },
         serverInfo: {
@@ -219,6 +267,15 @@ export class MCPServer {
       }
     ];
 
+    // Add internal NCP tools (scheduler functionality, analytics, etc.)
+    try {
+      const internalTools = this.orchestrator.getInternalMCPTools();
+      tools.push(...internalTools);
+    } catch (error) {
+      // Internal tools not available yet - orchestrator might not be initialized
+      // This is fine, tools will be available after initialization
+    }
+
     return {
       jsonrpc: '2.0',
       id: request.id,
@@ -243,6 +300,11 @@ export class MCPServer {
     const { name, arguments: args } = request.params;
 
     try {
+      // Check if it's an internal NCP tool
+      if (name.startsWith('ncp_')) {
+        return this.handleInternalTool(request, name, args);
+      }
+
       switch (name) {
         case 'find':
           return this.handleFind(request, args);
@@ -251,8 +313,16 @@ export class MCPServer {
           return this.handleRun(request, args);
 
         default:
-          // Suggest similar methods
-          const suggestions = this.getSuggestions(name, ['find', 'run']);
+          // Get available tool names for better suggestions
+          const availableTools = ['find', 'run'];
+          try {
+            const internalTools = this.orchestrator.getInternalMCPTools();
+            availableTools.push(...internalTools.map(tool => tool.name));
+          } catch (error) {
+            // Internal tools not available yet
+          }
+
+          const suggestions = this.getSuggestions(name, availableTools);
           const suggestionText = suggestions.length > 0 ? ` Did you mean: ${suggestions.join(', ')}?` : '';
 
           return {
@@ -260,7 +330,7 @@ export class MCPServer {
             id: request.id,
             error: {
               code: -32601,
-              message: `Method not found: '${name}'. NCP OSS supports 'find' and 'run' methods.${suggestionText} Use 'find()' to discover available tools.`
+              message: `Method not found: '${name}'.${suggestionText} Use 'find()' to discover available tools.`
             }
           };
       }
@@ -271,6 +341,46 @@ export class MCPServer {
         error: {
           code: -32603,
           message: error.message || 'Internal error'
+        }
+      };
+    }
+  }
+
+  private async handleInternalTool(request: MCPRequest, toolName: string, args: any): Promise<MCPResponse> {
+    try {
+      // Wait for orchestrator initialization if needed
+      if (!this.isInitialized && this.initializationPromise) {
+        await this.initializationPromise;
+      }
+
+      // Execute the internal tool via orchestrator
+      const result = await this.orchestrator.run(toolName, args || {});
+
+      if (result.success) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            content: result.content
+          }
+        };
+      } else {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32603,
+            message: result.error || 'Internal tool execution failed'
+          }
+        };
+      }
+    } catch (error: any) {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32603,
+          message: error.message || 'Internal tool execution error'
         }
       };
     }
@@ -770,7 +880,7 @@ export class MCPServer {
             const request = JSON.parse(line);
             const response = await this.handleRequest(request);
             if (response) {
-              process.stdout.write(JSON.stringify(response) + '\n');
+              this.safeWrite(JSON.stringify(response) + '\n');
             }
           } catch (error) {
             const errorResponse = {
@@ -781,14 +891,25 @@ export class MCPServer {
                 message: 'Parse error'
               }
             };
-            process.stdout.write(JSON.stringify(errorResponse) + '\n');
+            this.safeWrite(JSON.stringify(errorResponse) + '\n');
           }
         }
       }
     });
 
     process.stdin.on('end', () => {
+      this.clientDisconnected = true;
       this.shutdown();
+    });
+
+    // Handle stdout errors gracefully
+    process.stdout.on('error', (error: any) => {
+      if (error.code === 'EPIPE') {
+        this.clientDisconnected = true;
+        logger.info('Client disconnected (stdout EPIPE)');
+      } else {
+        logger.error(`Stdout error: ${error.message}`);
+      }
     });
   }
 

@@ -1,0 +1,1937 @@
+{
+  "timestamp": "2025-09-27T18:54:46.491Z",
+  "categories": [
+    "development",
+    "communication",
+    "productivity",
+    "data",
+    "cloud",
+    "content",
+    "automation",
+    "security"
+  ],
+  "results": {
+    "development": {
+      "searchResults": 11,
+      "mcpScores": [
+        {
+          "mcp": "portel",
+          "score": 0.618453845276748,
+          "toolCount": 5,
+          "avgConfidence": 0.518453845276748,
+          "topTools": [
+            "analyze_data (0.56)",
+            "manage_tasks (0.55)",
+            "create_repo (0.52)"
+          ]
+        },
+        {
+          "mcp": "git",
+          "score": 0.4727139492697898,
+          "toolCount": 1,
+          "avgConfidence": 0.4527139492697898,
+          "topTools": [
+            "commit (0.45)"
+          ]
+        },
+        {
+          "mcp": "sequential-thinking",
+          "score": 0.39867350613169716,
+          "toolCount": 3,
+          "avgConfidence": 0.33867350613169717,
+          "topTools": [
+            "create_thinking (0.36)",
+            "add_step (0.34)",
+            "get_thinking (0.32)"
+          ]
+        },
+        {
+          "mcp": "production-planning-api",
+          "score": 0.33545597183377335,
+          "toolCount": 1,
+          "avgConfidence": 0.31545597183377333,
+          "topTools": [
+            "list_resources (0.32)"
+          ]
+        },
+        {
+          "mcp": "obsidian",
+          "score": 0.32948584346525395,
+          "toolCount": 1,
+          "avgConfidence": 0.30948584346525393,
+          "topTools": [
+            "create_note (0.31)"
+          ]
+        }
+      ],
+      "topMCPs": [
+        {
+          "mcp": "portel",
+          "score": 0.618453845276748,
+          "toolCount": 5,
+          "avgConfidence": 0.518453845276748,
+          "topTools": [
+            "analyze_data (0.56)",
+            "manage_tasks (0.55)",
+            "create_repo (0.52)"
+          ]
+        },
+        {
+          "mcp": "git",
+          "score": 0.4727139492697898,
+          "toolCount": 1,
+          "avgConfidence": 0.4527139492697898,
+          "topTools": [
+            "commit (0.45)"
+          ]
+        },
+        {
+          "mcp": "sequential-thinking",
+          "score": 0.39867350613169716,
+          "toolCount": 3,
+          "avgConfidence": 0.33867350613169717,
+          "topTools": [
+            "create_thinking (0.36)",
+            "add_step (0.34)",
+            "get_thinking (0.32)"
+          ]
+        },
+        {
+          "mcp": "production-planning-api",
+          "score": 0.33545597183377335,
+          "toolCount": 1,
+          "avgConfidence": 0.31545597183377333,
+          "topTools": [
+            "list_resources (0.32)"
+          ]
+        },
+        {
+          "mcp": "obsidian",
+          "score": 0.32948584346525395,
+          "toolCount": 1,
+          "avgConfidence": 0.30948584346525393,
+          "topTools": [
+            "create_note (0.31)"
+          ]
+        }
+      ]
+    },
+    "communication": {
+      "searchResults": 24,
+      "mcpScores": [
+        {
+          "mcp": "email",
+          "score": 0.5765277486775188,
+          "toolCount": 1,
+          "avgConfidence": 0.5565277486775188,
+          "topTools": [
+            "send (0.56)"
+          ]
+        },
+        {
+          "mcp": "slack",
+          "score": 0.45277124601324936,
+          "toolCount": 3,
+          "avgConfidence": 0.39277124601324936,
+          "topTools": [
+            "send_message (0.52)",
+            "get_channel_history (0.34)",
+            "create_channel (0.31)"
+          ]
+        },
+        {
+          "mcp": "anthropic",
+          "score": 0.42098153794864657,
+          "toolCount": 1,
+          "avgConfidence": 0.40098153794864655,
+          "topTools": [
+            "create_message (0.40)"
+          ]
+        },
+        {
+          "mcp": "telegram",
+          "score": 0.41734216380221045,
+          "toolCount": 3,
+          "avgConfidence": 0.35734216380221046,
+          "topTools": [
+            "broadcast (0.44)",
+            "send_photo (0.32)",
+            "send_message (0.30)"
+          ]
+        },
+        {
+          "mcp": "intercom",
+          "score": 0.41657589410518997,
+          "toolCount": 1,
+          "avgConfidence": 0.39657589410518995,
+          "topTools": [
+            "create_conversation (0.40)"
+          ]
+        },
+        {
+          "mcp": "bluesky-at-protocol",
+          "score": 0.41649067069410994,
+          "toolCount": 1,
+          "avgConfidence": 0.3964906706941099,
+          "topTools": [
+            "post_data (0.40)"
+          ]
+        },
+        {
+          "mcp": "teams",
+          "score": 0.41356764465619084,
+          "toolCount": 2,
+          "avgConfidence": 0.37356764465619086,
+          "topTools": [
+            "send_message (0.43)",
+            "schedule_meeting (0.32)"
+          ]
+        },
+        {
+          "mcp": "portel",
+          "score": 0.4105245437077977,
+          "toolCount": 1,
+          "avgConfidence": 0.39052454370779766,
+          "topTools": [
+            "send_notifications (0.39)"
+          ]
+        },
+        {
+          "mcp": "discord",
+          "score": 0.40654064254585726,
+          "toolCount": 2,
+          "avgConfidence": 0.3665406425458573,
+          "topTools": [
+            "send_message (0.38)",
+            "create_channel (0.35)"
+          ]
+        },
+        {
+          "mcp": "signal-messenger-api",
+          "score": 0.39799537505619365,
+          "toolCount": 1,
+          "avgConfidence": 0.3779953750561936,
+          "topTools": [
+            "post_data (0.38)"
+          ]
+        },
+        {
+          "mcp": "mixer-interactive-api",
+          "score": 0.3927233378810134,
+          "toolCount": 1,
+          "avgConfidence": 0.37272333788101336,
+          "topTools": [
+            "post_data (0.37)"
+          ]
+        },
+        {
+          "mcp": "whatsapp",
+          "score": 0.38240945302287993,
+          "toolCount": 1,
+          "avgConfidence": 0.3624094530228799,
+          "topTools": [
+            "send_message (0.36)"
+          ]
+        },
+        {
+          "mcp": "stream-chat-api",
+          "score": 0.3537299490547154,
+          "toolCount": 1,
+          "avgConfidence": 0.33372994905471537,
+          "topTools": [
+            "post_data (0.33)"
+          ]
+        },
+        {
+          "mcp": "rabbitmq",
+          "score": 0.34830770657385335,
+          "toolCount": 1,
+          "avgConfidence": 0.32830770657385333,
+          "topTools": [
+            "publish (0.33)"
+          ]
+        },
+        {
+          "mcp": "line-messaging-api",
+          "score": 0.3454335927419033,
+          "toolCount": 1,
+          "avgConfidence": 0.32543359274190325,
+          "topTools": [
+            "post_data (0.33)"
+          ]
+        },
+        {
+          "mcp": "telegram-channels-api",
+          "score": 0.3409177609171447,
+          "toolCount": 1,
+          "avgConfidence": 0.3209177609171447,
+          "topTools": [
+            "post_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "constant-contact-v3",
+          "score": 0.33776740821164364,
+          "toolCount": 1,
+          "avgConfidence": 0.3177674082116436,
+          "topTools": [
+            "post_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "discord-stage-api",
+          "score": 0.3256195411531562,
+          "toolCount": 1,
+          "avgConfidence": 0.3056195411531562,
+          "topTools": [
+            "post_data (0.31)"
+          ]
+        }
+      ],
+      "topMCPs": [
+        {
+          "mcp": "email",
+          "score": 0.5765277486775188,
+          "toolCount": 1,
+          "avgConfidence": 0.5565277486775188,
+          "topTools": [
+            "send (0.56)"
+          ]
+        },
+        {
+          "mcp": "slack",
+          "score": 0.45277124601324936,
+          "toolCount": 3,
+          "avgConfidence": 0.39277124601324936,
+          "topTools": [
+            "send_message (0.52)",
+            "get_channel_history (0.34)",
+            "create_channel (0.31)"
+          ]
+        },
+        {
+          "mcp": "anthropic",
+          "score": 0.42098153794864657,
+          "toolCount": 1,
+          "avgConfidence": 0.40098153794864655,
+          "topTools": [
+            "create_message (0.40)"
+          ]
+        },
+        {
+          "mcp": "telegram",
+          "score": 0.41734216380221045,
+          "toolCount": 3,
+          "avgConfidence": 0.35734216380221046,
+          "topTools": [
+            "broadcast (0.44)",
+            "send_photo (0.32)",
+            "send_message (0.30)"
+          ]
+        },
+        {
+          "mcp": "intercom",
+          "score": 0.41657589410518997,
+          "toolCount": 1,
+          "avgConfidence": 0.39657589410518995,
+          "topTools": [
+            "create_conversation (0.40)"
+          ]
+        },
+        {
+          "mcp": "bluesky-at-protocol",
+          "score": 0.41649067069410994,
+          "toolCount": 1,
+          "avgConfidence": 0.3964906706941099,
+          "topTools": [
+            "post_data (0.40)"
+          ]
+        },
+        {
+          "mcp": "teams",
+          "score": 0.41356764465619084,
+          "toolCount": 2,
+          "avgConfidence": 0.37356764465619086,
+          "topTools": [
+            "send_message (0.43)",
+            "schedule_meeting (0.32)"
+          ]
+        },
+        {
+          "mcp": "portel",
+          "score": 0.4105245437077977,
+          "toolCount": 1,
+          "avgConfidence": 0.39052454370779766,
+          "topTools": [
+            "send_notifications (0.39)"
+          ]
+        },
+        {
+          "mcp": "discord",
+          "score": 0.40654064254585726,
+          "toolCount": 2,
+          "avgConfidence": 0.3665406425458573,
+          "topTools": [
+            "send_message (0.38)",
+            "create_channel (0.35)"
+          ]
+        },
+        {
+          "mcp": "signal-messenger-api",
+          "score": 0.39799537505619365,
+          "toolCount": 1,
+          "avgConfidence": 0.3779953750561936,
+          "topTools": [
+            "post_data (0.38)"
+          ]
+        }
+      ]
+    },
+    "productivity": {
+      "searchResults": 11,
+      "mcpScores": [
+        {
+          "mcp": "asana",
+          "score": 0.4431941378530554,
+          "toolCount": 1,
+          "avgConfidence": 0.4231941378530554,
+          "topTools": [
+            "create_task (0.42)"
+          ]
+        },
+        {
+          "mcp": "portel",
+          "score": 0.42736037064860716,
+          "toolCount": 2,
+          "avgConfidence": 0.3873603706486072,
+          "topTools": [
+            "manage_tasks (0.45)",
+            "analyze_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "todoist",
+          "score": 0.4026508372276991,
+          "toolCount": 1,
+          "avgConfidence": 0.3826508372276991,
+          "topTools": [
+            "add_task (0.38)"
+          ]
+        },
+        {
+          "mcp": "obsidian",
+          "score": 0.39972205174500297,
+          "toolCount": 1,
+          "avgConfidence": 0.37972205174500295,
+          "topTools": [
+            "create_note (0.38)"
+          ]
+        },
+        {
+          "mcp": "ncp-internal",
+          "score": 0.3604628929341944,
+          "toolCount": 2,
+          "avgConfidence": 0.32046289293419444,
+          "topTools": [
+            "ncp (0.32)",
+            "ncp (0.32)"
+          ]
+        },
+        {
+          "mcp": "calendar",
+          "score": 0.35668992719718823,
+          "toolCount": 1,
+          "avgConfidence": 0.3366899271971882,
+          "topTools": [
+            "schedule_event (0.34)"
+          ]
+        },
+        {
+          "mcp": "production-planning-api",
+          "score": 0.34640825952545984,
+          "toolCount": 2,
+          "avgConfidence": 0.30640825952545986,
+          "topTools": [
+            "list_resources (0.31)",
+            "get_info (0.31)"
+          ]
+        },
+        {
+          "mcp": "notion",
+          "score": 0.34617206660021727,
+          "toolCount": 1,
+          "avgConfidence": 0.32617206660021725,
+          "topTools": [
+            "create_page (0.33)"
+          ]
+        }
+      ],
+      "topMCPs": [
+        {
+          "mcp": "asana",
+          "score": 0.4431941378530554,
+          "toolCount": 1,
+          "avgConfidence": 0.4231941378530554,
+          "topTools": [
+            "create_task (0.42)"
+          ]
+        },
+        {
+          "mcp": "portel",
+          "score": 0.42736037064860716,
+          "toolCount": 2,
+          "avgConfidence": 0.3873603706486072,
+          "topTools": [
+            "manage_tasks (0.45)",
+            "analyze_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "todoist",
+          "score": 0.4026508372276991,
+          "toolCount": 1,
+          "avgConfidence": 0.3826508372276991,
+          "topTools": [
+            "add_task (0.38)"
+          ]
+        },
+        {
+          "mcp": "obsidian",
+          "score": 0.39972205174500297,
+          "toolCount": 1,
+          "avgConfidence": 0.37972205174500295,
+          "topTools": [
+            "create_note (0.38)"
+          ]
+        },
+        {
+          "mcp": "ncp-internal",
+          "score": 0.3604628929341944,
+          "toolCount": 2,
+          "avgConfidence": 0.32046289293419444,
+          "topTools": [
+            "ncp (0.32)",
+            "ncp (0.32)"
+          ]
+        },
+        {
+          "mcp": "calendar",
+          "score": 0.35668992719718823,
+          "toolCount": 1,
+          "avgConfidence": 0.3366899271971882,
+          "topTools": [
+            "schedule_event (0.34)"
+          ]
+        },
+        {
+          "mcp": "production-planning-api",
+          "score": 0.34640825952545984,
+          "toolCount": 2,
+          "avgConfidence": 0.30640825952545986,
+          "topTools": [
+            "list_resources (0.31)",
+            "get_info (0.31)"
+          ]
+        },
+        {
+          "mcp": "notion",
+          "score": 0.34617206660021727,
+          "toolCount": 1,
+          "avgConfidence": 0.32617206660021725,
+          "topTools": [
+            "create_page (0.33)"
+          ]
+        }
+      ]
+    },
+    "data": {
+      "searchResults": 38,
+      "mcpScores": [
+        {
+          "mcp": "pandorabots-aiaas",
+          "score": 0.41918758925661376,
+          "toolCount": 2,
+          "avgConfidence": 0.3791875892566138,
+          "topTools": [
+            "post_data (0.41)",
+            "get_data (0.35)"
+          ]
+        },
+        {
+          "mcp": "google-sheets",
+          "score": 0.4124266367502814,
+          "toolCount": 1,
+          "avgConfidence": 0.3924266367502814,
+          "topTools": [
+            "read_sheet (0.39)"
+          ]
+        },
+        {
+          "mcp": "youtube-live-streaming",
+          "score": 0.39993071105864114,
+          "toolCount": 2,
+          "avgConfidence": 0.35993071105864116,
+          "topTools": [
+            "post_data (0.40)",
+            "get_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "instagram-basic-display",
+          "score": 0.38248328528343933,
+          "toolCount": 1,
+          "avgConfidence": 0.3624832852834393,
+          "topTools": [
+            "post_data (0.36)"
+          ]
+        },
+        {
+          "mcp": "braintree-graphql-api",
+          "score": 0.36824436438474795,
+          "toolCount": 2,
+          "avgConfidence": 0.32824436438474797,
+          "topTools": [
+            "post_data (0.34)",
+            "get_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "customer-io-track-api",
+          "score": 0.36707409001284613,
+          "toolCount": 2,
+          "avgConfidence": 0.32707409001284615,
+          "topTools": [
+            "post_data (0.34)",
+            "get_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "mysql",
+          "score": 0.3652203964911304,
+          "toolCount": 1,
+          "avgConfidence": 0.3452203964911304,
+          "topTools": [
+            "select (0.35)"
+          ]
+        },
+        {
+          "mcp": "therealreal-api",
+          "score": 0.3535884831012562,
+          "toolCount": 1,
+          "avgConfidence": 0.33358848310125616,
+          "topTools": [
+            "post_data (0.33)"
+          ]
+        },
+        {
+          "mcp": "depop-api",
+          "score": 0.3524477013120206,
+          "toolCount": 1,
+          "avgConfidence": 0.33244770131202056,
+          "topTools": [
+            "post_data (0.33)"
+          ]
+        },
+        {
+          "mcp": "coinbase-commerce-api",
+          "score": 0.34564522312561163,
+          "toolCount": 1,
+          "avgConfidence": 0.3256452231256116,
+          "topTools": [
+            "post_data (0.33)"
+          ]
+        },
+        {
+          "mcp": "square-payments-api",
+          "score": 0.34224207961646647,
+          "toolCount": 1,
+          "avgConfidence": 0.32224207961646645,
+          "topTools": [
+            "post_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "rakuten-advertising-api",
+          "score": 0.34200688755516245,
+          "toolCount": 1,
+          "avgConfidence": 0.32200688755516244,
+          "topTools": [
+            "post_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "overstock-partner-api",
+          "score": 0.3410527798820255,
+          "toolCount": 1,
+          "avgConfidence": 0.32105277988202546,
+          "topTools": [
+            "post_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "youtube-data-api-v3",
+          "score": 0.3389368185172115,
+          "toolCount": 1,
+          "avgConfidence": 0.3189368185172115,
+          "topTools": [
+            "post_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "twitch-helix-api",
+          "score": 0.33576801082181745,
+          "toolCount": 1,
+          "avgConfidence": 0.31576801082181744,
+          "topTools": [
+            "post_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "alibaba-trade-api",
+          "score": 0.3357263658027575,
+          "toolCount": 1,
+          "avgConfidence": 0.3157263658027575,
+          "topTools": [
+            "post_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "klarna-payments-api",
+          "score": 0.33347758574566294,
+          "toolCount": 1,
+          "avgConfidence": 0.3134775857456629,
+          "topTools": [
+            "post_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "wit-ai-http-api",
+          "score": 0.3319227356998581,
+          "toolCount": 1,
+          "avgConfidence": 0.31192273569985807,
+          "topTools": [
+            "post_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "google-analytics-reporting-api-v4",
+          "score": 0.3308796831382616,
+          "toolCount": 1,
+          "avgConfidence": 0.3108796831382616,
+          "topTools": [
+            "post_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "portel",
+          "score": 0.3305228619983234,
+          "toolCount": 1,
+          "avgConfidence": 0.3105228619983234,
+          "topTools": [
+            "analyze_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "facebook-graph-api",
+          "score": 0.3287604422368576,
+          "toolCount": 1,
+          "avgConfidence": 0.30876044223685756,
+          "topTools": [
+            "post_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "drupal-commerce-api",
+          "score": 0.32854914165351684,
+          "toolCount": 1,
+          "avgConfidence": 0.3085491416535168,
+          "topTools": [
+            "post_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "segment-http-tracking-api",
+          "score": 0.32674396146940643,
+          "toolCount": 1,
+          "avgConfidence": 0.3067439614694064,
+          "topTools": [
+            "post_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "instagram-live-api",
+          "score": 0.325897909963262,
+          "toolCount": 1,
+          "avgConfidence": 0.305897909963262,
+          "topTools": [
+            "post_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "mattermost-api-v4",
+          "score": 0.3258556762921087,
+          "toolCount": 1,
+          "avgConfidence": 0.3058556762921087,
+          "topTools": [
+            "post_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "urban-airship-api-v3",
+          "score": 0.32557143672841593,
+          "toolCount": 1,
+          "avgConfidence": 0.3055714367284159,
+          "topTools": [
+            "post_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "airbnb-api",
+          "score": 0.32358714354637164,
+          "toolCount": 1,
+          "avgConfidence": 0.3035871435463716,
+          "topTools": [
+            "post_data (0.30)"
+          ]
+        },
+        {
+          "mcp": "campaign-monitor-v3",
+          "score": 0.32327989850794114,
+          "toolCount": 1,
+          "avgConfidence": 0.3032798985079411,
+          "topTools": [
+            "post_data (0.30)"
+          ]
+        },
+        {
+          "mcp": "booking-com-api",
+          "score": 0.32315792362909634,
+          "toolCount": 1,
+          "avgConfidence": 0.3031579236290963,
+          "topTools": [
+            "post_data (0.30)"
+          ]
+        },
+        {
+          "mcp": "bluesky-at-protocol",
+          "score": 0.322817793778399,
+          "toolCount": 1,
+          "avgConfidence": 0.30281779377839896,
+          "topTools": [
+            "post_data (0.30)"
+          ]
+        },
+        {
+          "mcp": "reddit-rest-api",
+          "score": 0.3217390327509096,
+          "toolCount": 1,
+          "avgConfidence": 0.3017390327509096,
+          "topTools": [
+            "post_data (0.30)"
+          ]
+        },
+        {
+          "mcp": "amplitude-http-api-v2",
+          "score": 0.32125286095467265,
+          "toolCount": 1,
+          "avgConfidence": 0.30125286095467263,
+          "topTools": [
+            "post_data (0.30)"
+          ]
+        },
+        {
+          "mcp": "ideal-payments-api",
+          "score": 0.32035667269795215,
+          "toolCount": 1,
+          "avgConfidence": 0.30035667269795213,
+          "topTools": [
+            "post_data (0.30)"
+          ]
+        },
+        {
+          "mcp": "discord-stage-api",
+          "score": 0.3203104656830896,
+          "toolCount": 1,
+          "avgConfidence": 0.30031046568308956,
+          "topTools": [
+            "post_data (0.30)"
+          ]
+        }
+      ],
+      "topMCPs": [
+        {
+          "mcp": "pandorabots-aiaas",
+          "score": 0.41918758925661376,
+          "toolCount": 2,
+          "avgConfidence": 0.3791875892566138,
+          "topTools": [
+            "post_data (0.41)",
+            "get_data (0.35)"
+          ]
+        },
+        {
+          "mcp": "google-sheets",
+          "score": 0.4124266367502814,
+          "toolCount": 1,
+          "avgConfidence": 0.3924266367502814,
+          "topTools": [
+            "read_sheet (0.39)"
+          ]
+        },
+        {
+          "mcp": "youtube-live-streaming",
+          "score": 0.39993071105864114,
+          "toolCount": 2,
+          "avgConfidence": 0.35993071105864116,
+          "topTools": [
+            "post_data (0.40)",
+            "get_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "instagram-basic-display",
+          "score": 0.38248328528343933,
+          "toolCount": 1,
+          "avgConfidence": 0.3624832852834393,
+          "topTools": [
+            "post_data (0.36)"
+          ]
+        },
+        {
+          "mcp": "braintree-graphql-api",
+          "score": 0.36824436438474795,
+          "toolCount": 2,
+          "avgConfidence": 0.32824436438474797,
+          "topTools": [
+            "post_data (0.34)",
+            "get_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "customer-io-track-api",
+          "score": 0.36707409001284613,
+          "toolCount": 2,
+          "avgConfidence": 0.32707409001284615,
+          "topTools": [
+            "post_data (0.34)",
+            "get_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "mysql",
+          "score": 0.3652203964911304,
+          "toolCount": 1,
+          "avgConfidence": 0.3452203964911304,
+          "topTools": [
+            "select (0.35)"
+          ]
+        },
+        {
+          "mcp": "therealreal-api",
+          "score": 0.3535884831012562,
+          "toolCount": 1,
+          "avgConfidence": 0.33358848310125616,
+          "topTools": [
+            "post_data (0.33)"
+          ]
+        },
+        {
+          "mcp": "depop-api",
+          "score": 0.3524477013120206,
+          "toolCount": 1,
+          "avgConfidence": 0.33244770131202056,
+          "topTools": [
+            "post_data (0.33)"
+          ]
+        },
+        {
+          "mcp": "coinbase-commerce-api",
+          "score": 0.34564522312561163,
+          "toolCount": 1,
+          "avgConfidence": 0.3256452231256116,
+          "topTools": [
+            "post_data (0.33)"
+          ]
+        }
+      ]
+    },
+    "cloud": {
+      "searchResults": 69,
+      "mcpScores": [
+        {
+          "mcp": "aws",
+          "score": 0.49863705397641855,
+          "toolCount": 8,
+          "avgConfidence": 0.34863705397641853,
+          "topTools": [
+            "deploy_lambda (0.48)",
+            "s3_upload_file (0.35)",
+            "lambda_invoke (0.34)"
+          ]
+        },
+        {
+          "mcp": "alibaba-cloud-api",
+          "score": 0.4897582184330617,
+          "toolCount": 3,
+          "avgConfidence": 0.4297582184330617,
+          "topTools": [
+            "scale (0.49)",
+            "monitor (0.43)",
+            "deploy (0.37)"
+          ]
+        },
+        {
+          "mcp": "tencent-cloud-api",
+          "score": 0.47932358380546936,
+          "toolCount": 3,
+          "avgConfidence": 0.41932358380546936,
+          "topTools": [
+            "scale (0.49)",
+            "monitor (0.44)",
+            "deploy (0.33)"
+          ]
+        },
+        {
+          "mcp": "upcloud-api",
+          "score": 0.4711587198784072,
+          "toolCount": 2,
+          "avgConfidence": 0.4311587198784072,
+          "topTools": [
+            "scale (0.46)",
+            "monitor (0.41)"
+          ]
+        },
+        {
+          "mcp": "gcp",
+          "score": 0.45981858519455127,
+          "toolCount": 3,
+          "avgConfidence": 0.39981858519455127,
+          "topTools": [
+            "create_instance (0.54)",
+            "create_bucket (0.36)",
+            "list_instances (0.30)"
+          ]
+        },
+        {
+          "mcp": "ibm-cloud-api",
+          "score": 0.45855940399527223,
+          "toolCount": 3,
+          "avgConfidence": 0.39855940399527223,
+          "topTools": [
+            "scale (0.47)",
+            "monitor (0.40)",
+            "deploy (0.33)"
+          ]
+        },
+        {
+          "mcp": "hetzner-cloud-api",
+          "score": 0.4559441295160067,
+          "toolCount": 3,
+          "avgConfidence": 0.3959441295160067,
+          "topTools": [
+            "scale (0.46)",
+            "monitor (0.40)",
+            "deploy (0.33)"
+          ]
+        },
+        {
+          "mcp": "aws-cloudformation-api",
+          "score": 0.44802747270115323,
+          "toolCount": 3,
+          "avgConfidence": 0.38802747270115323,
+          "topTools": [
+            "scale (0.41)",
+            "monitor (0.40)",
+            "deploy (0.35)"
+          ]
+        },
+        {
+          "mcp": "cloudinary-api",
+          "score": 0.42181666561672654,
+          "toolCount": 2,
+          "avgConfidence": 0.38181666561672656,
+          "topTools": [
+            "list_resources (0.39)",
+            "get_info (0.38)"
+          ]
+        },
+        {
+          "mcp": "amazon-cloudsearch-api",
+          "score": 0.4184155031559159,
+          "toolCount": 3,
+          "avgConfidence": 0.3584155031559159,
+          "topTools": [
+            "backup (0.40)",
+            "connect (0.36)",
+            "query (0.31)"
+          ]
+        },
+        {
+          "mcp": "oracle-cloud-api",
+          "score": 0.40500162893193165,
+          "toolCount": 2,
+          "avgConfidence": 0.36500162893193167,
+          "topTools": [
+            "scale (0.38)",
+            "monitor (0.35)"
+          ]
+        },
+        {
+          "mcp": "pandorabots-aiaas",
+          "score": 0.4048987841045827,
+          "toolCount": 3,
+          "avgConfidence": 0.3448987841045827,
+          "topTools": [
+            "post_data (0.41)",
+            "authenticate (0.32)",
+            "get_data (0.31)"
+          ]
+        },
+        {
+          "mcp": "cloudflare",
+          "score": 0.40152064985349617,
+          "toolCount": 3,
+          "avgConfidence": 0.34152064985349617,
+          "topTools": [
+            "purge_cache (0.38)",
+            "update_dns (0.34)",
+            "get_analytics (0.30)"
+          ]
+        },
+        {
+          "mcp": "huawei-cloud-api",
+          "score": 0.3984467161089156,
+          "toolCount": 2,
+          "avgConfidence": 0.3584467161089156,
+          "topTools": [
+            "scale (0.41)",
+            "monitor (0.30)"
+          ]
+        },
+        {
+          "mcp": "amazon-neptune-api",
+          "score": 0.39710689915635716,
+          "toolCount": 2,
+          "avgConfidence": 0.3571068991563572,
+          "topTools": [
+            "backup (0.39)",
+            "connect (0.33)"
+          ]
+        },
+        {
+          "mcp": "cloudflare-api-v4",
+          "score": 0.3944217127154706,
+          "toolCount": 2,
+          "avgConfidence": 0.3544217127154706,
+          "topTools": [
+            "scale (0.37)",
+            "monitor (0.34)"
+          ]
+        },
+        {
+          "mcp": "aws-cloudtrail-api",
+          "score": 0.386148030934052,
+          "toolCount": 2,
+          "avgConfidence": 0.346148030934052,
+          "topTools": [
+            "scale (0.36)",
+            "monitor (0.33)"
+          ]
+        },
+        {
+          "mcp": "digitalocean",
+          "score": 0.36867937638781406,
+          "toolCount": 1,
+          "avgConfidence": 0.34867937638781404,
+          "topTools": [
+            "list_droplets (0.35)"
+          ]
+        },
+        {
+          "mcp": "aws-cloudhsm-api",
+          "score": 0.36647866438560867,
+          "toolCount": 2,
+          "avgConfidence": 0.3264786643856087,
+          "topTools": [
+            "scale (0.34)",
+            "monitor (0.31)"
+          ]
+        },
+        {
+          "mcp": "youtube-live-streaming",
+          "score": 0.36347571049388616,
+          "toolCount": 1,
+          "avgConfidence": 0.34347571049388614,
+          "topTools": [
+            "post_data (0.34)"
+          ]
+        },
+        {
+          "mcp": "aws-cloudwatch-api",
+          "score": 0.3621236443477166,
+          "toolCount": 2,
+          "avgConfidence": 0.3221236443477166,
+          "topTools": [
+            "scale (0.34)",
+            "monitor (0.30)"
+          ]
+        },
+        {
+          "mcp": "amazon-ses-v2",
+          "score": 0.342690872337271,
+          "toolCount": 1,
+          "avgConfidence": 0.322690872337271,
+          "topTools": [
+            "post_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "fly-io-api",
+          "score": 0.34230920117817454,
+          "toolCount": 1,
+          "avgConfidence": 0.3223092011781745,
+          "topTools": [
+            "scale (0.32)"
+          ]
+        },
+        {
+          "mcp": "coherence-api",
+          "score": 0.34176324984783213,
+          "toolCount": 1,
+          "avgConfidence": 0.3217632498478321,
+          "topTools": [
+            "backup (0.32)"
+          ]
+        },
+        {
+          "mcp": "firebase-cloud-messaging-v1",
+          "score": 0.33808442326255517,
+          "toolCount": 1,
+          "avgConfidence": 0.31808442326255515,
+          "topTools": [
+            "post_data (0.32)"
+          ]
+        },
+        {
+          "mcp": "amazon-dynamodb-api",
+          "score": 0.3375969318771154,
+          "toolCount": 1,
+          "avgConfidence": 0.3175969318771154,
+          "topTools": [
+            "backup (0.32)"
+          ]
+        },
+        {
+          "mcp": "gcp-storage-api",
+          "score": 0.33545288638090925,
+          "toolCount": 1,
+          "avgConfidence": 0.31545288638090924,
+          "topTools": [
+            "scale (0.32)"
+          ]
+        },
+        {
+          "mcp": "gcp-monitoring-api",
+          "score": 0.3316753753982561,
+          "toolCount": 1,
+          "avgConfidence": 0.31167537539825607,
+          "topTools": [
+            "scale (0.31)"
+          ]
+        },
+        {
+          "mcp": "portel",
+          "score": 0.331128153968181,
+          "toolCount": 1,
+          "avgConfidence": 0.311128153968181,
+          "topTools": [
+            "deploy_app (0.31)"
+          ]
+        },
+        {
+          "mcp": "heroku",
+          "score": 0.3292887830291082,
+          "toolCount": 1,
+          "avgConfidence": 0.30928878302910817,
+          "topTools": [
+            "deploy (0.31)"
+          ]
+        },
+        {
+          "mcp": "azure-loganalytics-api",
+          "score": 0.3265296497555258,
+          "toolCount": 1,
+          "avgConfidence": 0.30652964975552577,
+          "topTools": [
+            "scale (0.31)"
+          ]
+        },
+        {
+          "mcp": "cloudflare-cdn-api",
+          "score": 0.3241673551012932,
+          "toolCount": 1,
+          "avgConfidence": 0.30416735510129317,
+          "topTools": [
+            "list_resources (0.30)"
+          ]
+        },
+        {
+          "mcp": "tomorrow-io-weather-api",
+          "score": 0.32210617256434454,
+          "toolCount": 1,
+          "avgConfidence": 0.3021061725643445,
+          "topTools": [
+            "post_data (0.30)"
+          ]
+        },
+        {
+          "mcp": "amazon-keyspaces-api",
+          "score": 0.32194430094837106,
+          "toolCount": 1,
+          "avgConfidence": 0.30194430094837105,
+          "topTools": [
+            "backup (0.30)"
+          ]
+        },
+        {
+          "mcp": "digitalocean-api-v2",
+          "score": 0.321552331831499,
+          "toolCount": 1,
+          "avgConfidence": 0.301552331831499,
+          "topTools": [
+            "scale (0.30)"
+          ]
+        }
+      ],
+      "topMCPs": [
+        {
+          "mcp": "aws",
+          "score": 0.49863705397641855,
+          "toolCount": 8,
+          "avgConfidence": 0.34863705397641853,
+          "topTools": [
+            "deploy_lambda (0.48)",
+            "s3_upload_file (0.35)",
+            "lambda_invoke (0.34)"
+          ]
+        },
+        {
+          "mcp": "alibaba-cloud-api",
+          "score": 0.4897582184330617,
+          "toolCount": 3,
+          "avgConfidence": 0.4297582184330617,
+          "topTools": [
+            "scale (0.49)",
+            "monitor (0.43)",
+            "deploy (0.37)"
+          ]
+        },
+        {
+          "mcp": "tencent-cloud-api",
+          "score": 0.47932358380546936,
+          "toolCount": 3,
+          "avgConfidence": 0.41932358380546936,
+          "topTools": [
+            "scale (0.49)",
+            "monitor (0.44)",
+            "deploy (0.33)"
+          ]
+        },
+        {
+          "mcp": "upcloud-api",
+          "score": 0.4711587198784072,
+          "toolCount": 2,
+          "avgConfidence": 0.4311587198784072,
+          "topTools": [
+            "scale (0.46)",
+            "monitor (0.41)"
+          ]
+        },
+        {
+          "mcp": "gcp",
+          "score": 0.45981858519455127,
+          "toolCount": 3,
+          "avgConfidence": 0.39981858519455127,
+          "topTools": [
+            "create_instance (0.54)",
+            "create_bucket (0.36)",
+            "list_instances (0.30)"
+          ]
+        },
+        {
+          "mcp": "ibm-cloud-api",
+          "score": 0.45855940399527223,
+          "toolCount": 3,
+          "avgConfidence": 0.39855940399527223,
+          "topTools": [
+            "scale (0.47)",
+            "monitor (0.40)",
+            "deploy (0.33)"
+          ]
+        },
+        {
+          "mcp": "hetzner-cloud-api",
+          "score": 0.4559441295160067,
+          "toolCount": 3,
+          "avgConfidence": 0.3959441295160067,
+          "topTools": [
+            "scale (0.46)",
+            "monitor (0.40)",
+            "deploy (0.33)"
+          ]
+        },
+        {
+          "mcp": "aws-cloudformation-api",
+          "score": 0.44802747270115323,
+          "toolCount": 3,
+          "avgConfidence": 0.38802747270115323,
+          "topTools": [
+            "scale (0.41)",
+            "monitor (0.40)",
+            "deploy (0.35)"
+          ]
+        },
+        {
+          "mcp": "cloudinary-api",
+          "score": 0.42181666561672654,
+          "toolCount": 2,
+          "avgConfidence": 0.38181666561672656,
+          "topTools": [
+            "list_resources (0.39)",
+            "get_info (0.38)"
+          ]
+        },
+        {
+          "mcp": "amazon-cloudsearch-api",
+          "score": 0.4184155031559159,
+          "toolCount": 3,
+          "avgConfidence": 0.3584155031559159,
+          "topTools": [
+            "backup (0.40)",
+            "connect (0.36)",
+            "query (0.31)"
+          ]
+        }
+      ]
+    },
+    "content": {
+      "searchResults": 13,
+      "mcpScores": [
+        {
+          "mcp": "medium",
+          "score": 0.45260050395409007,
+          "toolCount": 1,
+          "avgConfidence": 0.43260050395409005,
+          "topTools": [
+            "publish (0.43)"
+          ]
+        },
+        {
+          "mcp": "contentful",
+          "score": 0.44709442691947,
+          "toolCount": 1,
+          "avgConfidence": 0.42709442691946997,
+          "topTools": [
+            "create_entry (0.43)"
+          ]
+        },
+        {
+          "mcp": "contentful-api",
+          "score": 0.41980488929908616,
+          "toolCount": 2,
+          "avgConfidence": 0.3798048892990862,
+          "topTools": [
+            "list_resources (0.38)",
+            "get_info (0.38)"
+          ]
+        },
+        {
+          "mcp": "youtube-live-streaming",
+          "score": 0.4033031430586935,
+          "toolCount": 1,
+          "avgConfidence": 0.3833031430586935,
+          "topTools": [
+            "post_data (0.38)"
+          ]
+        },
+        {
+          "mcp": "youtube",
+          "score": 0.39676935092306964,
+          "toolCount": 2,
+          "avgConfidence": 0.35676935092306966,
+          "topTools": [
+            "upload (0.36)",
+            "search_videos (0.35)"
+          ]
+        },
+        {
+          "mcp": "strapi",
+          "score": 0.3943684972888714,
+          "toolCount": 1,
+          "avgConfidence": 0.3743684972888714,
+          "topTools": [
+            "add_content (0.37)"
+          ]
+        },
+        {
+          "mcp": "wordpress",
+          "score": 0.3812029759533168,
+          "toolCount": 1,
+          "avgConfidence": 0.3612029759533168,
+          "topTools": [
+            "create_post (0.36)"
+          ]
+        },
+        {
+          "mcp": "confluence",
+          "score": 0.3685323545638029,
+          "toolCount": 1,
+          "avgConfidence": 0.3485323545638029,
+          "topTools": [
+            "search_content (0.35)"
+          ]
+        },
+        {
+          "mcp": "ghost",
+          "score": 0.36237179932801433,
+          "toolCount": 1,
+          "avgConfidence": 0.3423717993280143,
+          "topTools": [
+            "publish_article (0.34)"
+          ]
+        },
+        {
+          "mcp": "tripadvisor-content-api",
+          "score": 0.3588958988695773,
+          "toolCount": 1,
+          "avgConfidence": 0.3388958988695773,
+          "topTools": [
+            "post_data (0.34)"
+          ]
+        },
+        {
+          "mcp": "pandorabots-aiaas",
+          "score": 0.3412730628240295,
+          "toolCount": 1,
+          "avgConfidence": 0.3212730628240295,
+          "topTools": [
+            "post_data (0.32)"
+          ]
+        }
+      ],
+      "topMCPs": [
+        {
+          "mcp": "medium",
+          "score": 0.45260050395409007,
+          "toolCount": 1,
+          "avgConfidence": 0.43260050395409005,
+          "topTools": [
+            "publish (0.43)"
+          ]
+        },
+        {
+          "mcp": "contentful",
+          "score": 0.44709442691947,
+          "toolCount": 1,
+          "avgConfidence": 0.42709442691946997,
+          "topTools": [
+            "create_entry (0.43)"
+          ]
+        },
+        {
+          "mcp": "contentful-api",
+          "score": 0.41980488929908616,
+          "toolCount": 2,
+          "avgConfidence": 0.3798048892990862,
+          "topTools": [
+            "list_resources (0.38)",
+            "get_info (0.38)"
+          ]
+        },
+        {
+          "mcp": "youtube-live-streaming",
+          "score": 0.4033031430586935,
+          "toolCount": 1,
+          "avgConfidence": 0.3833031430586935,
+          "topTools": [
+            "post_data (0.38)"
+          ]
+        },
+        {
+          "mcp": "youtube",
+          "score": 0.39676935092306964,
+          "toolCount": 2,
+          "avgConfidence": 0.35676935092306966,
+          "topTools": [
+            "upload (0.36)",
+            "search_videos (0.35)"
+          ]
+        },
+        {
+          "mcp": "strapi",
+          "score": 0.3943684972888714,
+          "toolCount": 1,
+          "avgConfidence": 0.3743684972888714,
+          "topTools": [
+            "add_content (0.37)"
+          ]
+        },
+        {
+          "mcp": "wordpress",
+          "score": 0.3812029759533168,
+          "toolCount": 1,
+          "avgConfidence": 0.3612029759533168,
+          "topTools": [
+            "create_post (0.36)"
+          ]
+        },
+        {
+          "mcp": "confluence",
+          "score": 0.3685323545638029,
+          "toolCount": 1,
+          "avgConfidence": 0.3485323545638029,
+          "topTools": [
+            "search_content (0.35)"
+          ]
+        },
+        {
+          "mcp": "ghost",
+          "score": 0.36237179932801433,
+          "toolCount": 1,
+          "avgConfidence": 0.3423717993280143,
+          "topTools": [
+            "publish_article (0.34)"
+          ]
+        },
+        {
+          "mcp": "tripadvisor-content-api",
+          "score": 0.3588958988695773,
+          "toolCount": 1,
+          "avgConfidence": 0.3388958988695773,
+          "topTools": [
+            "post_data (0.34)"
+          ]
+        }
+      ]
+    },
+    "automation": {
+      "searchResults": 24,
+      "mcpScores": [
+        {
+          "mcp": "webhook",
+          "score": 0.5463149886333759,
+          "toolCount": 1,
+          "avgConfidence": 0.5263149886333759,
+          "topTools": [
+            "send (0.53)"
+          ]
+        },
+        {
+          "mcp": "cron",
+          "score": 0.5258647060581431,
+          "toolCount": 1,
+          "avgConfidence": 0.505864706058143,
+          "topTools": [
+            "schedule (0.51)"
+          ]
+        },
+        {
+          "mcp": "activecampaign",
+          "score": 0.49435028839792905,
+          "toolCount": 1,
+          "avgConfidence": 0.47435028839792903,
+          "topTools": [
+            "create_automation (0.47)"
+          ]
+        },
+        {
+          "mcp": "make-automation-api",
+          "score": 0.46173854753512356,
+          "toolCount": 3,
+          "avgConfidence": 0.40173854753512356,
+          "topTools": [
+            "configure (0.47)",
+            "execute (0.38)",
+            "get_status (0.36)"
+          ]
+        },
+        {
+          "mcp": "unreal-automation-api",
+          "score": 0.45830654002013554,
+          "toolCount": 3,
+          "avgConfidence": 0.39830654002013555,
+          "topTools": [
+            "configure (0.46)",
+            "execute (0.39)",
+            "get_status (0.35)"
+          ]
+        },
+        {
+          "mcp": "zapier",
+          "score": 0.4411100182288642,
+          "toolCount": 1,
+          "avgConfidence": 0.4211100182288642,
+          "topTools": [
+            "create_zap (0.42)"
+          ]
+        },
+        {
+          "mcp": "github_actions",
+          "score": 0.4310271523850388,
+          "toolCount": 1,
+          "avgConfidence": 0.4110271523850388,
+          "topTools": [
+            "trigger (0.41)"
+          ]
+        },
+        {
+          "mcp": "pandorabots-aiaas",
+          "score": 0.4027437368292695,
+          "toolCount": 2,
+          "avgConfidence": 0.3627437368292695,
+          "topTools": [
+            "post_data (0.38)",
+            "authenticate (0.35)"
+          ]
+        },
+        {
+          "mcp": "microsoft-bot-framework",
+          "score": 0.3975682714175846,
+          "toolCount": 2,
+          "avgConfidence": 0.3575682714175846,
+          "topTools": [
+            "post_data (0.37)",
+            "authenticate (0.35)"
+          ]
+        },
+        {
+          "mcp": "portel",
+          "score": 0.3920813456488666,
+          "toolCount": 2,
+          "avgConfidence": 0.3520813456488666,
+          "topTools": [
+            "send_notifications (0.36)",
+            "deploy_app (0.35)"
+          ]
+        },
+        {
+          "mcp": "jenkins",
+          "score": 0.38549221889127727,
+          "toolCount": 1,
+          "avgConfidence": 0.36549221889127725,
+          "topTools": [
+            "build (0.37)"
+          ]
+        },
+        {
+          "mcp": "sourcetree-automation-api",
+          "score": 0.37611796630307753,
+          "toolCount": 2,
+          "avgConfidence": 0.33611796630307755,
+          "topTools": [
+            "execute (0.35)",
+            "configure (0.32)"
+          ]
+        },
+        {
+          "mcp": "git-gui-automation-api",
+          "score": 0.36298145486751393,
+          "toolCount": 1,
+          "avgConfidence": 0.3429814548675139,
+          "topTools": [
+            "execute (0.34)"
+          ]
+        },
+        {
+          "mcp": "anthropic",
+          "score": 0.34316718033699706,
+          "toolCount": 1,
+          "avgConfidence": 0.32316718033699704,
+          "topTools": [
+            "create_message (0.32)"
+          ]
+        },
+        {
+          "mcp": "ifttt",
+          "score": 0.3388873968010634,
+          "toolCount": 1,
+          "avgConfidence": 0.31888739680106337,
+          "topTools": [
+            "create_applet (0.32)"
+          ]
+        },
+        {
+          "mcp": "webdriverio-api",
+          "score": 0.32191310236745413,
+          "toolCount": 1,
+          "avgConfidence": 0.3019131023674541,
+          "topTools": [
+            "execute (0.30)"
+          ]
+        }
+      ],
+      "topMCPs": [
+        {
+          "mcp": "webhook",
+          "score": 0.5463149886333759,
+          "toolCount": 1,
+          "avgConfidence": 0.5263149886333759,
+          "topTools": [
+            "send (0.53)"
+          ]
+        },
+        {
+          "mcp": "cron",
+          "score": 0.5258647060581431,
+          "toolCount": 1,
+          "avgConfidence": 0.505864706058143,
+          "topTools": [
+            "schedule (0.51)"
+          ]
+        },
+        {
+          "mcp": "activecampaign",
+          "score": 0.49435028839792905,
+          "toolCount": 1,
+          "avgConfidence": 0.47435028839792903,
+          "topTools": [
+            "create_automation (0.47)"
+          ]
+        },
+        {
+          "mcp": "make-automation-api",
+          "score": 0.46173854753512356,
+          "toolCount": 3,
+          "avgConfidence": 0.40173854753512356,
+          "topTools": [
+            "configure (0.47)",
+            "execute (0.38)",
+            "get_status (0.36)"
+          ]
+        },
+        {
+          "mcp": "unreal-automation-api",
+          "score": 0.45830654002013554,
+          "toolCount": 3,
+          "avgConfidence": 0.39830654002013555,
+          "topTools": [
+            "configure (0.46)",
+            "execute (0.39)",
+            "get_status (0.35)"
+          ]
+        },
+        {
+          "mcp": "zapier",
+          "score": 0.4411100182288642,
+          "toolCount": 1,
+          "avgConfidence": 0.4211100182288642,
+          "topTools": [
+            "create_zap (0.42)"
+          ]
+        },
+        {
+          "mcp": "github_actions",
+          "score": 0.4310271523850388,
+          "toolCount": 1,
+          "avgConfidence": 0.4110271523850388,
+          "topTools": [
+            "trigger (0.41)"
+          ]
+        },
+        {
+          "mcp": "pandorabots-aiaas",
+          "score": 0.4027437368292695,
+          "toolCount": 2,
+          "avgConfidence": 0.3627437368292695,
+          "topTools": [
+            "post_data (0.38)",
+            "authenticate (0.35)"
+          ]
+        },
+        {
+          "mcp": "microsoft-bot-framework",
+          "score": 0.3975682714175846,
+          "toolCount": 2,
+          "avgConfidence": 0.3575682714175846,
+          "topTools": [
+            "post_data (0.37)",
+            "authenticate (0.35)"
+          ]
+        },
+        {
+          "mcp": "portel",
+          "score": 0.3920813456488666,
+          "toolCount": 2,
+          "avgConfidence": 0.3520813456488666,
+          "topTools": [
+            "send_notifications (0.36)",
+            "deploy_app (0.35)"
+          ]
+        }
+      ]
+    },
+    "security": {
+      "searchResults": 4,
+      "mcpScores": [
+        {
+          "mcp": "azure-security-api",
+          "score": 0.41378382644167333,
+          "toolCount": 2,
+          "avgConfidence": 0.37378382644167335,
+          "topTools": [
+            "scale (0.39)",
+            "monitor (0.36)"
+          ]
+        },
+        {
+          "mcp": "keycloak",
+          "score": 0.40385370458718406,
+          "toolCount": 1,
+          "avgConfidence": 0.38385370458718404,
+          "topTools": [
+            "manage_roles (0.38)"
+          ]
+        },
+        {
+          "mcp": "vault",
+          "score": 0.3661472673048926,
+          "toolCount": 1,
+          "avgConfidence": 0.3461472673048926,
+          "topTools": [
+            "store_secret (0.35)"
+          ]
+        }
+      ],
+      "topMCPs": [
+        {
+          "mcp": "azure-security-api",
+          "score": 0.41378382644167333,
+          "toolCount": 2,
+          "avgConfidence": 0.37378382644167335,
+          "topTools": [
+            "scale (0.39)",
+            "monitor (0.36)"
+          ]
+        },
+        {
+          "mcp": "keycloak",
+          "score": 0.40385370458718406,
+          "toolCount": 1,
+          "avgConfidence": 0.38385370458718404,
+          "topTools": [
+            "manage_roles (0.38)"
+          ]
+        },
+        {
+          "mcp": "vault",
+          "score": 0.3661472673048926,
+          "toolCount": 1,
+          "avgConfidence": 0.3461472673048926,
+          "topTools": [
+            "store_secret (0.35)"
+          ]
+        }
+      ]
+    }
+  }
+}
