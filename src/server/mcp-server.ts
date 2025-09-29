@@ -10,6 +10,8 @@ import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import { ToolFinder } from '../services/tool-finder.js';
 import { ResourceFinder } from '../services/resource-finder.js';
+import { AutoResourceDetector, ResourceCandidate } from '../services/auto-resource-detector.js';
+import { AutoResourceGenerator, GeneratedResource } from '../services/auto-resource-generator.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { TextUtils } from '../utils/text-utils.js';
 import chalk from 'chalk';
@@ -44,16 +46,87 @@ interface MCPTool {
 
 export class MCPServer {
   private orchestrator: NCPOrchestrator;
+  private autoResourceDetector: AutoResourceDetector;
+  private autoResourceGenerator: AutoResourceGenerator;
+  private autoResourcesGenerated: boolean = false;
 
   constructor(profileName: string = 'default') {
     // Profile-aware orchestrator using real MCP connections
     this.orchestrator = new NCPOrchestrator(profileName);
+    this.autoResourceDetector = new AutoResourceDetector();
+    this.autoResourceGenerator = new AutoResourceGenerator(this.orchestrator);
   }
 
   async initialize(): Promise<void> {
     logger.info('Starting NCP MCP server');
     await this.orchestrator.initialize();
+
+    // Generate auto-resources from existing tools
+    await this.generateAutoResources();
+
     logger.info('NCP MCP server ready');
+  }
+
+  /**
+   * Analyze tools and generate auto-resources for efficiency
+   */
+  private async generateAutoResources(): Promise<void> {
+    try {
+      // Get all available tools from orchestrator
+      const allTools = await this.getAllToolsForAnalysis();
+
+      if (allTools.length === 0) {
+        logger.info('No tools available for auto-resource generation');
+        return;
+      }
+
+      // Detect resource candidates
+      const candidates = this.autoResourceDetector.detectResourceCandidates(allTools);
+
+      if (candidates.length === 0) {
+        logger.info('No suitable tools found for auto-resource generation');
+        return;
+      }
+
+      // Generate resources from high-confidence candidates
+      const generatedResources = await this.autoResourceGenerator.generateResources(candidates);
+
+      logger.info(`Generated ${generatedResources.length} auto-resources from ${allTools.length} tools`);
+
+      // Log efficiency gains
+      const stats = this.autoResourceGenerator.getEfficiencyStats();
+      logger.info(`Auto-resource coverage: ${stats.totalGenerated} resources across ${Object.keys(stats.coverageByMcp).length} MCPs`);
+
+      this.autoResourcesGenerated = true;
+
+    } catch (error: any) {
+      logger.warn(`Auto-resource generation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get all tools from orchestrator for auto-resource analysis
+   */
+  private async getAllToolsForAnalysis(): Promise<Array<{name: string, description: string, inputSchema: any, mcpName: string}>> {
+    try {
+      const finder = new ToolFinder(this.orchestrator);
+      const findResult = await finder.find({
+        query: '',
+        page: 1,
+        limit: 10000, // Get all tools
+        depth: 2
+      });
+
+      return findResult.tools.map(tool => ({
+        name: tool.toolName,
+        description: tool.description || '',
+        inputSchema: tool.schema || {},
+        mcpName: tool.mcpName
+      }));
+    } catch (error: any) {
+      logger.warn(`Failed to get tools for analysis: ${error.message}`);
+      return [];
+    }
   }
 
   async handleRequest(request: any): Promise<MCPResponse | undefined> {
@@ -857,11 +930,14 @@ export class MCPServer {
 
   private async handleListResources(request: MCPRequest): Promise<MCPResponse> {
     try {
-      // Check if any MCPs actually provide resources
+      // Get both actual resources and auto-generated resources
       const actualResources = await this.orchestrator.getAllResources();
+      const autoResources = this.autoResourcesGenerated ? this.autoResourceGenerator.getGeneratedResources() : [];
 
-      if (actualResources && actualResources.length > 0) {
-        // Resources are available - show discovery guide instead of dumping all resources
+      const allResourcesExist = (actualResources && actualResources.length > 0) || autoResources.length > 0;
+
+      if (allResourcesExist) {
+        // Resources are available - include both actual and auto-generated
         const helpResource = {
           uri: "ncp://help/resource-discovery",
           name: "NCP Resource Discovery Guide",
@@ -869,11 +945,22 @@ export class MCPServer {
           mimeType: "text/markdown"
         };
 
+        // Convert auto-generated resources to MCP format
+        const autoResourcesMcp = autoResources.map((resource: GeneratedResource) => ({
+          uri: resource.uri,
+          name: resource.name,
+          description: resource.description,
+          mimeType: resource.mimeType
+        }));
+
+        // Combine all resources
+        const combinedResources = [helpResource, ...autoResourcesMcp];
+
         return {
           jsonrpc: '2.0',
           id: request.id,
           result: {
-            resources: [helpResource]  // Only show the discovery guide
+            resources: combinedResources
           }
         };
       } else {
@@ -927,6 +1014,29 @@ export class MCPServer {
             }]
           }
         };
+      }
+
+      // Check if this is an auto-generated resource first
+      if (this.autoResourcesGenerated) {
+        try {
+          const autoResult = await this.autoResourceGenerator.executeResource(uri, request.params || {});
+          if (autoResult.success) {
+            return {
+              jsonrpc: '2.0',
+              id: request.id,
+              result: {
+                contents: [{
+                  uri: uri,
+                  mimeType: "text/markdown", // Auto-resources use formatted markdown
+                  text: autoResult.content
+                }]
+              }
+            };
+          }
+        } catch (error: any) {
+          // If auto-resource execution fails, fall through to regular resource handling
+          logger.debug(`Auto-resource execution failed for ${uri}: ${error.message}`);
+        }
       }
 
       // Handle real resource URIs - proxy to appropriate MCP
