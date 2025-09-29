@@ -1,0 +1,21 @@
+mcp_name,package_name,command,category,status,description,repository_url
+filesystem,@modelcontextprotocol/server-filesystem,npx @modelcontextprotocol/server-filesystem,file-operations,active,"File system operations with secure access controls",https://github.com/modelcontextprotocol/servers
+memory,@modelcontextprotocol/server-memory,npx @modelcontextprotocol/server-memory,ai-memory,active,"Knowledge graph-based persistent memory system",https://github.com/modelcontextprotocol/servers
+everything,@modelcontextprotocol/server-everything,npx @modelcontextprotocol/server-everything,testing,active,"Reference server exercising all MCP protocol features",https://github.com/modelcontextprotocol/servers
+puppeteer,@modelcontextprotocol/server-puppeteer,npx @modelcontextprotocol/server-puppeteer,browser-automation,active,"Browser automation using Puppeteer",https://github.com/modelcontextprotocol/servers
+sequential-thinking,@modelcontextprotocol/server-sequential-thinking,npx @modelcontextprotocol/server-sequential-thinking,ai-reasoning,active,"Sequential thinking and problem solving",https://github.com/modelcontextprotocol/servers
+inspector,@modelcontextprotocol/inspector,npx @modelcontextprotocol/inspector,development,active,"Interactive developer tool for testing MCP servers",https://github.com/modelcontextprotocol/typescript-sdk
+github-official,github/github-mcp-server,npx github-mcp-server,developer-tools,active,"GitHub's official MCP server for repository management",https://github.com/github/github-mcp-server
+aws-bedrock,aws-bedrock-claude-chat,node aws-bedrock-claude-chat/src/mcp/server.js,cloud-infrastructure,experimental,"AWS Bedrock integration for Claude",https://github.com/aws-samples/bedrock-claude-chat
+cloudflare,cloudflare/mcp-server-cloudflare,npx @cloudflare/mcp-server,cloud-infrastructure,experimental,"Cloudflare MCP server for edge computing",https://github.com/cloudflare/mcp-server-cloudflare
+kubernetes,kubernetes/mcp-server,npx @k8s/mcp-server,cloud-infrastructure,experimental,"Kubernetes cluster management",https://github.com/kubernetes/mcp-server
+playwright,microsoft/playwright-mcp,npx @playwright/mcp-server,browser-automation,experimental,"Playwright browser automation",https://github.com/microsoft/playwright-mcp
+browserbase,browserbase/mcp-server-browserbase,npx @browserbase/mcp-server,browser-automation,experimental,"Browserbase browser automation platform",https://github.com/browserbase/mcp-server-browserbase
+leetcode,jinzcdev/leetcode-mcp-server,node leetcode-mcp-server,coding-practice,experimental,"LeetCode integration for coding practice",https://github.com/jinzcdev/leetcode-mcp-server
+tavily,tavily-ai/tavily-mcp,python -m tavily_mcp,search,experimental,"Tavily AI search integration",https://github.com/tavily-ai/tavily-mcp
+postman,postmanlabs/postman-mcp-server,npx @postman/mcp-server,api-testing,experimental,"Postman API testing integration",https://github.com/postmanlabs/postman-mcp-server
+twilio,twilio-labs/mcp,npx @twilio/mcp-server,communication,experimental,"Twilio communication services",https://github.com/twilio-labs/mcp
+supabase,supabase/mcp-server-supabase,npx @supabase/mcp-server,database,experimental,"Supabase database integration",https://github.com/supabase/mcp-server-supabase
+vscode,juehang/vscode-mcp-server,npx vscode-mcp-server,development,experimental,"VSCode integration",https://github.com/juehang/vscode-mcp-server
+anyquery,julien040/anyquery,npx anyquery-mcp,data-aggregation,experimental,"SQL queries across multiple data sources",https://github.com/julien040/anyquery
+inkeep,inkeep/mcp-server-python,python -m inkeep_mcp,documentation,experimental,"Documentation and knowledge base integration",https://github.com/inkeep/mcp-server-python

@@ -1022,7 +1022,7 @@ program
 
     // Use MCPServer for rich formatted output
     const { MCPServer } = await import('../server/mcp-server.js');
-    const server = new MCPServer(profileName, true); // Enable progress for first-time indexing
+    const server = new MCPServer(profileName);
     await server.initialize();
 
     const limit = parseInt(options.limit || '5');

@@ -9,6 +9,7 @@ import { updater } from '../utils/updater.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import { ToolFinder } from '../services/tool-finder.js';
+import { ResourceFinder } from '../services/resource-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { TextUtils } from '../utils/text-utils.js';
 import chalk from 'chalk';
@@ -95,6 +96,9 @@ export class MCPServer {
         case 'resources/list':
           return this.handleListResources(request);
 
+        case 'resources/read':
+          return this.handleResourcesRead(request);
+
         default:
           return {
             jsonrpc: '2.0',
@@ -138,7 +142,7 @@ export class MCPServer {
   }
 
   private async handleListTools(request: MCPRequest): Promise<MCPResponse> {
-    // NCP core 2-method architecture
+    // NCP core architecture: 2-3 methods depending on resource availability
     const tools: MCPTool[] = [
       {
         name: 'find',
@@ -195,6 +199,47 @@ export class MCPServer {
       }
     ];
 
+    // Conditionally add resource discovery tool if any MCPs provide resources
+    try {
+      const availableResources = await this.orchestrator.getAllResources();
+      if (availableResources && availableResources.length > 0) {
+        tools.push({
+          name: 'resource',
+          description: 'Dual-mode resource discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe the data you need: "I need project documentation", "I want current system metrics". (2) LISTING MODE: Call without description parameter for paginated browsing of all available resources and templates.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              description: {
+                type: 'string',
+                description: 'SEARCH MODE: Search query for needed data/documents ("project docs", "live weather"). LISTING MODE: Omit to browse all available resources with pagination.'
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum number of resources to return per page (default: 5 for search, 20 for list)'
+              },
+              page: {
+                type: 'number',
+                description: 'Page number for pagination (default: 1)'
+              },
+              confidence_threshold: {
+                type: 'number',
+                description: 'Minimum confidence level for search results (0.0-1.0, default: 0.3)'
+              },
+              depth: {
+                type: 'number',
+                description: 'Information depth: 0=Resource names only, 1=Names + descriptions, 2=Full details with URIs and metadata',
+                enum: [0, 1, 2],
+                default: 2
+              }
+            }
+          }
+        });
+      }
+    } catch (error) {
+      // If resource check fails, just continue without resource tool
+      logger.warn(`Failed to check resource availability: ${error}`);
+    }
+
     return {
       jsonrpc: '2.0',
       id: request.id,
@@ -226,17 +271,33 @@ export class MCPServer {
         case 'run':
           return this.handleRun(request, args);
 
+        case 'resource':
+          return this.handleResource(request, args);
+
         default:
           // Suggest similar methods
-          const suggestions = this.getSuggestions(name, ['find', 'run']);
+          const availableTools = ['find', 'run'];
+
+          // Check if resources are available to include in suggestions
+          try {
+            const resources = await this.orchestrator.getAllResources();
+            if (resources && resources.length > 0) {
+              availableTools.push('resource');
+            }
+          } catch (error) {
+            // Ignore error for suggestions
+          }
+
+          const suggestions = this.getSuggestions(name, availableTools);
           const suggestionText = suggestions.length > 0 ? ` Did you mean: ${suggestions.join(', ')}?` : '';
+          const methodList = availableTools.map(tool => `'${tool}'`).join(', ');
 
           return {
             jsonrpc: '2.0',
             id: request.id,
             error: {
               code: -32601,
-              message: `Method not found: '${name}'. NCP OSS supports 'find' and 'run' methods.${suggestionText} Use 'find()' to discover available tools.`
+              message: `Method not found: '${name}'. NCP OSS supports ${methodList} methods.${suggestionText} Use 'find()' to discover available tools.`
             }
           };
       }
@@ -428,7 +489,175 @@ export class MCPServer {
     };
   }
 
+  public async handleResource(request: MCPRequest, args: any): Promise<MCPResponse> {
+    const description = args?.description || '';
+    const page = Math.max(1, args?.page || 1);
+    const limit = args?.limit || (description ? 5 : 20);
+    const depth = args?.depth !== undefined ? Math.max(0, Math.min(2, args.depth)) : 2;
 
+    // Use ResourceFinder service for search logic
+    const finder = new ResourceFinder(this.orchestrator);
+    const findResult = await finder.find({
+      query: description,
+      page,
+      limit,
+      depth
+    });
+
+    const { resources: results, groupedByMCP: mcpGroups, pagination, mcpFilter, isListing } = findResult;
+
+    const filterText = mcpFilter ? ` (filtered to ${mcpFilter})` : '';
+
+    // Enhanced pagination display
+    const paginationInfo = pagination.totalPages > 1 ?
+      ` | Page ${pagination.page} of ${pagination.totalPages} (showing ${pagination.resultsInPage} of ${pagination.totalResults} results)` :
+      ` (${pagination.totalResults} results)`;
+
+    let output: string;
+    if (description) {
+      // Search mode - highlight the search query with reverse colors for emphasis
+      const highlightedQuery = chalk.inverse(` ${description} `);
+      output = `\n📄 Found resources for ${highlightedQuery}${filterText}${paginationInfo}:\n\n`;
+    } else {
+      // Listing mode - show all available resources
+      output = `\n📄 Available resources${filterText}${paginationInfo}:\n\n`;
+    }
+
+    // Add MCP health status summary
+    const healthStatus = this.orchestrator.getMCPHealthStatus();
+    if (healthStatus.total > 0) {
+      const healthIcon = healthStatus.unhealthy > 0 ? '⚠️' : '✅';
+      output += `${healthIcon} **MCPs**: ${healthStatus.healthy}/${healthStatus.total} healthy`;
+
+      if (healthStatus.unhealthy > 0) {
+        const unhealthyNames = healthStatus.mcps
+          .filter(mcp => !mcp.healthy)
+          .map(mcp => mcp.name)
+          .join(', ');
+        output += ` (${unhealthyNames} unavailable)`;
+      }
+      output += '\n\n';
+    }
+
+    // Handle no results case
+    if (results.length === 0) {
+      output = `❌ No resources found for "${description}"\n\n`;
+
+      // Show sample of available MCPs with resources
+      const samples = await finder.getSampleResources(8);
+
+      if (samples.length > 0) {
+        output += `📝 Available MCPs with resources:\n`;
+        samples.forEach(sample => {
+          output += `📁 **${sample.mcpName}** - ${sample.description}\n`;
+        });
+        output += `\n💡 *Try broader search terms or specify an MCP name in your query.*`;
+      } else {
+        output += `💡 *No resources are currently available from connected MCPs.*`;
+      }
+
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          content: [{ type: 'text', text: output }]
+        }
+      };
+    }
+
+    // Format output based on depth and mode
+    if (depth === 0) {
+      // Depth 0: Resource names only (no descriptions, no URIs)
+      results.forEach((resource) => {
+        if (isListing) {
+          output += `# **${resource.name}**\n`;
+        } else {
+          const confidence = Math.round(resource.confidence * 100);
+          output += `# **${resource.name}** (${confidence}% match)\n`;
+        }
+      });
+    } else if (depth === 1) {
+      // Depth 1: Resource name + description only (no URIs)
+      results.forEach((resource, resourceIndex) => {
+        if (resourceIndex > 0) output += '---\n';
+
+        // Resource name
+        if (isListing) {
+          output += `# **${resource.name}**\n`;
+        } else {
+          const confidence = Math.round(resource.confidence * 100);
+          output += `# **${resource.name}** (${confidence}% match)\n`;
+        }
+
+        // Resource description
+        if (resource.description) {
+          const cleanDescription = resource.description
+            .replace(/^[^:]+:\s*/, '') // Remove MCP prefix
+            .replace(/\s+/g, ' ') // Normalize whitespace
+            .trim();
+          output += `${cleanDescription}\n`;
+        }
+
+        // Show MIME type if available
+        if (resource.mimeType) {
+          output += `*Type: ${resource.mimeType}*\n`;
+        }
+      });
+    } else {
+      // Depth 2: Full details with URIs for resources/read
+      results.forEach((resource, resourceIndex) => {
+        if (resourceIndex > 0) output += '---\n';
+
+        // Resource name
+        if (isListing) {
+          output += `# **${resource.name}**\n`;
+        } else {
+          const confidence = Math.round(resource.confidence * 100);
+          output += `# **${resource.name}** (${confidence}% match)\n`;
+        }
+
+        // Resource description
+        if (resource.description) {
+          const cleanDescription = resource.description
+            .replace(/^[^:]+:\s*/, '') // Remove MCP prefix
+            .replace(/\s+/g, ' ') // Normalize whitespace
+            .trim();
+          output += `${cleanDescription}\n`;
+        }
+
+        // Resource URI for access
+        if (resource.uri) {
+          output += `**URI**: \`${resource.uri}\`\n`;
+          output += `*Use \`resources/read\` with this URI to access the content*\n`;
+        }
+
+        // Show MIME type if available
+        if (resource.mimeType) {
+          output += `**Type**: ${resource.mimeType}\n`;
+        }
+      });
+    }
+
+    // Add usage guidance for resources
+    if (depth === 2 && results.length > 0) {
+      output += '\n---\n\n';
+      output += '💡 **Next Steps**:\n';
+      output += '1. Use `resources/read` with any URI above to access content\n';
+      output += '2. For parameterized resources (containing `{variables}`), substitute values first\n';
+      output += '3. Use lower depth (0-1) for browsing, depth 2 for implementation\n';
+    }
+
+    return {
+      jsonrpc: '2.0',
+      id: request.id,
+      result: {
+        content: [{
+          type: 'text',
+          text: output
+        }]
+      }
+    };
+  }
 
   private getToolContext(toolName: string): string {
     return ToolContextResolver.getContext(toolName);
@@ -628,14 +857,35 @@ export class MCPServer {
 
   private async handleListResources(request: MCPRequest): Promise<MCPResponse> {
     try {
-      const resources = await this.orchestrator.getAllResources();
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          resources: resources || []
-        }
-      };
+      // Check if any MCPs actually provide resources
+      const actualResources = await this.orchestrator.getAllResources();
+
+      if (actualResources && actualResources.length > 0) {
+        // Resources are available - show discovery guide instead of dumping all resources
+        const helpResource = {
+          uri: "ncp://help/resource-discovery",
+          name: "NCP Resource Discovery Guide",
+          description: "Use semantic search to find resources instead of browsing hundreds. Use the 'resource' tool to discover what you need.",
+          mimeType: "text/markdown"
+        };
+
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            resources: [helpResource]  // Only show the discovery guide
+          }
+        };
+      } else {
+        // No resources available - return empty list
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            resources: []
+          }
+        };
+      }
     } catch (error: any) {
       logger.error(`Error listing resources: ${error.message}`);
       return {
@@ -645,6 +895,219 @@ export class MCPServer {
           resources: []
         }
       };
+    }
+  }
+
+  private async handleResourcesRead(request: MCPRequest): Promise<MCPResponse> {
+    try {
+      if (!request.params || !request.params.uri) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32602,
+            message: 'Invalid params: missing uri parameter'
+          }
+        };
+      }
+
+      const uri = request.params.uri;
+
+      // Handle special discovery guide URI
+      if (uri === "ncp://help/resource-discovery") {
+        const guideContent = this.generateResourceDiscoveryGuide();
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            contents: [{
+              uri: uri,
+              mimeType: "text/markdown",
+              text: guideContent
+            }]
+          }
+        };
+      }
+
+      // Handle real resource URIs - proxy to appropriate MCP
+      return await this.proxyResourceRead(uri, request.id);
+
+    } catch (error: any) {
+      logger.error(`Error reading resource: ${error.message}`);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32603,
+          message: 'Internal error reading resource',
+          data: error.message
+        }
+      };
+    }
+  }
+
+  private generateResourceDiscoveryGuide(): string {
+    return `# NCP Resource Discovery Guide
+
+Welcome to NCP's resource discovery system! Instead of browsing through potentially hundreds of resources, use **semantic search** to find exactly what you need.
+
+## How to Discover Resources
+
+Use the \`resource\` tool with natural language queries:
+
+### Example Searches:
+- \`resource("project documentation")\` - Find README files, API docs, guides
+- \`resource("configuration files")\` - Find config.json, settings, .env files
+- \`resource("system metrics")\` - Find live performance data, logs, status
+- \`resource("current weather")\` - Find live weather data endpoints
+- \`resource("database schema")\` - Find schema definitions, database docs
+
+### Search Modes:
+
+#### 1. Search Mode (Recommended)
+\`\`\`
+resource("what you're looking for")
+\`\`\`
+Returns the most relevant resources with confidence scores.
+
+#### 2. Listing Mode
+\`\`\`
+resource()  // No description parameter
+\`\`\`
+Browse all available resources with pagination.
+
+#### 3. MCP-Specific Search
+\`\`\`
+resource("mcp-name:specific-resource")
+\`\`\`
+Filter to a specific MCP's resources.
+
+## Using Discovered Resources
+
+After finding resources, use their URIs with \`resources/read\`:
+
+\`\`\`
+resources/read(uri="docs://project/readme")
+\`\`\`
+
+For parameterized resources with variables like \`{city}\`:
+\`\`\`
+resources/read(uri="weather://current/san-francisco")
+\`\`\`
+
+## Benefits of Semantic Discovery
+
+- **No Clutter**: See only relevant resources, not everything
+- **Intelligent**: Understands what you're looking for, not just exact matches
+- **Fast**: Find what you need in seconds, not minutes
+- **Scalable**: Works with any number of MCPs and resources
+
+## Need Help?
+
+- Use \`depth=0\` for just resource names
+- Use \`depth=1\` for names + descriptions
+- Use \`depth=2\` for full details with URIs (default)
+
+Start exploring with: \`resource("your search here")\`
+`;
+  }
+
+  private async proxyResourceRead(uri: string, requestId: string | number): Promise<MCPResponse> {
+    try {
+      // Find which MCP owns this resource by checking available resources
+      const allResources = await this.orchestrator.getAllResources();
+      const targetResource = allResources.find(resource => resource.uri === uri);
+
+      if (!targetResource) {
+        return {
+          jsonrpc: '2.0',
+          id: requestId,
+          error: {
+            code: -32602,
+            message: `Resource not found: ${uri}`
+          }
+        };
+      }
+
+      // Get the MCP that owns this resource
+      const mcpName = targetResource._source;
+      if (!mcpName) {
+        return {
+          jsonrpc: '2.0',
+          id: requestId,
+          error: {
+            code: -32603,
+            message: 'Resource has no associated MCP'
+          }
+        };
+      }
+
+      // Use the orchestrator's existing resource reading capability
+      const content = await this.readResourceFromMCP(mcpName, uri);
+
+      return {
+        jsonrpc: '2.0',
+        id: requestId,
+        result: {
+          contents: [{
+            uri: uri,
+            mimeType: targetResource.mimeType || "text/plain",
+            text: content
+          }]
+        }
+      };
+
+    } catch (error: any) {
+      return {
+        jsonrpc: '2.0',
+        id: requestId,
+        error: {
+          code: -32603,
+          message: `Failed to read resource: ${error.message}`
+        }
+      };
+    }
+  }
+
+  private async readResourceFromMCP(mcpName: string, uri: string): Promise<string> {
+    // Create temporary connection to read resource
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+
+    const definition = this.orchestrator['definitions'].get(mcpName);
+    if (!definition) {
+      throw new Error(`MCP definition not found: ${mcpName}`);
+    }
+
+    const transport = new StdioClientTransport({
+      command: definition.config.command,
+      args: definition.config.args || [],
+      env: definition.config.env || {}
+    });
+
+    const client = new Client(
+      { name: 'ncp-oss-resource-reader', version: '1.0.0' },
+      { capabilities: {} }
+    );
+
+    try {
+      await client.connect(transport);
+      const response = await client.readResource({ uri });
+      await client.close();
+
+      if (response.contents && response.contents.length > 0) {
+        const content = response.contents[0];
+        if (typeof content.text === 'string') {
+          return content.text;
+        }
+        return JSON.stringify(content);
+      }
+
+      return 'Resource content not available';
+
+    } catch (error) {
+      await client.close();
+      throw error;
     }
   }
 
