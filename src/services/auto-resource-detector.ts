@@ -1,9 +1,6 @@
 /**
  * Auto-Resource Detector
  * Identifies tools that could be efficiently exposed as resources for direct access
- *
- * Key insight: Convert high-frequency data retrieval tools into URI-based resources
- * to reduce AI processing overhead and improve response times.
  */
 
 export interface ToolDefinition {
@@ -131,12 +128,6 @@ export class AutoResourceDetector {
       }
     }
 
-    // Generic data patterns
-    if (lowerName.includes('data') || lowerName.includes('content')) {
-      reasoning.push(`✅ Data-focused operation`);
-      score = Math.max(score, 0.6);
-    }
-
     if (score === 0) {
       reasoning.push(`⚠️ No clear data-retrieval pattern identified`);
       score = 0.3; // Neutral score for unclear patterns
@@ -154,44 +145,21 @@ export class AutoResourceDetector {
       return 1.0;
     }
 
-    const properties = inputSchema.properties;
-    const paramCount = Object.keys(properties).length;
-    const required = inputSchema.required || [];
-
-    // Score based on parameter count and complexity
-    let score = 0;
+    const paramCount = Object.keys(inputSchema.properties).length;
 
     if (paramCount === 0) {
       reasoning.push(`✅ No parameters required`);
-      score = 1.0;
+      return 1.0;
     } else if (paramCount <= 2) {
       reasoning.push(`✅ Simple parameter set (${paramCount} params)`);
-      score = 0.9;
+      return 0.9;
     } else if (paramCount <= 4) {
       reasoning.push(`⚠️ Moderate parameter complexity (${paramCount} params)`);
-      score = 0.6;
+      return 0.6;
     } else {
       reasoning.push(`❌ Too many parameters (${paramCount} params)`);
-      score = 0.2;
+      return 0.2;
     }
-
-    // Check parameter types - simple types are better
-    const simpleTypes = ['string', 'number', 'integer', 'boolean'];
-    let complexParams = 0;
-
-    for (const [paramName, paramDef] of Object.entries(properties)) {
-      const paramType = (paramDef as any).type;
-      if (!simpleTypes.includes(paramType)) {
-        complexParams++;
-        reasoning.push(`⚠️ Complex parameter type: ${paramName} (${paramType})`);
-      }
-    }
-
-    if (complexParams > 0) {
-      score *= (1 - (complexParams / paramCount) * 0.3); // Reduce score for complex types
-    }
-
-    return score;
   }
 
   /**
@@ -304,13 +272,6 @@ export class AutoResourceDetector {
     if (requiredParams.length > 0) {
       const paramPath = requiredParams.map(p => p.uriPosition).join('/');
       template += `/${paramPath}`;
-    }
-
-    // Add optional parameters as query string (for now, simplified)
-    const optionalParams = parameters.filter(p => !p.required);
-    if (optionalParams.length > 0) {
-      const queryParams = optionalParams.map(p => `${p.toolParam}=${p.uriPosition}`).join('&');
-      template += `?${queryParams}`;
     }
 
     return template;

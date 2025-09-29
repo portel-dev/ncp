@@ -1,9 +1,6 @@
 /**
  * Auto-Resource Generator
- * Creates efficient resource endpoints from existing tools for direct AI access
- *
- * Core Innovation: Pre-formatted resources eliminate AI processing overhead
- * by providing human-readable data instead of raw tool responses
+ * Creates efficient resource endpoints from existing tools for direct access
  */
 
 import { ResourceCandidate, ParameterMapping } from './auto-resource-detector.js';
@@ -151,11 +148,6 @@ export class AutoResourceGenerator {
       return this.formatDirectoryListing(toolResponse, parameters);
     }
 
-    // Database queries
-    if (toolName.includes('query') || toolName.includes('read_query')) {
-      return this.formatDatabaseResult(toolResponse, parameters);
-    }
-
     // Status/info operations
     if (toolName.includes('status') || toolName.includes('info') || toolName.includes('health')) {
       return this.formatStatusInfo(toolResponse, parameters);
@@ -199,36 +191,6 @@ export class AutoResourceGenerator {
       output += JSON.stringify(response, null, 2);
     } else {
       output += response.toString();
-    }
-
-    return output;
-  }
-
-  /**
-   * Format database query results
-   */
-  private formatDatabaseResult(response: any, parameters: Record<string, any>): string {
-    const query = parameters.query || 'Database Query';
-    let output = `# Query Result: ${query}\n\n`;
-
-    if (Array.isArray(response)) {
-      if (response.length === 0) {
-        output += 'No results found.\n';
-      } else {
-        // Format as table
-        const headers = Object.keys(response[0] || {});
-        if (headers.length > 0) {
-          output += `| ${headers.join(' | ')} |\n`;
-          output += `|${headers.map(() => '---').join('|')}|\n`;
-
-          response.forEach(row => {
-            const values = headers.map(header => row[header] || '');
-            output += `| ${values.join(' | ')} |\n`;
-          });
-        }
-      }
-    } else {
-      output += JSON.stringify(response, null, 2);
     }
 
     return output;

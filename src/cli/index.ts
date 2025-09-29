@@ -1394,15 +1394,17 @@ program
     await orchestrator.cleanup();
   });
 
-// Detect MCP server mode (when called by Claude Desktop or other MCP clients)
-if (!process.stdin.isTTY && process.argv.length === 2) {
-  // Run as MCP server when stdin is piped and no CLI arguments
-  console.error('Starting NCP in MCP server mode...');
-  const profileName = process.env.NCP_PROFILE || 'all';
-  const server = new MCPServer(profileName);
-  await server.run();
-} else {
-  // Normal CLI mode
-  program.parse();
-}
+// Detect MCP server mode (when called by desktop client or other MCP clients)
+(async () => {
+  if (!process.stdin.isTTY && process.argv.length === 2) {
+    // Run as MCP server when stdin is piped and no CLI arguments
+    console.error('Starting NCP in MCP server mode...');
+    const profileName = process.env.NCP_PROFILE || 'all';
+    const server = new MCPServer(profileName);
+    await server.run();
+  } else {
+    // Normal CLI mode
+    program.parse();
+  }
+})().catch(console.error);
 }
