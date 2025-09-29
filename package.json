@@ -57,6 +57,7 @@
     "clipboardy": "^4.0.0",
     "commander": "^14.0.1",
     "env-paths": "^3.0.0",
+    "inquirer": "^12.9.6",
     "json-colorizer": "^3.0.1",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",

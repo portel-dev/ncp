@@ -9,6 +9,8 @@ import { updater } from '../utils/updater.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import { ToolFinder } from '../services/tool-finder.js';
+import { AutoResourceDetector, ResourceCandidate } from '../services/auto-resource-detector.js';
+import { AutoResourceGenerator, GeneratedResource } from '../services/auto-resource-generator.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { TextUtils } from '../utils/text-utils.js';
 import chalk from 'chalk';
@@ -43,16 +45,84 @@ interface MCPTool {
 
 export class MCPServer {
   private orchestrator: NCPOrchestrator;
+  private autoResourceDetector: AutoResourceDetector;
+  private autoResourceGenerator: AutoResourceGenerator;
+  private autoResourcesGenerated: boolean = false;
 
   constructor(profileName: string = 'default') {
     // Profile-aware orchestrator using real MCP connections
     this.orchestrator = new NCPOrchestrator(profileName);
+    this.autoResourceDetector = new AutoResourceDetector();
+    this.autoResourceGenerator = new AutoResourceGenerator(this.orchestrator);
   }
 
   async initialize(): Promise<void> {
     logger.info('Starting NCP MCP server');
     await this.orchestrator.initialize();
+
+    // Generate auto-resources from existing tools
+    await this.generateAutoResources();
+
     logger.info('NCP MCP server ready');
+  }
+
+  /**
+   * Analyze tools and generate auto-resources for efficiency
+   */
+  private async generateAutoResources(): Promise<void> {
+    try {
+      // Get all available tools from orchestrator
+      const allTools = await this.getAllToolsForAnalysis();
+
+      if (allTools.length === 0) {
+        logger.info('No tools available for auto-resource generation');
+        return;
+      }
+
+      // Detect resource candidates
+      const candidates = this.autoResourceDetector.detectResourceCandidates(allTools);
+
+      if (candidates.length === 0) {
+        logger.info('No suitable tools found for auto-resource generation');
+        return;
+      }
+
+      // Generate resources from high-confidence candidates
+      const generatedResources = await this.autoResourceGenerator.generateResources(candidates);
+
+      logger.info(`Generated ${generatedResources.length} auto-resources from ${allTools.length} tools`);
+
+      // Log efficiency gains
+      const stats = this.autoResourceGenerator.getEfficiencyStats();
+      logger.info(`Auto-resource coverage: ${stats.totalGenerated} resources across ${Object.keys(stats.coverageByMcp).length} MCPs`);
+
+      this.autoResourcesGenerated = true;
+
+    } catch (error: any) {
+      logger.warn(`Auto-resource generation failed: ${error.message}`);
+      this.autoResourcesGenerated = false;
+    }
+  }
+
+  /**
+   * Get all tools for auto-resource analysis
+   */
+  private async getAllToolsForAnalysis(): Promise<Array<{name: string; description: string; inputSchema: any; mcpName: string}>> {
+    try {
+      const finder = new ToolFinder(this.orchestrator);
+      const result = await finder.find({ limit: 1000 }); // Get all tools
+
+      return result.tools.map(tool => ({
+        name: tool.toolName.includes(':') ? tool.toolName.split(':')[1] : tool.toolName,
+        description: tool.description || '',
+        inputSchema: tool.schema || {},
+        mcpName: tool.toolName.includes(':') ? tool.toolName.split(':')[0] : 'unknown'
+      }));
+
+    } catch (error) {
+      logger.warn(`Failed to get tools for analysis: ${error}`);
+      return [];
+    }
   }
 
   async handleRequest(request: any): Promise<MCPResponse | undefined> {
@@ -94,6 +164,9 @@ export class MCPServer {
 
         case 'resources/list':
           return this.handleListResources(request);
+
+        case 'resources/read':
+          return this.handleResourcesRead(request);
 
         default:
           return {
@@ -628,12 +701,35 @@ export class MCPServer {
 
   private async handleListResources(request: MCPRequest): Promise<MCPResponse> {
     try {
-      const resources = await this.orchestrator.getAllResources();
+      // Get manual resources from MCPs
+      const manualResources = await this.orchestrator.getAllResources();
+
+      // Get auto-generated resources
+      const autoResources = this.autoResourcesGenerated
+        ? this.convertGeneratedResourcesToMCPFormat()
+        : [];
+
+      // Combine both types
+      const allResources = [...(manualResources || []), ...autoResources];
+
+      // Add summary information if auto-resources exist
+      if (autoResources.length > 0) {
+        const stats = this.autoResourceGenerator.getEfficiencyStats();
+        const summaryResource = {
+          uri: 'ncp://auto-resources/summary',
+          name: 'Auto-Generated Resources Summary',
+          description: `${stats.totalGenerated} auto-generated resources for efficient tool access. ` +
+                      `${stats.directAccess} direct access, ${stats.templatedAccess} templated access.`,
+          mimeType: 'text/markdown'
+        };
+        allResources.unshift(summaryResource);
+      }
+
       return {
         jsonrpc: '2.0',
         id: request.id,
         result: {
-          resources: resources || []
+          resources: allResources
         }
       };
     } catch (error: any) {
@@ -646,6 +742,141 @@ export class MCPServer {
         }
       };
     }
+  }
+
+  /**
+   * Convert generated resources to MCP resource format
+   */
+  private convertGeneratedResourcesToMCPFormat(): Array<any> {
+    const generatedResources = this.autoResourceGenerator.getGeneratedResources();
+
+    return generatedResources.map(resource => ({
+      uri: resource.uri,
+      name: resource.name,
+      description: `🤖 ${resource.description}`,
+      mimeType: resource.mimeType,
+      annotations: {
+        autoGenerated: true,
+        sourceToolName: resource.sourceToolName,
+        sourceMcpName: resource.sourceMcpName,
+        accessPattern: resource.accessPattern
+      }
+    }));
+  }
+
+  /**
+   * Handle resources/read requests for both manual and auto-generated resources
+   */
+  private async handleResourcesRead(request: MCPRequest): Promise<MCPResponse> {
+    try {
+      if (!request.params || !request.params.uri) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32602,
+            message: 'Invalid params: missing uri parameter'
+          }
+        };
+      }
+
+      const uri = request.params.uri;
+
+      // Handle special NCP resources
+      if (uri === 'ncp://auto-resources/summary') {
+        return this.handleAutoResourcesSummary(request.id);
+      }
+
+      // Check if it's an auto-generated resource
+      if (this.autoResourcesGenerated) {
+        const autoResult = await this.autoResourceGenerator.executeResource(uri);
+        if (autoResult.success) {
+          return {
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              contents: [{
+                uri: uri,
+                mimeType: 'text/markdown',
+                text: autoResult.content
+              }]
+            }
+          };
+        }
+      }
+
+      // Try to read from manual resources (delegate to original MCP)
+      // This would require implementing proxy reading to the original MCP
+      // For now, return not found
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32602,
+          message: `Resource not found: ${uri}`
+        }
+      };
+
+    } catch (error: any) {
+      logger.error(`Error reading resource: ${error.message}`);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32603,
+          message: 'Internal error reading resource',
+          data: error.message
+        }
+      };
+    }
+  }
+
+  /**
+   * Handle auto-resources summary
+   */
+  private handleAutoResourcesSummary(requestId: string | number): MCPResponse {
+    const stats = this.autoResourceGenerator.getEfficiencyStats();
+    const resources = this.autoResourceGenerator.getGeneratedResources();
+
+    let summary = `# Auto-Generated Resources Summary\n\n`;
+    summary += `**Total Generated**: ${stats.totalGenerated} resources\n`;
+    summary += `**Direct Access**: ${stats.directAccess} resources\n`;
+    summary += `**Templated Access**: ${stats.templatedAccess} resources\n\n`;
+
+    summary += `## Coverage by MCP\n\n`;
+    for (const [mcpName, count] of Object.entries(stats.coverageByMcp)) {
+      summary += `- **${mcpName}**: ${count} auto-resources\n`;
+    }
+
+    summary += `\n## Available Auto-Resources\n\n`;
+    for (const resource of resources.slice(0, 10)) { // Show first 10
+      summary += `### ${resource.name}\n`;
+      summary += `**URI**: \`${resource.uri}\`\n`;
+      summary += `**Source**: ${resource.sourceMcpName}:${resource.sourceToolName}\n`;
+      summary += `**Type**: ${resource.accessPattern}\n\n`;
+    }
+
+    if (resources.length > 10) {
+      summary += `\n*... and ${resources.length - 10} more auto-resources*\n`;
+    }
+
+    summary += `\n## Efficiency Benefits\n\n`;
+    summary += `- **Reduced Token Usage**: Pre-formatted responses eliminate AI processing overhead\n`;
+    summary += `- **Faster Access**: Direct URI-based access vs multi-step tool calls\n`;
+    summary += `- **Better Caching**: Stable URIs enable efficient caching strategies\n`;
+    summary += `- **Dual Interface**: Tools remain available for complex operations\n`;
+
+    return {
+      jsonrpc: '2.0',
+      id: requestId,
+      result: {
+        contents: [{
+          uri: 'ncp://auto-resources/summary',
+          mimeType: 'text/markdown',
+          text: summary
+        }]
+      }
+    };
   }
 
   async cleanup(): Promise<void> {
