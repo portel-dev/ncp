@@ -8,6 +8,24 @@ import { readFileSync, existsSync } from 'fs';
 import * as os from 'os';
 
 let _ncpBaseDir: string | null = null;
+let _overrideWorkingDirectory: string | null = null;
+
+/**
+ * Set override working directory for profile resolution
+ * This allows the --working-dir parameter to override process.cwd()
+ */
+export function setOverrideWorkingDirectory(dir: string | null): void {
+  _overrideWorkingDirectory = dir;
+  // Clear cached base directory so it gets recalculated with new working directory
+  _ncpBaseDir = null;
+}
+
+/**
+ * Get the effective working directory (override or process.cwd())
+ */
+export function getEffectiveWorkingDirectory(): string {
+  return _overrideWorkingDirectory || process.cwd();
+}
 
 /**
  * Determines the base .ncp directory to use
@@ -16,8 +34,8 @@ let _ncpBaseDir: string | null = null;
 export function getNcpBaseDirectory(): string {
   if (_ncpBaseDir) return _ncpBaseDir;
 
-  // Start from current working directory and traverse up
-  let currentDir = process.cwd();
+  // Start from effective working directory and traverse up
+  let currentDir = getEffectiveWorkingDirectory();
   const root = path.parse(currentDir).root;
 
   while (currentDir !== root) {

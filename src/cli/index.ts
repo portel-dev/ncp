@@ -18,6 +18,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { mcpWrapper } from '../utils/mcp-wrapper.js';
 import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 import { UpdateChecker } from '../utils/update-checker.js';
+import { setOverrideWorkingDirectory } from '../utils/ncp-paths.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -278,6 +279,7 @@ ${chalk.dim('Orchestrates multiple MCP servers through a unified interface for A
 ${chalk.dim('Reduces cognitive load and clutter, saving tokens and speeding up AI interactions.')}
 ${chalk.dim('Enables smart tool discovery across all configured servers with vector similarity search.')}`)
   .option('--profile <name>', 'Profile to use (default: all)')
+  .option('--working-dir <path>', 'Working directory for profile resolution (overrides current directory)')
   .option('--no-color', 'Disable colored output');
 
 // Configure help with enhanced formatting, Quick Start, and examples
@@ -414,12 +416,26 @@ const hasCommands = process.argv.includes('find') ||
 const shouldRunAsServer = !hasCommands;
 
 if (shouldRunAsServer) {
+  // Handle --working-dir parameter for MCP server mode
+  const workingDirIndex = process.argv.indexOf('--working-dir');
+  if (workingDirIndex !== -1 && workingDirIndex + 1 < process.argv.length) {
+    const workingDirValue = process.argv[workingDirIndex + 1];
+    setOverrideWorkingDirectory(workingDirValue);
+  }
+
   // Running as MCP server: ncp (defaults to 'all' profile) or ncp --profile <name>
   const profileName = profileIndex !== -1 ? (process.argv[profileIndex + 1] || 'all') : 'all';
 
   const server = new MCPServer(profileName);
   server.run().catch(console.error);
 } else {
+  // Handle --working-dir parameter for CLI mode
+  const workingDirIndex = process.argv.indexOf('--working-dir');
+  if (workingDirIndex !== -1 && workingDirIndex + 1 < process.argv.length) {
+    const workingDirValue = process.argv[workingDirIndex + 1];
+    setOverrideWorkingDirectory(workingDirValue);
+  }
+
   // Running as CLI tool
 
 // Add MCP command
