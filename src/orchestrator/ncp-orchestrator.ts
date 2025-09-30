@@ -246,7 +246,7 @@ export class NCPOrchestrator {
       await this.csvCache.startIncrementalWrite(profileHash);
 
       // Index only the MCPs that need it
-      await this.discoverMCPTools(mcpsToIndex, profile, true);
+      await this.discoverMCPTools(mcpsToIndex, profile, true, mcpConfigs.length);
 
       // Finalize cache
       await this.csvCache.finalize();
@@ -326,11 +326,13 @@ export class NCPOrchestrator {
     logger.info(`Loaded ${this.allTools.length} tools from CSV cache`);
   }
 
-  private async discoverMCPTools(mcpConfigs: MCPConfig[], profile?: Profile, incrementalMode: boolean = false): Promise<void> {
+  private async discoverMCPTools(mcpConfigs: MCPConfig[], profile?: Profile, incrementalMode: boolean = false, totalMCPCount?: number): Promise<void> {
     // Only clear allTools if not in incremental mode
     if (!incrementalMode) {
       this.allTools = [];
     }
+
+    const displayTotal = totalMCPCount || mcpConfigs.length;
 
     for (let i = 0; i < mcpConfigs.length; i++) {
       const config = mcpConfigs[i];
@@ -360,7 +362,10 @@ export class NCPOrchestrator {
             timeDisplay = ` (~${remainingSeconds}s remaining)`;
           }
 
-          spinner.updateMessage(`Indexing tools for the first time (${progress}) ${percentage}%${timeDisplay}`);
+          // Show appropriate message based on mode
+          const action = incrementalMode ? 'Updating' : 'Indexing';
+          const modeText = incrementalMode ? `(${mcpConfigs.length}/${displayTotal} MCPs)` : '';
+          spinner.updateMessage(`${action} tools ${modeText} (${progress}) ${percentage}%${timeDisplay}`);
           spinner.updateSubMessage(`Connecting to ${config.name}...`);
         }
 
