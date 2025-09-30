@@ -6,6 +6,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { getCacheDirectory } from '../utils/ncp-paths.js';
 import { join } from 'path';
+import { createHash } from 'crypto';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -68,6 +69,7 @@ function levenshteinDistance(str1: string, str2: string): number {
   return matrix[str2.length][str1.length];
 }
 import { CachePatcher } from '../cache/cache-patcher.js';
+import { CSVCache, CachedTool } from '../cache/csv-cache.js';
 import { spinner } from '../utils/progress-spinner.js';
 
 interface DiscoveryResult {
@@ -145,6 +147,7 @@ export class NCPOrchestrator {
   private discovery: DiscoveryEngine;
   private healthMonitor: MCPHealthMonitor;
   private cachePatcher: CachePatcher;
+  private csvCache: CSVCache;
   private showProgress: boolean;
   private indexingProgress: { current: number; total: number; currentMCP: string; estimatedTimeRemaining?: number } | null = null;
   private indexingStartTime: number = 0;
@@ -154,6 +157,7 @@ export class NCPOrchestrator {
     this.discovery = new DiscoveryEngine();
     this.healthMonitor = new MCPHealthMonitor();
     this.cachePatcher = new CachePatcher();
+    this.csvCache = new CSVCache(getCacheDirectory(), profileName);
     this.showProgress = showProgress;
   }
 
@@ -190,41 +194,62 @@ export class NCPOrchestrator {
     // Initialize discovery engine first
     await this.discovery.initialize();
 
-    // Use new optimized cache loading with profile hash validation
-    const cacheLoaded = await this.loadFromOptimizedCache(profile);
+    // Initialize CSV cache
+    await this.csvCache.initialize();
 
-    if (!cacheLoaded) {
-      // No cache or cache invalid - discover tools from MCPs
-      logger.info('Cache invalid or missing, discovering tools...');
+    // Get profile hash for cache validation
+    const profileHash = CSVCache.hashProfile(profile.mcpServers);
 
-      const mcpConfigs: MCPConfig[] = Object.entries(profile.mcpServers).map(([name, config]) => ({
-        name,
-        command: config.command,
-        args: config.args,
-        env: config.env || {}
-      }));
+    // Check if cache is valid
+    const cacheValid = this.csvCache.validateCache(profileHash);
 
+    const mcpConfigs: MCPConfig[] = Object.entries(profile.mcpServers).map(([name, config]) => ({
+      name,
+      command: config.command,
+      args: config.args,
+      env: config.env || {}
+    }));
+
+    if (cacheValid) {
+      // Load from cache
+      logger.info('Loading tools from CSV cache...');
+      await this.loadFromCSVCache(mcpConfigs);
+
+      if (this.showProgress && this.allTools.length > 0) {
+        spinner.success(`Loaded ${this.allTools.length} tools from cache`);
+      }
+    }
+
+    // Get list of MCPs that need indexing
+    const indexedMCPs = this.csvCache.getIndexedMCPs();
+    const mcpsToIndex = mcpConfigs.filter(config => {
+      const tools = profile.mcpServers[config.name];
+      const currentHash = CSVCache.hashProfile(tools);
+      return !this.csvCache.isMCPIndexed(config.name, currentHash);
+    });
+
+    if (mcpsToIndex.length > 0) {
       // Initialize progress tracking
       this.indexingProgress = {
         current: 0,
-        total: mcpConfigs.length,
+        total: mcpsToIndex.length,
         currentMCP: 'initializing...'
       };
 
       if (this.showProgress) {
-        spinner.start(`Indexing tools for the first time (${mcpConfigs.length} MCPs)`);
+        const action = cacheValid ? 'Updating' : 'Indexing';
+        spinner.start(`${action} tools (${mcpsToIndex.length}/${mcpConfigs.length} MCPs need indexing)`);
         spinner.updateSubMessage('Initializing discovery engine...');
       }
 
-      await this.discoverMCPTools(mcpConfigs);
+      // Start incremental cache writing
+      await this.csvCache.startIncrementalWrite(profileHash);
 
-      if (this.showProgress) {
-        spinner.updateMessage('Saving cache for future use...');
-        spinner.updateSubMessage('Writing tool metadata and embeddings...');
-      }
+      // Index only the MCPs that need it
+      await this.discoverMCPTools(mcpsToIndex, profile, true);
 
-      // Save to cache for next time
-      await this.saveToCache(profile);
+      // Finalize cache
+      await this.csvCache.finalize();
 
       if (this.showProgress) {
         spinner.success(`Indexed ${this.allTools.length} tools from ${this.definitions.size} MCPs`);
@@ -244,8 +269,68 @@ export class NCPOrchestrator {
     logger.info(`🚀 NCP-OSS initialized in ${loadTime}ms with ${this.allTools.length} tools from ${this.definitions.size} MCPs`);
   }
 
-  private async discoverMCPTools(mcpConfigs: MCPConfig[]): Promise<void> {
-    this.allTools = [];
+  /**
+   * Load cached tools from CSV
+   */
+  private async loadFromCSVCache(mcpConfigs: MCPConfig[]): Promise<void> {
+    const cachedTools = this.csvCache.loadCachedTools();
+
+    // Group tools by MCP
+    const toolsByMCP = new Map<string, CachedTool[]>();
+    for (const tool of cachedTools) {
+      if (!toolsByMCP.has(tool.mcpName)) {
+        toolsByMCP.set(tool.mcpName, []);
+      }
+      toolsByMCP.get(tool.mcpName)!.push(tool);
+    }
+
+    // Rebuild definitions and tool mappings from cache
+    for (const config of mcpConfigs) {
+      const mcpTools = toolsByMCP.get(config.name) || [];
+      if (mcpTools.length === 0) continue;
+
+      // Create definition
+      this.definitions.set(config.name, {
+        name: config.name,
+        config,
+        tools: mcpTools.map(t => ({
+          name: t.toolName,
+          description: t.description,
+          inputSchema: {}
+        })),
+        serverInfo: undefined
+      });
+
+      // Add to all tools and create mappings
+      for (const cachedTool of mcpTools) {
+        const tool = {
+          name: cachedTool.toolName,
+          description: cachedTool.description,
+          mcpName: config.name
+        };
+        this.allTools.push(tool);
+        this.toolToMCP.set(cachedTool.toolId, config.name);
+      }
+
+      // Index tools in discovery engine
+      const discoveryTools = mcpTools.map(t => ({
+        id: t.toolId,
+        name: t.toolName,
+        description: t.description
+      }));
+
+      // Use async indexing to avoid blocking
+      this.discovery.indexMCPTools(config.name, discoveryTools);
+    }
+
+    logger.info(`Loaded ${this.allTools.length} tools from CSV cache`);
+  }
+
+  private async discoverMCPTools(mcpConfigs: MCPConfig[], profile?: Profile, incrementalMode: boolean = false): Promise<void> {
+    // Only clear allTools if not in incremental mode
+    if (!incrementalMode) {
+      this.allTools = [];
+    }
 
     for (let i = 0; i < mcpConfigs.length; i++) {
       const config = mcpConfigs[i];
@@ -332,6 +417,21 @@ export class NCPOrchestrator {
 
         // Index tools with discovery engine for vector search
         await this.discovery.indexMCPTools(config.name, discoveryTools);
+
+        // Append to CSV cache incrementally (if in incremental mode)
+        if (incrementalMode && profile) {
+          const mcpHash = CSVCache.hashProfile(profile.mcpServers[config.name]);
+          const cachedTools: CachedTool[] = result.tools.map(tool => ({
+            mcpName: config.name,
+            toolId: `${config.name}:${tool.name}`,
+            toolName: tool.name,
+            description: tool.description || 'No description available',
+            hash: this.hashString(tool.description || ''),
+            timestamp: new Date().toISOString()
+          }));
+
+          await this.csvCache.appendMCP(config.name, cachedTools, mcpHash);
+        }
 
         logger.info(`Discovered ${result.tools.length} tools from ${config.name}`);
       } catch (error: any) {
@@ -1411,6 +1511,13 @@ export class NCPOrchestrator {
         confidence: result.confidence * totalBoost
       };
     });
+  }
+
+  /**
+   * Hash a string for change detection
+   */
+  private hashString(str: string): string {
+    return createHash('sha256').update(str).digest('hex');
   }
 }
 
