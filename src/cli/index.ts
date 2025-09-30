@@ -1045,6 +1045,17 @@ program
     // Use MCPServer for rich formatted output
     const { MCPServer } = await import('../server/mcp-server.js');
     const server = new MCPServer(profileName, true); // Enable progress for first-time indexing
+
+    // Setup graceful shutdown on Ctrl+C
+    const gracefulShutdown = async () => {
+      console.log('\n\nInterrupted. Cleaning up...');
+      await server.cleanup();
+      process.exit(0);
+    };
+
+    process.on('SIGINT', gracefulShutdown);
+    process.on('SIGTERM', gracefulShutdown);
+
     await server.initialize();
 
     // For CLI usage, wait for indexing to complete before searching

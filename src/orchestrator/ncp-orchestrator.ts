@@ -1420,6 +1420,21 @@ export class NCPOrchestrator {
       clearInterval(this.cleanupTimer);
     }
 
+    // Finalize cache if it's being written
+    if (this.csvCache) {
+      try {
+        await this.csvCache.finalize();
+      } catch (error) {
+        // Ignore finalize errors
+      }
+    }
+
+    // Stop progress spinner if active
+    if (this.showProgress) {
+      const { spinner } = await import('../utils/progress-spinner.js');
+      spinner.stop();
+    }
+
     // Close any active connections
     for (const connection of this.connections.values()) {
       try {
