@@ -3,7 +3,7 @@
  * Enables resumable indexing by appending each MCP as it's indexed
  */
 
-import { createWriteStream, existsSync, readFileSync, writeFileSync, WriteStream, fsync } from 'fs';
+import { createWriteStream, existsSync, readFileSync, writeFileSync, WriteStream, fsync, openSync, fsyncSync, closeSync } from 'fs';
 import { mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { createHash } from 'crypto';
@@ -269,7 +269,7 @@ export class CSVCache {
   }
 
   /**
-   * Save metadata to disk
+   * Save metadata to disk with fsync for crash safety
    */
   private saveMetadata(): void {
     if (!this.metadata) return;
@@ -280,7 +280,17 @@ export class CSVCache {
         ...this.metadata,
         indexedMCPs: Object.fromEntries(this.metadata.indexedMCPs)
       };
+
+      // Write metadata file
       writeFileSync(this.metaPath, JSON.stringify(metaToSave, null, 2));
+
+      // Force sync to disk (open file, fsync, close)
+      const fd = openSync(this.metaPath, 'r+');
+      try {
+        fsyncSync(fd);
+      } finally {
+        closeSync(fd);
+      }
     } catch (error) {
       logger.error(`Failed to save metadata: ${error}`);
     }
