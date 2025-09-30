@@ -4,9 +4,18 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import chalk from 'chalk';
+
+// Read version from package.json
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJsonPath = join(__dirname, '../../package.json');
+const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+const packageVersion = packageJson.version;
+const packageName = packageJson.name;
 
 interface UpdateCheckResult {
   hasUpdate: boolean;
@@ -28,17 +37,9 @@ export class UpdateChecker {
   private readonly checkInterval = 24 * 60 * 60 * 1000; // 24 hours
 
   constructor() {
-    // Get package info from package.json
-    try {
-      const packagePath = join(process.cwd(), 'package.json');
-      const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
-      this.packageName = packageJson.name;
-      this.packageVersion = packageJson.version;
-    } catch {
-      // Fallback for installed package
-      this.packageName = '@portel/ncp';
-      this.packageVersion = '1.3.0'; // Will be replaced in build
-    }
+    // Use package info from module-level constants (read from package.json)
+    this.packageName = packageName;
+    this.packageVersion = packageVersion;
 
     // Cache file location
     const ncpDir = join(homedir(), '.ncp');

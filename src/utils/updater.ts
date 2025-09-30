@@ -5,15 +5,18 @@
  * Follows npm best practices - users control when to update.
  */
 
-import { readFile } from 'fs/promises';
+import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { logger } from './logger.js';
 
-// Use a more compatible approach for getting package.json path
-const getPackageJsonPath = () => {
-  // In production, this will be dist/utils/updater.js, so go up two levels
-  return join(process.cwd(), 'package.json');
-};
+// Read version from package.json
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJsonPath = join(__dirname, '../../package.json');
+const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+const packageVersion = packageJson.version;
+const packageName = packageJson.name;
 
 interface VersionInfo {
   current: string;
@@ -23,7 +26,7 @@ interface VersionInfo {
 }
 
 export class NPCUpdater {
-  private readonly packageName = '@portel/ncp';
+  private readonly packageName = packageName;
   private readonly checkInterval = 24 * 60 * 60 * 1000; // 24 hours
   private readonly timeout = 5000; // 5 seconds
 
@@ -31,15 +34,7 @@ export class NPCUpdater {
    * Get current package version from package.json
    */
   private async getCurrentVersion(): Promise<string> {
-    try {
-      const packagePath = getPackageJsonPath();
-      const packageContent = await readFile(packagePath, 'utf-8');
-      const packageJson = JSON.parse(packageContent);
-      return packageJson.version;
-    } catch (error) {
-      logger.debug(`Failed to read package version: ${error}`);
-      return '1.0.0'; // fallback
-    }
+    return packageVersion;
   }
 
   /**
