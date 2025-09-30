@@ -4,12 +4,21 @@
  */
 
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
 import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
-import { existsSync, mkdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, statSync, readFileSync } from 'fs';
 import { logger } from '../utils/logger.js';
 import { SemanticEnhancementEngine } from './semantic-enhancement-engine.js';
+
+// Read version from package.json
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJsonPath = join(__dirname, '../../package.json');
+const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+const version = packageJson.version;
 
 // Import transformer.js (will be added to dependencies)
 declare const pipeline: any;
@@ -245,7 +254,7 @@ export class PersistentRAGEngine {
    */
   private async updateCacheMetadata(mcpHashes: Record<string, string>): Promise<void> {
     this.cacheMetadata = {
-      version: '1.3.2',
+      version,
       createdAt: new Date().toISOString(),
       lastValidated: new Date().toISOString(),
       configHash: '', // Will be set when config is available
