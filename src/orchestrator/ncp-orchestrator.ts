@@ -238,11 +238,8 @@ export class NCPOrchestrator {
       };
 
       if (this.showProgress) {
-        const action = cacheValid ? 'Resuming' : 'Indexing';
-        const cachedCount = mcpConfigs.length - mcpsToIndex.length;
-        const statusMsg = cacheValid
-          ? `${action} indexing (${cachedCount} cached, ${mcpsToIndex.length} remaining of ${mcpConfigs.length} total)`
-          : `${action} tools (${mcpConfigs.length} MCPs)`;
+        const action = 'Indexing';
+        const statusMsg = `${action} MCPs: 0/${mcpConfigs.length}`;
         spinner.start(statusMsg);
         spinner.updateSubMessage('Initializing discovery engine...');
       }
@@ -357,23 +354,19 @@ export class NCPOrchestrator {
         }
 
         if (this.showProgress) {
-          const progress = `${i + 1}/${mcpConfigs.length}`;
-          const percentage = Math.round(((i + 1) / mcpConfigs.length) * 100);
+          // Calculate absolute position
+          const cachedCount = displayTotal - mcpConfigs.length;
+          const currentAbsolute = cachedCount + (i + 1);
+          const percentage = Math.round((currentAbsolute / displayTotal) * 100);
 
-          // Add time estimate to match MCP interface
+          // Add time estimate
           let timeDisplay = '';
           if (this.indexingProgress?.estimatedTimeRemaining) {
             const remainingSeconds = Math.ceil(this.indexingProgress.estimatedTimeRemaining / 1000);
-            timeDisplay = ` (~${remainingSeconds}s remaining)`;
+            timeDisplay = ` ~${remainingSeconds}s remaining`;
           }
 
-          // Show appropriate message based on mode
-          const action = incrementalMode ? 'Resuming' : 'Indexing';
-          const cachedCount = displayTotal - mcpConfigs.length;
-          const statusText = incrementalMode
-            ? `(${cachedCount} cached, ${progress} remaining)`
-            : `(${progress})`;
-          spinner.updateMessage(`${action} ${statusText} ${percentage}%${timeDisplay}`);
+          spinner.updateMessage(`Indexing MCPs: ${currentAbsolute}/${displayTotal} (${percentage}%)${timeDisplay}`);
           spinner.updateSubMessage(`Connecting to ${config.name}...`);
         }
 
