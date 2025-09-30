@@ -217,7 +217,7 @@ export class NCPOrchestrator {
 
       if (this.showProgress && this.allTools.length > 0) {
         const cachedMCPs = this.csvCache.getIndexedMCPs().size;
-        spinner.success(`Loaded ${this.allTools.length} tools from ${cachedMCPs} cached MCPs`);
+        spinner.success(`Loaded ${cachedMCPs} MCPs from cache (${this.allTools.length} tools)`);
       }
     }
 
