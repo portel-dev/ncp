@@ -54,6 +54,25 @@ export class AutoResourceGenerator {
   }
 
   /**
+   * Generate resource endpoints from cached candidates (non-blocking)
+   */
+  async generateResourcesFromCache(candidates: ResourceCandidate[]): Promise<GeneratedResource[]> {
+    const resources: GeneratedResource[] = [];
+
+    for (const candidate of candidates) {
+      if (candidate.confidence >= 0.7) { // Only generate high-confidence resources
+        const resource = this.createResourceFromCandidate(candidate);
+        resources.push(resource);
+        this.generatedResources.set(resource.uri, resource);
+
+        console.error(`🤖 Generated auto-resource: ${resource.uri} (from ${candidate.mcpName}:${candidate.toolName})`);
+      }
+    }
+
+    return resources;
+  }
+
+  /**
    * Create resource definition from candidate
    */
   private createResourceFromCandidate(candidate: ResourceCandidate): GeneratedResource {

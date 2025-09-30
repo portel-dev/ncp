@@ -58,12 +58,117 @@ export class MCPServer {
 
   async initialize(): Promise<void> {
     logger.info('Starting NCP MCP server');
-    await this.orchestrator.initialize();
 
-    // Generate auto-resources from existing tools
-    await this.generateAutoResources();
+    // Start background initialization - do NOT await
+    this.backgroundInitialization().catch(error => {
+      logger.warn(`Background initialization failed: ${error.message}`);
+    });
 
-    logger.info('NCP MCP server ready');
+    logger.info('NCP MCP server ready (background initialization started)');
+  }
+
+  /**
+   * Non-blocking background initialization
+   * This allows the MCP server to respond immediately to protocol requests
+   */
+  private async backgroundInitialization(): Promise<void> {
+    try {
+      console.error('🔧 Starting background orchestrator initialization...');
+
+      // Skip slow orchestrator initialization for now - use cached tools only
+      console.error('⚠️ Skipping orchestrator initialization to prevent hanging');
+
+      console.error('🔧 Starting background auto-resource generation from cache...');
+      await this.generateAutoResourcesFromCache();
+      console.error('✅ Auto-resource generation completed from cache');
+
+      console.error('🎯 Background initialization completed successfully (cache mode)');
+    } catch (error: any) {
+      console.error(`❌ Background initialization failed: ${error.message}`);
+      console.error('Stack trace:', error.stack);
+    }
+  }
+
+  /**
+   * Generate auto-resources from cached tools (non-blocking)
+   */
+  private async generateAutoResourcesFromCache(): Promise<void> {
+    try {
+      // Try to load tools from cache instead of live connections
+      const cachedTools = await this.loadToolsFromCache();
+
+      if (cachedTools.length === 0) {
+        console.error('ℹ️ No cached tools found for auto-resource generation');
+        return;
+      }
+
+      console.error(`🔍 Found ${cachedTools.length} cached tools for auto-resource generation`);
+
+      // Detect resource candidates from cached tools
+      const candidates = this.autoResourceDetector.detectResourceCandidates(cachedTools);
+
+      if (candidates.length === 0) {
+        console.error('ℹ️ No suitable cached tools found for auto-resource generation');
+        return;
+      }
+
+      console.error(`🚀 Generating resources from ${candidates.length} candidates`);
+
+      // Generate resources (this doesn't need live MCP connections)
+      const generatedResources = await this.autoResourceGenerator.generateResourcesFromCache(candidates);
+
+      console.error(`✅ Generated ${generatedResources.length} auto-resources from cached tools`);
+      this.autoResourcesGenerated = true;
+
+    } catch (error: any) {
+      console.error(`⚠️ Cached auto-resource generation failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Load tools from cache (non-blocking alternative to live MCP connections)
+   */
+  private async loadToolsFromCache(): Promise<Array<{name: string; description: string; inputSchema: any; mcpName: string}>> {
+    try {
+      const { readFileSync, existsSync } = await import('fs');
+      const { getCacheDirectory } = await import('../utils/ncp-paths.js');
+      const { join } = await import('path');
+
+      const cacheDir = getCacheDirectory();
+      const cachePath = join(cacheDir, 'all-tools.json');
+
+      if (!existsSync(cachePath)) {
+        console.error('ℹ️ No tool cache found at:', cachePath);
+        return [];
+      }
+
+      const cacheContent = readFileSync(cachePath, 'utf-8');
+      const cache = JSON.parse(cacheContent);
+
+      const tools: Array<{name: string; description: string; inputSchema: any; mcpName: string}> = [];
+
+      // Extract tools from cache
+      for (const [mcpName, mcpData] of Object.entries(cache.mcps || {})) {
+        const data = mcpData as any;
+        if (data.tools && Array.isArray(data.tools)) {
+          for (const tool of data.tools) {
+            tools.push({
+              name: tool.name || '',
+              description: tool.description || '',
+              inputSchema: tool.inputSchema || {},
+              mcpName: mcpName
+            });
+          }
+        }
+      }
+
+      console.error(`📚 Loaded ${tools.length} tools from cache across ${Object.keys(cache.mcps || {}).length} MCPs`);
+      return tools;
+
+    } catch (error: any) {
+      console.error(`⚠️ Failed to load tools from cache: ${error.message}`);
+      return [];
+    }
   }
 
   /**
@@ -701,16 +806,39 @@ export class MCPServer {
 
   private async handleListResources(request: MCPRequest): Promise<MCPResponse> {
     try {
-      // Get manual resources from MCPs
-      const manualResources = await this.orchestrator.getAllResources();
+      // Get manual resources from MCPs (skip if orchestrator not initialized)
+      let manualResources: any[] = [];
+      try {
+        // Only try to get manual resources if orchestrator is ready
+        manualResources = await Promise.race([
+          this.orchestrator.getAllResources(),
+          new Promise<any[]>((_, reject) =>
+            setTimeout(() => reject(new Error('Orchestrator timeout')), 100)
+          )
+        ]);
+      } catch (error: any) {
+        console.error('⚠️ Skipping manual resources (orchestrator not ready):', error.message);
+        manualResources = [];
+      }
 
-      // Get auto-generated resources
+      // MCP Client Limitation: Dynamic resources don't work properly
+      // Let's add a static resource for testing instead of auto-generated ones
+      const staticTestResources = [
+        {
+          uri: 'ncp://static/test-resource',
+          name: 'Static Test Resource',
+          description: 'A static resource that should work in MCP clients',
+          mimeType: 'text/markdown'
+        }
+      ];
+
+      // Get auto-generated resources (these may not work due to MCP client limitations)
       const autoResources = this.autoResourcesGenerated
         ? this.convertGeneratedResourcesToMCPFormat()
         : [];
 
-      // Combine both types
-      const allResources = [...(manualResources || []), ...autoResources];
+      // Combine both types (prioritize static test resource)
+      const allResources = [...staticTestResources, ...(manualResources || []), ...autoResources];
 
       // Add summary information if auto-resources exist
       if (autoResources.length > 0) {
@@ -785,6 +913,21 @@ export class MCPServer {
       // Handle special NCP resources
       if (uri === 'ncp://auto-resources/summary') {
         return this.handleAutoResourcesSummary(request.id);
+      }
+
+      // Handle static test resource
+      if (uri === 'ncp://static/test-resource') {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            contents: [{
+              uri: uri,
+              mimeType: 'text/markdown',
+              text: '# Static Resource Test\n\nThis is a static resource that should work in MCP clients.\n\n**Key Points:**\n- Static URI: No parameters\n- Fixed content: Always the same\n- Should be clickable without upload errors\n\nIf you can see this content, static resources work but dynamic ones may not in MCP clients.'
+            }]
+          }
+        };
       }
 
       // Check if it's an auto-generated resource

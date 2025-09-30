@@ -17,6 +17,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { mcpWrapper } from '../utils/mcp-wrapper.js';
 import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
+import { setOverrideWorkingDirectory } from '../utils/ncp-paths.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -273,10 +274,11 @@ program
   .name('ncp')
   .description(`
 ${chalk.bold.white('Natural Context Provider')} ${chalk.dim('v' + version)} - ${chalk.cyan('1 MCP to rule them all')}
-${chalk.dim('Orchestrates multiple MCP servers through a unified interface for AI assistants.')}
-${chalk.dim('Reduces cognitive load and clutter, saving tokens and speeding up AI interactions.')}
+${chalk.dim('Orchestrates multiple MCP servers through a unified interface.')}
+${chalk.dim('Reduces cognitive load and clutter, saving tokens and speeding up interactions.')}
 ${chalk.dim('Enables smart tool discovery across all configured servers with vector similarity search.')}`)
   .option('--profile <name>', 'Profile to use (default: all)')
+  .option('--pwd <path>', 'Working directory for profile resolution (overrides cwd)')
   .option('--no-color', 'Disable colored output');
 
 // Configure help with enhanced formatting, Quick Start, and examples
@@ -1399,11 +1401,26 @@ program
   if (!process.stdin.isTTY && process.argv.length === 2) {
     // Run as MCP server when stdin is piped and no CLI arguments
     console.error('Starting NCP in MCP server mode...');
+
+    // Handle working directory override in MCP server mode via environment variable
+    if (process.env.NCP_PWD) {
+      setOverrideWorkingDirectory(process.env.NCP_PWD);
+    }
+
     const profileName = process.env.NCP_PROFILE || 'all';
     const server = new MCPServer(profileName);
     await server.run();
   } else {
-    // Normal CLI mode
+    // Normal CLI mode - handle --pwd before parsing to ensure it's available during command execution
+
+    // Check for --pwd parameter manually before parsing
+    const pwdArgIndex = process.argv.indexOf('--pwd');
+    if (pwdArgIndex !== -1 && pwdArgIndex + 1 < process.argv.length) {
+      const pwdValue = process.argv[pwdArgIndex + 1];
+      setOverrideWorkingDirectory(pwdValue);
+    }
+
+    // Now parse and execute commands
     program.parse();
   }
 })().catch(console.error);
