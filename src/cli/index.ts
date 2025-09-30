@@ -333,7 +333,7 @@ program.configureHelp({
 
       commands.forEach(cmd => {
         // Group commands by category with enhanced styling
-        const managementCommands = ['add', 'remove', 'list', 'config'];
+        const managementCommands = ['add', 'remove', 'import', 'list', 'config'];
         const discoveryCommands = ['find'];
         const executionCommands = ['run'];
 

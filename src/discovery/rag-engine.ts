@@ -245,7 +245,7 @@ export class PersistentRAGEngine {
    */
   private async updateCacheMetadata(mcpHashes: Record<string, string>): Promise<void> {
     this.cacheMetadata = {
-      version: '2.2.0',
+      version: '1.3.2',
       createdAt: new Date().toISOString(),
       lastValidated: new Date().toISOString(),
       configHash: '', // Will be set when config is available

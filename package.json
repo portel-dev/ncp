@@ -65,8 +65,7 @@
     "json-colorizer": "^3.0.1",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
-    "prettyjson": "^1.2.5",
-    "string-similarity": "^4.0.4"
+    "prettyjson": "^1.2.5"
   },
   "devDependencies": {
     "@agent-infra/mcp-server-browser": "^1.2.23",
@@ -87,7 +86,6 @@
     "@types/marked-terminal": "^6.1.1",
     "@types/node": "^20.0.0",
     "@types/prettyjson": "^0.0.33",
-    "@types/string-similarity": "^4.0.2",
     "@upstash/context7-mcp": "^1.0.17",
     "@winor30/mcp-server-datadog": "^1.6.0",
     "jest": "^30.1.3",
