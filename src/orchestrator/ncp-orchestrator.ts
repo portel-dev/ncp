@@ -213,11 +213,10 @@ export class NCPOrchestrator {
     if (cacheValid) {
       // Load from cache
       logger.info('Loading tools from CSV cache...');
-      await this.loadFromCSVCache(mcpConfigs);
+      const cachedMCPCount = await this.loadFromCSVCache(mcpConfigs);
 
       if (this.showProgress && this.allTools.length > 0) {
-        const cachedMCPs = this.csvCache.getIndexedMCPs().size;
-        spinner.success(`Loaded ${cachedMCPs} MCPs from cache (${this.allTools.length} tools)`);
+        spinner.success(`Loaded ${cachedMCPCount} MCPs from cache (${this.allTools.length} tools)`);
       }
     }
 
@@ -274,7 +273,7 @@ export class NCPOrchestrator {
   /**
    * Load cached tools from CSV
    */
-  private async loadFromCSVCache(mcpConfigs: MCPConfig[]): Promise<void> {
+  private async loadFromCSVCache(mcpConfigs: MCPConfig[]): Promise<number> {
     const cachedTools = this.csvCache.loadCachedTools();
 
     // Group tools by MCP
@@ -286,10 +285,14 @@ export class NCPOrchestrator {
       toolsByMCP.get(tool.mcpName)!.push(tool);
     }
 
+    let loadedMCPCount = 0;
+
     // Rebuild definitions and tool mappings from cache
     for (const config of mcpConfigs) {
       const mcpTools = toolsByMCP.get(config.name) || [];
       if (mcpTools.length === 0) continue;
+
+      loadedMCPCount++;
 
       // Create definition
       this.definitions.set(config.name, {
@@ -326,6 +329,7 @@ export class NCPOrchestrator {
     }
 
     logger.info(`Loaded ${this.allTools.length} tools from CSV cache`);
+    return loadedMCPCount;
   }
 
   private async discoverMCPTools(mcpConfigs: MCPConfig[], profile?: Profile, incrementalMode: boolean = false, totalMCPCount?: number): Promise<void> {
