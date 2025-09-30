@@ -69,6 +69,20 @@ export class MCPServer {
     logger.info('NCP MCP server ready (indexing in background)');
   }
 
+  /**
+   * Wait for initialization to complete
+   * Useful for CLI commands that need full indexing before proceeding
+   */
+  async waitForInitialization(): Promise<void> {
+    if (this.isInitialized) {
+      return;
+    }
+
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
+  }
+
   async handleRequest(request: any): Promise<MCPResponse | undefined> {
     // Handle notifications (requests without id)
     if (!('id' in request)) {

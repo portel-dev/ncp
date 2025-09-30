@@ -1044,6 +1044,9 @@ program
     const server = new MCPServer(profileName, true); // Enable progress for first-time indexing
     await server.initialize();
 
+    // For CLI usage, wait for indexing to complete before searching
+    await server.waitForInitialization();
+
     const limit = parseInt(options.limit || '5');
     const page = parseInt(options.page || '1');
     const depth = parseInt(options.depth || '2');
