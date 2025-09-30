@@ -24,8 +24,8 @@ export class ProgressSpinner {
     this.frame = 0;
     this.isSpinning = true;
 
-    // Add newline before spinner starts (don't overwrite command line)
-    console.log();
+    // Add blank line before spinner starts (don't overwrite command line)
+    process.stdout.write('\n\n');
 
     // Hide cursor
     process.stdout.write('\u001B[?25l');
