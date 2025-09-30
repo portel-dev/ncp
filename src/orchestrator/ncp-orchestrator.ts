@@ -345,32 +345,7 @@ export class NCPOrchestrator {
       try {
         logger.info(`Discovering tools from MCP: ${config.name}`);
 
-        // Update indexing progress
-        if (this.indexingProgress) {
-          this.indexingProgress.current = i + 1;
-          this.indexingProgress.currentMCP = config.name;
-
-          // Estimate remaining time based on average time per MCP so far
-          const elapsedTime = Date.now() - this.indexingStartTime;
-          const averageTimePerMCP = elapsedTime / (i + 1);
-          const remainingMCPs = mcpConfigs.length - (i + 1);
-          this.indexingProgress.estimatedTimeRemaining = remainingMCPs * averageTimePerMCP;
-        }
-
         if (this.showProgress) {
-          // Calculate absolute position
-          const cachedCount = displayTotal - mcpConfigs.length;
-          const currentAbsolute = cachedCount + (i + 1);
-          const percentage = Math.round((currentAbsolute / displayTotal) * 100);
-
-          // Add time estimate
-          let timeDisplay = '';
-          if (this.indexingProgress?.estimatedTimeRemaining) {
-            const remainingSeconds = Math.ceil(this.indexingProgress.estimatedTimeRemaining / 1000);
-            timeDisplay = ` ~${remainingSeconds}s remaining`;
-          }
-
-          spinner.updateMessage(`Indexing MCPs: ${currentAbsolute}/${displayTotal} (${percentage}%)${timeDisplay}`);
           spinner.updateSubMessage(`Connecting to ${config.name}...`);
         }
 
@@ -441,6 +416,34 @@ export class NCPOrchestrator {
           }));
 
           await this.csvCache.appendMCP(config.name, cachedTools, mcpHash);
+        }
+
+        // Update indexing progress AFTER successfully appending to cache
+        if (this.indexingProgress) {
+          this.indexingProgress.current = i + 1;
+          this.indexingProgress.currentMCP = config.name;
+
+          // Estimate remaining time based on average time per MCP so far
+          const elapsedTime = Date.now() - this.indexingStartTime;
+          const averageTimePerMCP = elapsedTime / (i + 1);
+          const remainingMCPs = mcpConfigs.length - (i + 1);
+          this.indexingProgress.estimatedTimeRemaining = remainingMCPs * averageTimePerMCP;
+        }
+
+        if (this.showProgress) {
+          // Calculate absolute position
+          const cachedCount = displayTotal - mcpConfigs.length;
+          const currentAbsolute = cachedCount + (i + 1);
+          const percentage = Math.round((currentAbsolute / displayTotal) * 100);
+
+          // Add time estimate
+          let timeDisplay = '';
+          if (this.indexingProgress?.estimatedTimeRemaining) {
+            const remainingSeconds = Math.ceil(this.indexingProgress.estimatedTimeRemaining / 1000);
+            timeDisplay = ` ~${remainingSeconds}s remaining`;
+          }
+
+          spinner.updateMessage(`Indexing MCPs: ${currentAbsolute}/${displayTotal} (${percentage}%)${timeDisplay}`);
         }
 
         logger.info(`Discovered ${result.tools.length} tools from ${config.name}`);
