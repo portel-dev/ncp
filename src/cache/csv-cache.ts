@@ -3,7 +3,7 @@
  * Enables resumable indexing by appending each MCP as it's indexed
  */
 
-import { createWriteStream, existsSync, readFileSync, writeFileSync, WriteStream } from 'fs';
+import { createWriteStream, existsSync, readFileSync, writeFileSync, WriteStream, fsync } from 'fs';
 import { mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { createHash } from 'crypto';
@@ -218,6 +218,9 @@ export class CSVCache {
       this.writeStream.write(row + '\n');
     }
 
+    // Force flush to disk for crash safety
+    await this.flushWriteStream();
+
     // Update metadata
     if (this.metadata) {
       this.metadata.indexedMCPs.set(mcpName, mcpHash);
@@ -281,6 +284,42 @@ export class CSVCache {
     } catch (error) {
       logger.error(`Failed to save metadata: ${error}`);
     }
+  }
+
+  /**
+   * Force flush write stream to disk
+   */
+  private async flushWriteStream(): Promise<void> {
+    if (!this.writeStream) return;
+
+    return new Promise((resolve, reject) => {
+      // Wait for any pending writes to drain
+      if (this.writeStream!.writableNeedDrain) {
+        this.writeStream!.once('drain', () => {
+          // Then force sync to disk
+          const fd = (this.writeStream as any).fd;
+          if (fd !== undefined) {
+            fsync(fd, (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          } else {
+            resolve();
+          }
+        });
+      } else {
+        // No drain needed, just sync to disk
+        const fd = (this.writeStream as any).fd;
+        if (fd !== undefined) {
+          fsync(fd, (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        } else {
+          resolve();
+        }
+      }
+    });
   }
 
   /**
