@@ -11,6 +11,7 @@ export class ProgressSpinner {
   private message = '';
   private subMessage = '';
   private isSpinning = false;
+  private isFirstRender = true;
 
   private readonly frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
@@ -23,9 +24,10 @@ export class ProgressSpinner {
     this.subMessage = '';
     this.frame = 0;
     this.isSpinning = true;
+    this.isFirstRender = true;
 
     // Add blank line before spinner starts (don't overwrite command line)
-    process.stdout.write('\n\n');
+    process.stdout.write('\n');
 
     // Hide cursor
     process.stdout.write('\u001B[?25l');
@@ -82,8 +84,12 @@ export class ProgressSpinner {
   private render(): void {
     if (!this.isSpinning) return;
 
-    // Clear previous output
-    this.clearLines();
+    // Clear previous output (skip on first render to preserve newline)
+    if (!this.isFirstRender) {
+      this.clearLines();
+    } else {
+      this.isFirstRender = false;
+    }
 
     // Main spinner line
     const spinnerChar = chalk.cyan(this.frames[this.frame]);
