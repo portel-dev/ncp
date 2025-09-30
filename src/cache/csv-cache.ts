@@ -240,17 +240,25 @@ export class CSVCache {
    */
   async finalize(): Promise<void> {
     if (this.writeStream) {
+      console.log('📝 Closing write stream...');
       // Wait for stream to finish writing before closing
       await new Promise<void>((resolve, reject) => {
         this.writeStream!.end((err: any) => {
-          if (err) reject(err);
-          else resolve();
+          if (err) {
+            console.error('❌ Error closing write stream:', err);
+            reject(err);
+          } else {
+            console.log('✅ Write stream closed');
+            resolve();
+          }
         });
       });
       this.writeStream = null;
     }
 
+    console.log('💾 Saving metadata...');
     this.saveMetadata();
+    console.log(`✅ Cache finalized: ${this.metadata?.totalTools} tools from ${this.metadata?.totalMCPs} MCPs`);
     logger.info(`✅ Cache finalized: ${this.metadata?.totalTools} tools from ${this.metadata?.totalMCPs} MCPs`);
   }
 
