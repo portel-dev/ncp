@@ -216,7 +216,8 @@ export class NCPOrchestrator {
       await this.loadFromCSVCache(mcpConfigs);
 
       if (this.showProgress && this.allTools.length > 0) {
-        spinner.success(`Loaded ${this.allTools.length} tools from cache`);
+        const cachedMCPs = mcpConfigs.length - this.csvCache.getIndexedMCPs().size;
+        spinner.success(`Loaded ${this.allTools.length} tools from ${cachedMCPs} cached MCPs`);
       }
     }
 
@@ -237,8 +238,12 @@ export class NCPOrchestrator {
       };
 
       if (this.showProgress) {
-        const action = cacheValid ? 'Updating' : 'Indexing';
-        spinner.start(`${action} tools (${mcpsToIndex.length}/${mcpConfigs.length} MCPs need indexing)`);
+        const action = cacheValid ? 'Resuming' : 'Indexing';
+        const cachedCount = mcpConfigs.length - mcpsToIndex.length;
+        const statusMsg = cacheValid
+          ? `${action} indexing (${cachedCount} cached, ${mcpsToIndex.length} remaining of ${mcpConfigs.length} total)`
+          : `${action} tools (${mcpConfigs.length} MCPs)`;
+        spinner.start(statusMsg);
         spinner.updateSubMessage('Initializing discovery engine...');
       }
 
@@ -363,9 +368,12 @@ export class NCPOrchestrator {
           }
 
           // Show appropriate message based on mode
-          const action = incrementalMode ? 'Updating' : 'Indexing';
-          const modeText = incrementalMode ? `(${mcpConfigs.length}/${displayTotal} MCPs)` : '';
-          spinner.updateMessage(`${action} tools ${modeText} (${progress}) ${percentage}%${timeDisplay}`);
+          const action = incrementalMode ? 'Resuming' : 'Indexing';
+          const cachedCount = displayTotal - mcpConfigs.length;
+          const statusText = incrementalMode
+            ? `(${cachedCount} cached, ${progress} remaining)`
+            : `(${progress})`;
+          spinner.updateMessage(`${action} ${statusText} ${percentage}%${timeDisplay}`);
           spinner.updateSubMessage(`Connecting to ${config.name}...`);
         }
 
