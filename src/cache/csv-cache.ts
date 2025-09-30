@@ -240,7 +240,13 @@ export class CSVCache {
    */
   async finalize(): Promise<void> {
     if (this.writeStream) {
-      this.writeStream.end();
+      // Wait for stream to finish writing before closing
+      await new Promise<void>((resolve, reject) => {
+        this.writeStream!.end((err: any) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
       this.writeStream = null;
     }
 
