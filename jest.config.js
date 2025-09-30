@@ -7,7 +7,11 @@ export default {
   ],
   transform: {
     '^.+\\.ts$': ['ts-jest', {
-      useESM: true
+      useESM: true,
+      tsconfig: {
+        module: 'ES2020',
+        target: 'ES2020'
+      }
     }]
   },
   coverageDirectory: 'coverage',
@@ -32,7 +36,8 @@ export default {
     '^(\\.{1,2}/.*)\\.js$': '$1',
     '@xenova/transformers': '<rootDir>/test/__mocks__/transformers.js',
     '^chalk$': '<rootDir>/test/__mocks__/chalk.js',
-    '../utils/updater.js': '<rootDir>/test/__mocks__/updater.js'
+    '../utils/updater.js': '<rootDir>/test/__mocks__/updater.js',
+    '^.*/utils/version\\.js$': '<rootDir>/test/__mocks__/version.ts'
   },
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
   testTimeout: 15000,
