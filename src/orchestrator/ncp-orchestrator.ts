@@ -139,7 +139,8 @@ export class NCPOrchestrator {
   private toolToMCP: Map<string, string> = new Map();
   private allTools: Array<{ name: string; description: string; mcpName: string }> = [];
   private profileName: string;
-  private readonly QUICK_PROBE_TIMEOUT = 8000; // 8 seconds - allow for npm package downloads
+  private readonly QUICK_PROBE_TIMEOUT = 8000; // 8 seconds - first attempt
+  private readonly SLOW_PROBE_TIMEOUT = 30000; // 30 seconds - retry for slow MCPs
   private readonly CONNECTION_TIMEOUT = 10000; // 10 seconds
   private readonly IDLE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
   private readonly CLEANUP_INTERVAL = 60 * 1000; // Check every minute
@@ -350,7 +351,24 @@ export class NCPOrchestrator {
           spinner.updateSubMessage(`Connecting to ${config.name}...`);
         }
 
-        const result = await this.probeMCPTools(config);
+        let result;
+        try {
+          // First attempt with quick timeout
+          result = await this.probeMCPTools(config, this.QUICK_PROBE_TIMEOUT);
+        } catch (firstError: any) {
+          // If it timed out (not connection error), retry with longer timeout
+          if (firstError.message.includes('Probe timeout') || firstError.message.includes('timeout')) {
+            logger.debug(`${config.name} timed out on first attempt, retrying with longer timeout...`);
+            if (this.showProgress) {
+              spinner.updateSubMessage(`Retrying ${config.name} (heavy initialization)...`);
+            }
+            // Second attempt with slow timeout for heavy MCPs
+            result = await this.probeMCPTools(config, this.SLOW_PROBE_TIMEOUT);
+          } else {
+            // Not a timeout - it's a real error (connection refused, etc), don't retry
+            throw firstError;
+          }
+        }
 
         // Store definition with schema fallback applied
         this.definitions.set(config.name, {
@@ -488,7 +506,7 @@ export class NCPOrchestrator {
   }
 
   // Based on commercial NCP's probeMCPTools method
-  private async probeMCPTools(config: MCPConfig): Promise<{
+  private async probeMCPTools(config: MCPConfig, timeout: number = this.QUICK_PROBE_TIMEOUT): Promise<{
     tools: Array<{name: string; description: string; inputSchema?: any}>;
     serverInfo?: {
       name: string;
@@ -538,7 +556,7 @@ export class NCPOrchestrator {
         await Promise.race([
           client!.connect(transport!),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Probe timeout')), this.QUICK_PROBE_TIMEOUT)
+            setTimeout(() => reject(new Error('Probe timeout')), timeout)
           )
         ]);
       });
