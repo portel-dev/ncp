@@ -218,10 +218,6 @@ export class NCPOrchestrator {
       // Load from cache
       logger.info('Loading tools from CSV cache...');
       const cachedMCPCount = await this.loadFromCSVCache(mcpConfigs);
-
-      if (this.showProgress && this.allTools.length > 0) {
-        spinner.success(`Loaded ${cachedMCPCount} MCPs from cache (${this.allTools.length} tools)`);
-      }
     }
 
     // Get list of MCPs that need indexing
