@@ -263,15 +263,7 @@ export class CSVCache {
     }
 
     this.saveMetadata();
-
-    const cached = this.metadata?.totalMCPs || 0;
-    const failed = this.metadata?.failedMCPs.size || 0;
-
-    if (failed > 0) {
-      logger.info(`Cache finalized: ${this.metadata?.totalTools} tools from ${cached} MCPs (${failed} failed, will retry later)`);
-    } else {
-      logger.info(`Cache finalized: ${this.metadata?.totalTools} tools from ${cached} MCPs`);
-    }
+    logger.debug(`Cache finalized: ${this.metadata?.totalTools} tools from ${this.metadata?.totalMCPs} MCPs`);
   }
 
   /**

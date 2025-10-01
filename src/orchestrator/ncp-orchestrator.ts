@@ -265,7 +265,15 @@ export class NCPOrchestrator {
       await this.csvCache.finalize();
 
       if (this.showProgress) {
-        spinner.success(`Indexed ${this.allTools.length} tools from ${this.definitions.size} MCPs`);
+        const successfulMCPs = this.definitions.size;
+        const failedMCPs = this.csvCache.getFailedMCPsCount();
+        const totalProcessed = successfulMCPs + failedMCPs;
+
+        if (failedMCPs > 0) {
+          spinner.success(`Indexed ${this.allTools.length} tools from ${successfulMCPs} MCPs | ${failedMCPs} failed (will retry later)`);
+        } else {
+          spinner.success(`Indexed ${this.allTools.length} tools from ${successfulMCPs} MCPs`);
+        }
       }
     }
 
