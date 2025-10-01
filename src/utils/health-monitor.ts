@@ -361,6 +361,13 @@ export class MCPHealthMonitor {
     this.healthStatus.clear();
     await this.saveHealthStatus();
   }
+
+  /**
+   * Force save health status to disk
+   */
+  async saveHealth(): Promise<void> {
+    await this.saveHealthStatus();
+  }
 }
 
 /**

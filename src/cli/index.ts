@@ -1039,12 +1039,13 @@ program
 
     console.log(chalk.bold('\n🔧 MCP Repair Tool\n'));
 
-    // Load failed MCPs
+    // Load failed MCPs from both sources
     const { getCacheDirectory } = await import('../utils/ncp-paths.js');
     const { CSVCache } = await import('../cache/csv-cache.js');
     const { MCPErrorParser } = await import('../utils/mcp-error-parser.js');
     const { ProfileManager } = await import('../profiles/profile-manager.js');
     const { MCPWrapper } = await import('../utils/mcp-wrapper.js');
+    const { healthMonitor } = await import('../utils/health-monitor.js');
     const { readFileSync, existsSync } = await import('fs');
     const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
     const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
@@ -1052,17 +1053,7 @@ program
     const cache = new CSVCache(getCacheDirectory(), profileName);
     await cache.initialize();
 
-    const failedCount = cache.getFailedMCPsCount();
-
-    if (failedCount === 0) {
-      console.log(chalk.green('✅ No failed MCPs! Everything is working.'));
-      return;
-    }
-
-    console.log(chalk.yellow(`Found ${failedCount} failed MCPs\n`));
-    console.log(chalk.dim('This tool will help you configure them interactively.\n'));
-
-    // Load profile
+    // Load profile first to know which MCPs to check
     const profileManager = new ProfileManager();
     await profileManager.initialize();
     const profile = await profileManager.getProfile(profileName);
@@ -1072,12 +1063,57 @@ program
       return;
     }
 
-    // Get failed MCPs metadata
-    const metadata = (cache as any).metadata;
-    if (!metadata || !metadata.failedMCPs) {
-      console.log(chalk.yellow('⚠️  No failed MCP metadata found'));
+    // Merge failed MCPs from both sources
+    const failedMCPs = new Map<string, {
+      errorMessage: string;
+      attemptCount: number;
+      source: 'cache' | 'health' | 'both';
+      lastAttempt: string;
+    }>();
+
+    // Add from CSV cache
+    const cacheMetadata = (cache as any).metadata;
+    if (cacheMetadata?.failedMCPs) {
+      for (const [mcpName, failedInfo] of cacheMetadata.failedMCPs) {
+        failedMCPs.set(mcpName, {
+          errorMessage: failedInfo.errorMessage,
+          attemptCount: failedInfo.attemptCount,
+          source: 'cache',
+          lastAttempt: failedInfo.lastAttempt
+        });
+      }
+    }
+
+    // Add from health monitor (unhealthy or disabled)
+    const healthReport = healthMonitor.generateHealthReport();
+    for (const health of healthReport.details) {
+      if (health.status === 'unhealthy' || health.status === 'disabled') {
+        // Only include if it's in the current profile
+        if (profile.mcpServers[health.name]) {
+          const existing = failedMCPs.get(health.name);
+          if (existing) {
+            // Already in cache, mark as both
+            existing.source = 'both';
+          } else {
+            // Only in health monitor
+            failedMCPs.set(health.name, {
+              errorMessage: health.lastError || 'Unknown error',
+              attemptCount: health.errorCount,
+              source: 'health',
+              lastAttempt: health.lastCheck
+            });
+          }
+        }
+      }
+    }
+
+    if (failedMCPs.size === 0) {
+      console.log(chalk.green('✅ No failed MCPs! Everything is working.'));
       return;
     }
+
+    console.log(chalk.yellow(`Found ${failedMCPs.size} failed MCPs\n`));
+    console.log(chalk.dim('This tool will help you configure them interactively.\n'));
 
     const errorParser = new MCPErrorParser();
     const mcpWrapper = new MCPWrapper();
@@ -1088,10 +1124,18 @@ program
     let stillFailingCount = 0;
 
     // Iterate through failed MCPs
-    for (const [mcpName, failedInfo] of metadata.failedMCPs) {
+    for (const [mcpName, failedInfo] of failedMCPs) {
       console.log(chalk.cyan(`\n📦 ${mcpName}`));
       console.log(chalk.dim(`   Last error: ${failedInfo.errorMessage}`));
       console.log(chalk.dim(`   Failed ${failedInfo.attemptCount} time(s)`));
+
+      // Show source of failure detection
+      const sourceLabel = failedInfo.source === 'both'
+        ? 'indexing & runtime'
+        : failedInfo.source === 'cache'
+          ? 'indexing'
+          : 'runtime';
+      console.log(chalk.dim(`   Detected during: ${sourceLabel}`));
 
       // Ask if user wants to fix this MCP
       const { shouldFix } = await prompts({
@@ -1250,9 +1294,16 @@ program
 
         await profileManager.saveProfile(profile);
 
-        // Remove from failed cache
-        metadata.failedMCPs.delete(mcpName);
-        (cache as any).saveMetadata();
+        // Remove from both failure tracking systems
+        if (cacheMetadata?.failedMCPs) {
+          cacheMetadata.failedMCPs.delete(mcpName);
+          (cache as any).saveMetadata();
+        }
+
+        // Clear from health monitor and mark as healthy
+        await healthMonitor.enableMCP(mcpName);
+        healthMonitor.markHealthy(mcpName);
+        await healthMonitor.saveHealth();
 
         fixedCount++;
       } catch (error: any) {
