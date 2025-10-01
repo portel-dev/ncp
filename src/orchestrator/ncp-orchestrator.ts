@@ -617,11 +617,20 @@ export class NCPOrchestrator {
         } : undefined
       };
 
-    } catch (error) {
+    } catch (error: any) {
       // Clean up on error
       if (client) {
         try { await client.close(); } catch {}
       }
+
+      // Log full error details for debugging
+      logger.debug(`Full error details for ${config.name}: ${JSON.stringify({
+        message: error.message,
+        code: error.code,
+        data: error.data,
+        stack: error.stack?.split('\n')[0]
+      })}`);
+
       throw error;
     }
   }

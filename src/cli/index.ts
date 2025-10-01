@@ -1029,6 +1029,47 @@ configCmd
     await manager.showConfigLocations();
   });
 
+// Repair command - fix failed MCPs interactively
+program
+  .command('repair')
+  .description('Interactively configure failed MCPs')
+  .option('--profile <name>', 'Profile to repair (default: all)')
+  .action(async (options) => {
+    const profileName = options.profile || program.getOptionValue('profile') || 'all';
+
+    console.log(chalk.bold('\n🔧 MCP Repair Tool\n'));
+
+    // Load failed MCPs
+    const { getCacheDirectory } = await import('../utils/ncp-paths.js');
+    const { CSVCache } = await import('../cache/csv-cache.js');
+    const cache = new CSVCache(getCacheDirectory(), profileName);
+    await cache.initialize();
+
+    const failedCount = cache.getFailedMCPsCount();
+
+    if (failedCount === 0) {
+      console.log(chalk.green('✅ No failed MCPs! Everything is working.'));
+      return;
+    }
+
+    console.log(chalk.yellow(`Found ${failedCount} failed MCPs\n`));
+    console.log(chalk.dim('This tool will help you configure them interactively.\n'));
+
+    // TODO: Implement interactive repair flow
+    // 1. List failed MCPs with error details
+    // 2. Parse errors to determine what config is needed
+    // 3. Prompt user for missing config
+    // 4. Test with new config
+    // 5. Update profile if successful
+    // 6. Report results
+
+    console.log(chalk.yellow('⚠️  Repair functionality coming soon!'));
+    console.log(chalk.dim('\nFor now, you can:'));
+    console.log(chalk.dim('  1. Check logs: ~/.ncp/logs/'));
+    console.log(chalk.dim('  2. Edit config: ncp config edit'));
+    console.log(chalk.dim('  3. Force retry: ncp find --force-retry'));
+  });
+
 // Find command (CLI-optimized version for fast discovery)
 program
   .command('find [query]')
