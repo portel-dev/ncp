@@ -719,7 +719,7 @@ export class NCPOrchestrator {
     }
   }
 
-  async run(toolName: string, parameters: any): Promise<ExecutionResult> {
+  async run(toolName: string, parameters: any, meta?: Record<string, any>): Promise<ExecutionResult> {
     // Parse tool format: "mcp:tool" or just "tool"
     let mcpName: string;
     let actualToolName: string;
@@ -770,10 +770,12 @@ export class NCPOrchestrator {
       }
 
       // Execute tool with filtered output to suppress MCP server console messages
+      // Forward _meta transparently to support session_id and other protocol-level metadata
       const result = await withFilteredOutput(async () => {
         return await connection.client.callTool({
           name: actualToolName,
-          arguments: parameters
+          arguments: parameters,
+          _meta: meta
         });
       });
 

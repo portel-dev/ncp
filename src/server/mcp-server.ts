@@ -659,6 +659,9 @@ export class MCPServer {
     const parameters = args.parameters || {};
     const dryRun = args.dry_run || false;
 
+    // Extract _meta for transparent passthrough (session_id, etc.)
+    const meta = request.params?._meta;
+
     if (dryRun) {
       // Dry run mode - show what would happen without executing
       const previewText = this.generateDryRunPreview(toolIdentifier, parameters);
@@ -674,8 +677,8 @@ export class MCPServer {
       };
     }
 
-    // Normal execution
-    const result = await this.orchestrator.run(toolIdentifier, parameters);
+    // Normal execution - pass _meta transparently
+    const result = await this.orchestrator.run(toolIdentifier, parameters, meta);
 
     if (result.success) {
       return {
