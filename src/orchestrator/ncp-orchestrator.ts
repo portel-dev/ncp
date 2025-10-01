@@ -246,7 +246,9 @@ export class NCPOrchestrator {
       if (this.showProgress) {
         const action = 'Indexing';
         const cachedCount = this.csvCache.getIndexedMCPs().size;
-        const statusMsg = `${action} MCPs: ${cachedCount}/${mcpConfigs.length}`;
+        const failedCount = this.csvCache.getFailedMCPsCount();
+        const totalProcessed = cachedCount + failedCount;
+        const statusMsg = `${action} MCPs: ${totalProcessed}/${mcpConfigs.length}`;
         spinner.start(statusMsg);
         spinner.updateSubMessage('Initializing discovery engine...');
       }
