@@ -267,8 +267,10 @@ async function discoverSingleMCP(name: string, command: string, args: string[] =
 
 const program = new Command();
 
+
 // Set version
 program.version(version, '-v, --version', 'output the current version');
+
 
 // Custom help configuration with colors and enhanced content
 program
@@ -282,6 +284,7 @@ ${chalk.dim('Enables smart tool discovery across all configured servers with vec
   .option('--working-dir <path>', 'Working directory for profile resolution (overrides current directory)')
   .option('--force-retry', 'Force retry all failed MCPs immediately (ignores scheduled retry times)')
   .option('--no-color', 'Disable colored output');
+
 
 // Configure help with enhanced formatting, Quick Start, and examples
 program.configureHelp({
@@ -361,6 +364,7 @@ program.configureHelp({
   }
 });
 
+
 // Add help command
 program
   .command('help [command]')
@@ -410,7 +414,8 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('import') ||
   process.argv.includes('analytics') ||
   process.argv.includes('visual') ||
-  process.argv.includes('update');
+  process.argv.includes('update') ||
+  process.argv.includes('repair');
 
 // Default to MCP server mode when no CLI commands are provided
 // This ensures compatibility with Claude Desktop and other MCP clients that expect server mode by default
@@ -611,6 +616,7 @@ async function loadMCPInfoFromCache(mcpDescriptions: Record<string, string>, mcp
     return false;
   }
 }
+
 
 // List command
 program
@@ -1029,15 +1035,17 @@ configCmd
     await manager.showConfigLocations();
   });
 
+
 // Repair command - fix failed MCPs interactively
 program
   .command('repair')
   .description('Interactively configure failed MCPs')
   .option('--profile <name>', 'Profile to repair (default: all)')
   .action(async (options) => {
-    const profileName = options.profile || program.getOptionValue('profile') || 'all';
+    try {
+      const profileName = options.profile || program.getOptionValue('profile') || 'all';
 
-    console.log(chalk.bold('\n🔧 MCP Repair Tool\n'));
+      console.log(chalk.bold('\n🔧 MCP Repair Tool\n'));
 
     // Load failed MCPs from both sources
     const { getCacheDirectory } = await import('../utils/ncp-paths.js');
@@ -1320,6 +1328,11 @@ program
 
     if (fixedCount > 0) {
       console.log(chalk.dim('\n💡 Run "ncp find --force-retry" to re-index fixed MCPs'));
+    }
+    } catch (error: any) {
+      console.error(chalk.red('\n❌ Repair command failed:'), error.message);
+      console.error(chalk.dim(error.stack));
+      process.exit(1);
     }
   });
 
@@ -1895,14 +1908,16 @@ program
   });
 
 // Check for updates on CLI startup (non-intrusive)
-(async () => {
-  try {
-    const updateChecker = new UpdateChecker();
-    await updateChecker.showUpdateNotification();
-  } catch {
-    // Silently fail - don't interrupt normal CLI usage
-  }
-})();
+// Temporarily disabled - causing hangs in some environments
+// TODO: Re-enable with proper timeout handling
+// (async () => {
+//   try {
+//     const updateChecker = new UpdateChecker();
+//     await updateChecker.showUpdateNotification();
+//   } catch {
+//     // Silently fail - don't interrupt normal CLI usage
+//   }
+// })();
 
 program.parse();
 }
