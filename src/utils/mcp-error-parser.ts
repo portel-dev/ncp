@@ -143,30 +143,34 @@ export class MCPErrorParser {
     const needs: ConfigurationNeed[] = [];
     let hasPathArgument = false;
 
-    // Pattern: Usage: command [argument] or Usage: command <argument>
-    const usagePattern = /Usage:.*?[\[<]([a-zA-Z][\w-]+)[\]>]/gi;
+    // First, extract the Usage line
+    const usageLine = this.extractLine(stderr, /Usage:/i);
 
-    let match;
-    while ((match = usagePattern.exec(stderr)) !== null) {
-      const argument = match[1];
-      const line = this.extractLine(stderr, /Usage:/i);
+    if (usageLine) {
+      // Pattern to match all bracketed arguments: [arg] or <arg>
+      const argPattern = /[\[<]([a-zA-Z][\w-]+)[\]>]/g;
 
-      // Determine type based on argument name
-      const isPath = /dir|path|folder|file|location/i.test(argument);
-      if (isPath) {
-        hasPathArgument = true;
+      let match;
+      while ((match = argPattern.exec(usageLine)) !== null) {
+        const argument = match[1];
+
+        // Determine type based on argument name
+        const isPath = /dir|path|folder|file|location/i.test(argument);
+        if (isPath) {
+          hasPathArgument = true;
+        }
+
+        needs.push({
+          type: 'command_arg',
+          variable: argument,
+          description: isPath
+            ? `${mcpName} requires a ${argument}`
+            : `${mcpName} requires command argument: ${argument}`,
+          prompt: `Enter ${argument}:`,
+          sensitive: false,
+          extractedFrom: usageLine
+        });
       }
-
-      needs.push({
-        type: 'command_arg',
-        variable: argument,
-        description: isPath
-          ? `${mcpName} requires a ${argument}`
-          : `${mcpName} requires command argument: ${argument}`,
-        prompt: `Enter ${argument}:`,
-        sensitive: false,
-        extractedFrom: line
-      });
     }
 
     // Also check for: "requires at least one" or "must provide"

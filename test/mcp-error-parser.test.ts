@@ -82,6 +82,18 @@ At least one directory must be provided by EITHER method for the server to opera
       expect(needs[0].type).toBe('command_arg');
       expect(needs[0].variable).toBe('allowed-directory');
     });
+
+    it('should detect multiple path arguments for clone/copy MCPs', () => {
+      const stderr = 'Usage: mcp-server-clone <source-directory> <destination-directory>';
+      const needs = parser.parseError('clone', stderr, 1);
+
+      // Should detect BOTH source and destination
+      expect(needs).toHaveLength(2);
+      expect(needs[0].type).toBe('command_arg');
+      expect(needs[0].variable).toBe('source-directory');
+      expect(needs[1].type).toBe('command_arg');
+      expect(needs[1].variable).toBe('destination-directory');
+    });
   });
 
   describe('Environment Variable Detection', () => {
