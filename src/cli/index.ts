@@ -1042,6 +1042,13 @@ program
     // Load failed MCPs
     const { getCacheDirectory } = await import('../utils/ncp-paths.js');
     const { CSVCache } = await import('../cache/csv-cache.js');
+    const { MCPErrorParser } = await import('../utils/mcp-error-parser.js');
+    const { ProfileManager } = await import('../profiles/profile-manager.js');
+    const { MCPWrapper } = await import('../utils/mcp-wrapper.js');
+    const { readFileSync, existsSync } = await import('fs');
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+
     const cache = new CSVCache(getCacheDirectory(), profileName);
     await cache.initialize();
 
@@ -1055,19 +1062,214 @@ program
     console.log(chalk.yellow(`Found ${failedCount} failed MCPs\n`));
     console.log(chalk.dim('This tool will help you configure them interactively.\n'));
 
-    // TODO: Implement interactive repair flow
-    // 1. List failed MCPs with error details
-    // 2. Parse errors to determine what config is needed
-    // 3. Prompt user for missing config
-    // 4. Test with new config
-    // 5. Update profile if successful
-    // 6. Report results
+    // Load profile
+    const profileManager = new ProfileManager();
+    await profileManager.initialize();
+    const profile = await profileManager.getProfile(profileName);
 
-    console.log(chalk.yellow('⚠️  Repair functionality coming soon!'));
-    console.log(chalk.dim('\nFor now, you can:'));
-    console.log(chalk.dim('  1. Check logs: ~/.ncp/logs/'));
-    console.log(chalk.dim('  2. Edit config: ncp config edit'));
-    console.log(chalk.dim('  3. Force retry: ncp find --force-retry'));
+    if (!profile) {
+      console.log(chalk.red(`❌ Profile '${profileName}' not found`));
+      return;
+    }
+
+    // Get failed MCPs metadata
+    const metadata = (cache as any).metadata;
+    if (!metadata || !metadata.failedMCPs) {
+      console.log(chalk.yellow('⚠️  No failed MCP metadata found'));
+      return;
+    }
+
+    const errorParser = new MCPErrorParser();
+    const mcpWrapper = new MCPWrapper();
+    const prompts = (await import('prompts')).default;
+
+    let fixedCount = 0;
+    let skippedCount = 0;
+    let stillFailingCount = 0;
+
+    // Iterate through failed MCPs
+    for (const [mcpName, failedInfo] of metadata.failedMCPs) {
+      console.log(chalk.cyan(`\n📦 ${mcpName}`));
+      console.log(chalk.dim(`   Last error: ${failedInfo.errorMessage}`));
+      console.log(chalk.dim(`   Failed ${failedInfo.attemptCount} time(s)`));
+
+      // Ask if user wants to fix this MCP
+      const { shouldFix } = await prompts({
+        type: 'confirm',
+        name: 'shouldFix',
+        message: `Try to fix ${mcpName}?`,
+        initial: true
+      });
+
+      if (!shouldFix) {
+        skippedCount++;
+        continue;
+      }
+
+      // Read stderr from log file
+      const logPath = mcpWrapper.getLogFile(mcpName);
+      let stderr = '';
+
+      if (existsSync(logPath)) {
+        const logContent = readFileSync(logPath, 'utf-8');
+        // Extract stderr lines
+        const stderrLines = logContent.split('\n').filter(line => line.includes('[STDERR]'));
+        stderr = stderrLines.map(line => line.replace(/\[STDERR\]\s*/, '')).join('\n');
+      } else {
+        stderr = failedInfo.errorMessage;
+      }
+
+      // Parse errors to detect configuration needs
+      const configNeeds = errorParser.parseError(mcpName, stderr, 1);
+
+      if (configNeeds.length === 0) {
+        console.log(chalk.yellow(`   ⚠️  Could not detect specific configuration needs`));
+        console.log(chalk.dim(`   Check logs manually: ${logPath}`));
+        skippedCount++;
+        continue;
+      }
+
+      // Check if it's a missing package
+      const packageMissing = configNeeds.find(n => n.type === 'package_missing');
+      if (packageMissing) {
+        console.log(chalk.red(`   ❌ Package not found on npm - cannot fix`));
+        console.log(chalk.dim(`      ${packageMissing.extractedFrom}`));
+        skippedCount++;
+        continue;
+      }
+
+      console.log(chalk.yellow(`\n   Found ${configNeeds.length} configuration need(s):`));
+      for (const need of configNeeds) {
+        console.log(chalk.dim(`   • ${need.description}`));
+      }
+
+      // Get current MCP config
+      const currentConfig = profile.mcpServers[mcpName];
+      if (!currentConfig) {
+        console.log(chalk.red(`   ❌ MCP not found in profile`));
+        skippedCount++;
+        continue;
+      }
+
+      // Collect new configuration from user
+      const newEnv = { ...(currentConfig.env || {}) };
+      const newArgs = [...(currentConfig.args || [])];
+
+      for (const need of configNeeds) {
+        if (need.type === 'api_key' || need.type === 'env_var') {
+          const { value } = await prompts({
+            type: need.sensitive ? 'password' : 'text',
+            name: 'value',
+            message: need.prompt,
+            validate: (val: string) => val.length > 0 ? true : 'Value required'
+          });
+
+          if (!value) {
+            console.log(chalk.yellow(`   Skipped ${mcpName}`));
+            skippedCount++;
+            continue;
+          }
+
+          newEnv[need.variable] = value;
+        } else if (need.type === 'command_arg') {
+          const { value } = await prompts({
+            type: 'text',
+            name: 'value',
+            message: need.prompt,
+            validate: (val: string) => val.length > 0 ? true : 'Value required'
+          });
+
+          if (!value) {
+            console.log(chalk.yellow(`   Skipped ${mcpName}`));
+            skippedCount++;
+            continue;
+          }
+
+          newArgs.push(value);
+        }
+      }
+
+      // Test MCP with new configuration
+      console.log(chalk.dim(`\n   Testing ${mcpName} with new configuration...`));
+
+      const testConfig = {
+        name: mcpName,
+        command: currentConfig.command,
+        args: newArgs,
+        env: newEnv
+      };
+
+      try {
+        // Create wrapper command
+        const wrappedCommand = mcpWrapper.createWrapper(
+          testConfig.name,
+          testConfig.command,
+          testConfig.args || []
+        );
+
+        // Test connection with 30 second timeout
+        const transport = new StdioClientTransport({
+          command: wrappedCommand.command,
+          args: wrappedCommand.args,
+          env: {
+            ...process.env,
+            ...(testConfig.env || {}),
+            MCP_SILENT: 'true',
+            QUIET: 'true'
+          }
+        });
+
+        const client = new Client({
+          name: 'ncp-repair-test',
+          version: '1.0.0'
+        }, {
+          capabilities: {}
+        });
+
+        await client.connect(transport);
+
+        // Try to list tools
+        const result = await Promise.race([
+          client.listTools(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Test timeout')), 30000)
+          )
+        ]);
+
+        await client.close();
+
+        console.log(chalk.green(`   ✅ Success! Found ${result.tools.length} tools`));
+
+        // Update profile with new configuration
+        profile.mcpServers[mcpName] = {
+          command: testConfig.command,
+          args: newArgs,
+          env: newEnv
+        };
+        profile.metadata.modified = new Date().toISOString();
+
+        await profileManager.saveProfile(profile);
+
+        // Remove from failed cache
+        metadata.failedMCPs.delete(mcpName);
+        (cache as any).saveMetadata();
+
+        fixedCount++;
+      } catch (error: any) {
+        console.log(chalk.red(`   ❌ Still failing: ${error.message}`));
+        stillFailingCount++;
+      }
+    }
+
+    // Final report
+    console.log(chalk.bold('\n📊 Repair Summary\n'));
+    console.log(chalk.green(`✅ Fixed: ${fixedCount}`));
+    console.log(chalk.yellow(`⏭️  Skipped: ${skippedCount}`));
+    console.log(chalk.red(`❌ Still failing: ${stillFailingCount}`));
+
+    if (fixedCount > 0) {
+      console.log(chalk.dim('\n💡 Run "ncp find --force-retry" to re-index fixed MCPs'));
+    }
   });
 
 // Find command (CLI-optimized version for fast discovery)
