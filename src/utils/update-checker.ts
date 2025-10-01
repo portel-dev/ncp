@@ -62,7 +62,16 @@ export class UpdateChecker {
 
   private async fetchLatestVersion(): Promise<string | null> {
     try {
-      const response = await fetch(`https://registry.npmjs.org/${this.packageName}/latest`);
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+
+      const response = await fetch(`https://registry.npmjs.org/${this.packageName}/latest`, {
+        signal: controller.signal
+      });
+
+      clearTimeout(timeout);
+
       if (!response.ok) {
         return null;
       }
