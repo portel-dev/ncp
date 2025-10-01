@@ -1050,12 +1050,12 @@ program
 
     // Setup graceful shutdown on Ctrl+C
     const gracefulShutdown = async () => {
-      console.log('\n\n🛑 Interrupted. Saving cache and cleaning up...');
+      process.stdout.write('\n\n💾 Saving progress...');
       try {
         await server.cleanup();
-        console.log('✅ Cleanup complete');
+        process.stdout.write('\r\u001B[K✅ Progress saved\n');
       } catch (error) {
-        console.error('❌ Error during cleanup:', error);
+        process.stdout.write('\r\u001B[K❌ Error saving progress\n');
       }
       process.exit(0);
     };

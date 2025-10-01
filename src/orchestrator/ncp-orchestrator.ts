@@ -1489,11 +1489,9 @@ export class NCPOrchestrator {
     // Finalize cache if it's being written
     if (this.csvCache) {
       try {
-        console.log('💾 Finalizing cache...');
         await this.csvCache.finalize();
-        console.log('✅ Cache finalized');
       } catch (error) {
-        console.error('❌ Error finalizing cache:', error);
+        // Ignore finalize errors
       }
     }
 
