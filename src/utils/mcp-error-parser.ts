@@ -101,11 +101,16 @@ export class MCPErrorParser {
 
     // Pattern: VARNAME (uppercase with underscores) followed by requirement indicators
     // Exclude API_KEY/TOKEN patterns (already handled)
-    const envVarPattern = /([A-Z][A-Z0-9_]{2,})(?!.*(?:API_KEY|TOKEN))\s+(?:is\s+)?(?:required|missing|not found|not set|must be (?:set|provided)|environment variable)/gi;
+    const envVarPattern = /([A-Z][A-Z0-9_]{2,})\s+(?:is\s+)?(?:required|missing|not found|not set|must be (?:set|provided)|environment variable)/gi;
 
     let match;
     while ((match = envVarPattern.exec(stderr)) !== null) {
       const variable = match[1];
+
+      // Skip if it's an API key/token pattern (already handled by detectAPIKeys)
+      if (/(?:API_KEY|TOKEN|KEY)$/i.test(variable)) {
+        continue;
+      }
 
       // Skip common false positives
       if (this.isCommonFalsePositive(variable)) {
