@@ -101,7 +101,8 @@ export class MCPErrorParser {
 
     // Pattern: VARNAME (uppercase with underscores) followed by requirement indicators
     // Exclude API_KEY/TOKEN patterns (already handled)
-    const envVarPattern = /([A-Z][A-Z0-9_]{2,})\s+(?:is\s+)?(?:required|missing|not found|not set|must be (?:set|provided)|environment variable)/gi;
+    // Note: No 'i' flag - must be actual uppercase to avoid matching regular words
+    const envVarPattern = /([A-Z][A-Z0-9_]{2,})\s+(?:is\s+)?(?:required|missing|not found|not set|must be (?:set|provided)|environment variable)/g;
 
     let match;
     while ((match = envVarPattern.exec(stderr)) !== null) {
@@ -140,6 +141,7 @@ export class MCPErrorParser {
    */
   private detectCommandArgs(stderr: string, mcpName: string): ConfigurationNeed[] {
     const needs: ConfigurationNeed[] = [];
+    let hasPathArgument = false;
 
     // Pattern: Usage: command [argument] or Usage: command <argument>
     const usagePattern = /Usage:.*?[\[<]([a-zA-Z][\w-]+)[\]>]/gi;
@@ -151,6 +153,9 @@ export class MCPErrorParser {
 
       // Determine type based on argument name
       const isPath = /dir|path|folder|file|location/i.test(argument);
+      if (isPath) {
+        hasPathArgument = true;
+      }
 
       needs.push({
         type: 'command_arg',
@@ -165,7 +170,8 @@ export class MCPErrorParser {
     }
 
     // Also check for: "requires at least one" or "must provide"
-    if (/(?:requires? at least one|must provide).*?(?:directory|path|file)/i.test(stderr)) {
+    // But skip if we already detected a path argument from Usage pattern
+    if (!hasPathArgument && /(?:requires? at least one|must provide).*?(?:directory|path|file)/i.test(stderr)) {
       const line = this.extractLine(stderr, /requires? at least one|must provide/i);
 
       needs.push({

@@ -71,6 +71,17 @@ describe('MCPErrorParser', () => {
       expect(needs[0].type).toBe('command_arg');
       expect(needs[0].variable).toBe('required-path');
     });
+
+    it('should not duplicate path requirements from Usage and "requires at least one"', () => {
+      const stderr = `Usage: mcp-server-filesystem [allowed-directory] [additional-directories...]
+At least one directory must be provided by EITHER method for the server to operate.`;
+      const needs = parser.parseError('filesystem', stderr, 1);
+
+      // Should only detect ONE requirement (from Usage), not two
+      expect(needs).toHaveLength(1);
+      expect(needs[0].type).toBe('command_arg');
+      expect(needs[0].variable).toBe('allowed-directory');
+    });
   });
 
   describe('Environment Variable Detection', () => {
