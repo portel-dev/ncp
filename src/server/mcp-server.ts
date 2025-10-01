@@ -46,9 +46,9 @@ export class MCPServer {
   private isInitialized: boolean = false;
   private initializationProgress: { current: number; total: number; currentMCP: string } | null = null;
 
-  constructor(profileName: string = 'default', showProgress: boolean = false) {
+  constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
     // Profile-aware orchestrator using real MCP connections
-    this.orchestrator = new NCPOrchestrator(profileName, showProgress);
+    this.orchestrator = new NCPOrchestrator(profileName, showProgress, forceRetry);
   }
 
   async initialize(): Promise<void> {

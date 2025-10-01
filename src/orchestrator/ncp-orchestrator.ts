@@ -153,13 +153,16 @@ export class NCPOrchestrator {
   private indexingProgress: { current: number; total: number; currentMCP: string; estimatedTimeRemaining?: number } | null = null;
   private indexingStartTime: number = 0;
 
-  constructor(profileName: string = 'default', showProgress: boolean = false) {
+  private forceRetry: boolean = false;
+
+  constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
     this.profileName = profileName;
     this.discovery = new DiscoveryEngine();
     this.healthMonitor = new MCPHealthMonitor();
     this.cachePatcher = new CachePatcher();
     this.csvCache = new CSVCache(getCacheDirectory(), profileName);
     this.showProgress = showProgress;
+    this.forceRetry = forceRetry;
   }
 
   private async loadProfile(): Promise<Profile | null> {
@@ -226,7 +229,14 @@ export class NCPOrchestrator {
     const mcpsToIndex = mcpConfigs.filter(config => {
       const tools = profile.mcpServers[config.name];
       const currentHash = CSVCache.hashProfile(tools);
-      return !this.csvCache.isMCPIndexed(config.name, currentHash);
+
+      // Check if already indexed
+      if (this.csvCache.isMCPIndexed(config.name, currentHash)) {
+        return false;
+      }
+
+      // Check if failed and should retry
+      return this.csvCache.shouldRetryFailed(config.name, this.forceRetry);
     });
 
     if (mcpsToIndex.length > 0) {
@@ -469,6 +479,11 @@ export class NCPOrchestrator {
       } catch (error: any) {
         // Probe failures are expected - don't alarm users with error messages
         logger.debug(`Failed to discover tools from ${config.name}: ${error.message}`);
+
+        // Mark MCP as failed for scheduled retry (if in incremental mode)
+        if (incrementalMode && profile) {
+          this.csvCache.markFailed(config.name, error);
+        }
 
         // Update indexing progress even for failed MCPs
         if (this.indexingProgress) {

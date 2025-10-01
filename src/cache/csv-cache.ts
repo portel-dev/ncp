@@ -26,6 +26,15 @@ export interface CachedMCP {
   tools: CachedTool[];
 }
 
+export interface FailedMCP {
+  name: string;
+  lastAttempt: string; // ISO timestamp
+  errorType: string; // 'timeout', 'connection_refused', 'unknown'
+  errorMessage: string;
+  attemptCount: number;
+  nextRetry: string; // ISO timestamp - when to retry next
+}
+
 export interface CacheMetadata {
   version: string;
   profileName: string;
@@ -35,6 +44,7 @@ export interface CacheMetadata {
   totalMCPs: number;
   totalTools: number;
   indexedMCPs: Map<string, string>; // mcpName -> mcpHash
+  failedMCPs: Map<string, FailedMCP>; // mcpName -> failure info
 }
 
 export class CSVCache {
@@ -60,10 +70,11 @@ export class CSVCache {
       try {
         const content = readFileSync(this.metaPath, 'utf-8');
         const parsed = JSON.parse(content);
-        // Convert indexedMCPs object back to Map
+        // Convert objects back to Maps
         this.metadata = {
           ...parsed,
-          indexedMCPs: new Map(Object.entries(parsed.indexedMCPs || {}))
+          indexedMCPs: new Map(Object.entries(parsed.indexedMCPs || {})),
+          failedMCPs: new Map(Object.entries(parsed.failedMCPs || {}))
         };
       } catch (error) {
         logger.warn(`Failed to load cache metadata: ${error}`);
@@ -80,7 +91,8 @@ export class CSVCache {
         lastUpdated: new Date().toISOString(),
         totalMCPs: 0,
         totalTools: 0,
-        indexedMCPs: new Map()
+        indexedMCPs: new Map(),
+        failedMCPs: new Map()
       };
     }
   }
@@ -289,10 +301,11 @@ export class CSVCache {
     if (!this.metadata) return;
 
     try {
-      // Convert Map to object for JSON serialization
+      // Convert Maps to objects for JSON serialization
       const metaToSave = {
         ...this.metadata,
-        indexedMCPs: Object.fromEntries(this.metadata.indexedMCPs)
+        indexedMCPs: Object.fromEntries(this.metadata.indexedMCPs),
+        failedMCPs: Object.fromEntries(this.metadata.failedMCPs)
       };
 
       // Write metadata file
@@ -387,6 +400,102 @@ export class CSVCache {
 
     fields.push(current);
     return fields;
+  }
+
+  /**
+   * Mark an MCP as failed with retry scheduling
+   */
+  markFailed(mcpName: string, error: Error): void {
+    if (!this.metadata) return;
+
+    const existing = this.metadata.failedMCPs.get(mcpName);
+    const attemptCount = (existing?.attemptCount || 0) + 1;
+
+    // Exponential backoff: 1 hour, 6 hours, 24 hours, then always 24 hours
+    const retryDelays = [
+      60 * 60 * 1000,      // 1 hour
+      6 * 60 * 60 * 1000,  // 6 hours
+      24 * 60 * 60 * 1000  // 24 hours (then keep this)
+    ];
+    const delayIndex = Math.min(attemptCount - 1, retryDelays.length - 1);
+    const retryDelay = retryDelays[delayIndex];
+
+    // Determine error type
+    let errorType = 'unknown';
+    if (error.message.includes('timeout') || error.message.includes('Probe timeout')) {
+      errorType = 'timeout';
+    } else if (error.message.includes('ECONNREFUSED') || error.message.includes('connection')) {
+      errorType = 'connection_refused';
+    } else if (error.message.includes('ENOENT') || error.message.includes('command not found')) {
+      errorType = 'command_not_found';
+    }
+
+    const failedMCP: FailedMCP = {
+      name: mcpName,
+      lastAttempt: new Date().toISOString(),
+      errorType,
+      errorMessage: error.message,
+      attemptCount,
+      nextRetry: new Date(Date.now() + retryDelay).toISOString()
+    };
+
+    this.metadata.failedMCPs.set(mcpName, failedMCP);
+    this.saveMetadata();
+
+    logger.info(`📋 Marked ${mcpName} as failed (attempt ${attemptCount}), will retry after ${new Date(failedMCP.nextRetry).toLocaleString()}`);
+  }
+
+  /**
+   * Check if we should retry a failed MCP
+   */
+  shouldRetryFailed(mcpName: string, forceRetry: boolean = false): boolean {
+    if (!this.metadata) return true;
+
+    const failed = this.metadata.failedMCPs.get(mcpName);
+    if (!failed) return true; // Never tried, should try
+
+    if (forceRetry) return true; // Force retry flag
+
+    // Check if enough time has passed
+    const now = new Date();
+    const nextRetry = new Date(failed.nextRetry);
+    return now >= nextRetry;
+  }
+
+  /**
+   * Clear all failed MCPs (for force retry)
+   */
+  clearFailedMCPs(): void {
+    if (!this.metadata) return;
+    this.metadata.failedMCPs.clear();
+    this.saveMetadata();
+    logger.info('Cleared all failed MCPs');
+  }
+
+  /**
+   * Get failed MCPs count
+   */
+  getFailedMCPsCount(): number {
+    return this.metadata?.failedMCPs.size || 0;
+  }
+
+  /**
+   * Get failed MCPs that are ready for retry
+   */
+  getRetryReadyFailedMCPs(): string[] {
+    if (!this.metadata) return [];
+
+    const now = new Date();
+    const ready: string[] = [];
+
+    for (const [name, failed] of this.metadata.failedMCPs) {
+      const nextRetry = new Date(failed.nextRetry);
+      if (now >= nextRetry) {
+        ready.push(name);
+      }
+    }
+
+    return ready;
   }
 
   /**

@@ -280,6 +280,7 @@ ${chalk.dim('Reduces cognitive load and clutter, saving tokens and speeding up A
 ${chalk.dim('Enables smart tool discovery across all configured servers with vector similarity search.')}`)
   .option('--profile <name>', 'Profile to use (default: all)')
   .option('--working-dir <path>', 'Working directory for profile resolution (overrides current directory)')
+  .option('--force-retry', 'Force retry all failed MCPs immediately (ignores scheduled retry times)')
   .option('--no-color', 'Disable colored output');
 
 // Configure help with enhanced formatting, Quick Start, and examples
@@ -1041,10 +1042,11 @@ program
     console.log();
 
     const profileName = program.getOptionValue('profile') || 'all';
+    const forceRetry = program.getOptionValue('forceRetry') || false;
 
     // Use MCPServer for rich formatted output
     const { MCPServer } = await import('../server/mcp-server.js');
-    const server = new MCPServer(profileName, true); // Enable progress for first-time indexing
+    const server = new MCPServer(profileName, true, forceRetry); // Enable progress + force retry flag
 
     // Setup graceful shutdown on Ctrl+C
     const gracefulShutdown = async () => {
