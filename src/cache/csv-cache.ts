@@ -491,6 +491,14 @@ export class CSVCache {
   }
 
   /**
+   * Check if an MCP is in the failed list
+   */
+  isMCPFailed(mcpName: string): boolean {
+    if (!this.metadata) return false;
+    return this.metadata.failedMCPs.has(mcpName);
+  }
+
+  /**
    * Hash profile configuration for change detection
    */
   static hashProfile(profile: any): string {

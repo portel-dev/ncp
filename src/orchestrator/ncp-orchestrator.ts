@@ -246,8 +246,16 @@ export class NCPOrchestrator {
       if (this.showProgress) {
         const action = 'Indexing';
         const cachedCount = this.csvCache.getIndexedMCPs().size;
-        const failedCount = this.csvCache.getFailedMCPsCount();
-        const totalProcessed = cachedCount + failedCount;
+
+        // Count only failed MCPs that are NOT being retried in this run
+        const allFailedCount = this.csvCache.getFailedMCPsCount();
+        const retryingNowCount = mcpsToIndex.filter(config => {
+          // Check if this MCP is in the failed list (being retried)
+          return this.csvCache.isMCPFailed(config.name);
+        }).length;
+        const failedNotRetryingCount = allFailedCount - retryingNowCount;
+
+        const totalProcessed = cachedCount + failedNotRetryingCount;
         const statusMsg = `${action} MCPs: ${totalProcessed}/${mcpConfigs.length}`;
         spinner.start(statusMsg);
         spinner.updateSubMessage('Initializing discovery engine...');
