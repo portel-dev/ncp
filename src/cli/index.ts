@@ -19,6 +19,12 @@ import { mcpWrapper } from '../utils/mcp-wrapper.js';
 import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 import { UpdateChecker } from '../utils/update-checker.js';
 import { setOverrideWorkingDirectory } from '../utils/ncp-paths.js';
+import { ConfigSchemaReader } from '../services/config-schema-reader.js';
+import { ConfigPrompter } from '../services/config-prompter.js';
+import { SchemaCache } from '../cache/schema-cache.js';
+import { getCacheDirectory } from '../utils/ncp-paths.js';
+import { SmitheryConfigReader } from '../utils/smithery-config-reader.js';
+import { SchemaConverter } from '../utils/schema-converter.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -174,6 +180,7 @@ async function discoverSingleMCP(name: string, command: string, args: string[] =
     description?: string;
     websiteUrl?: string;
   };
+  configurationSchema?: any;
 }> {
   const config = { name, command, args, env };
 
@@ -226,6 +233,12 @@ async function discoverSingleMCP(name: string, command: string, args: string[] =
     // Capture server info after connection
     const serverInfo = client!.getServerVersion();
 
+    // Capture configuration schema if available
+    // TODO: Once MCP SDK is updated to support top-level configurationSchema,
+    // also check for it directly. For now, check experimental capabilities.
+    const serverCapabilities = client!.getServerCapabilities();
+    const configurationSchema = (serverCapabilities as any)?.experimental?.configurationSchema;
+
     // Get tool list with filtered output
     const response = await withFilteredOutput(async () => {
       return await client!.listTools();
@@ -248,7 +261,8 @@ async function discoverSingleMCP(name: string, command: string, args: string[] =
         version: serverInfo.version || 'unknown',
         description: serverInfo.title || serverInfo.name || undefined,
         websiteUrl: serverInfo.websiteUrl
-      } : undefined
+      } : undefined,
+      configurationSchema
     };
 
   } catch (error: any) {
@@ -511,29 +525,106 @@ program
 
     console.log(''); // spacing
 
+    // Initialize schema services
+    const schemaReader = new ConfigSchemaReader();
+    const configPrompter = new ConfigPrompter();
+    const schemaCache = new SchemaCache(getCacheDirectory());
+    const smitheryReader = new SmitheryConfigReader();
+    const schemaConverter = new SchemaConverter();
+
+    // Try to discover and detect configuration requirements BEFORE adding to profile
+    console.log(chalk.dim('🔍 Discovering tools and configuration requirements...'));
+    const discoveryStart = Date.now();
+
+    let discoveryResult: Awaited<ReturnType<typeof discoverSingleMCP>> | null = null;
+    let finalConfig = { ...config };
+    let detectedSchema: any = null;
+
+    try {
+      discoveryResult = await discoverSingleMCP(name, command, args, env);
+      const discoveryTime = Date.now() - discoveryStart;
+
+      console.log(`${chalk.green('✅')} Found ${discoveryResult.tools.length} tools in ${discoveryTime}ms`);
+
+      // Three-tier configuration detection strategy:
+      // Tier 1: MCP Protocol configurationSchema (from server capabilities)
+      // Tier 2: Smithery configSchema (from smithery.yaml)
+      // Tier 3: Error parsing (fallback - happens on failure below)
+
+      // Tier 1: Check for MCP protocol schema
+      if (discoveryResult.configurationSchema) {
+        detectedSchema = schemaReader.readSchema({
+          protocolVersion: '1.0',
+          capabilities: {},
+          serverInfo: { name, version: '1.0' },
+          configurationSchema: discoveryResult.configurationSchema
+        });
+        if (detectedSchema) {
+          console.log(chalk.dim('   Configuration schema detected (MCP protocol)'));
+        }
+      }
+
+      // Tier 2: Try Smithery configSchema if no MCP schema found
+      if (!detectedSchema) {
+        // Try to extract package name from command for npm packages
+        let packageName = name;
+        if (command === 'npx' && args.length > 0) {
+          // For npx commands, first arg is usually the package name
+          packageName = args[0].replace(/^-y\s+/, ''); // Remove -y flag if present
+        }
+
+        const smitherySchema = smitheryReader.readFromPackage(packageName);
+        if (smitherySchema && smitheryReader.isValidSchema(smitherySchema)) {
+          detectedSchema = schemaConverter.convertSmitheryToMCP(smitherySchema);
+          if (detectedSchema) {
+            console.log(chalk.dim('   Configuration schema detected (smithery.yaml)'));
+          }
+        }
+      }
+
+      // Apply detected schema if we have one with required config
+      if (detectedSchema && schemaReader.hasRequiredConfig(detectedSchema)) {
+        console.log(chalk.cyan('\n📋 Configuration required'));
+
+        // Prompt for configuration
+        const promptedConfig = await configPrompter.promptForConfig(detectedSchema, name);
+
+        // Merge prompted config with existing config
+        finalConfig = {
+          command: config.command,
+          args: [...(config.args || []), ...(promptedConfig.arguments || [])],
+          env: { ...(config.env || {}), ...(promptedConfig.environmentVariables || {}) }
+        };
+
+        // Display summary
+        configPrompter.displaySummary(promptedConfig, name);
+
+        // Cache schema for future use
+        schemaCache.save(name, detectedSchema);
+        console.log(chalk.dim('✓ Configuration schema cached'));
+      }
+    } catch (discoveryError: any) {
+      console.log(`${chalk.yellow('⚠️')} Discovery failed: ${discoveryError.message}`);
+      console.log(chalk.dim('   Proceeding with manual configuration...'));
+      // Tier 3: Error parsing would happen here in future enhancement
+      // Continue with manual config - error will be saved to profile
+    }
+
     // Initialize cache patcher
     const cachePatcher = new CachePatcher();
 
     for (const profileName of profiles) {
       try {
-        // 1. Update profile
-        await manager.addMCPToProfile(profileName, name, config);
+        // 1. Update profile with final configuration
+        await manager.addMCPToProfile(profileName, name, finalConfig);
         console.log(`\n${OutputFormatter.success(`Added ${name} to profile: ${profileName}`)}`);
 
-        // 2. Discover tools from this MCP only
-        console.log(chalk.dim('🔍 Discovering tools and updating cache...'));
-        const discoveryStart = Date.now();
-
-        try {
-          const discoveryResult = await discoverSingleMCP(name, command, args, env);
-          const discoveryTime = Date.now() - discoveryStart;
-
-          console.log(`${chalk.green('✅')} Found ${discoveryResult.tools.length} tools in ${discoveryTime}ms`);
-
+        // 2. Update cache if we have discovery results
+        if (discoveryResult) {
           if (discoveryResult.tools.length > 0) {
+            console.log(chalk.dim('   Tools discovered:'));
             // Show first few tools
             const toolsToShow = discoveryResult.tools.slice(0, 3);
-            console.log(chalk.dim('   Tools:'));
             toolsToShow.forEach(tool => {
               const shortDesc = tool.description?.length > 50
                 ? tool.description.substring(0, 50) + '...'
@@ -545,8 +636,8 @@ program
             }
           }
 
-          // 3. Patch tool metadata cache
-          await cachePatcher.patchAddMCP(name, config, discoveryResult.tools, discoveryResult.serverInfo);
+          // 3. Patch tool metadata cache with final config
+          await cachePatcher.patchAddMCP(name, finalConfig, discoveryResult.tools, discoveryResult.serverInfo);
 
           // 4. Update profile hash
           const profile = await manager.getProfile(profileName);
@@ -554,9 +645,7 @@ program
           await cachePatcher.updateProfileHash(profileHash);
 
           console.log(`${chalk.green('✅')} Cache updated for ${name}`);
-
-        } catch (discoveryError: any) {
-          console.log(`${chalk.yellow('⚠️')} Could not discover tools: ${discoveryError.message}`);
+        } else {
           console.log(chalk.dim('   Profile updated, but cache not built. Run "ncp find <query>" to build cache later.'));
         }
 

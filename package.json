@@ -1,6 +1,7 @@
 {
   "name": "@portel/ncp",
   "version": "1.3.2",
+  "mcpName": "io.github.portel-dev/ncp",
   "description": "Natural Context Provider - N-to-1 MCP Orchestration for AI Assistants",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -27,7 +28,7 @@
     "test:pre-publish": "npm run test:critical && npm run test",
     "test:package": "node scripts/test-package-locally.cjs",
     "prepack": "npm run build && npm run test:pre-publish",
-    "prepublishOnly": "npm run build && npm run test:pre-publish",
+    "prepublishOnly": "npm run build && npm run test:pre-publish && node scripts/sync-server-version.js",
     "release": "release-it",
     "release:dry": "release-it --dry-run"
   },
@@ -67,7 +68,8 @@
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "prettyjson": "^1.2.5",
-    "prompts": "^2.4.2"
+    "prompts": "^2.4.2",
+    "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@agent-infra/mcp-server-browser": "^1.2.23",
