@@ -62,40 +62,50 @@ When an MCP has been published to [Smithery](https://smithery.ai/) and includes 
 ### Why This Matters
 Many MCPs are already published to Smithery and include configuration metadata. This gives us immediate coverage without waiting for MCP spec adoption.
 
-### Key Insight: Smithery is a Config File Format, Not a Dependency
+### Key Insight: Smithery is Registry Metadata, Not Package Content
 
-**Critical Understanding**: Smithery is simply a metadata format (smithery.yaml), **NOT** a runtime dependency or SDK that MCPs need to integrate with.
+**Critical Understanding**: `smithery.yaml` is metadata **for the Smithery registry platform**, not for the npm package itself.
 
 **What Smithery Actually Is**:
-- 📝 A standardized YAML file format for MCP metadata
-- 📋 A registry/marketplace where MCPs are published and discovered
-- 🔍 A config file that describes how to start and configure an MCP
+- 📋 A registry/marketplace where MCPs are discovered and listed
+- 📝 `smithery.yaml` contains metadata FOR THE REGISTRY (like package.json is for npm)
+- 🔍 Used by Smithery.ai to show installation instructions and requirements
+- 🎯 Similar to `.github/workflows` - useful for external tooling, not the package
 
 **What Smithery Is NOT**:
-- ❌ NOT a runtime library that MCPs import or depend on
-- ❌ NOT a service that MCPs connect to during operation
-- ❌ NOT something that needs to be "integrated" into MCP servers
+- ❌ NOT meant to be distributed with npm packages
+- ❌ NOT a runtime dependency of the MCP
+- ❌ NOT something MCP packages need at runtime
 
-**How NCP Uses Smithery**:
+**Why MCPs Don't Include It in NPM Packages**:
+This is **intentional and correct** - not a "publishing gap":
+- The MCP package doesn't need smithery.yaml at runtime
+- It's metadata for an external registry (Smithery.ai)
+- Including it would bloat packages with files they never use
+- Only relevant to Smithery's platform, not to MCP consumers
+
+**NCP's Novel Use Case**:
+We're **repurposing** Smithery registry metadata as a configuration schema source:
 ```typescript
-// We simply READ the smithery.yaml file as static metadata
+// Try to read smithery.yaml if publisher included it
 const smitheryPath = `${packageName}/smithery.yaml`;
 const content = readFileSync(smitheryPath, 'utf-8');
 const parsed = YAML.parse(content);
-// No SDK, no API calls, no runtime dependencies!
+
+// This is an UNCONVENTIONAL use case
+// Most publishers have no reason to include this file
 ```
 
-**Real-World Example**: [Gmail MCP Server](https://github.com/GongRzhe/Gmail-MCP-Server)
-- ✅ Has a `smithery.yaml` file with configSchema
-- ✅ Works as a standard stdio MCP server
-- ✅ No Smithery runtime dependencies in package.json
-- ✅ We just read its smithery.yaml to understand its config needs
+**Coverage Reality**:
+- ✅ Smithery.yaml exists for ~40-60% of MCPs in Smithery registry
+- ⚠️ But <5% include it in published npm packages (and that's OK!)
+- 🎯 This is why Tier 3 (error parsing) remains critical
 
-**Why This Matters for NCP**:
-- Simple implementation: Just YAML file parsing
-- No integration challenges: No SDKs to install
-- Works offline: File is bundled with the MCP package
-- Universal compatibility: Works with any MCP that has smithery.yaml
+**Why We Still Check for It**:
+- Some publishers MAY choose to include it
+- Zero cost to check if it exists
+- Provides better UX when available
+- Gracefully degrades to Tier 3 when not available
 
 ### Advantages
 ✅ **Already available** - Many MCPs have smithery.yaml today
@@ -297,12 +307,14 @@ async function addMCP(name: string, command: string, packageName: string) {
 
 ### Today (With Three-Tier Detection)
 ```
-~5%    → MCP Protocol schema (new servers)
-~40-60%→ Smithery configSchema (existing)
-~30-50%→ Error-based detection (fallback)
+~5%    → MCP Protocol schema (new servers implementing spec)
+<5%    → Smithery configSchema (rarely in npm packages)
+~90%+  → Error-based detection (universal fallback)
 
 Total Coverage: ~95%+ of MCPs
 ```
+
+**Note**: Smithery Tier 2 has low coverage because smithery.yaml is registry metadata, not meant for npm packages. This is expected and correct.
 
 ### After MCP Spec PR #1583 is Merged
 ```
