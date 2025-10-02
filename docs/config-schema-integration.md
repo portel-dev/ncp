@@ -68,39 +68,61 @@ prompter.displaySummary(config, 'github');
 
 ## Integration Points
 
-### During `ncp add`
+### During `ncp add` (with Fallback Strategy)
 
-**Enhanced Flow**:
+**Two-Tier Detection Flow**:
 ```typescript
 // 1. User runs: ncp add github npx @modelcontextprotocol/server-github
 
-// 2. Try to connect to MCP (will likely fail without config)
+let config: ConfigValues | null = null;
+
 try {
+  // 2. Try to connect to MCP
   await client.initialize();
 
-  // 3. Check for configurationSchema in InitializeResult
+  // 3. STRATEGY 1: Check for configurationSchema (PREFERRED)
   const schema = reader.readSchema(initResult);
 
   if (schema && reader.hasRequiredConfig(schema)) {
     console.log('✓ Configuration schema detected!');
 
-    // 4. Prompt user interactively
-    const config = await prompter.promptForConfig(schema, mcpName);
+    // 4. Use schema-based prompting
+    config = await prompter.promptForConfig(schema, mcpName);
 
-    // 5. Save to profile with correct format
-    profileManager.addMCP(mcpName, {
-      command,
-      args: config.arguments,
-      env: config.environmentVariables
-    });
-
-    // 6. Cache schema for future use
+    // 5. Cache schema for future use
     schemaCache.save(mcpName, schema);
+
+    console.log('✓ Configuration validated using schema');
+  } else {
+    // No required config, proceed normally
+    console.log('✓ No configuration required');
   }
+
 } catch (error) {
-  // Fallback to MCPErrorParser if no schema
-  const needs = errorParser.parseError(mcpName, error.message, 1);
-  // ... existing error handling
+  // 6. STRATEGY 2: Fallback to error parsing (LEGACY)
+  console.log('⚠️  Connection failed, analyzing error...');
+
+  const needs = errorParser.parseError(mcpName, error.stderr, error.exitCode);
+
+  if (needs.length > 0) {
+    console.log(`⚠️  Detected ${needs.length} configuration need(s) from error`);
+
+    // Use error-based prompting (existing MCPErrorParser flow)
+    config = await promptForErrorBasedConfig(needs);
+
+    console.log('✓ Configuration detected from error patterns');
+  } else {
+    throw new Error(`Failed to connect: ${error.message}`);
+  }
+}
+
+// 7. Save to profile
+if (config) {
+  profileManager.addMCP(mcpName, {
+    command,
+    args: config.arguments,
+    env: config.environmentVariables
+  });
 }
 ```
 
