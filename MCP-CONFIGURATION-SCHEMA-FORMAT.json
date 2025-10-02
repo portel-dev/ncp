@@ -1,0 +1,102 @@
+{
+  "comment": "MCP InitializeResult with configurationSchema",
+  "description": "This is the JSON format MCP servers return in their initialize() response",
+
+  "protocolVersion": "0.1.0",
+  "capabilities": {
+    "tools": {},
+    "resources": {},
+    "prompts": {}
+  },
+  "serverInfo": {
+    "name": "example-mcp-server",
+    "version": "1.0.0"
+  },
+  "instructions": "Optional human-readable setup instructions",
+
+  "configurationSchema": {
+    "comment": "This is the configuration schema that clients like NCP will use",
+
+    "environmentVariables": [
+      {
+        "name": "API_KEY",
+        "description": "API key for service authentication",
+        "type": "string",
+        "required": true,
+        "sensitive": true,
+        "pattern": "^[a-zA-Z0-9]{32}$",
+        "examples": ["abcd1234efgh5678ijkl9012mnop3456"]
+      },
+      {
+        "name": "DATABASE_URL",
+        "description": "PostgreSQL database connection URL",
+        "type": "url",
+        "required": true,
+        "sensitive": true,
+        "pattern": "^postgresql://.*",
+        "examples": ["postgresql://user:pass@localhost:5432/dbname"]
+      },
+      {
+        "name": "CONFIG_PATH",
+        "description": "Path to configuration file",
+        "type": "path",
+        "required": false,
+        "default": "~/.config/app.json",
+        "examples": ["/etc/app/config.json", "~/.config/app.json"]
+      },
+      {
+        "name": "LOG_LEVEL",
+        "description": "Logging level (debug, info, warn, error)",
+        "type": "string",
+        "required": false,
+        "default": "info",
+        "examples": ["debug", "info", "warn", "error"]
+      },
+      {
+        "name": "MAX_RETRIES",
+        "description": "Maximum number of retry attempts",
+        "type": "number",
+        "required": false,
+        "default": 3,
+        "examples": [3, 5, 10]
+      },
+      {
+        "name": "ENABLE_CACHE",
+        "description": "Enable response caching",
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "examples": [true, false]
+      }
+    ],
+
+    "arguments": [
+      {
+        "name": "allowed-directory",
+        "description": "Directories that the MCP is allowed to access",
+        "type": "path",
+        "required": true,
+        "multiple": true,
+        "examples": ["/home/user/documents", "/var/data"]
+      },
+      {
+        "name": "port",
+        "description": "Port number to listen on",
+        "type": "number",
+        "required": false,
+        "default": 8080,
+        "examples": [8080, 3000, 9000]
+      }
+    ],
+
+    "other": [
+      {
+        "name": "custom-setting",
+        "description": "Custom configuration setting",
+        "type": "string",
+        "required": false,
+        "examples": ["value1", "value2"]
+      }
+    ]
+  }
+}

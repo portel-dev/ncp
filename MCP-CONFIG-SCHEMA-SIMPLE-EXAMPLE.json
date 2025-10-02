@@ -1,0 +1,32 @@
+{
+  "comment": "Simple, common example - just environment variables",
+  "description": "This is what most MCP servers will return",
+
+  "protocolVersion": "0.1.0",
+  "capabilities": {
+    "tools": {}
+  },
+  "serverInfo": {
+    "name": "gmail-mcp",
+    "version": "1.0.0"
+  },
+
+  "configurationSchema": {
+    "environmentVariables": [
+      {
+        "name": "GCP_OAUTH_KEYS_PATH",
+        "description": "Path to the GCP OAuth keys JSON file",
+        "type": "path",
+        "required": true,
+        "sensitive": true
+      },
+      {
+        "name": "CREDENTIALS_PATH",
+        "description": "Path to the stored credentials JSON file",
+        "type": "path",
+        "required": true,
+        "sensitive": true
+      }
+    ]
+  }
+}
