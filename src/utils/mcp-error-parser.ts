@@ -197,22 +197,70 @@ export class MCPErrorParser {
   private detectPaths(stderr: string, mcpName: string): ConfigurationNeed[] {
     const needs: ConfigurationNeed[] = [];
 
-    // Pattern: "cannot find", "no such file", "does not exist" with a path-like word
-    const pathPattern = /(?:cannot find|no such file|does not exist|missing).*?([a-zA-Z][\w/-]*(?:file|dir|directory|path|config|\.json|\.yaml|\.yml))/gi;
+    // Pattern 1 (High Priority): Extract filenames from "Please place X in..." messages
+    // This is the most specific and usually gives the exact filename needed
+    const pleasePlacePattern = /please place\s+([a-zA-Z][\w.-]*\.(?:json|yaml|yml|txt|config|env|key|keys))/gi;
 
     let match;
+    while ((match = pleasePlacePattern.exec(stderr)) !== null) {
+      const filename = match[1];
+      const line = this.extractLine(stderr, new RegExp(filename, 'i'));
+
+      needs.push({
+        type: 'command_arg',
+        variable: filename,
+        description: `${mcpName} requires ${filename}`,
+        prompt: `Enter path to ${filename}:`,
+        sensitive: false,
+        extractedFrom: line
+      });
+    }
+
+    // Pattern 2: Specific filename mentioned before "not found" (e.g., "config.json not found")
+    const filenameNotFoundPattern = /([a-zA-Z][\w.-]*\.(?:json|yaml|yml|txt|config|env|key|keys))\s+(?:not found|missing|required|needed)/gi;
+
+    while ((match = filenameNotFoundPattern.exec(stderr)) !== null) {
+      const filename = match[1];
+      const line = this.extractLine(stderr, new RegExp(filename, 'i'));
+
+      // Check if we already added this file
+      if (!needs.some(n => n.variable === filename)) {
+        needs.push({
+          type: 'command_arg',
+          variable: filename,
+          description: `${mcpName} requires ${filename}`,
+          prompt: `Enter path to ${filename}:`,
+          sensitive: false,
+          extractedFrom: line
+        });
+      }
+    }
+
+    // Pattern 3 (Fallback): Generic "cannot find", "no such file" patterns
+    const pathPattern = /(?:cannot find|no such file|does not exist|not found|missing).*?([a-zA-Z][\w/-]*(?:file|dir|directory|path|config|\.json|\.yaml|\.yml))/gi;
+
     while ((match = pathPattern.exec(stderr)) !== null) {
       const pathRef = match[1];
       const line = this.extractLine(stderr, new RegExp(pathRef, 'i'));
 
-      needs.push({
-        type: 'command_arg',
-        variable: pathRef,
-        description: `${mcpName} cannot find ${pathRef}`,
-        prompt: `Enter path to ${pathRef}:`,
-        sensitive: false,
-        extractedFrom: line
-      });
+      // Check if we already added this file or a more specific version
+      // Skip if this looks like a partial match (e.g., "keys.json" when "gcp-oauth.keys.json" already exists)
+      const isDuplicate = needs.some(n =>
+        n.variable === pathRef ||
+        n.variable.endsWith(pathRef) ||
+        pathRef.endsWith(n.variable)
+      );
+
+      if (!isDuplicate) {
+        needs.push({
+          type: 'command_arg',
+          variable: pathRef,
+          description: `${mcpName} cannot find ${pathRef}`,
+          prompt: `Enter path to ${pathRef}:`,
+          sensitive: false,
+          extractedFrom: line
+        });
+      }
     }
 
     return needs;
