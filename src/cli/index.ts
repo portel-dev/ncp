@@ -1247,7 +1247,76 @@ program
         continue;
       }
 
-      // Read stderr from log file
+      // Get current MCP config first (needed for all tiers)
+      const currentConfig = profile.mcpServers[mcpName];
+      if (!currentConfig) {
+        console.log(chalk.red(`   ❌ MCP not found in profile`));
+        skippedCount++;
+        continue;
+      }
+
+      // Three-tier configuration detection (same as ncp add):
+      // Tier 1: Cached schema (from previous successful add)
+      // Tier 2: Smithery configSchema (from smithery.yaml)
+      // Tier 3: Error parsing (fallback)
+
+      let detectedSchema: any = null;
+
+      // Tier 1: Check for cached schema
+      const schemaCache = new SchemaCache(getCacheDirectory());
+      detectedSchema = schemaCache.get(mcpName);
+
+      if (detectedSchema) {
+        console.log(chalk.dim(`   ✓ Using cached configuration schema`));
+      }
+
+      // Tier 2: Try Smithery configSchema if no cached schema
+      if (!detectedSchema) {
+        const smitheryReader = new SmitheryConfigReader();
+        const schemaConverter = new SchemaConverter();
+
+        // Extract package name from command
+        let packageName = mcpName;
+        if (currentConfig.command === 'npx' && currentConfig.args && currentConfig.args.length > 0) {
+          packageName = currentConfig.args[0].replace(/^-y\s+/, '');
+        }
+
+        const smitherySchema = smitheryReader.readFromPackage(packageName);
+        if (smitherySchema && smitheryReader.isValidSchema(smitherySchema)) {
+          detectedSchema = schemaConverter.convertSmitheryToMCP(smitherySchema);
+          if (detectedSchema) {
+            console.log(chalk.dim(`   ✓ Configuration schema detected (smithery.yaml)`));
+          }
+        }
+      }
+
+      // If we have a schema, use schema-based prompting
+      if (detectedSchema) {
+        const schemaReader = new ConfigSchemaReader();
+        const configPrompter = new ConfigPrompter();
+
+        if (schemaReader.hasRequiredConfig(detectedSchema)) {
+          console.log(chalk.cyan(`\n   📋 Configuration required`));
+
+          const promptedConfig = await configPrompter.promptForConfig(detectedSchema, mcpName);
+
+          // Update config with prompted values
+          const updatedConfig = {
+            command: currentConfig.command,
+            args: [...(currentConfig.args || []), ...(promptedConfig.arguments || [])],
+            env: { ...(currentConfig.env || {}), ...(promptedConfig.environmentVariables || {}) }
+          };
+
+          // Save updated config
+          await profileManager.addMCPToProfile(profileName, mcpName, updatedConfig);
+
+          console.log(chalk.green(`\n   ✅ Configuration updated for ${mcpName}`));
+          fixedCount++;
+          continue;
+        }
+      }
+
+      // Tier 3: Fallback to error parsing if no schema available
       const logPath = mcpWrapper.getLogFile(mcpName);
       let stderr = '';
 
@@ -1282,14 +1351,6 @@ program
       console.log(chalk.yellow(`\n   Found ${configNeeds.length} configuration need(s):`));
       for (const need of configNeeds) {
         console.log(chalk.dim(`   • ${need.description}`));
-      }
-
-      // Get current MCP config
-      const currentConfig = profile.mcpServers[mcpName];
-      if (!currentConfig) {
-        console.log(chalk.red(`   ❌ MCP not found in profile`));
-        skippedCount++;
-        continue;
       }
 
       // Collect new configuration from user
