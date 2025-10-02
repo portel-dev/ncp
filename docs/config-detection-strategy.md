@@ -62,6 +62,41 @@ When an MCP has been published to [Smithery](https://smithery.ai/) and includes 
 ### Why This Matters
 Many MCPs are already published to Smithery and include configuration metadata. This gives us immediate coverage without waiting for MCP spec adoption.
 
+### Key Insight: Smithery is a Config File Format, Not a Dependency
+
+**Critical Understanding**: Smithery is simply a metadata format (smithery.yaml), **NOT** a runtime dependency or SDK that MCPs need to integrate with.
+
+**What Smithery Actually Is**:
+- 📝 A standardized YAML file format for MCP metadata
+- 📋 A registry/marketplace where MCPs are published and discovered
+- 🔍 A config file that describes how to start and configure an MCP
+
+**What Smithery Is NOT**:
+- ❌ NOT a runtime library that MCPs import or depend on
+- ❌ NOT a service that MCPs connect to during operation
+- ❌ NOT something that needs to be "integrated" into MCP servers
+
+**How NCP Uses Smithery**:
+```typescript
+// We simply READ the smithery.yaml file as static metadata
+const smitheryPath = `${packageName}/smithery.yaml`;
+const content = readFileSync(smitheryPath, 'utf-8');
+const parsed = YAML.parse(content);
+// No SDK, no API calls, no runtime dependencies!
+```
+
+**Real-World Example**: [Gmail MCP Server](https://github.com/GongRzhe/Gmail-MCP-Server)
+- ✅ Has a `smithery.yaml` file with configSchema
+- ✅ Works as a standard stdio MCP server
+- ✅ No Smithery runtime dependencies in package.json
+- ✅ We just read its smithery.yaml to understand its config needs
+
+**Why This Matters for NCP**:
+- Simple implementation: Just YAML file parsing
+- No integration challenges: No SDKs to install
+- Works offline: File is bundled with the MCP package
+- Universal compatibility: Works with any MCP that has smithery.yaml
+
 ### Advantages
 ✅ **Already available** - Many MCPs have smithery.yaml today
 ✅ **Standard format** - Uses JSON Schema, widely understood
