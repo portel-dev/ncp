@@ -1,0 +1,47 @@
+# Development files
+.git/
+.github/
+node_modules/
+coverage/
+test/
+docs/
+scripts/
+
+# Cache and user data
+.ncp/
+*.cache
+*.tmp
+
+# Source files (only need compiled dist/)
+src/
+*.ts
+tsconfig.json
+jest.config.js
+
+# Documentation
+*.md
+!manifest.json
+
+# Build artifacts
+*.tgz
+*.mcpb
+*.backup
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Development configs
+.eslintrc*
+.prettierrc*
+.travis.yml
+.dockerignore
+
+# Other unnecessary files
+CHANGELOG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+LICENSE
+.release-it.json
+.npmignore
