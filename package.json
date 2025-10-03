@@ -1,6 +1,6 @@
 {
   "name": "@portel/ncp",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "mcpName": "io.github.portel-dev/ncp",
   "description": "Natural Context Provider - N-to-1 MCP Orchestration for AI Assistants",
   "main": "dist/index.js",
