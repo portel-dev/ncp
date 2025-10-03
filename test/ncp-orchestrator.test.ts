@@ -22,6 +22,18 @@ describe('NCPOrchestrator - Basic Tests', () => {
 
     // Default mock behavior - no files exist
     mockFs.existsSync.mockReturnValue(false);
+
+    // Mock createWriteStream to return a writable stream
+    const mockWriteStream = {
+      write: jest.fn(),
+      end: jest.fn((callback?: any) => {
+        if (callback) callback();
+      }),
+      on: jest.fn(),
+      once: jest.fn(),
+      emit: jest.fn()
+    };
+    (mockFs.createWriteStream as jest.Mock).mockImplementation(() => mockWriteStream as any);
   });
 
   describe('instantiation', () => {
