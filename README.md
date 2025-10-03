@@ -132,20 +132,41 @@ With NCP's orchestration:
 1. **Download NCP Bundle:** [ncp.mcpb](https://github.com/portel-dev/ncp/releases/latest/download/ncp.mcpb) from latest release
 2. **Double-click** the downloaded `ncp.mcpb` file
 3. **Claude Desktop** will prompt you to install - click "Install"
-4. **Done!** NCP is now available in Claude
+4. **Configure MCPs manually** by editing `~/.ncp/profiles/all.json`:
 
-> ⚠️ **IMPORTANT LIMITATION:** The .mcpb installation **only** adds NCP as an MCP server in Claude Desktop. It does **NOT** install the `ncp` CLI tool needed to configure MCPs (`ncp add`, `ncp find`, etc.).
+```bash
+# Edit the profile configuration
+nano ~/.ncp/profiles/all.json
+```
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/yourname"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxx"
+      }
+    }
+  }
+}
+```
+
+5. **Restart Claude Desktop** and NCP will load your configured MCPs
+
+> ℹ️ **About .mcpb installation:**
+> - **Slim & Fast:** .mcpb bundle is MCP-only (126KB, no CLI code)
+> - **Manual config:** Edit JSON files directly (no `ncp add` command)
+> - **Power users:** Fastest startup, direct control over configuration
+> - **Optional CLI:** Install `npm install -g @portel/ncp` separately if you want CLI tools
 >
-> **You still need to install via NPM to get the CLI:**
-> ```bash
-> npm install -g @portel/ncp
-> ```
->
-> **Why both?**
-> - `.mcpb` → Claude Desktop integration (MCP server only)
-> - `npm` → CLI tools for configuration (`ncp add`, `ncp list`, etc.) + works with all MCP clients
->
-> **Recommendation:** Most users should use NPM installation (see below) which provides both CLI and MCP server functionality for all clients.
+> **Why .mcpb is slim:**
+> The .mcpb bundle excludes all CLI code, making it 13% smaller and faster to load than the full npm package. Perfect for production use where you manage configs manually or via automation.
 
 ---
 

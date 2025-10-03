@@ -18,6 +18,11 @@ src/
 tsconfig.json
 jest.config.js
 
+# CLI-specific code (MCP-only bundle uses index-mcp.js)
+dist/cli/
+dist/index.js
+dist/index.js.map
+
 # Documentation
 *.md
 !manifest.json
