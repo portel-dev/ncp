@@ -440,6 +440,13 @@ if (shouldRunAsServer) {
   // Running as MCP server: ncp (defaults to 'all' profile) or ncp --profile <name>
   const profileName = profileIndex !== -1 ? (process.argv[profileIndex + 1] || 'all') : 'all';
 
+  // Debug logging for integration tests
+  if (process.env.NCP_DEBUG === 'true') {
+    console.error(`[DEBUG] profileIndex: ${profileIndex}`);
+    console.error(`[DEBUG] process.argv: ${process.argv.join(' ')}`);
+    console.error(`[DEBUG] Selected profile: ${profileName}`);
+  }
+
   const server = new MCPServer(profileName);
   server.run().catch(console.error);
 } else {

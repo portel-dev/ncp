@@ -155,7 +155,7 @@ export class NCPOrchestrator {
 
   private forceRetry: boolean = false;
 
-  constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
+  constructor(profileName: string = 'all', showProgress: boolean = false, forceRetry: boolean = false) {
     this.profileName = profileName;
     this.discovery = new DiscoveryEngine();
     this.healthMonitor = new MCPHealthMonitor();
@@ -186,6 +186,13 @@ export class NCPOrchestrator {
   async initialize(): Promise<void> {
     const startTime = Date.now();
     this.indexingStartTime = startTime;
+
+    // Debug logging
+    if (process.env.NCP_DEBUG === 'true') {
+      console.error(`[DEBUG ORC] Initializing with profileName: ${this.profileName}`);
+      console.error(`[DEBUG ORC] Cache will use: ${this.csvCache ? 'csvCache exists' : 'NO CACHE'}`);
+    }
+
     logger.info(`Initializing NCP orchestrator with profile: ${this.profileName}`);
 
     // Initialize progress immediately to prevent race condition
@@ -197,6 +204,14 @@ export class NCPOrchestrator {
     };
 
     const profile = await this.loadProfile();
+
+    if (process.env.NCP_DEBUG === 'true') {
+      console.error(`[DEBUG ORC] Loaded profile: ${profile ? 'YES' : 'NO'}`);
+      if (profile) {
+        console.error(`[DEBUG ORC] Profile MCPs: ${Object.keys(profile.mcpServers || {}).join(', ')}`);
+      }
+    }
+
     if (!profile) {
       logger.error('Failed to load profile');
       this.indexingProgress = null;
