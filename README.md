@@ -3,6 +3,8 @@
 [![License: Elastic-2.0](https://img.shields.io/badge/License-Elastic--2.0-blue.svg)](https://www.elastic.co/licensing/elastic-license)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-blue.svg)](https://modelcontextprotocol.io/)
 
+<!-- mcp-name: io.github.portel-dev/ncp -->
+
 # NCP - Natural Context Provider
 
 ## 🎯 **One MCP to Rule Them All**
