@@ -28,7 +28,7 @@
     "test:pre-publish": "npm run test:critical && npm run test",
     "test:package": "node scripts/test-package-locally.cjs",
     "prepack": "npm run build && npm run test:pre-publish",
-    "prepublishOnly": "npm run build && npm run test:pre-publish && node scripts/sync-server-version.js",
+    "prepublishOnly": "npm run build && npm run test:pre-publish && node scripts/sync-server-version.cjs",
     "release": "release-it",
     "release:dry": "release-it --dry-run"
   },

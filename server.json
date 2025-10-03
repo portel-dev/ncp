@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.portel-dev/ncp",
+  "description": "Natural Context Provider - N-to-1 MCP Orchestration for AI Assistants. Acts as a unified gateway that aggregates multiple MCP servers into a single interface with intelligent tool discovery.",
+  "repository": {
+    "url": "https://github.com/portel-dev/ncp",
+    "source": "github"
+  },
+  "version": "1.3.2",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@portel/ncp",
+      "version": "1.3.2",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

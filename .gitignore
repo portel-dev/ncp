@@ -36,7 +36,6 @@ IMPLEMENTATION-*.md
 CLEANUP-*.md
 TEST-PLAN.md
 TESTING-*.md
-server.json
 
 # Test and script files
 *.test.js
@@ -60,6 +59,8 @@ yarn-error.log*
 
 # Scripts directory (development files not for release)
 scripts/
+!scripts/*.cjs
+!scripts/cleanup/
 
 # Ignore image files in project root (temporary screenshots)
 /*.png
