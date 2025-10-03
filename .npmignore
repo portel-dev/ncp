@@ -57,7 +57,6 @@ RELEASE.md
 # Local runtime data
 .ncp/
 *.cache
-profiles/
 
 # Example and reference files (not needed for runtime)
 MCP-CONFIG-*.ts
