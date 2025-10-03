@@ -29,6 +29,7 @@
     "test:cli": "bash test/cli-help-validation.sh",
     "test:pre-publish": "npm run test:critical && npm run test:integration",
     "test:package": "node scripts/test-package-locally.cjs",
+    "build:mcpb": "npm run build && npx @anthropic-ai/mcpb pack",
     "prepack": "npm run build && npm run test:pre-publish",
     "prepublishOnly": "npm run build && npm run test:pre-publish && node scripts/sync-server-version.cjs",
     "release": "release-it",
@@ -81,6 +82,7 @@
     "yaml": "^2.8.1"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "^1.0.0",
     "@agent-infra/mcp-server-browser": "^1.2.23",
     "@amap/amap-maps-mcp-server": "^0.0.8",
     "@apify/actors-mcp-server": "^0.4.15",

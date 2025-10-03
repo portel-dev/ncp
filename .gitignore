@@ -3,6 +3,11 @@ node_modules/
 dist/
 coverage/
 
+# Build artifacts
+*.mcpb
+*.dxt
+*.tgz
+
 # Local configuration
 .env
 .env.local

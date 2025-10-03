@@ -52,6 +52,13 @@ jobs:
       - name: Test package functionality
         run: npm run test:package
 
+      - name: Build MCPB bundle
+        run: npm run build:mcpb
+
+      - name: Get package version
+        id: get_version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions"
@@ -66,5 +73,14 @@ jobs:
       - name: Release
         if: ${{ inputs.dry_run == false }}
         run: npm run release -- --increment=${{ inputs.release_type }} --ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload MCPB bundle to release
+        if: ${{ inputs.dry_run == false }}
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ncp.mcpb
+          tag_name: ${{ steps.get_version.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

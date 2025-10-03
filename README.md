@@ -125,6 +125,21 @@ With NCP's orchestration:
 
 ## 🚀 **2-Minute Setup for Existing MCP Users**
 
+### **⚡ The Easy Way: One-Click Installation** (Claude Desktop Only)
+
+**For Claude Desktop users** - Download and double-click to install:
+
+1. **Download NCP Bundle:** [ncp.mcpb](https://github.com/portel-dev/ncp/releases/latest/download/ncp.mcpb) from latest release
+2. **Double-click** the downloaded `ncp.mcpb` file
+3. **Claude Desktop** will prompt you to install - click "Install"
+4. **Done!** NCP is now available in Claude
+
+> **Note:** The .mcpb (MCP Bundle) format works with Claude Desktop on macOS and Windows. For other MCP clients (Cursor, Cline, Continue) or manual installation, see the steps below.
+
+---
+
+### **🔧 The Manual Way: For All MCP Clients**
+
 ### **Step 1: Import Your Existing MCPs** ⚡
 
 Already have MCPs? Don't start over - import everything instantly:
