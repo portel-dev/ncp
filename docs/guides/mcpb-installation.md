@@ -57,7 +57,7 @@ Installing NCP traditionally requires:
 
 ## Installation Steps
 
-### For Claude Desktop Users (Manual Configuration)
+### For Claude Desktop Users (Auto-Import + Manual Configuration)
 
 1. **Download the bundle:**
    - Go to [NCP Releases](https://github.com/portel-dev/ncp/releases/latest)
@@ -68,7 +68,16 @@ Installing NCP traditionally requires:
    - Claude Desktop will show an installation dialog
    - Click "Install"
 
-3. **Configure MCPs manually:**
+3. **First startup - Auto-import:**
+   - On first run, NCP automatically detects and imports ALL your existing MCPs:
+     - ✅ MCPs from `claude_desktop_config.json`
+     - ✅ .mcpb-installed extensions from Claude Extensions directory
+   - You'll see a message: `✨ Auto-imported X MCPs from Claude Desktop`
+   - No manual configuration needed!
+
+4. **Add more MCPs later (manual configuration):**
+
+If you want to add additional MCPs after the initial import:
 
 ```bash
 # Create/edit the profile configuration
@@ -227,7 +236,82 @@ When a new version is released:
 | **Client Support** | Claude Desktop only | All MCP clients |
 | **Best for** | ✅ Power users, automation, production | ✅ General users, development |
 
+## How Auto-Import Works
+
+On first startup, NCP intelligently detects and imports your existing Claude Desktop MCPs:
+
+### Detection Process
+
+1. **Checks for existing NCP profile:**
+   - If `~/.ncp/profiles/all.json` exists and has MCPs → Skip auto-import
+   - If empty or doesn't exist → Proceed with auto-import
+
+2. **Scans Claude Desktop configuration:**
+   - **JSON config:** Reads `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - **.mcpb extensions:** Scans `~/Library/Application Support/Claude/Claude Extensions/`
+
+3. **Extracts MCP configurations:**
+   - For JSON MCPs: Copies command, args, env directly
+   - For .mcpb extensions: Reads `manifest.json`, resolves `${__dirname}` paths
+
+4. **Saves to NCP profile:**
+   - Merges all MCPs into `~/.ncp/profiles/all.json`
+   - Adds metadata (`_source`, `_extensionId`, `_version`) for tracking
+
+### Example Auto-Import Output
+
+```
+✨ Auto-imported 6 MCPs from Claude Desktop:
+   - 4 from claude_desktop_config.json
+   - 2 from .mcpb extensions
+   → Saved to ~/.ncp/profiles/all.json
+```
+
+### What Gets Imported
+
+**From `claude_desktop_config.json`:**
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/name"]
+    }
+  }
+}
+```
+
+**From `.mcpb` extensions:**
+- Installed via double-click in Claude Desktop
+- Stored in `Claude Extensions/` directory
+- Automatically detected and imported with correct paths
+
+**Result in NCP:**
+```json
+{
+  "filesystem": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/name"],
+    "_source": "json"
+  },
+  "apple-mcp": {
+    "command": "node",
+    "args": ["/Users/.../Claude Extensions/local.dxt.../dist/index.js"],
+    "_source": ".mcpb",
+    "_extensionId": "local.dxt.dhravya-shah.apple-mcp",
+    "_version": "1.0.0"
+  }
+}
+```
+
 ## FAQ
+
+### Q: Does NCP automatically import my existing Claude Desktop MCPs?
+**A:** ✅ **YES!** On first startup, NCP automatically detects and imports:
+- All MCPs from `claude_desktop_config.json`
+- All .mcpb-installed extensions
+
+This means **zero manual configuration** if you're already using Claude Desktop with MCPs.
 
 ### Q: Can I use `ncp add` after .mcpb installation?
 **A:** ❌ **NO.** The .mcpb is a slim MCP-only bundle that excludes CLI code. You configure MCPs by editing `~/.ncp/profiles/all.json` manually.

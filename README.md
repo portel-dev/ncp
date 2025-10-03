@@ -132,7 +132,13 @@ With NCP's orchestration:
 1. **Download NCP Bundle:** [ncp.mcpb](https://github.com/portel-dev/ncp/releases/latest/download/ncp.mcpb) from latest release
 2. **Double-click** the downloaded `ncp.mcpb` file
 3. **Claude Desktop** will prompt you to install - click "Install"
-4. **Configure MCPs manually** by editing `~/.ncp/profiles/all.json`:
+4. **Auto-import your existing MCPs** - NCP automatically detects and imports:
+   - MCPs from `claude_desktop_config.json`
+   - .mcpb-installed extensions
+
+> 🎉 **First run magic:** NCP automatically imports all your existing Claude Desktop MCPs on first startup! No manual configuration needed.
+
+If you want to add more MCPs later, **configure manually** by editing `~/.ncp/profiles/all.json`:
 
 ```bash
 # Edit the profile configuration
