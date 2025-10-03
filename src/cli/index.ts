@@ -1733,7 +1733,7 @@ program
     const profileName = program.getOptionValue('profile') || 'all';
 
     const { NCPOrchestrator } = await import('../orchestrator/ncp-orchestrator.js');
-    const orchestrator = new NCPOrchestrator(profileName, true); // Enable progress for CLI
+    const orchestrator = new NCPOrchestrator(profileName, false); // Silent indexing for run command
 
     await orchestrator.initialize();
 
