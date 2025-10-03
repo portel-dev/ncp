@@ -46,8 +46,19 @@ jobs:
           chmod +x mcp-publisher
           ./mcp-publisher --version
 
-      - name: Login to MCP Registry (GitHub OIDC)
-        run: ./mcp-publisher login github-oidc
+      - name: Login to MCP Registry
+        run: |
+          # Try GitHub OIDC first (preferred, no secrets needed)
+          if ./mcp-publisher login github-oidc; then
+            echo "✓ Authenticated via GitHub OIDC"
+          elif [ -n "${{ secrets.MCP_GITHUB_TOKEN }}" ]; then
+            # Fallback to GitHub PAT if OIDC fails or org not detected
+            echo "⚠ OIDC failed, falling back to GitHub PAT"
+            echo "${{ secrets.MCP_GITHUB_TOKEN }}" | ./mcp-publisher login github --token-stdin
+          else
+            echo "❌ Authentication failed. See RELEASE.md for setup instructions."
+            exit 1
+          fi
 
       - name: Publish to MCP Registry
         run: ./mcp-publisher publish

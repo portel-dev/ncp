@@ -92,10 +92,25 @@ After release completes:
 - Check `.npmignore` for correct file exclusions
 
 ### MCP Registry Publish Failed
-- Check GitHub Actions logs for `publish-mcp-registry` workflow
-- Verify `server.json` is valid (run `jsonschema -i server.json /tmp/mcp-server.schema.json`)
-- Ensure `id-token: write` permission is set in workflow
-- GitHub OIDC authentication doesn't require secrets
+
+**Issue: Organization not detected with OIDC**
+
+If you see "portel-dev organization not detected" with GitHub OIDC:
+
+1. **Use GitHub Personal Access Token (Recommended)**:
+   - Create a GitHub PAT with `repo` and `read:org` scopes
+   - Go to: Settings → Developer settings → Personal access tokens → Tokens (classic)
+   - Generate new token with scopes: `repo`, `read:org`
+   - Add as GitHub Secret: `Settings → Secrets → Actions → New repository secret`
+   - Name: `MCP_GITHUB_TOKEN`
+   - Value: Your PAT
+   - Workflow will automatically fallback to PAT if OIDC fails
+
+2. **Other troubleshooting**:
+   - Check GitHub Actions logs for `publish-mcp-registry` workflow
+   - Verify `server.json` is valid (run `jsonschema -i server.json /tmp/mcp-server.schema.json`)
+   - Ensure `id-token: write` permission is set in workflow
+   - Confirm you're an admin of `portel-dev` organization: `gh api orgs/portel-dev/memberships/$(gh api user -q .login)`
 
 ### Release Workflow Failed
 - Check test failures in Actions logs
