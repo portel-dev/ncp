@@ -9,6 +9,13 @@ coverage/
 *.local.*
 .claude.local.md
 
+# Sensitive tokens and credentials
+.mcpregistry_*
+*_token
+*_secret
+*.key
+*.pem
+
 # Cache and temp files
 .ncp/
 *.cache
@@ -22,6 +29,14 @@ coverage/
 *.ai.md
 *.notes.md
 *.temp.md
+
+# Session documentation (move to commercial repo)
+SESSION-*.md
+IMPLEMENTATION-*.md
+CLEANUP-*.md
+TEST-PLAN.md
+TESTING-*.md
+server.json
 
 # Test and script files
 *.test.js
