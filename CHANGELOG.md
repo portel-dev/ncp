@@ -1,5 +1,55 @@
 # Changelog
 
+## [1.4.0](https://github.com/portel-dev/ncp/compare/1.3.2...1.4.0) (2025-10-03)
+
+### Features
+
+* add --working-dir parameter and fix GitHub releases ([0a1e4db](https://github.com/portel-dev/ncp/commit/0a1e4db9f83ac6ba67ac85db519b0bdfdc79a89a))
+* add automated MCP registry publishing ([56f410c](https://github.com/portel-dev/ncp/commit/56f410c56e1657def7a617fa5af4bd9f0751bd18))
+* add GitHub Actions workflow for publishing releases ([a7eab05](https://github.com/portel-dev/ncp/commit/a7eab05d65246660f451c3d2152e19ac9ba10d3d))
+* add graceful shutdown on Ctrl+C for clean cache finalization ([b37d6d2](https://github.com/portel-dev/ncp/commit/b37d6d26dc4f9ff401dd149e7d4a0740e5cfc7b1))
+* add repair command skeleton and improve error logging ([303ce05](https://github.com/portel-dev/ncp/commit/303ce05c44927b252b66b67e3d97a8bc1c9d7402))
+* add repair command with generic error parser ([ef89a62](https://github.com/portel-dev/ncp/commit/ef89a62d9f85f18a4e345f8af2a6cc52cb1a1580))
+* add session ID transparency for stateful MCP servers ([af72da9](https://github.com/portel-dev/ncp/commit/af72da964aba3b16b2fa5a4c51ffc9f8aba4faa8))
+* add Smithery config detection to ncp repair command ([2ff58da](https://github.com/portel-dev/ncp/commit/2ff58da91083eea8c608d804937f42f5f9828883))
+* add Smithery config schema detection (3-tier system) ([ef008e8](https://github.com/portel-dev/ncp/commit/ef008e832dcb5bff37598857a3890deaf841693e))
+* enhance error parser to detect file-not-found patterns ([d9ca05b](https://github.com/portel-dev/ncp/commit/d9ca05b1acb7d5f9d0cdb7c665be8c1f6fdef372))
+* implement CSV-based incremental caching for resumable indexing ([064e347](https://github.com/portel-dev/ncp/commit/064e34710392b74643d6b4f3b8cf370f30e5d1c1)), closes [#30](https://github.com/portel-dev/ncp/issues/30)
+* integrate health monitor with repair command ([48ce0d1](https://github.com/portel-dev/ncp/commit/48ce0d1f894806484209c8a976fd92fd12cc61d0))
+* intelligent failed MCP tracking with scheduled retry and --force-retry flag ([91c7a65](https://github.com/portel-dev/ncp/commit/91c7a65076d4e838f8819606737f919b7e4a176b))
+* retry slow MCPs with longer timeout to capture healthy-but-slow servers ([844e347](https://github.com/portel-dev/ncp/commit/844e347be969f02cdd5ba2d462df7c48aa561ceb))
+
+### Bug Fixes
+
+* add 3s timeout to update checker to prevent CLI hangs ([05210d8](https://github.com/portel-dev/ncp/commit/05210d8d27c6cbb9a7df6b2290f5eb6b30497068))
+* add fallback authentication for MCP registry publishing ([f138b37](https://github.com/portel-dev/ncp/commit/f138b37259d251564d9fbcfaa4d9a1381271e33e))
+* add newline before progress spinner to avoid overwriting command ([676f0a5](https://github.com/portel-dev/ncp/commit/676f0a5bb0f208ef127357bfd64e6ded36f9fe83))
+* add proper blank line spacing before progress spinner ([8eea9aa](https://github.com/portel-dev/ncp/commit/8eea9aa380ed3611769f29b112a40fc2c69958e9))
+* add repair command to CLI mode check to prevent hanging ([3c2aa60](https://github.com/portel-dev/ncp/commit/3c2aa60be3b7df6c6a9cbeb8845d4aad1b1e1cd8))
+* also fsync metadata file to ensure cache progress is saved ([e47a180](https://github.com/portel-dev/ncp/commit/e47a180399f599d90401bd73060853e22574527f))
+* clarify progress messages for cache resume ([51f0e90](https://github.com/portel-dev/ncp/commit/51f0e900450431a7a22e38bd8b7fc82a4717128c))
+* CLI find command now waits for indexing to complete ([8f2e671](https://github.com/portel-dev/ncp/commit/8f2e671af4ea9f2277bfa22c97d9337402cec68d))
+* correct cached MCP count in first progress message ([925e819](https://github.com/portel-dev/ncp/commit/925e819b67ef18188aeb8a38997acd9073feb1e0))
+* correct version reading in update checker and updater ([5f7c737](https://github.com/portel-dev/ncp/commit/5f7c7376b657b3a9b8eecb684e433ed07f021db5))
+* correctly calculate starting position excluding failed MCPs being retried ([0706653](https://github.com/portel-dev/ncp/commit/0706653dbde56e8c9eb2f0b189d1c529098022cf))
+* detect multiple arguments in Usage message for clone/copy MCPs ([579b27c](https://github.com/portel-dev/ncp/commit/579b27cace62fea90586b370d23333d00033bfed))
+* disable indexing progress in run command for clean CLI output ([7cde964](https://github.com/portel-dev/ncp/commit/7cde96454d76b632e5303262c148401275694b89))
+* display correct progress message and add newline in CLI ([0dcd686](https://github.com/portel-dev/ncp/commit/0dcd686e0ba077c8f78cb5fe923f5feb6d45171b))
+* force flush CSV cache to disk after each MCP for crash safety ([e7f7649](https://github.com/portel-dev/ncp/commit/e7f7649cf3d89a1052e62b032871f4cdca80c8e8))
+* preserve newline before spinner by skipping clearLines on first render ([33b85a3](https://github.com/portel-dev/ncp/commit/33b85a30ee2a7f9257e9eccf8d585e21fd49a6ae))
+* prevent duplicate API key/token detection in env var parser ([246b3d1](https://github.com/portel-dev/ncp/commit/246b3d1b2d3284ec2adcb43096a47aed15bf126a))
+* prevent duplicate path detection in error parser ([f017606](https://github.com/portel-dev/ncp/commit/f017606fa5012d67baf6eda67626741daaf944ee))
+* read version from package.json instead of hardcoding ([c2a0e46](https://github.com/portel-dev/ncp/commit/c2a0e4693c004a402a2e1c5501c69473a87671cc))
+* remove deprecated string-similarity and correct version issues ([486a866](https://github.com/portel-dev/ncp/commit/486a866fb0c027f5dec09bd97450cd4d9631b9e3))
+* restore and correct server.json for MCP registry ([60e16e0](https://github.com/portel-dev/ncp/commit/60e16e07e3b2a597886010f897ea99e667096e35))
+* show actual MCP count loaded from CSV, not stale metadata count ([a2a4c62](https://github.com/portel-dev/ncp/commit/a2a4c62645568a5d4670883fd9e0c8bb2e6e82f8))
+* show cached count as starting position, not 0 ([3f0d2bd](https://github.com/portel-dev/ncp/commit/3f0d2bd204baf9eef7bc443fc1938ab4f08373f4))
+* show total processed count (cached+failed) as starting position ([c3e52ca](https://github.com/portel-dev/ncp/commit/c3e52cacdd95285938b5c5487051f5bf66c2788f))
+* simplify progress messages to show absolute position only ([43007d9](https://github.com/portel-dev/ncp/commit/43007d9411ddc80bdab25a902e3e5f21888bbd99))
+* update progress counter for failed/skipped MCPs too ([9cbf744](https://github.com/portel-dev/ncp/commit/9cbf744606bb65e161da60510e72dd140065d303))
+* update progress only AFTER MCP is appended to cache ([1db3c73](https://github.com/portel-dev/ncp/commit/1db3c73e7690e0324091a0c1c6cb60e8232c96a9))
+* wait for write stream to finish in finalize() ([0174a87](https://github.com/portel-dev/ncp/commit/0174a872c35000341cbe415b4a0d06acde647628))
+
 ## [1.3.1](https://github.com/portel-dev/ncp/compare/v1.3.0...1.3.1) (2025-09-27)
 
 ### Bug Fixes
