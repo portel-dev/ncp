@@ -1,0 +1,59 @@
+name: Publish to MCP Registry
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write  # Required for GitHub OIDC authentication with MCP registry
+
+jobs:
+  publish-to-mcp-registry:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+
+      - name: Update server.json with release version
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' server.json > server.json.tmp
+          mv server.json.tmp server.json
+          cat server.json
+
+      - name: Validate server.json
+        run: |
+          curl -sS https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json -o /tmp/server.schema.json
+          # Basic JSON validation
+          jq empty server.json
+          echo "✓ server.json is valid JSON"
+
+      - name: Download MCP Publisher
+        run: |
+          VERSION="v1.1.0"
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/download/${VERSION}/mcp-publisher_${VERSION#v}_${OS}_${ARCH}.tar.gz" | tar xz
+          chmod +x mcp-publisher
+          ./mcp-publisher --version
+
+      - name: Login to MCP Registry (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish
+
+      - name: Summary
+        run: |
+          echo "✅ Successfully published NCP v${{ steps.get_version.outputs.version }} to MCP Registry"
+          echo "📦 Package: io.github.portel-dev/ncp"
+          echo "🔗 NPM: https://www.npmjs.com/package/@portel/ncp"
