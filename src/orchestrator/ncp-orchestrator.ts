@@ -188,6 +188,14 @@ export class NCPOrchestrator {
     this.indexingStartTime = startTime;
     logger.info(`Initializing NCP orchestrator with profile: ${this.profileName}`);
 
+    // Initialize progress immediately to prevent race condition
+    // Total will be updated once we know how many MCPs need indexing
+    this.indexingProgress = {
+      current: 0,
+      total: 0,
+      currentMCP: 'initializing...'
+    };
+
     const profile = await this.loadProfile();
     if (!profile) {
       logger.error('Failed to load profile');
@@ -236,12 +244,10 @@ export class NCPOrchestrator {
     });
 
     if (mcpsToIndex.length > 0) {
-      // Initialize progress tracking
-      this.indexingProgress = {
-        current: 0,
-        total: mcpsToIndex.length,
-        currentMCP: 'initializing...'
-      };
+      // Update progress tracking with actual count
+      if (this.indexingProgress) {
+        this.indexingProgress.total = mcpsToIndex.length;
+      }
 
       if (this.showProgress) {
         const action = 'Indexing';

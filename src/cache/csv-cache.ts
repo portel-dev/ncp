@@ -192,14 +192,18 @@ export class CSVCache {
   async startIncrementalWrite(profileHash: string): Promise<void> {
     const isNewCache = !existsSync(this.csvPath);
 
+    // Always update profile hash (critical for cache validation)
+    if (this.metadata) {
+      this.metadata.profileHash = profileHash;
+    }
+
     if (isNewCache) {
       // Create new cache file with header
       this.writeStream = createWriteStream(this.csvPath, { flags: 'w' });
       this.writeStream.write('mcp_name,tool_id,tool_name,description,hash,timestamp\n');
 
-      // Initialize metadata
+      // Initialize metadata for new cache
       if (this.metadata) {
-        this.metadata.profileHash = profileHash;
         this.metadata.createdAt = new Date().toISOString();
         this.metadata.indexedMCPs.clear();
       }

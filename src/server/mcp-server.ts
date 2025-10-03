@@ -282,51 +282,14 @@ export class MCPServer {
   }
 
   public async handleFind(request: MCPRequest, args: any): Promise<MCPResponse> {
-    // Check if indexing is still in progress
-    if (!this.isInitialized && this.initializationPromise) {
-      // Get indexing progress from orchestrator
-      const progress = this.orchestrator.getIndexingProgress();
-
-      if (progress && progress.total > 0) {
-        const percentComplete = Math.round((progress.current / progress.total) * 100);
-        const remainingTime = progress.estimatedTimeRemaining ?
-          ` (~${Math.ceil(progress.estimatedTimeRemaining / 1000)}s remaining)` : '';
-
-        const progressMessage = `⏳ **Indexing in progress**: ${progress.current}/${progress.total} MCPs (${percentComplete}%)${remainingTime}\n` +
-          `Currently indexing: ${progress.currentMCP || 'initializing...'}\n\n` +
-          `Tools will be available as indexing completes. Please try again in a moment.`;
-
-        return {
-          jsonrpc: '2.0',
-          id: request.id,
-          result: {
-            content: [{ type: 'text', text: progressMessage }]
-          }
-        };
-      }
-
-      // Wait briefly for initialization to complete (max 2 seconds)
-      try {
-        let timeoutId: NodeJS.Timeout;
-        await Promise.race([
-          this.initializationPromise,
-          new Promise((_, reject) => {
-            timeoutId = setTimeout(() => reject(new Error('timeout')), 2000);
-          })
-        ]).finally(() => {
-          if (timeoutId) clearTimeout(timeoutId);
-        });
-      } catch {
-        // Continue even if timeout - show what's available so far
-      }
-    }
+    const isStillIndexing = !this.isInitialized && this.initializationPromise;
 
     const description = args?.description || '';
     const page = Math.max(1, args?.page || 1);
     const limit = args?.limit || (description ? 5 : 20);
     const depth = args?.depth !== undefined ? Math.max(0, Math.min(2, args.depth)) : 2;
 
-    // Use ToolFinder service for search logic
+    // Use ToolFinder service for search logic - always run to get partial results
     const finder = new ToolFinder(this.orchestrator);
     const findResult = await finder.find({
       query: description,
@@ -336,6 +299,9 @@ export class MCPServer {
     });
 
     const { tools: results, groupedByMCP: mcpGroups, pagination, mcpFilter, isListing } = findResult;
+
+    // Get indexing progress if still indexing
+    const progress = isStillIndexing ? this.orchestrator.getIndexingProgress() : null;
 
     const filterText = mcpFilter ? ` (filtered to ${mcpFilter})` : '';
 
@@ -370,9 +336,25 @@ export class MCPServer {
       output += '\n\n';
     }
 
-    // Handle no results case
-    if (results.length === 0) {
-      output = `❌ No tools found for "${description}"\n\n`;
+    // Add indexing progress if still indexing (parity with CLI)
+    if (progress && progress.total > 0) {
+      const percentComplete = Math.round((progress.current / progress.total) * 100);
+      const remainingTime = progress.estimatedTimeRemaining ?
+        ` (~${Math.ceil(progress.estimatedTimeRemaining / 1000)}s remaining)` : '';
+
+      output += `⏳ **Indexing in progress**: ${progress.current}/${progress.total} MCPs (${percentComplete}%)${remainingTime}\n`;
+      output += `   Currently indexing: ${progress.currentMCP || 'initializing...'}\n\n`;
+
+      if (results.length > 0) {
+        output += `📋 **Showing partial results** - more tools will become available as indexing completes.\n\n`;
+      } else {
+        output += `📋 **No tools available yet** - please try again in a moment as indexing progresses.\n\n`;
+      }
+    }
+
+    // Handle no results case (but only if not indexing - during indexing we already showed message above)
+    if (results.length === 0 && !progress) {
+      output += `❌ No tools found for "${description}"\n\n`;
 
       // Show sample of available MCPs
       const samples = await finder.getSampleTools(8);
@@ -385,6 +367,17 @@ export class MCPServer {
         output += `\n💡 *Try broader search terms or specify an MCP name in your query.*`;
       }
 
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          content: [{ type: 'text', text: output }]
+        }
+      };
+    }
+
+    // If no results but still indexing, return progress message
+    if (results.length === 0 && progress) {
       return {
         jsonrpc: '2.0',
         id: request.id,
