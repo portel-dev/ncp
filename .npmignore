@@ -1,10 +1,15 @@
-# Source files (only dist/ is published)
+# Source code and development files
 src/
 test/
 scripts/
-docs/
 coverage/
 .github/
+*.ts
+!dist/**/*.d.ts
+
+# Build artifacts that shouldn't be published
+*.map
+*.tsbuildinfo
 
 # Configuration files
 .gitignore
@@ -12,80 +17,66 @@ coverage/
 tsconfig.json
 jest.config.js
 .release-it.json
+.editorconfig
+.prettierrc*
+.eslintrc*
 
-# Documentation (except essentials)
-*.prd.md
-*.draft.md
-*.ai.md
-*.notes.md
-*.temp.md
-CONTRIBUTING.md
+# Documentation (keep only README.md and LICENSE)
 CHANGELOG.md
 CODE_OF_CONDUCT.md
-HOW-IT-WORKS.md
+CONTRIBUTING.md
 SECURITY.md
-.dockerignore
+RELEASE.md
+*.prd.md
 
-# SEP and protocol documentation (keep in repo, not in package)
-SEP-*.md
-MCP-PROTOCOL-*.md
-MCP-CONFIG-*.md
-MCP-CONFIG-*.json
-MCP-CONFIG-*.ts
-MCP-CONFIGURATION-SCHEMA-FORMAT.json
-GMAIL-*.md
-ncp-logo.md
+# Development and testing artifacts
+*.test.js
+*.spec.js
+*.test.ts
+*.spec.ts
+**/testing/
+**/__tests__/
+**/__mocks__/
 
-# Local files
-.ncp/
-*.local.*
+# Local and temporary files
 .env*
+*.local.*
+*.tmp
+*.temp
+*.backup.*
+.DS_Store
+*.log
 
-# Sensitive tokens and credentials
+# Sensitive files and credentials
 .mcpregistry_*
 *_token
 *_secret
 *.key
 *.pem
 
-# AI assistant instructions
-CLAUDE.md
-.claude.local.md
+# Local runtime data
+.ncp/
+*.cache
+profiles/
 
-# Contribution materials (not for npm)
-contrib/
+# Example and reference files (not needed for runtime)
+MCP-CONFIG-*.ts
+MCP-CONFIG-*.json
+MCP-CONFIGURATION-*.json
+*-EXAMPLE.*
 
-# Development files
-*.test.js
-*.script.js
-*.backup.*
-
-# Raw screenshots in project root
-./*.png
-./*.jpg
-./*.jpeg
-./*.gif
-
-# TypeScript source files (redundant - we have compiled JS)
-*.ts
-!*.d.ts
-
-# Source maps (reduce package size)
-*.js.map
-*.d.ts.map
-
-# Build configuration
-webpack.config.js
-rollup.config.js
-
-# Development artifacts
-ecosystem-repo-setup/
-/profiles/
-test-*.js
-2025-*.txt
-
-# IDE and system files
-.DS_Store
-*.log
+# IDE files
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# Images and media (not needed for runtime)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+
+# Specific files not needed in package
+.dockerignore
