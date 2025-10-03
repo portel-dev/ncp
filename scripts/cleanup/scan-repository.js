@@ -90,7 +90,17 @@ function scanDirectory(dir, ignore = ['node_modules', 'dist', '.git', '.ncp']) {
           }
 
           // Check test directory for non-test files
-          if (relativePath.startsWith('test/') && !file.endsWith('.test.ts') && !file.endsWith('.test.js') && !file.endsWith('.ts') && !file.endsWith('.js')) {
+          const validTestExtensions = [
+            '.test.ts', '.test.js', '.test.cjs', '.test.mjs',
+            '.spec.ts', '.spec.js', '.spec.cjs', '.spec.mjs',
+            '.ts', '.js', '.cjs', '.mjs',
+            '.sh', '.bash',  // Shell test scripts
+            '.json', '.yaml', '.yml'  // Config files for mock data
+          ];
+          const isMockDirectory = relativePath.includes('/mock-') || relativePath.includes('/mocks/');
+          const isValidTestFile = validTestExtensions.some(ext => file.endsWith(ext)) || isMockDirectory;
+
+          if (relativePath.startsWith('test/') && !isValidTestFile) {
             issues.push({
               category: 'misplaced',
               file: relativePath,

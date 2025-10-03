@@ -134,7 +134,18 @@ With NCP's orchestration:
 3. **Claude Desktop** will prompt you to install - click "Install"
 4. **Done!** NCP is now available in Claude
 
-> **Note:** The .mcpb (MCP Bundle) format works with Claude Desktop on macOS and Windows. For other MCP clients (Cursor, Cline, Continue) or manual installation, see the steps below.
+> ⚠️ **IMPORTANT LIMITATION:** The .mcpb installation **only** adds NCP as an MCP server in Claude Desktop. It does **NOT** install the `ncp` CLI tool needed to configure MCPs (`ncp add`, `ncp find`, etc.).
+>
+> **You still need to install via NPM to get the CLI:**
+> ```bash
+> npm install -g @portel/ncp
+> ```
+>
+> **Why both?**
+> - `.mcpb` → Claude Desktop integration (MCP server only)
+> - `npm` → CLI tools for configuration (`ncp add`, `ncp list`, etc.) + works with all MCP clients
+>
+> **Recommendation:** Most users should use NPM installation (see below) which provides both CLI and MCP server functionality for all clients.
 
 ---
 

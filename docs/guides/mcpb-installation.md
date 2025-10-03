@@ -1,5 +1,32 @@
 # One-Click Installation with .mcpb Files
 
+## ⚠️ CRITICAL LIMITATION
+
+**The .mcpb installation ONLY installs NCP as an MCP server in Claude Desktop. It does NOT install the `ncp` CLI tool.**
+
+You will still need to run `npm install -g @portel/ncp` to get:
+- `ncp add <mcp-name>` - Add MCPs to your configuration
+- `ncp find <query>` - Search for tools from the command line
+- `ncp list` - List configured MCPs
+- `ncp remove <mcp-name>` - Remove MCPs
+- All other CLI functionality
+
+**Why this limitation exists:**
+- .mcpb bundles use Claude Desktop's sandboxed Node.js runtime
+- This runtime is only available when Claude Desktop runs MCP servers
+- It's NOT in your system PATH, so CLI commands won't work
+- The `ncp` command requires global npm installation
+
+**Recommended approach:**
+1. Install via npm: `npm install -g @portel/ncp` (get CLI + MCP server)
+2. Configure your MCPs: `ncp add filesystem`, etc.
+3. Works with ALL MCP clients (Claude Desktop, Cursor, Cline, Continue)
+
+**Or for Claude Desktop users who prefer .mcpb:**
+1. Install .mcpb (Claude Desktop integration only)
+2. **ALSO** install via npm: `npm install -g @portel/ncp` (for CLI tools)
+3. Configure using CLI, use with Claude Desktop
+
 ## What is a .mcpb file?
 
 .mcpb (MCP Bundle) files are zip-based packages that bundle an entire MCP server with all its dependencies into a single installable file. Think of them like:
@@ -16,6 +43,8 @@ Installing NCP traditionally requires:
 4. Understanding of file paths and environment variables
 
 **With .mcpb:** Download → Double-click → Done! ✨
+
+**But remember:** You still need npm for CLI tools (see limitation above).
 
 ## Installation Steps
 
@@ -125,14 +154,33 @@ When a new version is released:
 | **Ease** | Double-click | Multiple commands |
 | **Prerequisites** | None (Claude Desktop has runtime) | Node.js 18+ |
 | **Time** | 10 seconds | 2-3 minutes |
+| **CLI Tools** | ❌ **NO** - Cannot run `ncp add`, `ncp find`, etc. | ✅ YES - Full CLI available |
+| **MCP Server** | ✅ YES - Works in Claude Desktop | ✅ YES - Works in all MCP clients |
+| **Configuration** | ❌ **Requires npm CLI anyway** | ✅ Complete solution |
 | **Updates** | Download new .mcpb | `npm update -g @portel/ncp` |
 | **Client Support** | Claude Desktop only | All MCP clients |
-| **Best for** | End users, non-technical | Developers, power users |
+| **Best for** | ❌ **Not recommended** - still need npm | ✅ **Recommended** - Complete installation |
 
 ## FAQ
 
-### Q: Do I need Node.js installed?
-**A:** No! Claude Desktop includes Node.js runtime for .mcpb bundles.
+### Q: Can I use `ncp add` after .mcpb installation?
+**A:** ❌ **NO!** The .mcpb installation does NOT include CLI tools. You MUST install via npm to get `ncp add`, `ncp find`, `ncp list`, etc.
+
+**Solution:** Run `npm install -g @portel/ncp` to get the CLI tools.
+
+### Q: So do I need both .mcpb AND npm installation?
+**A:** If you want to use .mcpb for Claude Desktop integration, **YES** - you still need npm for the CLI tools to configure NCP.
+
+**Better solution:** Just use `npm install -g @portel/ncp` - it gives you BOTH CLI tools AND MCP server for all clients.
+
+### Q: Why can't .mcpb include the CLI tools?
+**A:** The .mcpb bundle uses Claude Desktop's sandboxed Node.js runtime, which is only available when running MCP servers. It's not in your system PATH, so terminal commands like `ncp add` won't work. Global npm installation is required for CLI functionality.
+
+### Q: What's the point of .mcpb if I still need npm?
+**A:** Good question! For NCP specifically, **we recommend npm installation** as the primary method. The .mcpb is provided for completeness but has significant limitations for NCP's use case.
+
+### Q: Do I need Node.js installed for .mcpb?
+**A:** No, Claude Desktop includes Node.js runtime for .mcpb bundles. However, if you need the CLI tools (which you do for NCP), you'll need Node.js + npm anyway.
 
 ### Q: Can I use .mcpb with Cursor/Cline/Continue?
 **A:** Not yet. The .mcpb format is currently Claude Desktop-only. Use npm installation for other clients.
