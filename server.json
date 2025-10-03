@@ -13,9 +13,27 @@
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@portel/ncp",
       "version": "1.4.2",
+      "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "environmentVariables": [
+        {
+          "name": "NCP_DEBUG",
+          "description": "Enable debug logging for troubleshooting",
+          "default": "false"
+        },
+        {
+          "name": "NCP_MODE",
+          "description": "Operating mode: 'mcp' for AI assistant integration or 'cli' for command-line",
+          "default": "mcp"
+        },
+        {
+          "name": "NO_COLOR",
+          "description": "Disable colored output in logs and CLI",
+          "default": "false"
+        }
+      ]
     }
   ]
 }
