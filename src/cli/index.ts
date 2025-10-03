@@ -23,8 +23,6 @@ import { ConfigSchemaReader } from '../services/config-schema-reader.js';
 import { ConfigPrompter } from '../services/config-prompter.js';
 import { SchemaCache } from '../cache/schema-cache.js';
 import { getCacheDirectory } from '../utils/ncp-paths.js';
-import { SmitheryConfigReader } from '../utils/smithery-config-reader.js';
-import { SchemaConverter } from '../utils/schema-converter.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -529,8 +527,6 @@ program
     const schemaReader = new ConfigSchemaReader();
     const configPrompter = new ConfigPrompter();
     const schemaCache = new SchemaCache(getCacheDirectory());
-    const smitheryReader = new SmitheryConfigReader();
-    const schemaConverter = new SchemaConverter();
 
     // Try to discover and detect configuration requirements BEFORE adding to profile
     console.log(chalk.dim('🔍 Discovering tools and configuration requirements...'));
@@ -546,10 +542,9 @@ program
 
       console.log(`${chalk.green('✅')} Found ${discoveryResult.tools.length} tools in ${discoveryTime}ms`);
 
-      // Three-tier configuration detection strategy:
+      // Two-tier configuration detection strategy:
       // Tier 1: MCP Protocol configurationSchema (from server capabilities)
-      // Tier 2: Smithery configSchema (from smithery.yaml)
-      // Tier 3: Error parsing (fallback - happens on failure below)
+      // Tier 2: Error parsing (fallback - happens on failure below)
 
       // Tier 1: Check for MCP protocol schema
       if (discoveryResult.configurationSchema) {
@@ -561,24 +556,6 @@ program
         });
         if (detectedSchema) {
           console.log(chalk.dim('   Configuration schema detected (MCP protocol)'));
-        }
-      }
-
-      // Tier 2: Try Smithery configSchema if no MCP schema found
-      if (!detectedSchema) {
-        // Try to extract package name from command for npm packages
-        let packageName = name;
-        if (command === 'npx' && args.length > 0) {
-          // For npx commands, first arg is usually the package name
-          packageName = args[0].replace(/^-y\s+/, ''); // Remove -y flag if present
-        }
-
-        const smitherySchema = smitheryReader.readFromPackage(packageName);
-        if (smitherySchema && smitheryReader.isValidSchema(smitherySchema)) {
-          detectedSchema = schemaConverter.convertSmitheryToMCP(smitherySchema);
-          if (detectedSchema) {
-            console.log(chalk.dim('   Configuration schema detected (smithery.yaml)'));
-          }
         }
       }
 
@@ -1255,39 +1232,18 @@ program
         continue;
       }
 
-      // Three-tier configuration detection (same as ncp add):
-      // Tier 1: Cached schema (from previous successful add)
-      // Tier 2: Smithery configSchema (from smithery.yaml)
-      // Tier 3: Error parsing (fallback)
+      // Two-tier configuration detection (same as ncp add):
+      // Tier 1: Cached schema (from previous successful add or MCP protocol)
+      // Tier 2: Error parsing (fallback)
 
       let detectedSchema: any = null;
 
-      // Tier 1: Check for cached schema
+      // Check for cached schema
       const schemaCache = new SchemaCache(getCacheDirectory());
       detectedSchema = schemaCache.get(mcpName);
 
       if (detectedSchema) {
         console.log(chalk.dim(`   ✓ Using cached configuration schema`));
-      }
-
-      // Tier 2: Try Smithery configSchema if no cached schema
-      if (!detectedSchema) {
-        const smitheryReader = new SmitheryConfigReader();
-        const schemaConverter = new SchemaConverter();
-
-        // Extract package name from command
-        let packageName = mcpName;
-        if (currentConfig.command === 'npx' && currentConfig.args && currentConfig.args.length > 0) {
-          packageName = currentConfig.args[0].replace(/^-y\s+/, '');
-        }
-
-        const smitherySchema = smitheryReader.readFromPackage(packageName);
-        if (smitherySchema && smitheryReader.isValidSchema(smitherySchema)) {
-          detectedSchema = schemaConverter.convertSmitheryToMCP(smitherySchema);
-          if (detectedSchema) {
-            console.log(chalk.dim(`   ✓ Configuration schema detected (smithery.yaml)`));
-          }
-        }
       }
 
       // If we have a schema, use schema-based prompting
