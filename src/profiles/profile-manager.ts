@@ -48,60 +48,84 @@ export class ProfileManager {
       await this.createDefaultProfile();
     }
 
-    // Auto-import from Claude Desktop if needed (first run or empty profile)
+    // Auto-sync from Claude Desktop (runs every startup to detect new MCPs)
     await this.tryAutoImport();
   }
 
   /**
-   * Auto-import MCPs from Claude Desktop on first run
+   * Auto-sync MCPs from Claude Desktop on every startup
    * Detects both JSON config and .mcpb extensions
+   * Imports missing MCPs using add command for cache coherence
    */
   private async tryAutoImport(): Promise<void> {
     try {
-      // Check if 'all' profile already has MCPs
+      // Get current 'all' profile
       const allProfile = this.profiles.get('all');
       if (!allProfile) {
         return; // Should not happen, but guard anyway
       }
 
-      const existingMCPs = allProfile.mcpServers || {};
-      const existingMCPCount = Object.keys(existingMCPs).length;
-
-      // If profile already has MCPs, don't auto-import
-      if (existingMCPCount > 0) {
-        return;
-      }
-
-      // Import from Claude Desktop
+      // Get MCPs from Claude Desktop (both JSON config and .mcpb extensions)
       const importResult = await importFromClaudeDesktop();
       if (!importResult || importResult.count === 0) {
-        return; // Nothing to import
+        return; // No Claude Desktop MCPs found
       }
 
-      // Merge imported MCPs with existing profile (existingMCPs is already empty, but keep for future-proofing)
-      const mergedMCPs = { ...existingMCPs, ...importResult.mcpServers };
+      // Get existing MCPs in NCP profile
+      const existingMCPs = allProfile.mcpServers || {};
+      const existingMCPNames = new Set(Object.keys(existingMCPs));
 
-      // Update profile with imported MCPs
-      allProfile.mcpServers = mergedMCPs;
-      allProfile.metadata.modified = new Date().toISOString();
+      // Find MCPs that are in Claude Desktop but NOT in NCP (missing MCPs)
+      const missingMCPs: Array<{ name: string; config: any }> = [];
 
-      // Save updated profile
-      await this.saveProfile(allProfile);
-      this.profiles.set('all', allProfile);
-
-      // Log import summary (visible to user)
-      console.error(`\n✨ Auto-imported ${importResult.count} MCPs from Claude Desktop:`);
-      if (importResult.sources.json > 0) {
-        console.error(`   - ${importResult.sources.json} from claude_desktop_config.json`);
+      for (const [mcpName, mcpConfig] of Object.entries(importResult.mcpServers)) {
+        if (!existingMCPNames.has(mcpName)) {
+          missingMCPs.push({ name: mcpName, config: mcpConfig });
+        }
       }
-      if (importResult.sources.mcpb > 0) {
-        console.error(`   - ${importResult.sources.mcpb} from .mcpb extensions`);
+
+      if (missingMCPs.length === 0) {
+        return; // All Claude Desktop MCPs already in NCP
       }
-      console.error(`   → Saved to ~/.ncp/profiles/all.json\n`);
+
+      // Import missing MCPs using add command (ensures cache coherence)
+      const imported: string[] = [];
+      for (const { name, config } of missingMCPs) {
+        try {
+          // Remove metadata fields before adding (internal use only)
+          const cleanConfig = {
+            command: config.command,
+            args: config.args || [],
+            env: config.env || {}
+          };
+
+          // Use addMCPToProfile to ensure cache updates happen
+          await this.addMCPToProfile('all', name, cleanConfig);
+          imported.push(name);
+        } catch (error) {
+          console.warn(`Failed to import ${name}: ${error}`);
+        }
+      }
+
+      if (imported.length > 0) {
+        // Count by source for logging
+        const jsonCount = missingMCPs.filter(m => m.config._source === 'json').length;
+        const mcpbCount = missingMCPs.filter(m => m.config._source === '.mcpb').length;
+
+        // Log import summary
+        console.error(`\n✨ Auto-synced ${imported.length} new MCPs from Claude Desktop:`);
+        if (jsonCount > 0) {
+          console.error(`   - ${jsonCount} from claude_desktop_config.json`);
+        }
+        if (mcpbCount > 0) {
+          console.error(`   - ${mcpbCount} from .mcpb extensions`);
+        }
+        console.error(`   → Added to ~/.ncp/profiles/all.json\n`);
+      }
     } catch (error) {
       // Silent failure - don't block startup if auto-import fails
       // User can still configure manually
-      console.warn(`Auto-import failed: ${error}`);
+      console.warn(`Auto-sync failed: ${error}`);
     }
   }
 

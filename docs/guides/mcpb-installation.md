@@ -68,11 +68,14 @@ Installing NCP traditionally requires:
    - Claude Desktop will show an installation dialog
    - Click "Install"
 
-3. **First startup - Auto-import:**
-   - On first run, NCP automatically detects and imports ALL your existing MCPs:
-     - ✅ MCPs from `claude_desktop_config.json`
-     - ✅ .mcpb-installed extensions from Claude Extensions directory
-   - You'll see a message: `✨ Auto-imported X MCPs from Claude Desktop`
+3. **Continuous auto-sync:**
+   - **On every startup**, NCP automatically detects and imports NEW MCPs:
+     - ✅ Scans `claude_desktop_config.json` for traditional MCPs
+     - ✅ Scans Claude Extensions directory for .mcpb extensions
+     - ✅ Compares with NCP profile to find missing MCPs
+     - ✅ Auto-imports only the new ones using internal `add` command
+   - You'll see: `✨ Auto-synced X new MCPs from Claude Desktop`
+   - **Cache coherence maintained**: Using internal `add` ensures vector cache, discovery index, and all other caches stay in sync
    - No manual configuration needed!
 
 4. **Add more MCPs later (manual configuration):**
@@ -236,35 +239,57 @@ When a new version is released:
 | **Client Support** | Claude Desktop only | All MCP clients |
 | **Best for** | ✅ Power users, automation, production | ✅ General users, development |
 
-## How Auto-Import Works
+## How Continuous Auto-Sync Works
 
-On first startup, NCP intelligently detects and imports your existing Claude Desktop MCPs:
+**On every startup**, NCP automatically syncs with Claude Desktop to detect new MCPs:
 
-### Detection Process
+### Sync Process
 
-1. **Checks for existing NCP profile:**
-   - If `~/.ncp/profiles/all.json` exists and has MCPs → Skip auto-import
-   - If empty or doesn't exist → Proceed with auto-import
-
-2. **Scans Claude Desktop configuration:**
+1. **Scans Claude Desktop configuration:**
    - **JSON config:** Reads `~/Library/Application Support/Claude/claude_desktop_config.json`
    - **.mcpb extensions:** Scans `~/Library/Application Support/Claude/Claude Extensions/`
 
-3. **Extracts MCP configurations:**
-   - For JSON MCPs: Copies command, args, env directly
+2. **Extracts MCP configurations:**
+   - For JSON MCPs: Extracts command, args, env
    - For .mcpb extensions: Reads `manifest.json`, resolves `${__dirname}` paths
 
-4. **Saves to NCP profile:**
-   - Merges all MCPs into `~/.ncp/profiles/all.json`
-   - Adds metadata (`_source`, `_extensionId`, `_version`) for tracking
+3. **Detects missing MCPs:**
+   - Compares Claude Desktop MCPs vs NCP profile
+   - Identifies MCPs that exist in Claude Desktop but NOT in NCP
 
-### Example Auto-Import Output
+4. **Imports missing MCPs using internal `add` command:**
+   - For each missing MCP: `await this.addMCPToProfile('all', name, config)`
+   - This ensures **cache coherence**:
+     - ✅ Profile JSON gets updated
+     - ✅ Cache invalidation triggers on next orchestrator init
+     - ✅ Vector embeddings regenerate for new tools
+     - ✅ Discovery index includes new MCPs
+     - ✅ All caches stay in sync
 
+5. **Skips existing MCPs:**
+   - If MCP already exists in NCP → No action
+   - Prevents duplicate imports and cache thrashing
+
+### Example Auto-Sync Output
+
+**First startup (multiple MCPs found):**
 ```
-✨ Auto-imported 6 MCPs from Claude Desktop:
+✨ Auto-synced 6 new MCPs from Claude Desktop:
    - 4 from claude_desktop_config.json
    - 2 from .mcpb extensions
-   → Saved to ~/.ncp/profiles/all.json
+   → Added to ~/.ncp/profiles/all.json
+```
+
+**Subsequent startup (1 new MCP detected):**
+```
+✨ Auto-synced 1 new MCPs from Claude Desktop:
+   - 1 from .mcpb extensions
+   → Added to ~/.ncp/profiles/all.json
+```
+
+**Subsequent startup (no new MCPs):**
+```
+(No output - all Claude Desktop MCPs already in sync)
 ```
 
 ### What Gets Imported
@@ -306,12 +331,18 @@ On first startup, NCP intelligently detects and imports your existing Claude Des
 
 ## FAQ
 
-### Q: Does NCP automatically import my existing Claude Desktop MCPs?
-**A:** ✅ **YES!** On first startup, NCP automatically detects and imports:
-- All MCPs from `claude_desktop_config.json`
-- All .mcpb-installed extensions
+### Q: Does NCP automatically sync with Claude Desktop?
+**A:** ✅ **YES!** On **every startup**, NCP automatically detects and imports NEW MCPs:
+- Scans `claude_desktop_config.json` for traditional MCPs
+- Scans Claude Extensions for .mcpb-installed extensions
+- Compares with NCP profile to find missing MCPs
+- Auto-imports only the new ones
 
-This means **zero manual configuration** if you're already using Claude Desktop with MCPs.
+**Workflow example:**
+1. Day 1: Install NCP → Auto-syncs 5 existing MCPs
+2. Day 2: Install new .mcpb extension in Claude Desktop
+3. Day 3: Restart Claude Desktop → NCP auto-syncs the new MCP
+4. **Zero manual configuration** - NCP stays in sync automatically!
 
 ### Q: Can I use `ncp add` after .mcpb installation?
 **A:** ❌ **NO.** The .mcpb is a slim MCP-only bundle that excludes CLI code. You configure MCPs by editing `~/.ncp/profiles/all.json` manually.

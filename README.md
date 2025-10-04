@@ -132,11 +132,13 @@ With NCP's orchestration:
 1. **Download NCP Desktop Extension:** [ncp.dxt](https://github.com/portel-dev/ncp/releases/latest/download/ncp.dxt)
 2. **Double-click** the downloaded `ncp.dxt` file
 3. **Claude Desktop** will prompt you to install - click "Install"
-4. **Auto-import your existing MCPs** - NCP automatically detects and imports:
-   - MCPs from `claude_desktop_config.json`
-   - Other desktop extensions
+4. **Auto-sync with Claude Desktop** - NCP continuously syncs MCPs:
+   - Detects MCPs from `claude_desktop_config.json`
+   - Detects .mcpb-installed extensions
+   - **Runs on every startup** to find new MCPs
+   - Uses internal `add` command for cache coherence
 
-> 🎉 **First run magic:** NCP automatically imports all your existing Claude Desktop MCPs on first startup! No manual configuration needed.
+> 🔄 **Continuous sync:** NCP automatically detects and imports new MCPs every time you start it! Add an MCP to Claude Desktop → NCP auto-syncs it on next startup. Zero manual configuration needed.
 
 If you want to add more MCPs later, **configure manually** by editing `~/.ncp/profiles/all.json`:
 
