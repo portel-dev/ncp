@@ -11,6 +11,11 @@
       "command": "node",
       "args": ["test/mock-mcps/github-server.js"],
       "env": {}
+    },
+    "test-git": {
+      "command": "node",
+      "args": ["test/mock-mcps/git-server.js"],
+      "env": {}
     }
   },
   "metadata": {
