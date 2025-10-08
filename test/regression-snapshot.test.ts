@@ -6,9 +6,22 @@
 import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { MockServerManager } from './helpers/mock-server-manager';
 
 describe('CLI Command Regression Tests', () => {
   const CLI_PATH = path.join(__dirname, '..', 'dist', 'index.js');
+  let mockServerManager: MockServerManager;
+
+  beforeAll(async () => {
+    mockServerManager = new MockServerManager();
+    // Start the git mock server before running tests
+    await mockServerManager.startServer('git-test', 'git-server.js');
+  });
+
+  afterAll(async () => {
+    // Clean up all mock servers
+    await mockServerManager.stopAll();
+  });
 
   // Helper to run CLI commands
   function runCommand(args: string): string {
@@ -35,9 +48,23 @@ describe('CLI Command Regression Tests', () => {
   }
 
   describe('find command', () => {
-    test('should find git-related tools', () => {
-      const output = runCommand('find git-commit --depth 0');
-      const normalized = normalizeOutput(output);
+    test('should find git-related tools', async () => {
+      // Helper to retry the find command if indexing is in progress
+      async function retryFindCommand(retries = 5, delayMs = 1500) {
+        for (let i = 0; i < retries; i++) {
+          const output = runCommand('find git-commit --depth 0');
+          const normalized = normalizeOutput(output);
+          if (!/indexing in progress|no tools found/i.test(normalized)) {
+            return normalized;
+          }
+          // Wait before retrying
+          await new Promise(res => setTimeout(res, delayMs));
+        }
+        // Final attempt
+        return normalizeOutput(runCommand('find git-commit --depth 0'));
+      }
+
+      const normalized = await retryFindCommand();
 
       // Should find tools from at least one MCP (flexible MCP names)
       expect(normalized).toMatch(/\w+:/); // Any MCP name followed by colon
