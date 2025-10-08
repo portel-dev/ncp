@@ -3,7 +3,7 @@ export default {
   testEnvironment: 'node',
   roots: ['<rootDir>/test'],
   testMatch: [
-    '**/?(*.)+(spec|test).ts'
+    '**/?(*.)+(spec|test).[tj]s'
   ],
   transform: {
     '^.+\\.ts$': ['ts-jest', {
@@ -37,7 +37,7 @@ export default {
     '@xenova/transformers': '<rootDir>/test/__mocks__/transformers.js',
     '^chalk$': '<rootDir>/test/__mocks__/chalk.js',
     '../utils/updater.js': '<rootDir>/test/__mocks__/updater.js',
-    '^.*/utils/version\\.js$': '<rootDir>/test/__mocks__/version.ts'
+  // '^.*/utils/version\\.js$': '<rootDir>/test/__mocks__/version.ts'
   },
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
   testTimeout: 15000,
