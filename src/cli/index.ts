@@ -161,12 +161,8 @@ const getIcon = (emoji: string, fallback: string) =>
 // Configure OutputFormatter
 OutputFormatter.configure({ noColor: !!noColor, emoji: !!supportsEmoji() });
 
-// Read version from package.json
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const packageJsonPath = join(__dirname, '../../package.json');
-const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
-const version = packageJson.version;
+// Use centralized version utility
+import { version } from '../utils/version.js';
 
 // Discovery function for single MCP - extracted from NCPOrchestrator.probeMCPTools
 async function discoverSingleMCP(name: string, command: string, args: string[] = [], env: Record<string, string> = {}): Promise<{
