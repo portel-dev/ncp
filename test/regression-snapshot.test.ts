@@ -8,7 +8,10 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { MockServerManager } from './helpers/mock-server-manager';
 
-// Increase Jest's timeouts
+// Use fake timers for deterministic testing
+jest.useFakeTimers();
+
+// Still keep a high timeout for the real operations we need
 jest.setTimeout(120000);  // Increase global timeout
 jest.retryTimes(3);      // Allow test retries for flaky tests
 
@@ -37,6 +40,12 @@ describe('CLI Command Regression Tests', () => {
       if (mockServerManager) {
         await mockServerManager.stopAll();
         console.error('Successfully cleaned up all mock servers');
+        
+        // Use fake timer advance instead of real timer
+        jest.advanceTimersByTime(1000);
+        
+        // Restore real timers after all tests
+        jest.useRealTimers();
       }
     } catch (err) {
       console.error('Error during cleanup:', err);
@@ -71,15 +80,15 @@ describe('CLI Command Regression Tests', () => {
   describe('find command', () => {
     test('should find git-related tools', async () => {
       // Helper to retry the find command if indexing is in progress
-      async function retryFindCommand(retries = 5, delayMs = 1500) {
+      async function retryFindCommand(retries = 5) {
         for (let i = 0; i < retries; i++) {
           const output = runCommand('find git-commit --depth 0');
           const normalized = normalizeOutput(output);
           if (!/indexing in progress|no tools found/i.test(normalized)) {
             return normalized;
           }
-          // Wait before retrying
-          await new Promise(res => setTimeout(res, delayMs));
+          // Use fake timer advance instead of real wait
+          jest.advanceTimersByTime(1500);
         }
         // Final attempt
         return normalizeOutput(runCommand('find git-commit --depth 0'));
