@@ -5,18 +5,53 @@
  * Real MCP server structure for Git version control testing
  */
 
-import { MockMCPServer } from './base-mock-server.js';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+console.error('[DEBUG] Starting git-server process');
+console.error('[DEBUG] Loading mock server at:', join(__dirname, 'base-mock-server.mjs'));
+
+let MockMCPServer;
+try {
+  const mockServer = await import(join(__dirname, 'base-mock-server.mjs'));
+  MockMCPServer = mockServer.MockMCPServer;
+  console.error('[DEBUG] Successfully imported MockMCPServer');
+} catch (err) {
+  console.error('[ERROR] Failed to import MockMCPServer:', err);
+  console.error('[ERROR] Stack:', err.stack);
+  process.exit(1);
+}
+
+// Load dependencies as ESM modules
+console.error('[DEBUG] Loading SDK modules as ESM...');
+try {
+  await import('@modelcontextprotocol/sdk/server/index.js');
+  await import('@modelcontextprotocol/sdk/server/stdio.js');
+  await import('@modelcontextprotocol/sdk/types.js');
+  console.error('[DEBUG] Successfully loaded SDK modules');
+} catch (err) {
+  console.error('[ERROR] Failed to load MCP SDK dependencies:', err.message);
+  console.error('[ERROR] Error stack:', err.stack);
+  console.error('[ERROR] Check that @modelcontextprotocol/sdk is installed');
+  process.exit(1);
+}
 
 const serverInfo = {
+  id: 'git-test',
   name: 'git-test',
+  tools: ['git-commit', 'create_branch', 'merge_branch', 'push_changes', 'pull_changes', 'show_status', 'view_log'],
   version: '1.0.0',
   description: 'Git version control operations including commits, branches, merges, and repository management'
 };
 
 const tools = [
   {
-    name: 'commit_changes',
-    description: 'Create Git commits to save changes to version history. Save progress, commit code changes, record modifications.',
+    name: 'git-commit',
+    description: 'Create Git commits to save changes to version history. git commit for saving progress, commit code changes, record modifications.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -179,6 +214,35 @@ const tools = [
   }
 ];
 
-// Create and run the server
-const server = new MockMCPServer(serverInfo, tools);
-server.run().catch(console.error);
+// Server capabilities are defined at server creation
+
+console.error('[DEBUG] Creating git server with capabilities...');
+
+// Set up MCP server with git capabilities
+try {
+  // Log server info
+  console.error('[DEBUG] Server info:', JSON.stringify(serverInfo, null, 2));
+  console.error('[DEBUG] Initializing git server...');
+  
+  const server = new MockMCPServer(serverInfo, tools, [], {
+    tools: {
+      listTools: true,
+      callTool: true,
+      find: true,
+      'git-commit': true // Enable git-commit capability explicitly
+    },
+    resources: {}
+  });
+
+  console.error('[DEBUG] Git server created, starting run...');
+
+  server.run().catch(err => {
+    console.error('[ERROR] Error running git server:', err);
+    console.error('[ERROR] Error stack:', err.stack);
+    process.exit(1);
+  });
+} catch (err) {
+  console.error('[ERROR] Failed to initialize git server:', err);
+  console.error('[ERROR] Error stack:', err.stack);
+  process.exit(1);
+}

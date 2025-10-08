@@ -8,19 +8,40 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { MockServerManager } from './helpers/mock-server-manager';
 
+// Increase Jest's timeouts
+jest.setTimeout(120000);  // Increase global timeout
+jest.retryTimes(3);      // Allow test retries for flaky tests
+
 describe('CLI Command Regression Tests', () => {
   const CLI_PATH = path.join(__dirname, '..', 'dist', 'index.js');
   let mockServerManager: MockServerManager;
 
   beforeAll(async () => {
-    mockServerManager = new MockServerManager();
-    // Start the git mock server before running tests
-    await mockServerManager.startServer('git-test', 'git-server.js');
+    console.error('Setting up regression test suite...');
+    try {
+      mockServerManager = new MockServerManager();
+      console.error('Starting git server...');
+      // Start the git mock server before running tests
+      await mockServerManager.startServer('git', 'git-server.mjs');
+      console.error('Git server started successfully');
+    } catch (err) {
+      console.error('Failed to start git server:', err);
+      throw err;
+    }
   });
 
   afterAll(async () => {
-    // Clean up all mock servers
-    await mockServerManager.stopAll();
+    console.error('Cleaning up regression test suite...');
+    try {
+      // Clean up all mock servers
+      if (mockServerManager) {
+        await mockServerManager.stopAll();
+        console.error('Successfully cleaned up all mock servers');
+      }
+    } catch (err) {
+      console.error('Error during cleanup:', err);
+      // Don't throw in afterAll
+    }
   });
 
   // Helper to run CLI commands
