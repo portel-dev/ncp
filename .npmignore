@@ -3,6 +3,7 @@ src/
 test/
 scripts/
 coverage/
+docs/
 .github/
 *.ts
 !dist/**/*.d.ts
