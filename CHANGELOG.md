@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.0](https://github.com/portel-dev/ncp/compare/1.4.3...1.5.0) (2025-10-11)
+
+### Features
+
+* add installation metadata to server.json ([fe0e25b](https://github.com/portel-dev/ncp/commit/fe0e25b7e15003f3ab3c92664784f8cf7ca3221e))
+* enhance MockServerManager with improved timeout management and error handling ([edb0fb4](https://github.com/portel-dev/ncp/commit/edb0fb4bff8ea67b8c1486a36d52fc4be9204864))
+* enhance MockServerManager with robust server startup and error handling; add Git mock server implementation ([3488512](https://github.com/portel-dev/ncp/commit/3488512af0fdd75efaf61bafe6a3ce43e09836ff))
+* enhance test configurations with improved Jest settings and mock server management ([ad7e893](https://github.com/portel-dev/ncp/commit/ad7e893a713b39987ca09ae22c842bde0ec113b9))
+* implement MockServerManager to manage mock MCP server processes for tests ([89d5b38](https://github.com/portel-dev/ncp/commit/89d5b383472fbeb8ef749dc84fab4eb3233f9de5))
+* improve timeout handling in MCPServer and MCPHealthMonitor; enhance find command test assertions ([d089f6b](https://github.com/portel-dev/ncp/commit/d089f6b7bddbfdd6010121e1aed058912ebfdd6a))
+* update .npmignore and package.json to include TypeScript support and specify files for packaging ([ae9bbcf](https://github.com/portel-dev/ncp/commit/ae9bbcf94ba6c212c7eec1ef41485e665d474f9a))
+
+### Bug Fixes
+
+* correct testMatch pattern to include both .js and .ts files ([dec5625](https://github.com/portel-dev/ncp/commit/dec56254a8cde1240dc56b26fe11d980f72252cc))
+
 ## [1.4.1](https://github.com/portel-dev/ncp/compare/1.4.0...1.4.1) (2025-10-03)
 
 ### Bug Fixes
