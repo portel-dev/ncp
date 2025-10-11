@@ -5,7 +5,7 @@
 
 
 import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join } from 'path';
 // import { fileURLToPath } from 'url';
 
 // Helper to get package info - tries multiple strategies
