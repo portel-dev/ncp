@@ -19,16 +19,46 @@ interface ServerState {
   outputLog: string[];
 }
 
+/**
+ * Manages mock server processes for testing
+ */
 export class MockServerManager {
-  private servers: Map<string, ChildProcess>;
-
-  constructor() {
-    this.servers = new Map();
-  }
-
+  private readonly servers: Map<string, ChildProcess>;
+  private readonly timeouts: Set<NodeJS.Timeout>;
   private readonly MAX_RETRIES = 5;
   private readonly RETRY_DELAY = 3000;
   private readonly TIMEOUT_MS = 10000;
+
+  constructor() {
+    this.servers = new Map();
+    this.timeouts = new Set();
+  }
+
+  /**
+   * Register a timeout so we can clean it up later
+   */
+  private trackTimeout(timeout: NodeJS.Timeout): NodeJS.Timeout {
+    this.timeouts.add(timeout);
+    return timeout;
+  }
+
+  /**
+   * Clear a specific timeout and remove it from tracking
+   */
+  private clearTrackedTimeout(timeout: NodeJS.Timeout): void {
+    clearTimeout(timeout);
+    this.timeouts.delete(timeout);
+  }
+
+  /**
+   * Clear all tracked timeouts
+   */
+  private clearAllTimeouts(): void {
+    for (const timeout of this.timeouts) {
+      clearTimeout(timeout);
+    }
+    this.timeouts.clear();
+  }
 
   async startServer(name: string, serverScript: string): Promise<void> {
     if (this.servers.has(name)) {
@@ -77,10 +107,8 @@ export class MockServerManager {
             }
           };
 
-          let readyTimeout: NodeJS.Timeout | undefined;
-
           // Set timeout for server startup
-          readyTimeout = setTimeout(() => {
+          const readyTimeout = this.trackTimeout(setTimeout(() => {
             // Print output log for diagnosis
             console.error('Recent output:', state.outputLog.join('\n'));
             
@@ -97,7 +125,7 @@ export class MockServerManager {
               try {
                 serverProcess.kill('SIGTERM');
                 // Force kill after 1s if SIGTERM doesn't work
-                setTimeout(() => {
+                this.trackTimeout(setTimeout(() => {
                   if (!serverProcess.killed) {
                     console.error(`Force killing ${name} server...`);
                     try {
@@ -106,14 +134,13 @@ export class MockServerManager {
                       // Ignore kill errors
                     }
                   }
-                }, 1000).unref();
+                }, 1000));
               } catch (err) {
                 console.error(`Error killing ${name} server:`, err);
               }
             }
             reject(new Error(`Timeout waiting for ${name} server to start - ${state.lastError}`));
-          }, this.TIMEOUT_MS);
-          readyTimeout.unref();
+          }, this.TIMEOUT_MS));
 
           // Enhanced stdout handling with buffering
           let stdoutBuffer = '';
@@ -127,7 +154,7 @@ export class MockServerManager {
             if (stdoutBuffer.includes(`[READY] ${name}`)) {
               state.sawReady = true;
               console.error(`[DEBUG] ${name} server ready signal received in stdout buffer (attempt ${attempt}/${this.MAX_RETRIES})`);
-              if (readyTimeout) clearTimeout(readyTimeout);
+              this.clearTrackedTimeout(readyTimeout);
               this.servers.set(name, serverProcess);
               resolve();
             }
@@ -137,7 +164,7 @@ export class MockServerManager {
               state.sawError = true;
               state.lastError = 'Failed to load SDK dependencies';
               console.error(`[ERROR] ${name} server failed to load dependencies (attempt ${attempt}/${this.MAX_RETRIES})`);
-              if (readyTimeout) clearTimeout(readyTimeout);
+              this.clearTrackedTimeout(readyTimeout);
               serverProcess.kill('SIGTERM');
               reject(new Error('Server failed to load dependencies'));
               return;
@@ -167,7 +194,7 @@ export class MockServerManager {
             if (stderrBuffer.includes(`[READY] ${name}`)) {
               state.sawReady = true;
               console.error(`[DEBUG] ${name} server ready signal received in stderr buffer`);
-              if (readyTimeout) clearTimeout(readyTimeout);
+              this.clearTrackedTimeout(readyTimeout);
               this.servers.set(name, serverProcess);
               resolve();
             }
@@ -175,7 +202,7 @@ export class MockServerManager {
 
           // Set up error handling
           serverProcess.on('error', (err: Error) => {
-            if (readyTimeout) clearTimeout(readyTimeout);
+            this.clearTrackedTimeout(readyTimeout);
             console.error(`Error in mock server ${name}:`, err);
             console.error(`Error status for ${name}:`, {
               pid: serverProcess.pid,
@@ -199,7 +226,7 @@ export class MockServerManager {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         console.error(`Attempt ${attempt} failed:`, errorMessage);
         if (attempt < this.MAX_RETRIES) {
-          // Wait before retrying
+          // Wait before retrying using Jest's fake timer
           await wait(this.RETRY_DELAY);
         }
       }
@@ -211,6 +238,9 @@ export class MockServerManager {
 
   async stopAll(): Promise<void> {
     console.error('[DEBUG] Stopping all servers...');
+    
+    // Clean up all timeouts first
+    this.clearAllTimeouts();
     
     // Give processes a chance to clean up gracefully
     for (const [name, serverProcess] of this.servers.entries()) {
