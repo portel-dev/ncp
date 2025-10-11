@@ -53,6 +53,14 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "server.json",
+    "package.json"
+  ],
+  "files:comments": "Explicit list of files to include in the package",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.0",
     "@types/prompts": "^2.4.9",

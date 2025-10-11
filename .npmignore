@@ -59,6 +59,9 @@ RELEASE.md
 .ncp/
 *.cache
 
+# Uncomment if you don't need TypeScript support
+# dist/**/*.d.ts
+
 # Example and reference files (not needed for runtime)
 MCP-CONFIG-*.ts
 MCP-CONFIG-*.json
