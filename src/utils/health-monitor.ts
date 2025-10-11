@@ -133,29 +133,35 @@ export class MCPHealthMonitor {
       // Wait for process to start successfully or fail
       await new Promise<void>((resolve, reject) => {
         let stderr = '';
-        
+        let healthyTimeout: NodeJS.Timeout;
+
         child.on('error', (err) => {
           clearTimeout(timeout);
+          if (healthyTimeout) clearTimeout(healthyTimeout);
           reject(err);
         });
-        
+
         child.stderr.on('data', (data) => {
           stderr += data.toString();
         });
-        
+
         // If process stays alive for 2 seconds, consider it healthy
-        setTimeout(() => {
+        healthyTimeout = setTimeout(() => {
           if (!child.killed) {
             clearTimeout(timeout);
             child.kill();
             resolve();
           }
         }, 2000);
-        
+
         child.on('exit', (code) => {
           clearTimeout(timeout);
+          if (healthyTimeout) clearTimeout(healthyTimeout);
           if (code !== 0 && code !== null) {
             reject(new Error(`Process exited with code ${code}: ${stderr}`));
+          } else if (code === 0) {
+            // Process exited cleanly, consider it healthy
+            resolve();
           }
         });
       });

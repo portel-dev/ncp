@@ -307,10 +307,15 @@ export class MCPServer {
 
       // Wait briefly for initialization to complete (max 2 seconds)
       try {
+        let timeoutId: NodeJS.Timeout;
         await Promise.race([
           this.initializationPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
-        ]);
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error('timeout')), 2000);
+          })
+        ]).finally(() => {
+          if (timeoutId) clearTimeout(timeoutId);
+        });
       } catch {
         // Continue even if timeout - show what's available so far
       }
@@ -635,10 +640,15 @@ export class MCPServer {
 
       // Wait briefly for initialization to complete (max 2 seconds)
       try {
+        let timeoutId: NodeJS.Timeout;
         await Promise.race([
           this.initializationPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
-        ]);
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error('timeout')), 2000);
+          })
+        ]).finally(() => {
+          if (timeoutId) clearTimeout(timeoutId);
+        });
       } catch {
         // Continue even if timeout - try to execute with what's available
       }
