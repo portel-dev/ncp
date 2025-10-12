@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.2](https://github.com/portel-dev/ncp/compare/1.5.1...1.5.2) (2025-10-12)
+
+### Bug Fixes
+
+* resolve script symlink to find actual installation directory ([ad7f3c8](https://github.com/portel-dev/ncp/commit/ad7f3c894ec60b92817473ce418e58f90f1221e3))
+
 ## [1.5.1](https://github.com/portel-dev/ncp/compare/1.5.0...1.5.1) (2025-10-12)
 
 ### Bug Fixes
