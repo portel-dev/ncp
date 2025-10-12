@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/portel-dev/ncp/compare/1.5.0...1.5.1) (2025-10-12)
+
+### Bug Fixes
+
+* enhance version utility to prefer global package version and improve local fallback logic in tests ([8765c69](https://github.com/portel-dev/ncp/commit/8765c6964c0166251222ec58da91a4bd7dc88d96))
+* look for package.json after resolving the symlinks if found and update version in server.json ([0f0c9c8](https://github.com/portel-dev/ncp/commit/0f0c9c8e49cf9a7a6a721b44248fe7f88aafe5bd))
+
 ## [1.5.0](https://github.com/portel-dev/ncp/compare/1.4.3...1.5.0) (2025-10-11)
 
 ### Features
