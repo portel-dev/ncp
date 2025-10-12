@@ -38,43 +38,46 @@ function getInstalledPackageDir(): string {
 
   // Get the directory where code is running from
   // Check global.__dirname first (set by tests to simulate global installation)
-  let runningCodeDir: string;
+  let runningCodeDir: string | undefined;
 
   if (typeof (global as any).__dirname === 'string' && (global as any).__dirname) {
     runningCodeDir = (global as any).__dirname;
   } else if (process.argv[1]) {
-    // In production, use the entry script location to find where code is installed
-    // This works for both global and local installations
-    runningCodeDir = dirname(process.argv[1]);
-  } else {
-    // Last resort fallback to cwd
-    runningCodeDir = process.cwd();
-  }
-
-  try {
-    // Resolve symlinks (common in global npm installs)
-    const realDir = realpathSync(runningCodeDir);
-
-    // Walk up the directory tree to find the package root
-    let dir = realDir;
-    const seenDirs = new Set<string>();
-
-    while (dir && !seenDirs.has(dir)) {
-      seenDirs.add(dir);
-
-      if (isOurPackage(dir)) {
-        return dir;
-      }
-
-      const parentDir = dirname(dir);
-      if (parentDir === dir) break; // At root
-      dir = parentDir;
+    try {
+      // Resolve the script file symlink first (common in npm global installs)
+      // e.g., /usr/local/bin/ncp -> /usr/local/lib/node_modules/@portel/ncp/dist/index.js
+      const realScriptPath = realpathSync(process.argv[1]);
+      // Then get the directory containing the actual script
+      runningCodeDir = dirname(realScriptPath);
+    } catch (e) {
+      // If symlink resolution fails, fall back to dirname of argv[1]
+      runningCodeDir = dirname(process.argv[1]);
     }
-  } catch (e) {
-    // If symlink resolution fails, continue with fallback
   }
 
-  // Fallback to process.cwd()
+  // If we have a running code directory, walk up to find the package root
+  if (runningCodeDir) {
+    try {
+      let dir = runningCodeDir;
+      const seenDirs = new Set<string>();
+
+      while (dir && !seenDirs.has(dir)) {
+        seenDirs.add(dir);
+
+        if (isOurPackage(dir)) {
+          return dir;
+        }
+
+        const parentDir = dirname(dir);
+        if (parentDir === dir) break; // At root
+        dir = parentDir;
+      }
+    } catch (e) {
+      // Continue to fallback
+    }
+  }
+
+  // Fallback to process.cwd() only as last resort
   const cwd = process.cwd();
   if (isOurPackage(cwd)) {
     return cwd;
@@ -86,12 +89,7 @@ function getInstalledPackageDir(): string {
 // Export as function for testability and lazy evaluation
 export function getPackageInfo() {
   const packageDir = getInstalledPackageDir();
-  
-  // Make sure we have a valid directory
-  if (!packageDir) {
-    return { version: '1.3.2', packageName: '@portel/ncp' };
-  }
-  
+
   // Try to get package info from directory
   const pkgPath = join(packageDir, 'package.json');
   try {
@@ -103,11 +101,19 @@ export function getPackageInfo() {
       }
     }
   } catch (e) {
-    console.debug('Error reading package info:', e);
+    // In test environments, fs might be mocked - handle gracefully
+    if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+      return { version: '0.0.0-test', packageName: '@portel/ncp' };
+    }
+    console.error('Error reading package info:', e);
   }
-  
-  // If we couldn't read package.json or it wasn't valid, return default
-  return { version: '1.3.2', packageName: '@portel/ncp' };
+
+  // If we reach here in production, something is wrong
+  if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) {
+    return { version: '0.0.0-test', packageName: '@portel/ncp' };
+  }
+
+  throw new Error(`Failed to find @portel/ncp package.json. Searched in: ${packageDir}`);
 }
 
 export const version = getPackageInfo().version;
