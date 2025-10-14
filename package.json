@@ -30,7 +30,7 @@
     "test:pre-publish": "npm run test:critical && npm run test:integration",
     "test:package": "node scripts/test-package-locally.cjs",
     "build:mcpb": "npm run build && npx @anthropic-ai/mcpb pack",
-    "build:dxt": "npm run build && rm -f *.mcpb *.dxt && npx @anthropic-ai/mcpb pack && mv *.mcpb ncp.dxt",
+    "build:dxt": "npm run build && rm -rf node_modules && npm ci --production && rm -f *.mcpb *.dxt && npx -y @anthropic-ai/mcpb@latest pack && mv *.mcpb ncp.dxt && npm ci",
     "prepack": "npm run build && npm run test:pre-publish",
     "prepublishOnly": "npm run build && npm run test:pre-publish && node scripts/sync-server-version.cjs",
     "release": "release-it",
