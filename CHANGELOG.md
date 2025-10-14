@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.3](https://github.com/portel-dev/ncp/compare/1.5.2...1.5.3) (2025-10-14)
+
+### Bug Fixes
+
+* ensure MCP protocol compliance with immediate stdio listener ([43a71c7](https://github.com/portel-dev/ncp/commit/43a71c7a290cb22b256f07eae95e501c8818fdb7))
+
 ## [1.5.2](https://github.com/portel-dev/ncp/compare/1.5.1...1.5.2) (2025-10-12)
 
 ### Bug Fixes
