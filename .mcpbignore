@@ -1,7 +1,6 @@
 # Development files
 .git/
 .github/
-node_modules/
 coverage/
 test/
 docs/
