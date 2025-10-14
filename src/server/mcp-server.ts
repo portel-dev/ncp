@@ -770,8 +770,20 @@ export class MCPServer {
     }
   }
 
-  async run(): Promise<void> {
-    await this.initialize();
+  /**
+   * Set up stdio transport listener for MCP protocol messages.
+   * Safe to call multiple times (idempotent).
+   *
+   * This should be called immediately when the process starts to ensure
+   * the server is ready to receive protocol messages from any MCP client,
+   * without requiring an explicit run() call.
+   */
+  startStdioListener(): void {
+    // Prevent duplicate listener setup
+    if ((this as any)._stdioListenerActive) {
+      return;
+    }
+    (this as any)._stdioListenerActive = true;
 
     // Simple STDIO server
     process.stdin.setEncoding('utf8');
@@ -808,6 +820,18 @@ export class MCPServer {
     process.stdin.on('end', () => {
       this.shutdown();
     });
+  }
+
+  /**
+   * Legacy run() method for backwards compatibility.
+   * Used by command-line interface entry point.
+   *
+   * For MCP server usage, prefer calling startStdioListener() immediately
+   * and initialize() separately to be protocol-compliant.
+   */
+  async run(): Promise<void> {
+    await this.initialize();
+    this.startStdioListener();
   }
 }
 
