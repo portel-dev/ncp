@@ -148,6 +148,16 @@ export class MCPServer {
   }
 
   private handleInitialize(request: MCPRequest): MCPResponse {
+    // Extract client name from initialize request for auto-import
+    const clientName = request.params?.clientInfo?.name;
+
+    // Trigger auto-import asynchronously (don't block initialize response)
+    if (clientName) {
+      this.orchestrator.triggerAutoImport(clientName).catch(error => {
+        logger.error(`Auto-import failed for ${clientName}: ${error.message}`);
+      });
+    }
+
     return {
       jsonrpc: '2.0',
       id: request.id,

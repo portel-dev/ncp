@@ -1793,6 +1793,7 @@ export class NCPOrchestrator {
   /**
    * Trigger auto-import from MCP client
    * Called by MCPServer after it receives clientInfo from initialize request
+   * Re-indexes any new MCPs that were added by auto-import
    */
   async triggerAutoImport(clientName: string): Promise<void> {
     if (!this.profileManager) {
@@ -1802,7 +1803,52 @@ export class NCPOrchestrator {
     }
 
     try {
+      // Get current MCPs before auto-import
+      const profileBefore = await this.profileManager.getProfile(this.profileName);
+      if (!profileBefore) {
+        return;
+      }
+      const mcpsBefore = new Set(Object.keys(profileBefore.mcpServers));
+
+      // Run auto-import (adds new MCPs to profile)
       await this.profileManager.tryAutoImportFromClient(clientName);
+
+      // Get updated profile after auto-import
+      const profileAfter = await this.profileManager.getProfile(this.profileName);
+      if (!profileAfter) {
+        return;
+      }
+
+      // Find new MCPs that were added
+      const newMCPs: MCPConfig[] = [];
+      for (const [name, config] of Object.entries(profileAfter.mcpServers)) {
+        if (!mcpsBefore.has(name)) {
+          newMCPs.push({
+            name,
+            command: config.command,
+            args: config.args,
+            env: config.env || {},
+            url: config.url
+          });
+        }
+      }
+
+      // If new MCPs were added, index them
+      if (newMCPs.length > 0) {
+        logger.info(`Indexing ${newMCPs.length} new MCPs from auto-import...`);
+
+        // Update profile hash in cache
+        const profileHash = CSVCache.hashProfile(profileAfter.mcpServers);
+        await this.csvCache.startIncrementalWrite(profileHash);
+
+        // Index new MCPs (incremental mode)
+        await this.discoverMCPTools(newMCPs, profileAfter, true, Object.keys(profileAfter.mcpServers).length);
+
+        // Finalize cache
+        await this.csvCache.finalize();
+
+        logger.info(`Successfully indexed ${newMCPs.length} new MCPs`);
+      }
     } catch (error: any) {
       logger.error(`Auto-import failed: ${error.message}`);
     }
