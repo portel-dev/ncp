@@ -7,11 +7,13 @@ import { OutputFormatter } from '../services/output-formatter.js';
 import { ErrorHandler } from '../services/error-handler.js';
 import { formatCommandDisplay } from '../utils/security.js';
 import { TextUtils } from '../utils/text-utils.js';
+import { logger } from '../utils/logger.js';
 
 interface MCPConfig {
-  command: string;
+  command?: string;  // Optional: for stdio transport
   args?: string[];
   env?: Record<string, string>;
+  url?: string;  // Optional: for HTTP/SSE transport
 }
 
 interface MCPImportData {
@@ -85,8 +87,20 @@ export class ConfigManager {
 
   /**
    * Import MCP configurations using interactive editor
+   *
+   * ⚠️ CRITICAL: Default profile MUST be 'all' - DO NOT CHANGE!
+   *
+   * The 'all' profile is the universal profile where MCPs are imported by default.
+   * This matches the behavior of `ncp add` and auto-import functionality.
+   *
+   * Changing this to 'default' or any other name will break:
+   * - User expectations (CLI help says "default: all")
+   * - Consistency with `ncp add` command
+   * - Auto-import from Claude Desktop
+   *
+   * If you change this, you WILL introduce bugs. Keep it as 'all'.
    */
-  async importConfig(filePath?: string, profileName: string = 'default', dryRun: boolean = false): Promise<void> {
+  async importConfig(filePath?: string, profileName: string = 'all', dryRun: boolean = false): Promise<void> {
     if (filePath) {
       // Import from file
       await this.importFromFile(filePath, profileName, dryRun);
@@ -360,8 +374,10 @@ export class ConfigManager {
         // MCP name (no indent - root level)
         console.log(chalk.gray(`${connector} `) + chalk.cyan(name));
 
-        // Command line with reverse colors (like ncp list)
-        const fullCommand = formatCommandDisplay(config.command, config.args);
+        // Command line or URL with reverse colors (like ncp list)
+        const fullCommand = config.url
+          ? `HTTP/SSE: ${config.url}`
+          : formatCommandDisplay(config.command || '', config.args);
         const maxWidth = process.stdout.columns ? process.stdout.columns - 4 : 80;
         const wrappedLines = TextUtils.wrapTextWithBackground(fullCommand, maxWidth, chalk.gray(`${indent} `), (text: string) => chalk.bgGray.black(text));
         console.log(wrappedLines);
@@ -479,10 +495,16 @@ export class ConfigManager {
         }
 
         try {
+          // Skip health check for HTTP/SSE MCPs (they use different connection method)
+          if (!mcpConfig.command && mcpConfig.url) {
+            logger.debug(`Skipping health check for HTTP/SSE MCP: ${mcpName}`);
+            continue;
+          }
+
           // Direct health check using the health monitor
           const health = await healthMonitor.checkMCPHealth(
             mcpName,
-            mcpConfig.command,
+            mcpConfig.command || '',
             mcpConfig.args || [],
             mcpConfig.env
           );
@@ -603,8 +625,10 @@ export class ConfigManager {
         console.log(`  ${indent} ${chalk.white(description)}`);
       }
 
-      // Command with reverse colors (depth >= 2)
-      const commandText = formatCommandDisplay(config.command, config.args);
+      // Command or URL with reverse colors (depth >= 2)
+      const commandText = config.url
+        ? `HTTP/SSE: ${config.url}`
+        : formatCommandDisplay(config.command || '', config.args);
       const maxWidth = process.stdout.columns ? process.stdout.columns - 6 : 80;
       const wrappedLines = TextUtils.wrapTextWithBackground(commandText, maxWidth, `  ${indent} `, (text: string) => chalk.bgGray.black(text));
       console.log(wrappedLines);

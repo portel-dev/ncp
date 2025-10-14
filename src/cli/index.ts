@@ -438,6 +438,7 @@ if (shouldRunAsServer) {
   }
 
   // Running as MCP server: ncp (defaults to 'all' profile) or ncp --profile <name>
+  // ⚠️ CRITICAL: Default MUST be 'all' - DO NOT CHANGE to 'default' or anything else!
   const profileName = profileIndex !== -1 ? (process.argv[profileIndex + 1] || 'all') : 'all';
 
   // Debug logging for integration tests
@@ -463,7 +464,7 @@ if (shouldRunAsServer) {
 program
   .command('add <name> <command> [args...]')
   .description('Add an MCP server to a profile')
-  .option('--profiles <names...>', 'Profiles to add to (default: all)')
+  .option('--profile <names...>', 'Profile(s) to add to (can specify multiple, default: all)')
   .option('--env <vars...>', 'Environment variables (KEY=value)')
   .action(async (name, command, args, options) => {
     console.log(`\n${chalk.blue(`📦 Adding MCP server: ${chalk.bold(name)}`)}`);
@@ -513,7 +514,8 @@ program
 
     // Show what will be added
     // Determine which profiles to add to
-    const profiles = options.profiles || ['all'];
+    // ⚠️ CRITICAL: Default MUST be ['all'] - DO NOT CHANGE!
+    const profiles = options.profile || ['all'];
 
     console.log('\n📋 Profile configuration:');
     console.log(`   ${chalk.cyan('Target profiles:')} ${profiles.join(', ')}`);
@@ -981,14 +983,15 @@ function formatFindOutput(text: string): string {
 program
   .command('remove <name>')
   .description('Remove an MCP server from profiles')
-  .option('--profiles <names...>', 'Profiles to remove from (default: all)')
+  .option('--profile <names...>', 'Profile(s) to remove from (can specify multiple, default: all)')
   .action(async (name, options) => {
     console.log(chalk.blue(`🗑️  Removing MCP server: ${chalk.bold(name)}`));
 
     const manager = new ProfileManager();
     await manager.initialize();
 
-    const profiles = options.profiles || ['all'];
+    // ⚠️ CRITICAL: Default MUST be ['all'] - DO NOT CHANGE!
+    const profiles = options.profile || ['all'];
 
     // Validate if MCP exists and get suggestions
     const validation = await validateRemoveCommand(name, manager, profiles);
@@ -1112,6 +1115,7 @@ program
   .option('--profile <name>', 'Profile to repair (default: all)')
   .action(async (options) => {
     try {
+      // ⚠️ CRITICAL: Default MUST be 'all' - DO NOT CHANGE!
       const profileName = options.profile || program.getOptionValue('profile') || 'all';
 
       console.log(chalk.bold('\n🔧 MCP Repair Tool\n'));
@@ -1231,6 +1235,13 @@ program
       const currentConfig = profile.mcpServers[mcpName];
       if (!currentConfig) {
         console.log(chalk.red(`   ❌ MCP not found in profile`));
+        skippedCount++;
+        continue;
+      }
+
+      // Skip HTTP/SSE MCPs (they don't have command/args to repair)
+      if (currentConfig.url && !currentConfig.command) {
+        console.log(chalk.yellow(`   ⚠️  Skipping HTTP/SSE MCP (remote connector)`));
         skippedCount++;
         continue;
       }
@@ -1364,7 +1375,7 @@ program
         // Create wrapper command
         const wrappedCommand = mcpWrapper.createWrapper(
           testConfig.name,
-          testConfig.command,
+          testConfig.command || '',  // Should never be undefined after HTTP/SSE check
           testConfig.args || []
         );
 
@@ -1457,6 +1468,7 @@ program
     // Add newline after command before any output
     console.log();
 
+    // ⚠️ CRITICAL: Default MUST be 'all' - DO NOT CHANGE!
     const profileName = program.getOptionValue('profile') || 'all';
     const forceRetry = program.getOptionValue('forceRetry') || false;
 
@@ -1733,6 +1745,7 @@ program
     }
   })
   .action(async (tool, options) => {
+    // ⚠️ CRITICAL: Default MUST be 'all' - DO NOT CHANGE!
     const profileName = program.getOptionValue('profile') || 'all';
 
     const { NCPOrchestrator } = await import('../orchestrator/ncp-orchestrator.js');
@@ -1951,6 +1964,95 @@ program
     }
 
     await orchestrator.cleanup();
+  });
+
+// Auth command
+program
+  .command('auth <mcp>')
+  .description('Authenticate an MCP server using OAuth Device Flow')
+  .option('--profile <name>', 'Profile to use (default: all)')
+  .configureHelp({
+    formatHelp: () => {
+      let output = '\n';
+      output += chalk.bold.white('NCP Auth Command') + ' - ' + chalk.cyan('OAuth Authentication') + '\n\n';
+      output += chalk.dim('Authenticate an MCP server that requires OAuth 2.0 Device Flow authentication.') + '\n';
+      output += chalk.dim('Tokens are securely stored and automatically refreshed.') + '\n\n';
+      output += chalk.bold.white('Usage:') + '\n';
+      output += '  ' + chalk.yellow('ncp auth <mcp>') + '          # Authenticate an MCP server\n';
+      output += '  ' + chalk.yellow('ncp auth <mcp> --profile <name>') + '   # Authenticate for specific profile\n\n';
+      output += chalk.bold.white('Examples:') + '\n';
+      output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp auth github') + '\n';
+      output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp auth my-api --profile production') + '\n\n';
+      return output;
+    }
+  })
+  .action(async (mcpName, options) => {
+    try {
+      const profileName = options.profile || 'all';
+
+      // Load profile
+      const manager = new ProfileManager();
+      await manager.initialize();
+
+      const profile = await manager.getProfile(profileName);
+      if (!profile) {
+        console.error(chalk.red(`❌ Profile '${profileName}' not found`));
+        process.exit(1);
+      }
+
+      // Check if MCP exists in profile
+      const mcpConfig = profile.mcpServers[mcpName];
+      if (!mcpConfig) {
+        console.error(chalk.red(`❌ MCP '${mcpName}' not found in profile '${profileName}'`));
+
+        // Suggest similar MCPs
+        const availableMCPs = Object.keys(profile.mcpServers);
+        if (availableMCPs.length > 0) {
+          const suggestions = findSimilarNames(mcpName, availableMCPs);
+          if (suggestions.length > 0) {
+            console.log(chalk.yellow('\n💡 Did you mean:'));
+            suggestions.forEach((suggestion, index) => {
+              console.log(`  ${index + 1}. ${chalk.cyan(suggestion)}`);
+            });
+          }
+        }
+        process.exit(1);
+      }
+
+      // Check if MCP has OAuth configuration
+      if (!mcpConfig.auth || mcpConfig.auth.type !== 'oauth' || !mcpConfig.auth.oauth) {
+        console.error(chalk.red(`❌ MCP '${mcpName}' does not have OAuth configuration`));
+        console.log(chalk.yellow('\n💡 To add OAuth configuration, edit your profile configuration file:'));
+        console.log(chalk.dim('   Add "auth": { "type": "oauth", "oauth": { ... } } to the MCP configuration'));
+        process.exit(1);
+      }
+
+      // Perform OAuth Device Flow
+      const { DeviceFlowAuthenticator } = await import('../auth/oauth-device-flow.js');
+      const { getTokenStore } = await import('../auth/token-store.js');
+
+      const authenticator = new DeviceFlowAuthenticator(mcpConfig.auth.oauth);
+      const tokenStore = getTokenStore();
+
+      console.log(chalk.blue(`🔐 Starting OAuth Device Flow for '${mcpName}'...\n`));
+
+      try {
+        const tokenResponse = await authenticator.authenticate();
+
+        // Store the token
+        await tokenStore.storeToken(mcpName, tokenResponse);
+
+        console.log(chalk.green(`✅ Successfully authenticated '${mcpName}'!`));
+        console.log(chalk.dim(`   Token expires: ${new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString()}`));
+        console.log(chalk.dim(`   Token stored securely in: ~/.ncp/tokens/${mcpName}.token`));
+      } catch (error: any) {
+        console.error(chalk.red(`❌ Authentication failed: ${error.message}`));
+        process.exit(1);
+      }
+    } catch (error: any) {
+      console.error(chalk.red(`❌ Error: ${error.message}`));
+      process.exit(1);
+    }
   });
 
 // Update command

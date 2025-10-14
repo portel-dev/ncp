@@ -1,5 +1,7 @@
 [![npm version](https://img.shields.io/npm/v/@portel/ncp.svg)](https://www.npmjs.com/package/@portel/ncp)
 [![npm downloads](https://img.shields.io/npm/dm/@portel/ncp.svg)](https://www.npmjs.com/package/@portel/ncp)
+[![GitHub release downloads](https://img.shields.io/github/downloads/portel-dev/ncp/total?label=.mcpb%20downloads)](https://github.com/portel-dev/ncp/releases)
+[![Latest release](https://img.shields.io/github/downloads/portel-dev/ncp/latest/total?label=latest%20.mcpb)](https://github.com/portel-dev/ncp/releases/latest)
 [![License: Elastic-2.0](https://img.shields.io/badge/License-Elastic--2.0-blue.svg)](https://www.elastic.co/licensing/elastic-license)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-blue.svg)](https://modelcontextprotocol.io/)
 
@@ -123,9 +125,16 @@ With NCP's orchestration:
 - **npm** (included with Node.js) or **npx** for running packages
 - **Command line access** (Terminal on Mac/Linux, Command Prompt/PowerShell on Windows)
 
-## 🚀 **2-Minute Setup for Existing MCP Users**
+## 🚀 **Installation**
 
-### **⚡ The Easy Way: One-Click Installation** (Claude Desktop Only)
+Choose your preferred installation method:
+
+| Method | Best For | Downloads |
+|--------|----------|-----------|
+| **📦 .mcpb Bundle** | Claude Desktop users | ![.mcpb downloads](https://img.shields.io/github/downloads/portel-dev/ncp/total?label=downloads&color=green) |
+| **📥 npm Package** | All MCP clients, CLI users | ![npm downloads](https://img.shields.io/npm/dt/@portel/ncp?label=downloads&color=blue) |
+
+### **⚡ Option 1: One-Click Installation (.mcpb)** - Claude Desktop Only
 
 **For Claude Desktop users** - Download and double-click to install:
 
@@ -178,7 +187,7 @@ nano ~/.ncp/profiles/all.json
 
 ---
 
-### **🔧 The Manual Way: For All MCP Clients**
+### **🔧 Option 2: npm Installation** - All MCP Clients (Cursor, Cline, Continue, etc.)
 
 ### **Step 1: Import Your Existing MCPs** ⚡
 

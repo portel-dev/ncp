@@ -28,7 +28,7 @@ dist/index.js.map
 
 # Build artifacts
 *.tgz
-*.mcpb
+*.dxt
 *.backup
 
 # IDE

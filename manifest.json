@@ -2,20 +2,63 @@
   "manifest_version": "0.2",
   "name": "ncp",
   "display_name": "NCP - Natural Context Provider",
-  "version": "1.4.3",
-  "description": "N-to-1 MCP Orchestration. Unified gateway for multiple MCP servers with intelligent tool discovery.",
-  "long_description": "NCP transforms N scattered MCP servers into 1 intelligent orchestrator. Your AI sees just 2 simple tools instead of 50+ complex ones, while NCP handles all the routing, discovery, and execution behind the scenes. Features semantic search, token optimization (97% reduction), and automatic tool discovery across all your MCP servers.",
+  "version": "1.5.0",
+  "description": "N-to-1 MCP Orchestration. Unified gateway for multiple MCP servers with intelligent tool discovery and auto-import.",
+  "long_description": "NCP transforms N scattered MCP servers into 1 intelligent orchestrator. Your AI sees just 2 simple tools instead of 50+ complex ones, while NCP handles all the routing, discovery, and execution behind the scenes. Features: semantic search, token optimization (97% reduction), automatic tool discovery, multi-client auto-import (Claude Desktop, Perplexity, Cursor, Cline, Continue), dynamic runtime detection, and optional global CLI access.",
   "author": {
-    "name": "NCP Team",
+    "name": "Portel",
     "url": "https://github.com/portel-dev/ncp"
+  },
+  "user_config": {
+    "profile": {
+      "type": "string",
+      "title": "Profile Name",
+      "description": "Which NCP profile to use (e.g., 'all', 'development', 'minimal'). Auto-imported MCPs from your MCP client will be added to this profile.",
+      "default": "all"
+    },
+    "config_path": {
+      "type": "string",
+      "title": "Configuration Path",
+      "description": "Where to store NCP configurations. Use '~/.ncp' for global (shared across projects), '.ncp' for local (per-project), or specify custom path.",
+      "default": "~/.ncp"
+    },
+    "enable_global_cli": {
+      "type": "boolean",
+      "title": "Enable Global CLI Access",
+      "description": "Create a global 'ncp' command for terminal usage. Allows running NCP from command line anywhere on your system.",
+      "default": false
+    },
+    "auto_import_client_mcps": {
+      "type": "boolean",
+      "title": "Auto-import Client MCPs",
+      "description": "Automatically import all MCPs from your MCP client (Claude Desktop, Perplexity, Cursor, etc.) on startup. Syncs both config files and extensions.",
+      "default": true
+    },
+    "enable_debug_logging": {
+      "type": "boolean",
+      "title": "Enable Debug Logging",
+      "description": "Show detailed logs for troubleshooting (runtime detection, MCP loading, etc.)",
+      "default": false
+    }
   },
   "server": {
     "type": "node",
     "entry_point": "dist/index-mcp.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/dist/index-mcp.js"],
-      "env": {}
+      "args": [
+        "${__dirname}/dist/index-mcp.js",
+        "--profile=${user_config.profile}",
+        "--config-path=${user_config.config_path}"
+      ],
+      "env": {
+        "NCP_PROFILE": "${user_config.profile}",
+        "NCP_CONFIG_PATH": "${user_config.config_path}",
+        "NCP_ENABLE_GLOBAL_CLI": "${user_config.enable_global_cli}",
+        "NCP_AUTO_IMPORT": "${user_config.auto_import_client_mcps}",
+        "NCP_DEBUG": "${user_config.enable_debug_logging}",
+        "NCP_MODE": "extension"
+      }
     }
   },
   "tools": [
@@ -28,6 +71,6 @@
       "description": "Execute tools from managed MCP servers. Requires exact format 'mcp_name:tool_name' with required parameters. System provides suggestions if tool not found and automatic fallbacks when tools fail."
     }
   ],
-  "keywords": ["mcp", "model-context-protocol", "ai-orchestration", "tool-discovery", "multi-mcp", "claude", "ai-gateway"],
+  "keywords": ["mcp", "model-context-protocol", "ai-orchestration", "tool-discovery", "multi-mcp", "claude", "ai-gateway", "auto-import"],
   "license": "Elastic-2.0"
 }

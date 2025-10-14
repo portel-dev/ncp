@@ -11,13 +11,17 @@ import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { DiscoveryEngine } from '../discovery/engine.js';
 import { MCPHealthMonitor } from '../utils/health-monitor.js';
 import { SearchEnhancer } from '../discovery/search-enhancer.js';
 import { mcpWrapper } from '../utils/mcp-wrapper.js';
 import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
+import { InternalMCPManager } from '../internal-mcps/internal-mcp-manager.js';
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
+import type { OAuthConfig } from '../auth/oauth-device-flow.js';
+import { getRuntimeForExtension, logRuntimeInfo } from '../utils/runtime-detector.js';
 // Simple string similarity for tool name matching
 function calculateSimilarity(str1: string, str2: string): number {
   const s1 = str1.toLowerCase();
@@ -88,25 +92,41 @@ interface ExecutionResult {
 
 interface MCPConfig {
   name: string;
-  command: string;
+  command?: string;  // Optional: for stdio transport
   args?: string[];
   env?: Record<string, string>;
+  url?: string;  // Optional: for HTTP/SSE transport (Claude Desktop native)
+  auth?: {
+    type: 'oauth' | 'bearer' | 'apiKey' | 'basic';
+    oauth?: OAuthConfig;  // OAuth 2.0 Device Flow configuration
+    token?: string;       // Bearer token or API key
+    username?: string;    // Basic auth username
+    password?: string;    // Basic auth password
+  };
 }
 
 interface Profile {
   name: string;
   description: string;
   mcpServers: Record<string, {
-    command: string;
+    command?: string;  // Optional: for stdio transport
     args?: string[];
     env?: Record<string, string>;
+    url?: string;  // Optional: for HTTP/SSE transport
+    auth?: {
+      type: 'oauth' | 'bearer' | 'apiKey' | 'basic';
+      oauth?: OAuthConfig;  // OAuth 2.0 Device Flow configuration
+      token?: string;       // Bearer token or API key
+      username?: string;    // Basic auth username
+      password?: string;    // Basic auth password
+    };
   }>;
   metadata?: any;
 }
 
 interface MCPConnection {
   client: Client;
-  transport: StdioClientTransport;
+  transport: StdioClientTransport | SSEClientTransport;
   tools: Array<{name: string; description: string}>;
   serverInfo?: {
     name: string;
@@ -152,9 +172,19 @@ export class NCPOrchestrator {
   private showProgress: boolean;
   private indexingProgress: { current: number; total: number; currentMCP: string; estimatedTimeRemaining?: number } | null = null;
   private indexingStartTime: number = 0;
+  private profileManager: ProfileManager | null = null;
+  private internalMCPManager: InternalMCPManager;
 
   private forceRetry: boolean = false;
 
+  /**
+   * ⚠️ CRITICAL: Default profile MUST be 'all' - DO NOT CHANGE!
+   *
+   * The 'all' profile is the universal profile that contains all MCPs.
+   * This default is used by MCPServer and all CLI commands.
+   *
+   * DO NOT change this to 'default' or any other name - it will break everything.
+   */
   constructor(profileName: string = 'all', showProgress: boolean = false, forceRetry: boolean = false) {
     this.profileName = profileName;
     this.discovery = new DiscoveryEngine();
@@ -163,13 +193,21 @@ export class NCPOrchestrator {
     this.csvCache = new CSVCache(getCacheDirectory(), profileName);
     this.showProgress = showProgress;
     this.forceRetry = forceRetry;
+    this.internalMCPManager = new InternalMCPManager();
   }
 
   private async loadProfile(): Promise<Profile | null> {
     try {
-      const profileManager = new ProfileManager();
-      await profileManager.initialize();
-      const profile = await profileManager.getProfile(this.profileName);
+      // Create and store ProfileManager instance (reused for auto-import)
+      if (!this.profileManager) {
+        this.profileManager = new ProfileManager();
+        await this.profileManager.initialize();
+
+        // Initialize internal MCPs with ProfileManager
+        this.internalMCPManager.initialize(this.profileManager);
+      }
+
+      const profile = await this.profileManager.getProfile(this.profileName);
 
       if (!profile) {
         logger.error(`Profile not found: ${this.profileName}`);
@@ -194,6 +232,11 @@ export class NCPOrchestrator {
     }
 
     logger.info(`Initializing NCP orchestrator with profile: ${this.profileName}`);
+
+    // Log runtime detection info (how NCP is running)
+    if (process.env.NCP_DEBUG === 'true') {
+      logRuntimeInfo();
+    }
 
     // Initialize progress immediately to prevent race condition
     // Total will be updated once we know how many MCPs need indexing
@@ -234,13 +277,19 @@ export class NCPOrchestrator {
       name,
       command: config.command,
       args: config.args,
-      env: config.env || {}
+      env: config.env || {},
+      url: config.url  // HTTP/SSE transport support
     }));
 
     if (cacheValid) {
       // Load from cache
       logger.info('Loading tools from CSV cache...');
       const cachedMCPCount = await this.loadFromCSVCache(mcpConfigs);
+    } else {
+      // Cache invalid - clear it to force full re-indexing
+      logger.info('Cache invalid, clearing for full re-index...');
+      await this.csvCache.clear();
+      await this.csvCache.initialize();
     }
 
     // Get list of MCPs that need indexing
@@ -307,14 +356,19 @@ export class NCPOrchestrator {
     // Clear progress tracking once complete
     this.indexingProgress = null;
 
+    // Add internal MCPs to discovery
+    this.addInternalMCPsToDiscovery();
+
     // Start cleanup timer for idle connections
     this.cleanupTimer = setInterval(
       () => this.cleanupIdleConnections(),
       this.CLEANUP_INTERVAL
     );
 
+    const externalMCPs = this.definitions.size;
+    const internalMCPs = this.internalMCPManager.getAllInternalMCPs().length;
     const loadTime = Date.now() - startTime;
-    logger.info(`🚀 NCP-OSS initialized in ${loadTime}ms with ${this.allTools.length} tools from ${this.definitions.size} MCPs`);
+    logger.info(`🚀 NCP-OSS initialized in ${loadTime}ms with ${this.allTools.length} tools from ${externalMCPs} external + ${internalMCPs} internal MCPs`);
   }
 
   /**
@@ -555,6 +609,109 @@ export class NCPOrchestrator {
     }
   }
 
+  /**
+   * Create appropriate transport based on config
+   * Supports both stdio (command/args) and HTTP/SSE (url) transports
+   * Handles OAuth authentication for HTTP/SSE connections
+   */
+  private async createTransport(config: MCPConfig, env?: Record<string, string>): Promise<StdioClientTransport | SSEClientTransport> {
+    if (config.url) {
+      // HTTP/SSE transport (Claude Desktop native support)
+      const url = new URL(config.url);
+      const headers: Record<string, string> = {};
+
+      // Handle authentication
+      if (config.auth) {
+        const token = await this.getAuthToken(config);
+
+        switch (config.auth.type) {
+          case 'oauth':
+          case 'bearer':
+            headers['Authorization'] = `Bearer ${token}`;
+            break;
+          case 'apiKey':
+            // API key can be in header or query param - assume header for now
+            headers['X-API-Key'] = token;
+            break;
+          case 'basic':
+            if (config.auth.username && config.auth.password) {
+              const credentials = Buffer.from(`${config.auth.username}:${config.auth.password}`).toString('base64');
+              headers['Authorization'] = `Basic ${credentials}`;
+            }
+            break;
+        }
+      }
+
+      // Use requestInit to add custom headers to POST requests
+      // and eventSourceInit to add headers to the initial SSE connection
+      const options = Object.keys(headers).length > 0 ? {
+        requestInit: { headers },
+        eventSourceInit: { headers } as EventSourceInit
+      } : undefined;
+
+      return new SSEClientTransport(url, options);
+    }
+
+    if (config.command) {
+      // stdio transport (local process)
+      const resolvedCommand = getRuntimeForExtension(config.command);
+      const wrappedCommand = mcpWrapper.createWrapper(
+        config.name,
+        resolvedCommand,
+        config.args || []
+      );
+
+      return new StdioClientTransport({
+        command: wrappedCommand.command,
+        args: wrappedCommand.args,
+        env: env as Record<string, string>
+      });
+    }
+
+    throw new Error(`Invalid config for ${config.name}: must have either 'command' or 'url'`);
+  }
+
+  /**
+   * Get authentication token for MCP
+   * Handles OAuth Device Flow and token refresh
+   */
+  private async getAuthToken(config: MCPConfig): Promise<string> {
+    if (!config.auth) {
+      throw new Error('No auth configuration provided');
+    }
+
+    // For non-OAuth auth types, return the token directly
+    if (config.auth.type !== 'oauth') {
+      return config.auth.token || '';
+    }
+
+    // OAuth flow
+    if (!config.auth.oauth) {
+      throw new Error('OAuth configuration missing');
+    }
+
+    const { getTokenStore } = await import('../auth/token-store.js');
+    const tokenStore = getTokenStore();
+
+    // Check for existing valid token
+    const existingToken = await tokenStore.getToken(config.name);
+    if (existingToken) {
+      return existingToken.access_token;
+    }
+
+    // No valid token - trigger OAuth Device Flow
+    const { DeviceFlowAuthenticator } = await import('../auth/oauth-device-flow.js');
+    const authenticator = new DeviceFlowAuthenticator(config.auth.oauth);
+
+    logger.info(`No valid token found for ${config.name}, starting OAuth Device Flow...`);
+    const tokenResponse = await authenticator.authenticate();
+
+    // Store token for future use
+    await tokenStore.storeToken(config.name, tokenResponse);
+
+    return tokenResponse.access_token;
+  }
+
   // Based on commercial NCP's probeMCPTools method
   private async probeMCPTools(config: MCPConfig, timeout: number = this.QUICK_PROBE_TIMEOUT): Promise<{
     tools: Array<{name: string; description: string; inputSchema?: any}>;
@@ -566,21 +723,14 @@ export class NCPOrchestrator {
       websiteUrl?: string;
     };
   }> {
-    if (!config.command) {
-      throw new Error(`Invalid config for ${config.name}`);
+    if (!config.command && !config.url) {
+      throw new Error(`Invalid config for ${config.name}: must have either 'command' or 'url'`);
     }
 
     let client: Client | null = null;
-    let transport: StdioClientTransport | null = null;
+    let transport: StdioClientTransport | SSEClientTransport | null = null;
 
     try {
-      // Create wrapper command for discovery phase
-      const wrappedCommand = mcpWrapper.createWrapper(
-        config.name,
-        config.command,
-        config.args || []
-      );
-
       // Create temporary connection for discovery
       const silentEnv = {
         ...process.env,
@@ -590,11 +740,7 @@ export class NCPOrchestrator {
         NO_COLOR: 'true'
       };
 
-      transport = new StdioClientTransport({
-        command: wrappedCommand.command,
-        args: wrappedCommand.args,
-        env: silentEnv as Record<string, string>
-      });
+      transport = await this.createTransport(config, silentEnv);
 
       client = new Client(
         { name: 'ncp-oss', version: '1.0.0' },
@@ -768,6 +914,24 @@ export class NCPOrchestrator {
       };
     }
 
+    // Check if this is an internal MCP
+    if (this.internalMCPManager.isInternalMCP(mcpName)) {
+      try {
+        const result = await this.internalMCPManager.executeInternalTool(mcpName, actualToolName, parameters);
+        return {
+          success: result.success,
+          content: result.content,
+          error: result.error
+        };
+      } catch (error: any) {
+        logger.error(`Internal tool execution failed for ${toolName}:`, error);
+        return {
+          success: false,
+          error: error.message || 'Internal tool execution failed'
+        };
+      }
+    }
+
     const definition = this.definitions.get(mcpName);
     if (!definition) {
       const availableMcps = Array.from(this.definitions.keys()).join(', ');
@@ -840,13 +1004,6 @@ export class NCPOrchestrator {
     const connectStart = Date.now();
 
     try {
-      // Create wrapper command that redirects output to logs
-      const wrappedCommand = mcpWrapper.createWrapper(
-        mcpName,
-        definition.config.command,
-        definition.config.args || []
-      );
-
       // Add environment variables
       const silentEnv = {
         ...process.env,
@@ -857,11 +1014,7 @@ export class NCPOrchestrator {
         NO_COLOR: 'true'
       };
 
-      const transport = new StdioClientTransport({
-        command: wrappedCommand.command,
-        args: wrappedCommand.args,
-        env: silentEnv as Record<string, string>
-      });
+      const transport = await this.createTransport(definition.config, silentEnv);
 
       const client = new Client(
         { name: 'ncp-oss', version: '1.0.0' },
@@ -1255,11 +1408,12 @@ export class NCPOrchestrator {
     const crypto = require('crypto');
 
     for (const [mcpName, config] of Object.entries(profile.mcpServers)) {
-      // Hash command + args + env for change detection
+      // Hash command + args + env + url for change detection
       const configString = JSON.stringify({
         command: config.command,
         args: config.args || [],
-        env: config.env || {}
+        env: config.env || {},
+        url: config.url  // Include HTTP/SSE URL in hash
       });
 
       hashes[mcpName] = crypto.createHash('sha256').update(configString).digest('hex');
@@ -1384,7 +1538,6 @@ export class NCPOrchestrator {
 
       // Create temporary connection for resources request
       const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
-      const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
 
       const silentEnv = {
         ...process.env,
@@ -1394,11 +1547,7 @@ export class NCPOrchestrator {
         NO_COLOR: 'true'
       };
 
-      const transport = new StdioClientTransport({
-        command: definition.config.command,
-        args: definition.config.args || [],
-        env: silentEnv as Record<string, string>
-      });
+      const transport = await this.createTransport(definition.config, silentEnv);
 
       const client = new Client(
         { name: 'ncp-oss-resources', version: '1.0.0' },
@@ -1441,7 +1590,6 @@ export class NCPOrchestrator {
 
       // Create temporary connection for prompts request
       const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
-      const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
 
       const silentEnv = {
         ...process.env,
@@ -1451,11 +1599,7 @@ export class NCPOrchestrator {
         NO_COLOR: 'true'
       };
 
-      const transport = new StdioClientTransport({
-        command: definition.config.command,
-        args: definition.config.args || [],
-        env: silentEnv as Record<string, string>
-      });
+      const transport = await this.createTransport(definition.config, silentEnv);
 
       const client = new Client(
         { name: 'ncp-oss-prompts', version: '1.0.0' },
@@ -1644,6 +1788,84 @@ export class NCPOrchestrator {
         confidence: result.confidence * totalBoost
       };
     });
+  }
+
+  /**
+   * Trigger auto-import from MCP client
+   * Called by MCPServer after it receives clientInfo from initialize request
+   */
+  async triggerAutoImport(clientName: string): Promise<void> {
+    if (!this.profileManager) {
+      // ProfileManager not initialized yet, skip auto-import
+      logger.warn('ProfileManager not initialized, skipping auto-import');
+      return;
+    }
+
+    try {
+      await this.profileManager.tryAutoImportFromClient(clientName);
+    } catch (error: any) {
+      logger.error(`Auto-import failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Add internal MCPs to tool discovery
+   * Called after external MCPs are indexed
+   */
+  private addInternalMCPsToDiscovery(): void {
+    const internalMCPs = this.internalMCPManager.getAllInternalMCPs();
+
+    for (const mcp of internalMCPs) {
+      // Add to definitions (for consistency with external MCPs)
+      this.definitions.set(mcp.name, {
+        name: mcp.name,
+        config: {
+          name: mcp.name,
+          command: 'internal',
+          args: []
+        },
+        tools: mcp.tools.map(t => ({ name: t.name, description: t.description })),
+        serverInfo: {
+          name: mcp.name,
+          version: '1.0.0',
+          description: mcp.description
+        }
+      });
+
+      // Add tools to allTools and discovery
+      for (const tool of mcp.tools) {
+        const toolId = `${mcp.name}:${tool.name}`;
+
+        // Add to allTools
+        this.allTools.push({
+          name: tool.name,
+          description: tool.description,
+          mcpName: mcp.name
+        });
+
+        // Add to toolToMCP mapping
+        this.toolToMCP.set(toolId, mcp.name);
+      }
+
+      // Index in discovery engine
+      const discoveryTools = mcp.tools.map(t => ({
+        id: `${mcp.name}:${t.name}`,
+        name: t.name,
+        description: t.description
+      }));
+
+      this.discovery.indexMCPTools(mcp.name, discoveryTools);
+
+      logger.info(`Added internal MCP "${mcp.name}" with ${mcp.tools.length} tools`);
+    }
+  }
+
+  /**
+   * Get the ProfileManager instance
+   * Used by MCP server for management operations (add/remove MCPs)
+   */
+  getProfileManager(): ProfileManager | null {
+    return this.profileManager;
   }
 
   /**

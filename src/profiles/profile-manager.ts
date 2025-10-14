@@ -7,12 +7,21 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { getProfilesDirectory } from '../utils/ncp-paths.js';
-import { importFromClaudeDesktop, shouldAutoImport } from '../utils/claude-desktop-importer.js';
+import { importFromClient, shouldAttemptClientSync } from '../utils/client-importer.js';
+import type { OAuthConfig } from '../auth/oauth-device-flow.js';
 
 interface MCPConfig {
-  command: string;
+  command?: string;  // Optional: for stdio transport
   args?: string[];
   env?: Record<string, string>;
+  url?: string;  // Optional: for HTTP/SSE transport
+  auth?: {
+    type: 'oauth' | 'bearer' | 'apiKey' | 'basic';
+    oauth?: OAuthConfig;  // OAuth 2.0 Device Flow configuration
+    token?: string;       // Bearer token or API key
+    username?: string;    // Basic auth username
+    password?: string;    // Basic auth password
+  };
 }
 
 interface Profile {
@@ -48,34 +57,51 @@ export class ProfileManager {
       await this.createDefaultProfile();
     }
 
-    // Auto-sync from Claude Desktop (runs every startup to detect new MCPs)
-    await this.tryAutoImport();
+    // Note: Auto-import is now triggered separately via tryAutoImportFromClient()
+    // after MCP client is identified in the initialize request
   }
 
   /**
-   * Auto-sync MCPs from Claude Desktop on every startup
-   * Detects both JSON config and .mcpb extensions
+   * Auto-sync MCPs from any MCP client on every startup
+   * Detects both config files (JSON/TOML) and extensions (.dxt/dxt bundles)
    * Imports missing MCPs using add command for cache coherence
+   *
+   * Supports: Claude Desktop, Perplexity, Cursor, Cline, Continue, and more
+   *
+   * How it works:
+   * 1. Client identifies itself via MCP initialize request (clientInfo.name)
+   * 2. Name is matched against CLIENT_REGISTRY (with normalization)
+   * 3. Client-specific importer reads config and extensions
+   * 4. Missing MCPs are added to 'all' profile
+   *
+   * ⚠️ CRITICAL: This MUST target the 'all' profile - DO NOT CHANGE!
+   * Auto-imported MCPs go to 'all' to maintain consistency with manual `ncp add`.
    */
-  private async tryAutoImport(): Promise<void> {
+  async tryAutoImportFromClient(clientName: string): Promise<void> {
     try {
+      // Check if we should attempt auto-sync for this client
+      if (!shouldAttemptClientSync(clientName)) {
+        return; // Client config not found, skip auto-sync
+      }
+
       // Get current 'all' profile
+      // ⚠️ DO NOT CHANGE 'all' to 'default' or any other profile name!
       const allProfile = this.profiles.get('all');
       if (!allProfile) {
         return; // Should not happen, but guard anyway
       }
 
-      // Get MCPs from Claude Desktop (both JSON config and .mcpb extensions)
-      const importResult = await importFromClaudeDesktop();
+      // Get MCPs from client (both config and extensions)
+      const importResult = await importFromClient(clientName);
       if (!importResult || importResult.count === 0) {
-        return; // No Claude Desktop MCPs found
+        return; // No MCPs found in client
       }
 
       // Get existing MCPs in NCP profile
       const existingMCPs = allProfile.mcpServers || {};
       const existingMCPNames = new Set(Object.keys(existingMCPs));
 
-      // Find MCPs that are in Claude Desktop but NOT in NCP (missing MCPs)
+      // Find MCPs that are in client but NOT in NCP (missing MCPs)
       const missingMCPs: Array<{ name: string; config: any }> = [];
 
       for (const [mcpName, mcpConfig] of Object.entries(importResult.mcpServers)) {
@@ -85,7 +111,7 @@ export class ProfileManager {
       }
 
       if (missingMCPs.length === 0) {
-        return; // All Claude Desktop MCPs already in NCP
+        return; // All client MCPs already in NCP
       }
 
       // Import missing MCPs using add command (ensures cache coherence)
@@ -109,16 +135,16 @@ export class ProfileManager {
 
       if (imported.length > 0) {
         // Count by source for logging
-        const jsonCount = missingMCPs.filter(m => m.config._source === 'json').length;
-        const mcpbCount = missingMCPs.filter(m => m.config._source === '.mcpb').length;
+        const configCount = missingMCPs.filter(m => m.config._source !== '.dxt' && m.config._source !== 'dxt').length;
+        const extensionsCount = missingMCPs.filter(m => m.config._source === '.dxt' || m.config._source === 'dxt').length;
 
         // Log import summary
-        console.error(`\n✨ Auto-synced ${imported.length} new MCPs from Claude Desktop:`);
-        if (jsonCount > 0) {
-          console.error(`   - ${jsonCount} from claude_desktop_config.json`);
+        console.error(`\n✨ Auto-synced ${imported.length} new MCPs from ${importResult.clientName}:`);
+        if (configCount > 0) {
+          console.error(`   - ${configCount} from config file`);
         }
-        if (mcpbCount > 0) {
-          console.error(`   - ${mcpbCount} from .mcpb extensions`);
+        if (extensionsCount > 0) {
+          console.error(`   - ${extensionsCount} from extensions`);
         }
         console.error(`   → Added to ~/.ncp/profiles/all.json\n`);
       }
@@ -146,9 +172,22 @@ export class ProfileManager {
     }
   }
 
+  /**
+   * ⚠️ CRITICAL: Profile name MUST be 'all' - DO NOT CHANGE!
+   *
+   * This creates the universal 'all' profile that:
+   * 1. Is the default target for `ncp add`, `ncp config import`, auto-import
+   * 2. Merges all MCPs from other profiles at runtime
+   * 3. Is used by default when running NCP as MCP server
+   *
+   * DO NOT change the name to 'default' or anything else - it will break:
+   * - All CLI commands that depend on 'all' being the default
+   * - Auto-import from Claude Desktop
+   * - User expectations (docs say 'all' is the universal profile)
+   */
   private async createDefaultProfile(): Promise<void> {
     const defaultProfile: Profile = {
-      name: 'all',
+      name: 'all', // ⚠️ DO NOT CHANGE THIS NAME!
       description: 'Universal profile with all configured MCP servers',
       mcpServers: {},
       metadata: {
@@ -158,7 +197,7 @@ export class ProfileManager {
     };
 
     await this.saveProfile(defaultProfile);
-    this.profiles.set('all', defaultProfile);
+    this.profiles.set('all', defaultProfile); // ⚠️ DO NOT CHANGE THIS NAME!
   }
 
   async saveProfile(profile: Profile): Promise<void> {

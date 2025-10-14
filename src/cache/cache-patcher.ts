@@ -55,9 +55,10 @@ export interface EmbeddingsCache {
 }
 
 export interface MCPConfig {
-  command: string;
+  command?: string;  // Optional: for stdio transport
   args?: string[];
   env?: Record<string, string>;
+  url?: string;  // Optional: for HTTP/SSE transport
 }
 
 export class CachePatcher {

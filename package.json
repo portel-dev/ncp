@@ -1,6 +1,6 @@
 {
   "name": "@portel/ncp",
-  "version": "1.5.3",
+  "version": "1.5.2",
   "mcpName": "io.github.portel-dev/ncp",
   "description": "Natural Context Provider - N-to-1 MCP Orchestration for AI Assistants",
   "main": "dist/index.js",
@@ -29,8 +29,9 @@
     "test:cli": "bash test/cli-help-validation.sh",
     "test:pre-publish": "npm run test:critical && npm run test:integration",
     "test:package": "node scripts/test-package-locally.cjs",
-    "build:mcpb": "npm run build && npx @anthropic-ai/mcpb pack",
-    "build:dxt": "npm run build && rm -rf node_modules && npm ci --production && rm -f *.mcpb *.dxt && npx -y @anthropic-ai/mcpb@latest pack && mv *.mcpb ncp.dxt && npm ci",
+    "build:dxt": "npm run build && npm prune --production && npx @anthropic-ai/mcpb pack && npm run rename:dxt && npm install",
+    "rename:dxt": "for f in *.mcpb; do [ -f \"$f\" ] && mv \"$f\" \"${f%.mcpb}.dxt\" || true; done",
+    "stats": "node scripts/check-dxt-downloads.js",
     "prepack": "npm run build && npm run test:pre-publish",
     "prepublishOnly": "npm run build && npm run test:pre-publish && node scripts/sync-server-version.cjs",
     "release": "release-it",
@@ -42,7 +43,7 @@
     "ai-orchestration",
     "tool-discovery"
   ],
-  "author": "NCP Team",
+  "author": "Portel",
   "license": "Elastic-2.0",
   "repository": {
     "type": "git",

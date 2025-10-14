@@ -4,13 +4,39 @@
  * Automatically imports MCP configurations from Claude Desktop into NCP's profile system.
  * Detects and imports BOTH:
  * 1. Traditional MCPs from claude_desktop_config.json
- * 2. .mcpb-installed extensions from Claude Extensions directory
+ * 2. .dxt-installed extensions from Claude Extensions directory
  */
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { existsSync } from 'fs';
+
+/**
+ * Detect if we're running as .dxt bundle (always Claude Desktop)
+ */
+export function isRunningAsDXT(): boolean {
+  // Check if entry point is index-mcp.js (the .dxt entry point)
+  const entryPoint = process.argv[1] || '';
+  return entryPoint.includes('index-mcp.js');
+}
+
+/**
+ * Detect if we should attempt Claude Desktop auto-sync
+ * Returns true if:
+ * 1. Running as .dxt bundle (always Claude Desktop), OR
+ * 2. Claude Desktop directory exists (best-effort detection)
+ */
+export function shouldAttemptClaudeDesktopSync(): boolean {
+  // If running as .dxt, we know it's Claude Desktop
+  if (isRunningAsDXT()) {
+    return true;
+  }
+
+  // Otherwise, check if Claude Desktop directory exists
+  const claudeDir = getClaudeDesktopDir();
+  return existsSync(claudeDir);
+}
 
 /**
  * Get Claude Desktop directory path for the current platform
@@ -86,9 +112,9 @@ export function extractMCPServers(claudeConfig: any): Record<string, any> {
 }
 
 /**
- * Read .mcpb extensions from Claude Extensions directory
+ * Read .dxt extensions from Claude Extensions directory
  */
-export async function readMCPBExtensions(): Promise<Record<string, any>> {
+export async function readDXTExtensions(): Promise<Record<string, any>> {
   const extensionsDir = getClaudeExtensionsDir();
   const mcpServers: Record<string, any> = {};
 
@@ -130,7 +156,7 @@ export async function readMCPBExtensions(): Promise<Record<string, any>> {
             args,
             env: mcpConfig.env || {},
             // Add metadata for tracking
-            _source: '.mcpb',
+            _source: '.dxt',
             _extensionId: entry.name,
             _version: manifest.version
           };
@@ -141,14 +167,14 @@ export async function readMCPBExtensions(): Promise<Record<string, any>> {
       }
     }
   } catch (error) {
-    console.error(`Failed to read .mcpb extensions: ${error}`);
+    console.error(`Failed to read .dxt extensions: ${error}`);
   }
 
   return mcpServers;
 }
 
 /**
- * Import MCPs from Claude Desktop (both JSON config and .mcpb extensions)
+ * Import MCPs from Claude Desktop (both JSON config and .dxt extensions)
  * Returns the combined profile object ready to be saved
  */
 export async function importFromClaudeDesktop(): Promise<{
@@ -178,11 +204,11 @@ export async function importFromClaudeDesktop(): Promise<{
     }
   }
 
-  // 2. Import from .mcpb extensions
-  const mcpbMCPs = await readMCPBExtensions();
+  // 2. Import from .dxt extensions
+  const mcpbMCPs = await readDXTExtensions();
   mcpbCount = Object.keys(mcpbMCPs).length;
 
-  // Merge .mcpb extensions (json config takes precedence for same name)
+  // Merge .dxt extensions (json config takes precedence for same name)
   for (const [name, config] of Object.entries(mcpbMCPs)) {
     if (!(name in allMCPs)) {
       allMCPs[name] = config;
@@ -210,7 +236,7 @@ export async function importFromClaudeDesktop(): Promise<{
  * Check if we should auto-import (first run detection)
  * Returns true if:
  * 1. NCP profile doesn't exist OR is empty
- * 2. Claude Desktop has MCPs (in JSON config OR .mcpb extensions)
+ * 2. Claude Desktop has MCPs (in JSON config OR .dxt extensions)
  */
 export async function shouldAutoImport(ncpProfilePath: string): Promise<boolean> {
   // Check if NCP profile exists and has MCPs
@@ -231,7 +257,7 @@ export async function shouldAutoImport(ncpProfilePath: string): Promise<boolean>
     }
   }
 
-  // Check if Claude Desktop has MCPs to import (either JSON or .mcpb)
+  // Check if Claude Desktop has MCPs to import (either JSON or .dxt)
   const hasJsonConfig = hasClaudeDesktopConfig();
   const hasExtensions = existsSync(getClaudeExtensionsDir());
 
