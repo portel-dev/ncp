@@ -52,8 +52,8 @@ jobs:
       - name: Test package functionality
         run: npm run test:package
 
-      - name: Build MCPB bundle
-        run: npm run build:mcpb
+      - name: Build Desktop Extension (DXT)
+        run: npm run build:dxt
 
       - name: Get package version
         id: get_version
@@ -76,11 +76,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload MCPB bundle to release
+      - name: Upload Desktop Extension to release
         if: ${{ inputs.dry_run == false }}
         uses: softprops/action-gh-release@v1
         with:
-          files: ncp.mcpb
+          files: ncp.dxt
           tag_name: ${{ steps.get_version.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

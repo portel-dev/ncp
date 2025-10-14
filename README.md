@@ -129,12 +129,12 @@ With NCP's orchestration:
 
 **For Claude Desktop users** - Download and double-click to install:
 
-1. **Download NCP Bundle:** [ncp.mcpb](https://github.com/portel-dev/ncp/releases/latest/download/ncp.mcpb) from latest release
-2. **Double-click** the downloaded `ncp.mcpb` file
+1. **Download NCP Desktop Extension:** [ncp.dxt](https://github.com/portel-dev/ncp/releases/latest/download/ncp.dxt)
+2. **Double-click** the downloaded `ncp.dxt` file
 3. **Claude Desktop** will prompt you to install - click "Install"
 4. **Auto-import your existing MCPs** - NCP automatically detects and imports:
    - MCPs from `claude_desktop_config.json`
-   - .mcpb-installed extensions
+   - Other desktop extensions
 
 > 🎉 **First run magic:** NCP automatically imports all your existing Claude Desktop MCPs on first startup! No manual configuration needed.
 
@@ -165,14 +165,14 @@ nano ~/.ncp/profiles/all.json
 
 5. **Restart Claude Desktop** and NCP will load your configured MCPs
 
-> ℹ️ **About .mcpb installation:**
-> - **Slim & Fast:** .mcpb bundle is MCP-only (126KB, no CLI code)
+> ℹ️ **About .dxt (Desktop Extension) installation:**
+> - **Slim & Fast:** Desktop extension is MCP-only (126KB, no CLI code)
 > - **Manual config:** Edit JSON files directly (no `ncp add` command)
 > - **Power users:** Fastest startup, direct control over configuration
 > - **Optional CLI:** Install `npm install -g @portel/ncp` separately if you want CLI tools
 >
-> **Why .mcpb is slim:**
-> The .mcpb bundle excludes all CLI code, making it 13% smaller and faster to load than the full npm package. Perfect for production use where you manage configs manually or via automation.
+> **Why .dxt is slim:**
+> The desktop extension excludes all CLI code, making it 13% smaller and faster to load than the full npm package. Perfect for production use where you manage configs manually or via automation.
 
 ---
 
