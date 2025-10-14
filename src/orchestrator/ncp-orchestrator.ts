@@ -1455,8 +1455,25 @@ export class NCPOrchestrator {
   private enhanceErrorMessage(error: any, toolName: string, mcpName: string): string {
     const errorMessage = error.message || error.toString() || 'Unknown error';
 
-    // Always provide context and actionable guidance, regardless of specific error patterns
+    // Build detailed error message with all available error information
     let enhancedMessage = `Tool '${toolName}' failed in MCP '${mcpName}': ${errorMessage}`;
+
+    // Include error code if available (MCP protocol errors)
+    if (error.code !== undefined) {
+      enhancedMessage += `\nError Code: ${error.code}`;
+    }
+
+    // Include error data if available (additional context from MCP)
+    if (error.data) {
+      const errorData = typeof error.data === 'string' ? error.data : JSON.stringify(error.data, null, 2);
+      enhancedMessage += `\nDetails: ${errorData}`;
+    }
+
+    // Include stack trace for debugging (first few lines only)
+    if (error.stack && process.env.NCP_DEBUG === 'true') {
+      const stackLines = error.stack.split('\n').slice(0, 3).join('\n');
+      enhancedMessage += `\n\nStack Trace:\n${stackLines}`;
+    }
 
     // Add generic troubleshooting guidance
     const troubleshootingTips = [
@@ -1870,7 +1887,11 @@ export class NCPOrchestrator {
           command: 'internal',
           args: []
         },
-        tools: mcp.tools.map(t => ({ name: t.name, description: t.description })),
+        tools: mcp.tools.map(t => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema  // Include schema for parameter visibility
+        })),
         serverInfo: {
           name: mcp.name,
           version: '1.0.0',
@@ -1889,8 +1910,9 @@ export class NCPOrchestrator {
           mcpName: mcp.name
         });
 
-        // Add to toolToMCP mapping
-        this.toolToMCP.set(toolId, mcp.name);
+        // Add to toolToMCP mapping (both prefixed and unprefixed for consistency)
+        this.toolToMCP.set(tool.name, mcp.name);       // Unprefixed: "add" -> "ncp"
+        this.toolToMCP.set(toolId, mcp.name);          // Prefixed: "ncp:add" -> "ncp"
       }
 
       // Index in discovery engine
