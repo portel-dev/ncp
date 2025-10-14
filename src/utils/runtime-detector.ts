@@ -59,6 +59,35 @@ export function detectRuntime(): RuntimeInfo {
   }
 
   // Otherwise, we're running via system runtime
+  // When running as .dxt extension, PATH may not include common locations
+  // Use full paths to ensure executables can be found
+  const isRunningAsDxt = currentNodePath.includes('Claude Helper') ||
+                         currentNodePath.includes('Electron');
+
+  if (isRunningAsDxt) {
+    // Common system node locations
+    const commonNodePaths = [
+      '/opt/homebrew/bin/node',      // Homebrew on Apple Silicon
+      '/usr/local/bin/node',         // Homebrew on Intel Mac
+      '/usr/bin/node',               // Linux system
+      'C:\\Program Files\\nodejs\\node.exe'  // Windows
+    ];
+
+    // Find first existing node
+    const { existsSync } = require('fs');
+    const nodePath = commonNodePaths.find(p => existsSync(p)) || 'node';
+
+    // Derive npx and python paths
+    const npxPath = nodePath.replace(/\/node$/, '/npx').replace(/\\node\.exe$/, '\\npx.cmd');
+    const pythonPath = nodePath.replace(/\/node$/, '/python3').replace(/\\node\.exe$/, '\\python.exe');
+
+    return {
+      type: 'system',
+      nodePath,
+      pythonPath: existsSync(pythonPath) ? pythonPath : 'python3'
+    };
+  }
+
   return {
     type: 'system',
     nodePath: 'node', // Use system node
@@ -87,7 +116,13 @@ export function getRuntimeForExtension(command: string): string {
       const npxPath = runtime.nodePath.replace(/\/node$/, '/npx').replace(/\\node\.exe$/, '\\npx.cmd');
       return npxPath;
     }
-    // For system runtime, use system npx
+    // For system runtime, derive npx from node path
+    // If node path is absolute (starts with /), derive npx from it
+    if (runtime.nodePath.startsWith('/') || runtime.nodePath.startsWith('C:')) {
+      const npxPath = runtime.nodePath.replace(/\/node$/, '/npx').replace(/\\node\.exe$/, '\\npx.cmd');
+      return npxPath;
+    }
+    // Otherwise use system npx
     return 'npx';
   }
 
@@ -96,6 +131,24 @@ export function getRuntimeForExtension(command: string): string {
       command.endsWith('/python3') || command.endsWith('/python') ||
       command.endsWith('\\python.exe') || command.endsWith('\\python3.exe')) {
     return runtime.pythonPath || command; // Fallback to original if no Python detected
+  }
+
+  // Handle other common tools that may not be in PATH when running from .dxt
+  // Only resolve if running as .dxt (when node path is absolute)
+  if (runtime.nodePath.startsWith('/') || runtime.nodePath.startsWith('C:')) {
+    const { existsSync } = require('fs');
+
+    // Handle uv (Python package manager)
+    if (command === 'uv' || command.endsWith('/uv') || command.endsWith('\\uv.exe')) {
+      const commonUvPaths = [
+        '/Users/' + require('os').userInfo().username + '/.local/bin/uv',  // User install
+        '/opt/homebrew/bin/uv',         // Homebrew on Apple Silicon
+        '/usr/local/bin/uv',            // Homebrew on Intel Mac
+        '/usr/bin/uv'                   // Linux system
+      ];
+      const uvPath = commonUvPaths.find(p => existsSync(p));
+      if (uvPath) return uvPath;
+    }
   }
 
   // For other commands, return as-is
