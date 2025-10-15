@@ -51,15 +51,25 @@ export async function initializeExtension(): Promise<void> {
 
   if (config.debug) {
     process.env.NCP_DEBUG = 'true';
-    console.error('[Extension] Configuration:');
-    console.error(`  Profile: ${config.profile}`);
-    console.error(`  Config Path: ${config.configPath}`);
-    console.error(`  Global CLI: ${config.enableGlobalCLI}`);
-    console.error(`  Auto-import: ${config.autoImport}`);
+    // Note: Debug logs are now written to file instead of console
+    // to avoid Claude Desktop notification spam
   }
 
   // 1. Ensure config directory exists
   ensureConfigDirectory(config.configPath);
+
+  // Log configuration when debug is enabled
+  if (config.debug) {
+    logger.debug(`Extension Configuration:`);
+    logger.debug(`  Profile: ${config.profile}`);
+    logger.debug(`  Config Path: ${config.configPath}`);
+    logger.debug(`  Global CLI: ${config.enableGlobalCLI}`);
+    logger.debug(`  Auto-import: ${config.autoImport}`);
+    const logFile = logger.getLogFilePath();
+    if (logFile) {
+      logger.debug(`  Log file: ${logFile}`);
+    }
+  }
 
   // 2. Set up global CLI if enabled
   if (config.enableGlobalCLI) {
@@ -117,9 +127,7 @@ async function setupGlobalCLI(debug: boolean): Promise<void> {
       symlinkSync(ncpExecutable, globalLink);
       chmodSync(globalLink, 0o755);
       logger.info('✅ Global CLI access enabled: ncp command available');
-      if (debug) {
-        console.error(`[Extension] Created symlink: ${globalLink} -> ${ncpExecutable}`);
-      }
+      logger.debug(`Created symlink: ${globalLink} -> ${ncpExecutable}`);
     } catch (err: any) {
       // Likely permission error
       logger.warn(`Could not create global CLI link (requires sudo): ${err.message}`);
@@ -135,17 +143,13 @@ async function setupGlobalCLI(debug: boolean): Promise<void> {
  */
 async function autoImportClaudeMCPs(profileName: string, debug: boolean): Promise<void> {
   try {
-    if (debug) {
-      console.error('[Extension] Auto-importing Claude Desktop MCPs...');
-    }
+    logger.debug('Auto-importing Claude Desktop MCPs...');
 
     // Import from Claude Desktop
     const result = await importFromClient('claude-desktop');
 
     if (!result || result.count === 0) {
-      if (debug) {
-        console.error('[Extension] No MCPs found in Claude Desktop config');
-      }
+      logger.debug('No MCPs found in Claude Desktop config');
       return;
     }
 
@@ -174,17 +178,13 @@ async function autoImportClaudeMCPs(profileName: string, debug: boolean): Promis
       // Skip NCP instances (avoid importing ourselves!)
       if (isNCPInstance(name, config)) {
         skippedNCP++;
-        if (debug) {
-          console.error(`[Extension] Skipping ${name} (NCP instance - avoiding recursion)`);
-        }
+        logger.debug(`Skipping ${name} (NCP instance - avoiding recursion)`);
         continue;
       }
 
       // Skip if already exists (don't overwrite user configs)
       if (profile!.mcpServers[name]) {
-        if (debug) {
-          console.error(`[Extension] Skipping ${name} (already configured)`);
-        }
+        logger.debug(`Skipping ${name} (already configured)`);
         continue;
       }
 
@@ -195,10 +195,8 @@ async function autoImportClaudeMCPs(profileName: string, debug: boolean): Promis
       profile!.mcpServers[name] = config;
       importedCount++;
 
-      if (debug) {
-        const source = config._source || 'config';
-        console.error(`[Extension] Imported ${name} from ${source} (transport: ${transport})`);
-      }
+      const source = config._source || 'config';
+      logger.debug(`Imported ${name} from ${source} (transport: ${transport})`);
     }
 
     // Update metadata
@@ -211,9 +209,7 @@ async function autoImportClaudeMCPs(profileName: string, debug: boolean): Promis
     if (skippedNCP > 0) {
       logger.info(`   (Skipped ${skippedNCP} NCP instance${skippedNCP > 1 ? 's' : ''} to avoid recursion)`);
     }
-    if (debug) {
-      console.error(`[Extension] Total MCPs in profile: ${Object.keys(profile!.mcpServers).length}`);
-    }
+    logger.debug(`Total MCPs in profile: ${Object.keys(profile!.mcpServers).length}`);
   } catch (error: any) {
     logger.error(`Failed to auto-import Claude Desktop MCPs: ${error.message}`);
   }
