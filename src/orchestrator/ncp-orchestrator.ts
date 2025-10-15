@@ -802,7 +802,7 @@ export class NCPOrchestrator {
     }
   }
 
-  async find(query: string, limit: number = 5, detailed: boolean = false): Promise<DiscoveryResult[]> {
+  async find(query: string, limit: number = 5, detailed: boolean = false, confidenceThreshold: number = 0.35): Promise<DiscoveryResult[]> {
     if (!query) {
       // No query = list all tools, filtered by health
       const healthyTools = this.allTools.filter(tool => this.healthMonitor.getHealthyMCPs([tool.mcpName]).length > 0);
@@ -824,7 +824,7 @@ export class NCPOrchestrator {
     // DOUBLE SEARCH TECHNIQUE: Request 2x results to account for filtering disabled MCPs
     try {
       const doubleLimit = limit * 2; // Request double to account for filtered MCPs
-      const vectorResults = await this.discovery.findRelevantTools(query, doubleLimit);
+      const vectorResults = await this.discovery.findRelevantTools(query, doubleLimit, confidenceThreshold);
 
       // Apply universal term frequency scoring boost
       const adjustedResults = this.adjustScoresUniversally(query, vectorResults);

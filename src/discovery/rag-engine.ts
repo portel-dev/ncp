@@ -521,7 +521,7 @@ export class PersistentRAGEngine {
   /**
    * Discover tools using semantic similarity (or fallback to keyword matching)
    */
-  async discover(query: string, maxResults = 5): Promise<DiscoveryResult[]> {
+  async discover(query: string, maxResults = 5, confidenceThreshold = 0.35): Promise<DiscoveryResult[]> {
     if (!this.isInitialized) {
       logger.warn('⚠️ RAG engine not initialized, falling back to keyword matching');
       return this.fallbackKeywordSearch(query, maxResults);
@@ -654,9 +654,9 @@ export class PersistentRAGEngine {
         })
         .sort((a, b) => b.similarity - a.similarity) // Re-sort after boosting
         .slice(0, maxResults) // Take final top results
-        .filter(result => result.similarity > 0.3); // Final threshold
+        .filter(result => result.similarity > confidenceThreshold); // Apply configurable confidence threshold
 
-      logger.debug(`🎯 Found ${results.length} matches for "${query}"`);
+      logger.debug(`🎯 Found ${results.length} matches for "${query}" (threshold: ${confidenceThreshold})`);
       
       return results;
 

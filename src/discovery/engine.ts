@@ -22,14 +22,14 @@ export class DiscoveryEngine {
     logger.info(`[Discovery] RAG engine ready for semantic discovery in ${endTime - startTime}ms`);
   }
   
-  async findBestTool(description: string): Promise<{
+  async findBestTool(description: string, confidenceThreshold = 0.35): Promise<{
     name: string;
     confidence: number;
     reason: string;
   } | null> {
     try {
       // Use RAG for ALL semantic discovery - no hard-coded overrides
-      const results = await this.ragEngine.discover(description, 1);
+      const results = await this.ragEngine.discover(description, 1, confidenceThreshold);
       
       if (results.length > 0) {
         const best = results[0];
@@ -64,7 +64,7 @@ export class DiscoveryEngine {
   /**
    * Find multiple relevant tools using RAG discovery
    */
-  async findRelevantTools(description: string, limit: number = 15): Promise<Array<{
+  async findRelevantTools(description: string, limit: number = 15, confidenceThreshold = 0.35): Promise<Array<{
     name: string;
     confidence: number;
     reason: string;
@@ -74,7 +74,7 @@ export class DiscoveryEngine {
       logger.debug(`[Discovery] Starting search for: "${description}"`);
 
       // Use RAG for semantic discovery
-      const results = await this.ragEngine.discover(description, limit);
+      const results = await this.ragEngine.discover(description, limit, confidenceThreshold);
 
       const endTime = Date.now();
       logger.debug(`[Discovery] Search completed in ${endTime - startTime}ms, found ${results.length} results`);

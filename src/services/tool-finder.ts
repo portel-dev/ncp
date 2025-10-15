@@ -11,6 +11,7 @@ export interface FindOptions {
   limit?: number;
   depth?: number;
   mcpFilter?: string | null;
+  confidenceThreshold?: number;
 }
 
 export interface PaginationInfo {
@@ -50,7 +51,8 @@ export class ToolFinder {
       page = 1,
       limit = query ? 5 : 20,
       depth = 2,
-      mcpFilter = null
+      mcpFilter = null,
+      confidenceThreshold = 0.35
     } = options;
 
     // Detect MCP-specific search if not explicitly provided
@@ -62,7 +64,7 @@ export class ToolFinder {
     // Get results with proper confidence-based ordering from orchestrator
     // Request enough for pagination but not excessive amounts
     const searchLimit = Math.min(1000, (page * limit) + 50); // Get enough for current page + buffer
-    const allResults = await this.orchestrator.find(searchQuery, searchLimit, depth >= 1);
+    const allResults = await this.orchestrator.find(searchQuery, searchLimit, depth >= 1, confidenceThreshold);
 
     // Apply MCP filtering if detected
     const filteredResults = detectedMCPFilter ?

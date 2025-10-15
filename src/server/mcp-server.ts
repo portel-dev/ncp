@@ -199,7 +199,7 @@ export class MCPServer {
             },
             confidence_threshold: {
               type: 'number',
-              description: 'Minimum confidence level for search results (0.0-1.0, default: 0.3). Examples: 0.1=show all, 0.3=balanced, 0.5=strict, 0.7=very precise. Lower values show more loosely related tools, higher values show only close matches.'
+              description: 'Minimum confidence level for search results (0.0-1.0, default: 0.35). Examples: 0.1=show all, 0.35=balanced, 0.5=strict, 0.7=very precise. Lower values show more loosely related tools, higher values show only close matches.'
             },
             depth: {
               type: 'number',
@@ -298,6 +298,7 @@ export class MCPServer {
     const page = Math.max(1, args?.page || 1);
     const limit = args?.limit || (description ? 5 : 20);
     const depth = args?.depth !== undefined ? Math.max(0, Math.min(2, args.depth)) : 2;
+    const confidenceThreshold = args?.confidence_threshold !== undefined ? args.confidence_threshold : 0.35;
 
     // Use ToolFinder service for search logic - always run to get partial results
     const finder = new ToolFinder(this.orchestrator);
@@ -305,7 +306,8 @@ export class MCPServer {
       query: description,
       page,
       limit,
-      depth
+      depth,
+      confidenceThreshold
     });
 
     const { tools: results, groupedByMCP: mcpGroups, pagination, mcpFilter, isListing } = findResult;
