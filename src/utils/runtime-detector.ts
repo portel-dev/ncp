@@ -66,25 +66,38 @@ export function detectRuntime(): RuntimeInfo {
                          currentNodePath.includes('Electron');
 
   if (isRunningAsDxt) {
-    // Common system node locations
-    const commonNodePaths = [
-      '/opt/homebrew/bin/node',      // Homebrew on Apple Silicon
-      '/usr/local/bin/node',         // Homebrew on Intel Mac
-      '/usr/bin/node',               // Linux system
-      'C:\\Program Files\\nodejs\\node.exe'  // Windows
-    ];
+    // When running as .dxt, use platform-specific default paths
+    // Don't check existence (sandbox restrictions) - let spawn try the path
+    const platform = process.platform;
+    let nodePath: string;
+    let pythonPath: string;
 
-    // Find first existing node (using imported existsSync)
-    const nodePath = commonNodePaths.find(p => existsSync(p)) || 'node';
-
-    // Derive npx and python paths
-    const npxPath = nodePath.replace(/\/node$/, '/npx').replace(/\\node\.exe$/, '\\npx.cmd');
-    const pythonPath = nodePath.replace(/\/node$/, '/python3').replace(/\\node\.exe$/, '\\python.exe');
+    if (platform === 'darwin') {
+      // macOS: Check for Apple Silicon first, then Intel
+      const arch = process.arch;
+      if (arch === 'arm64') {
+        // Apple Silicon - Homebrew installs to /opt/homebrew
+        nodePath = '/opt/homebrew/bin/node';
+        pythonPath = '/opt/homebrew/bin/python3';
+      } else {
+        // Intel Mac - Homebrew installs to /usr/local
+        nodePath = '/usr/local/bin/node';
+        pythonPath = '/usr/local/bin/python3';
+      }
+    } else if (platform === 'win32') {
+      // Windows
+      nodePath = 'C:\\Program Files\\nodejs\\node.exe';
+      pythonPath = 'C:\\Python\\python.exe';
+    } else {
+      // Linux and others
+      nodePath = '/usr/bin/node';
+      pythonPath = '/usr/bin/python3';
+    }
 
     return {
       type: 'system',
       nodePath,
-      pythonPath: existsSync(pythonPath) ? pythonPath : 'python3'
+      pythonPath
     };
   }
 
@@ -138,14 +151,20 @@ export function getRuntimeForExtension(command: string): string {
   if (runtime.nodePath.startsWith('/') || runtime.nodePath.startsWith('C:')) {
     // Handle uv (Python package manager)
     if (command === 'uv' || command.endsWith('/uv') || command.endsWith('\\uv.exe')) {
-      const commonUvPaths = [
-        '/Users/' + userInfo().username + '/.local/bin/uv',  // User install
-        '/opt/homebrew/bin/uv',         // Homebrew on Apple Silicon
-        '/usr/local/bin/uv',            // Homebrew on Intel Mac
-        '/usr/bin/uv'                   // Linux system
-      ];
-      const uvPath = commonUvPaths.find(p => existsSync(p));
-      if (uvPath) return uvPath;
+      // Use platform-specific UV path (don't check existence due to sandbox)
+      const platform = process.platform;
+      const arch = process.arch;
+
+      if (platform === 'darwin') {
+        // Try user install first, then homebrew
+        const userUv = '/Users/' + userInfo().username + '/.local/bin/uv';
+        const homebrewUv = arch === 'arm64' ? '/opt/homebrew/bin/uv' : '/usr/local/bin/uv';
+        return userUv;  // Prefer user install
+      } else if (platform === 'win32') {
+        return 'uv.exe';  // Windows
+      } else {
+        return '/usr/bin/uv';  // Linux
+      }
     }
   }
 

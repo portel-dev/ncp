@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "ncp",
   "display_name": "NCP - Natural Context Provider",
-  "version": "1.5.0",
+  "version": "1.5.3",
   "description": "N-to-1 MCP Orchestration. Unified gateway for multiple MCP servers with intelligent tool discovery and auto-import.",
   "long_description": "NCP transforms N scattered MCP servers into 1 intelligent orchestrator. Your AI sees just 2 simple tools instead of 50+ complex ones, while NCP handles all the routing, discovery, and execution behind the scenes. Features: semantic search, token optimization (97% reduction), automatic tool discovery, multi-client auto-import (Claude Desktop, Perplexity, Cursor, Cline, Continue), dynamic runtime detection, and optional global CLI access.",
   "author": {
