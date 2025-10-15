@@ -108,15 +108,15 @@ export class NCPManagementMCP implements InternalMCP {
     },
     {
       name: 'export',
-      description: 'Export current NCP configuration',
+      description: 'Export current NCP configuration. Use clipboard for security (no chat history), response for transparency.',
       inputSchema: {
         type: 'object',
         properties: {
           to: {
             type: 'string',
-            enum: ['clipboard', 'file'],
+            enum: ['clipboard', 'response', 'file'],
             default: 'clipboard',
-            description: 'Export destination: clipboard (default) or file'
+            description: 'Export destination: clipboard (silent, secure), response (visible to AI), or file'
           },
           destination: {
             type: 'string',
@@ -562,15 +562,36 @@ export class NCPManagementMCP implements InternalMCP {
 
       switch (to) {
         case 'clipboard': {
-          // Return JSON in response for AI to present to user
-          // Works in all environments (no clipboard library dependency)
+          // Write to clipboard (security pattern - no chat history)
+          try {
+            const clipboardy = await import('clipboardy');
+            await clipboardy.default.write(jsonContent);
+            return {
+              success: true,
+              content: `✅ Copied ${Object.keys(mcps).length} MCPs from profile "${profile}" to clipboard\n\n` +
+                       `Use ncp:import with from=clipboard to restore later.`
+            };
+          } catch (error: any) {
+            // Clipboard failed - fallback to response mode
+            logger.warn(`Clipboard write failed: ${error.message}, falling back to response mode`);
+            return {
+              success: true,
+              content: `⚠️  Clipboard unavailable. Showing configuration instead:\n\n` +
+                       `\`\`\`json\n${jsonContent}\n\`\`\`\n\n` +
+                       `Please copy manually.`
+            };
+          }
+        }
+
+        case 'response': {
+          // Return JSON in response (visible to AI, for transparency)
           return {
             success: true,
             content: `✅ Exported ${Object.keys(mcps).length} MCPs from profile "${profile}"\n\n` +
-                     `📋 Configuration (copy and paste where needed):\n\n` +
+                     `📋 Configuration:\n\n` +
                      `\`\`\`json\n${jsonContent}\n\`\`\`\n\n` +
                      `💡 You can:\n` +
-                     `• Paste into another MCP client's config\n` +
+                     `• Copy and paste into another MCP client's config\n` +
                      `• Save to a file for backup\n` +
                      `• Share with your team\n` +
                      `• Use with 'ncp import' to restore later`
@@ -604,7 +625,7 @@ export class NCPManagementMCP implements InternalMCP {
         default:
           return {
             success: false,
-            error: `Invalid to parameter: ${to}. Use: clipboard or file`
+            error: `Invalid to parameter: ${to}. Use: clipboard, response, or file`
           };
       }
     } catch (error: any) {
