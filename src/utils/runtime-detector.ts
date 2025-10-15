@@ -45,35 +45,23 @@ export function detectRuntime(): RuntimeInfo {
     };
   }
 
-  // Check if execPath is inside Claude.app (might be different bundled path)
+  // Check if we're running inside Claude Desktop (as .dxt extension or otherwise)
+  // Note: Claude Desktop does NOT provide bundled Node/Python - it uses system runtimes
   const isInsideClaudeApp = currentNodePath.includes('/Claude.app/') ||
                             currentNodePath.includes('\\Claude\\') ||
-                            currentNodePath.includes('/Claude/');
+                            currentNodePath.includes('/Claude/') ||
+                            currentNodePath.includes('Claude Helper') ||
+                            currentNodePath.includes('Electron');
 
-  if (isInsideClaudeApp && claudeBundledNode && existsSync(claudeBundledNode)) {
-    // We're running from Claude Desktop, use its bundled runtimes
-    return {
-      type: 'bundled',
-      nodePath: claudeBundledNode,
-      pythonPath: claudeBundledPython || undefined
-    };
-  }
-
-  // Otherwise, we're running via system runtime
-  // When running as .dxt extension, PATH may not include common locations
-  // Use full paths to ensure executables can be found
-  const isRunningAsDxt = currentNodePath.includes('Claude Helper') ||
-                         currentNodePath.includes('Electron');
-
-  if (isRunningAsDxt) {
-    // When running as .dxt, use platform-specific default paths
-    // Don't check existence (sandbox restrictions) - let spawn try the path
+  if (isInsideClaudeApp) {
+    // Running inside Claude Desktop - use platform-specific system runtimes
+    // Claude Desktop expects node/npx/python3 to be available on the system
     const platform = process.platform;
     let nodePath: string;
     let pythonPath: string;
 
     if (platform === 'darwin') {
-      // macOS: Check for Apple Silicon first, then Intel
+      // macOS: Use Homebrew paths (most common install method)
       const arch = process.arch;
       if (arch === 'arm64') {
         // Apple Silicon - Homebrew installs to /opt/homebrew
@@ -85,11 +73,11 @@ export function detectRuntime(): RuntimeInfo {
         pythonPath = '/usr/local/bin/python3';
       }
     } else if (platform === 'win32') {
-      // Windows
+      // Windows - use common install locations
       nodePath = 'C:\\Program Files\\nodejs\\node.exe';
       pythonPath = 'C:\\Python\\python.exe';
     } else {
-      // Linux and others
+      // Linux - use system paths
       nodePath = '/usr/bin/node';
       pythonPath = '/usr/bin/python3';
     }

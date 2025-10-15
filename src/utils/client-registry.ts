@@ -79,18 +79,10 @@ export const CLIENT_REGISTRY: Record<string, ClientDefinition> = {
       linux: '~/.config/Claude/Claude Extensions'
     },
     mcpServersPath: 'mcpServers',
-    bundledRuntimes: {
-      node: {
-        darwin: '/Applications/Claude.app/Contents/Resources/app.asar.unpacked/node_modules/@anthropic-ai/node-wrapper/bin/node',
-        win32: '%LOCALAPPDATA%/Programs/Claude/resources/app.asar.unpacked/node_modules/@anthropic-ai/node-wrapper/bin/node.exe',
-        linux: '/opt/Claude/resources/app.asar.unpacked/node_modules/@anthropic-ai/node-wrapper/bin/node'
-      },
-      python: {
-        darwin: '/Applications/Claude.app/Contents/Resources/app.asar.unpacked/python/bin/python3',
-        win32: '%LOCALAPPDATA%/Programs/Claude/resources/app.asar.unpacked/python/python.exe',
-        linux: '/opt/Claude/resources/app.asar.unpacked/python/bin/python3'
-      }
-    },
+    // Note: Claude Desktop does NOT bundle Node/Python runtimes
+    // It uses system-installed runtimes (node, npx, python3)
+    // The bundled runtime paths below are kept for reference but do not exist
+    bundledRuntimes: undefined,
     runtimeSettingsPath: 'extensionSettings.useBuiltInNodeForMCP'
   },
 
