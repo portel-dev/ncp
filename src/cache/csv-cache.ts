@@ -6,6 +6,7 @@
 import { createWriteStream, existsSync, readFileSync, writeFileSync, WriteStream, fsync, openSync, fsyncSync, closeSync } from 'fs';
 import { mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
 import { logger } from '../utils/logger.js';
 
@@ -117,20 +118,20 @@ export class CSVCache {
    */
   private getNcpVersion(): string {
     try {
-      // Look for package.json in project root
-      const fs = require('fs');
-      const path = require('path');
+      // Get __dirname equivalent in ES modules
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
 
       // Try multiple paths to find package.json
       const possiblePaths = [
-        path.join(__dirname, '../../package.json'), // From dist/cache
-        path.join(process.cwd(), 'package.json'),   // From CWD
-        path.join(__dirname, '../../../package.json') // From node_modules
+        join(__dirname, '../../package.json'), // From dist/cache
+        join(process.cwd(), 'package.json'),   // From CWD
+        join(__dirname, '../../../package.json') // From node_modules
       ];
 
       for (const pkgPath of possiblePaths) {
-        if (fs.existsSync(pkgPath)) {
-          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        if (existsSync(pkgPath)) {
+          const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
           if (pkg.version) {
             return pkg.version;
           }
