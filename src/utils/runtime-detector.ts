@@ -6,6 +6,7 @@
  */
 
 import { existsSync } from 'fs';
+import { userInfo } from 'os';
 import { getBundledRuntimePath } from './client-registry.js';
 
 export interface RuntimeInfo {
@@ -73,8 +74,7 @@ export function detectRuntime(): RuntimeInfo {
       'C:\\Program Files\\nodejs\\node.exe'  // Windows
     ];
 
-    // Find first existing node
-    const { existsSync } = require('fs');
+    // Find first existing node (using imported existsSync)
     const nodePath = commonNodePaths.find(p => existsSync(p)) || 'node';
 
     // Derive npx and python paths
@@ -136,12 +136,10 @@ export function getRuntimeForExtension(command: string): string {
   // Handle other common tools that may not be in PATH when running from .dxt
   // Only resolve if running as .dxt (when node path is absolute)
   if (runtime.nodePath.startsWith('/') || runtime.nodePath.startsWith('C:')) {
-    const { existsSync } = require('fs');
-
     // Handle uv (Python package manager)
     if (command === 'uv' || command.endsWith('/uv') || command.endsWith('\\uv.exe')) {
       const commonUvPaths = [
-        '/Users/' + require('os').userInfo().username + '/.local/bin/uv',  // User install
+        '/Users/' + userInfo().username + '/.local/bin/uv',  // User install
         '/opt/homebrew/bin/uv',         // Homebrew on Apple Silicon
         '/usr/local/bin/uv',            // Homebrew on Intel Mac
         '/usr/bin/uv'                   // Linux system
