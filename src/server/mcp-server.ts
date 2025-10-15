@@ -10,6 +10,7 @@ import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import { ToolFinder } from '../services/tool-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { TextUtils } from '../utils/text-utils.js';
+import { RegistryClient } from '../services/registry-client.js';
 import chalk from 'chalk';
 
 interface MCPRequest {
@@ -365,10 +366,56 @@ export class MCPServer {
     }
 
     // Handle no results case (but only if not indexing - during indexing we already showed message above)
-    if (results.length === 0 && !progress) {
+    if (results.length === 0 && !progress && description) {
       output += `❌ No tools found for "${description}"\n\n`;
 
-      // Show sample of available MCPs
+      // Intelligent fallback: Search MCP registry for matching tools
+      try {
+        logger.debug(`Searching registry for: ${description}`);
+        const registryClient = new RegistryClient();
+        const registryCandidates = await registryClient.searchForSelection(description);
+
+        if (registryCandidates.length > 0) {
+          output += `💡 **I don't have this capability yet, but found ${registryCandidates.length} MCP${registryCandidates.length > 1 ? 's' : ''} in the registry that can help:**\n\n`;
+
+          // Show top 5 results
+          const topCandidates = registryCandidates.slice(0, 5);
+          topCandidates.forEach(candidate => {
+            const statusBadge = candidate.status === 'active' ? '⭐' : '📦';
+            const envInfo = candidate.envVars?.length ? ` ⚠️ Requires ${candidate.envVars.length} env var${candidate.envVars.length > 1 ? 's' : ''}` : '';
+            output += `${candidate.number}. ${statusBadge} **${candidate.displayName}**${envInfo}\n`;
+            output += `   ${candidate.description}\n`;
+            output += `   Version: ${candidate.version}\n\n`;
+          });
+
+          output += `\n🚀 **To install one of these MCPs:**\n\n`;
+          output += `**Option 1: Use discovery import (recommended):**\n`;
+          output += `\`\`\`\nrun("ncp:import", {\n`;
+          output += `  from: "discovery",\n`;
+          output += `  source: "${description}",\n`;
+          output += `  selection: "1"  // or "1,3,5" for multiple, or "*" for all\n`;
+          output += `})\n\`\`\`\n\n`;
+
+          output += `**Option 2: Direct add with clipboard secrets:**\n`;
+          output += `1. Copy config to clipboard (for secrets): \`{"env":{"API_KEY":"your_secret"}}\`\n`;
+          output += `2. Call: \`run("ncp:add", {mcp_name: "${topCandidates[0].displayName}", command: "${topCandidates[0].command}", args: ${JSON.stringify(topCandidates[0].args)}})\`\n\n`;
+
+          output += `💡 *MCPs will be available after NCP restarts.*`;
+
+          return {
+            jsonrpc: '2.0',
+            id: request.id,
+            result: {
+              content: [{ type: 'text', text: output }]
+            }
+          };
+        }
+      } catch (error: any) {
+        logger.warn(`Registry search failed: ${error.message}`);
+        // Continue to show available MCPs below
+      }
+
+      // Fallback: Show sample of available MCPs (if registry search failed or returned no results)
       const samples = await finder.getSampleTools(8);
 
       if (samples.length > 0) {
