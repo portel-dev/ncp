@@ -87,5 +87,6 @@ test-*.js
 experiment-*.js
 *-ecosystem.json
 
-# Date-prefixed AI exports
-2025-*.txt2025-10-15-improvements-for-desktop-extension.txt
+# Date-prefixed conversation exports (move to ~/Projects/ncp/ instead of deleting!)
+# See .conversation-exports.md for details
+2025-*.txt
