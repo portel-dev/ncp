@@ -562,11 +562,18 @@ export class NCPManagementMCP implements InternalMCP {
 
       switch (to) {
         case 'clipboard': {
-          const clipboardy = await import('clipboardy');
-          await clipboardy.default.write(jsonContent);
+          // Return JSON in response for AI to present to user
+          // Works in all environments (no clipboard library dependency)
           return {
             success: true,
-            content: `✅ Exported ${Object.keys(mcps).length} MCPs to clipboard`
+            content: `✅ Exported ${Object.keys(mcps).length} MCPs from profile "${profile}"\n\n` +
+                     `📋 Configuration (copy and paste where needed):\n\n` +
+                     `\`\`\`json\n${jsonContent}\n\`\`\`\n\n` +
+                     `💡 You can:\n` +
+                     `• Paste into another MCP client's config\n` +
+                     `• Save to a file for backup\n` +
+                     `• Share with your team\n` +
+                     `• Use with 'ncp import' to restore later`
           };
         }
 
