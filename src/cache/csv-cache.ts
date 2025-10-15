@@ -39,6 +39,7 @@ export interface CacheMetadata {
   version: string;
   profileName: string;
   profileHash: string;
+  ncpVersion: string; // Track NCP version to detect code changes
   createdAt: string;
   lastUpdated: string;
   totalMCPs: number;
@@ -65,17 +66,30 @@ export class CSVCache {
     // Ensure cache directory exists
     await mkdir(dirname(this.csvPath), { recursive: true });
 
+    // Get current NCP version
+    const currentVersion = this.getNcpVersion();
+
     // Load or create metadata
     if (existsSync(this.metaPath)) {
       try {
         const content = readFileSync(this.metaPath, 'utf-8');
         const parsed = JSON.parse(content);
         // Convert objects back to Maps
-        this.metadata = {
+        const loadedMetadata = {
           ...parsed,
           indexedMCPs: new Map(Object.entries(parsed.indexedMCPs || {})),
           failedMCPs: new Map(Object.entries(parsed.failedMCPs || {}))
         };
+
+        // Check if NCP version changed (code updated)
+        if (loadedMetadata.ncpVersion !== currentVersion) {
+          logger.info(`NCP version changed (${loadedMetadata.ncpVersion || 'unknown'} → ${currentVersion}), clearing failed MCPs`);
+          loadedMetadata.ncpVersion = currentVersion;
+          loadedMetadata.failedMCPs.clear(); // Clear failures when code changes
+        }
+
+        this.metadata = loadedMetadata;
+        this.saveMetadata();
       } catch (error) {
         logger.warn(`Failed to load cache metadata: ${error}`);
         this.metadata = null;
@@ -87,6 +101,7 @@ export class CSVCache {
         version: '1.0',
         profileName: this.profileName,
         profileHash: '',
+        ncpVersion: currentVersion,
         createdAt: new Date().toISOString(),
         lastUpdated: new Date().toISOString(),
         totalMCPs: 0,
@@ -94,6 +109,38 @@ export class CSVCache {
         indexedMCPs: new Map(),
         failedMCPs: new Map()
       };
+    }
+  }
+
+  /**
+   * Get NCP version from package.json
+   */
+  private getNcpVersion(): string {
+    try {
+      // Look for package.json in project root
+      const fs = require('fs');
+      const path = require('path');
+
+      // Try multiple paths to find package.json
+      const possiblePaths = [
+        path.join(__dirname, '../../package.json'), // From dist/cache
+        path.join(process.cwd(), 'package.json'),   // From CWD
+        path.join(__dirname, '../../../package.json') // From node_modules
+      ];
+
+      for (const pkgPath of possiblePaths) {
+        if (fs.existsSync(pkgPath)) {
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+          if (pkg.version) {
+            return pkg.version;
+          }
+        }
+      }
+
+      return '1.0.0'; // Fallback version
+    } catch (error) {
+      logger.debug(`Could not determine NCP version: ${error}`);
+      return '1.0.0';
     }
   }
 
