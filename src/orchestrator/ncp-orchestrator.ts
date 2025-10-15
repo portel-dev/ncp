@@ -227,8 +227,8 @@ export class NCPOrchestrator {
 
     // Debug logging
     if (process.env.NCP_DEBUG === 'true') {
-      console.error(`[DEBUG ORC] Initializing with profileName: ${this.profileName}`);
-      console.error(`[DEBUG ORC] Cache will use: ${this.csvCache ? 'csvCache exists' : 'NO CACHE'}`);
+      logger.debug(`[DEBUG ORC] Initializing with profileName: ${this.profileName}`);
+      logger.debug(`[DEBUG ORC] Cache will use: ${this.csvCache ? 'csvCache exists' : 'NO CACHE'}`);
     }
 
     logger.info(`Initializing NCP orchestrator with profile: ${this.profileName}`);
@@ -249,9 +249,9 @@ export class NCPOrchestrator {
     const profile = await this.loadProfile();
 
     if (process.env.NCP_DEBUG === 'true') {
-      console.error(`[DEBUG ORC] Loaded profile: ${profile ? 'YES' : 'NO'}`);
+      logger.debug(`[DEBUG ORC] Loaded profile: ${profile ? 'YES' : 'NO'}`);
       if (profile) {
-        console.error(`[DEBUG ORC] Profile MCPs: ${Object.keys(profile.mcpServers || {}).join(', ')}`);
+        logger.debug(`[DEBUG ORC] Profile MCPs: ${Object.keys(profile.mcpServers || {}).join(', ')}`);
       }
     }
 

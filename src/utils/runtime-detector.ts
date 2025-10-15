@@ -8,6 +8,7 @@
 import { existsSync } from 'fs';
 import { userInfo } from 'os';
 import { getBundledRuntimePath } from './client-registry.js';
+import { logger } from './logger.js';
 
 export interface RuntimeInfo {
   /** The runtime being used ('bundled' or 'system') */
@@ -165,11 +166,11 @@ export function getRuntimeForExtension(command: string): string {
  */
 export function logRuntimeInfo(): void {
   const runtime = detectRuntime();
-  console.log(`[Runtime Detection]`);
-  console.log(`  Type: ${runtime.type}`);
-  console.log(`  Node: ${runtime.nodePath}`);
+  logger.debug('[Runtime Detection]');
+  logger.debug(`  Type: ${runtime.type}`);
+  logger.debug(`  Node: ${runtime.nodePath}`);
   if (runtime.pythonPath) {
-    console.log(`  Python: ${runtime.pythonPath}`);
+    logger.debug(`  Python: ${runtime.pythonPath}`);
   }
-  console.log(`  Process execPath: ${process.execPath}`);
+  logger.debug(`  Process execPath: ${process.execPath}`);
 }
