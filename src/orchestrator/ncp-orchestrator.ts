@@ -1937,6 +1937,99 @@ export class NCPOrchestrator {
   }
 
   /**
+   * Get the profile name
+   * Used by MCP server for resource generation
+   */
+  getProfileName(): string {
+    return this.profileName;
+  }
+
+  /**
+   * Read a resource from an MCP by URI
+   * Used by MCP server to handle resources/read requests
+   */
+  async readResource(uri: string): Promise<string> {
+    // Parse URI to extract MCP name and resource path
+    // Format: mcp_name:resource_path or full URI
+    const uriParts = uri.split(':');
+    if (uriParts.length < 2) {
+      throw new Error(`Invalid resource URI format: ${uri}`);
+    }
+
+    const mcpName = uriParts[0];
+    const resourceUri = uriParts.slice(1).join(':'); // Rejoin in case URI has multiple colons
+
+    const definition = this.definitions.get(mcpName);
+    if (!definition) {
+      throw new Error(`MCP '${mcpName}' not found`);
+    }
+
+    // Create temporary connection to read resource
+    try {
+      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+
+      const silentEnv = {
+        ...process.env,
+        ...(definition.config.env || {}),
+        MCP_SILENT: 'true',
+        QUIET: 'true',
+        NO_COLOR: 'true'
+      };
+
+      const transport = await this.createTransport(definition.config, silentEnv);
+
+      const client = new Client(
+        { name: 'ncp-oss-resources', version: '1.0.0' },
+        { capabilities: {} }
+      );
+
+      // Connect with timeout
+      await withFilteredOutput(async () => {
+        await Promise.race([
+          client.connect(transport),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Resource connection timeout')), this.QUICK_PROBE_TIMEOUT)
+          )
+        ]);
+      });
+
+      // Read resource
+      const response = await withFilteredOutput(async () => {
+        return await client.readResource({ uri: resourceUri });
+      });
+
+      await client.close();
+
+      // Return the first content item's text
+      if (response.contents && response.contents.length > 0) {
+        const content = response.contents[0];
+        if (content && typeof content.text === 'string') {
+          return content.text;
+        }
+        if (content && content.text) {
+          return String(content.text);
+        }
+      }
+
+      return '';
+    } catch (error: any) {
+      logger.error(`Failed to read resource ${uri}: ${error.message}`);
+      throw new Error(`Failed to read resource from ${mcpName}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get auto-import summary
+   * Returns summary of last auto-import operation (if any)
+   */
+  getAutoImportSummary(): { count: number; source?: string; profile?: string; timestamp?: string; mcps?: Array<{ name: string; transport: string }>; skipped?: number } | null {
+    // For Phase 1, return null to show "no auto-import yet" message
+    // In the future, this could track actual auto-import data
+    // For now, we'll just return null which will trigger the appropriate message in the resource
+    return null;
+  }
+
+  /**
    * Hash a string for change detection
    */
   private hashString(str: string): string {

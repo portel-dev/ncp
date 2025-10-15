@@ -124,6 +124,9 @@ export class MCPServer {
         case 'resources/list':
           return this.handleListResources(request);
 
+        case 'resources/read':
+          return this.handleReadResource(request);
+
         default:
           return {
             jsonrpc: '2.0',
@@ -789,12 +792,36 @@ export class MCPServer {
 
   private async handleListResources(request: MCPRequest): Promise<MCPResponse> {
     try {
-      const resources = await this.orchestrator.getAllResources();
+      // Get resources from managed MCPs
+      const mcpResources = await this.orchestrator.getAllResources();
+
+      // Add NCP-specific help resources
+      const ncpResources = [
+        {
+          uri: 'ncp://help/getting-started',
+          name: 'NCP Getting Started Guide',
+          description: 'Learn how to use NCP effectively - search tips, parameters, and best practices',
+          mimeType: 'text/markdown'
+        },
+        {
+          uri: 'ncp://status/health',
+          name: 'MCP Health Dashboard',
+          description: 'Shows health status of all configured MCPs',
+          mimeType: 'text/markdown'
+        },
+        {
+          uri: 'ncp://status/auto-import',
+          name: 'Last Auto-Import Summary',
+          description: 'Shows MCPs imported from Claude Desktop on last startup',
+          mimeType: 'text/markdown'
+        }
+      ];
+
       return {
         jsonrpc: '2.0',
         id: request.id,
         result: {
-          resources: resources || []
+          resources: [...ncpResources, ...(mcpResources || [])]
         }
       };
     } catch (error: any) {
@@ -807,6 +834,309 @@ export class MCPServer {
         }
       };
     }
+  }
+
+  private async handleReadResource(request: MCPRequest): Promise<MCPResponse> {
+    const uri = request.params?.uri;
+
+    if (!uri) {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32602,
+          message: 'Missing required parameter: uri'
+        }
+      };
+    }
+
+    try {
+      // Handle NCP-specific resources
+      if (uri.startsWith('ncp://')) {
+        const content = await this.generateNCPResourceContent(uri);
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result: {
+            contents: [{
+              uri,
+              mimeType: 'text/markdown',
+              text: content
+            }]
+          }
+        };
+      }
+
+      // Delegate to orchestrator for MCP resources
+      const mcpContent = await this.orchestrator.readResource(uri);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          contents: [{
+            uri,
+            mimeType: 'text/plain',
+            text: mcpContent
+          }]
+        }
+      };
+    } catch (error: any) {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32603,
+          message: `Failed to read resource: ${error.message}`
+        }
+      };
+    }
+  }
+
+  private async generateNCPResourceContent(uri: string): Promise<string> {
+    switch (uri) {
+      case 'ncp://help/getting-started':
+        return this.generateGettingStartedGuide();
+
+      case 'ncp://status/health':
+        return this.generateHealthDashboard();
+
+      case 'ncp://status/auto-import':
+        return this.generateAutoImportSummary();
+
+      default:
+        throw new Error(`Unknown NCP resource: ${uri}`);
+    }
+  }
+
+  private generateGettingStartedGuide(): string {
+    return `# NCP Getting Started Guide
+
+## 🎯 Quick Start
+
+NCP provides two simple tools:
+
+1. **find()** - Discover tools across all your MCPs
+2. **run()** - Execute tools from any MCP
+
+## 🔍 Using find() - Tool Discovery
+
+### Search Mode (Describe Your Need)
+\`\`\`
+find("I want to read a file")
+find("send an email to the team")
+find("query my database")
+\`\`\`
+
+### Listing Mode (Browse All Tools)
+\`\`\`
+find()  // Shows all available tools
+\`\`\`
+
+## ⚙️ Advanced Parameters
+
+### Depth Control
+- **depth=0**: Tool names only (quick scan)
+- **depth=1**: Names + descriptions (overview)
+- **depth=2**: Full details with parameters (default, recommended)
+
+\`\`\`
+find("file operations", depth=1)
+\`\`\`
+
+### Confidence Threshold
+Control how strictly tools must match your query:
+- **0.1**: Show all loosely related tools
+- **0.35**: Balanced (default)
+- **0.5**: Strict matching
+- **0.7**: Very precise matches only
+
+\`\`\`
+find("database query", confidence_threshold=0.5)
+\`\`\`
+
+### Pagination
+\`\`\`
+find("file tools", page=2, limit=10)
+\`\`\`
+
+## 🚀 Using run() - Execute Tools
+
+Format: \`mcp_name:tool_name\`
+
+\`\`\`
+run("filesystem:read_file", {path: "/path/to/file.txt"})
+run("github:create_issue", {title: "Bug report", body: "..."})
+\`\`\`
+
+### Dry Run (Preview Only)
+\`\`\`
+run("filesystem:write_file", {path: "/tmp/test.txt", content: "..."}, dry_run=true)
+\`\`\`
+
+## 💡 Pro Tips
+
+1. **Describe intent, not tools**: "send notification" not "slack message"
+2. **Start broad, refine**: Lower confidence first, then increase
+3. **Use depth wisely**: depth=0 for quick scan, depth=2 for details
+4. **Check health**: Health status shows in find() results
+
+## 🔧 Managing MCPs
+
+### Install New MCPs
+When find() shows no results, NCP suggests MCPs from the registry:
+\`\`\`
+run("ncp:import", {from: "discovery", source: "your query", selection: "1"})
+\`\`\`
+
+### List Configured MCPs
+\`\`\`
+run("ncp:list", {profile: "all"})
+\`\`\`
+
+### Check Health
+Use the health dashboard resource (you're reading resources now!)
+
+## 🆘 Troubleshooting
+
+**No results?**
+- Try broader search terms
+- Lower confidence_threshold
+- Check MCP health status
+
+**Tool not found?**
+- Use find() to discover correct tool name
+- Format must be \`mcp:tool\` with colon
+
+**Slow indexing?**
+- NCP indexes in background
+- Partial results available immediately
+- Full results after indexing completes
+`;
+  }
+
+  private generateHealthDashboard(): string {
+    const healthStatus = this.orchestrator.getMCPHealthStatus();
+
+    let content = `# MCP Health Dashboard
+
+## Overall Status
+
+**${healthStatus.healthy}/${healthStatus.total} MCPs Healthy**
+
+`;
+
+    if (healthStatus.total === 0) {
+      content += `⚠️  No MCPs configured yet.
+
+To add MCPs, use:
+\`\`\`
+run("ncp:import", {from: "discovery", source: "your search"})
+\`\`\`
+
+Or manually:
+\`\`\`
+run("ncp:add", {mcp_name: "...", command: "...", args: [...]})
+\`\`\`
+`;
+      return content;
+    }
+
+    content += `## MCP Status\n\n`;
+
+    healthStatus.mcps.forEach(mcp => {
+      const icon = mcp.healthy ? '✅' : '❌';
+      const status = mcp.healthy ? 'Running' : 'Unavailable';
+      content += `${icon} **${mcp.name}**: ${status}\n`;
+    });
+
+    if (healthStatus.unhealthy > 0) {
+      content += `\n## ⚠️  Issues Found\n\n`;
+      content += `${healthStatus.unhealthy} MCP${healthStatus.unhealthy > 1 ? 's are' : ' is'} unavailable. This may be due to:\n\n`;
+      content += `- Missing dependencies or permissions\n`;
+      content += `- Incorrect configuration\n`;
+      content += `- Network connectivity issues\n`;
+      content += `- MCP server crashed or not running\n\n`;
+
+      content += `**To troubleshoot:**\n`;
+      content += `1. Check logs: \`~/.ncp/logs/ncp-debug-*.log\` (if debug enabled)\n`;
+      content += `2. Verify configuration: \`run("ncp:list")\`\n`;
+      content += `3. Try restarting NCP\n`;
+    }
+
+    content += `\n---\n\n`;
+    content += `**Profile**: ${this.orchestrator.getProfileName()}\n`;
+    content += `**Last Updated**: ${new Date().toLocaleString()}\n`;
+
+    return content;
+  }
+
+  private generateAutoImportSummary(): string {
+    // Try to get auto-import info from orchestrator
+    const autoImportInfo = this.orchestrator.getAutoImportSummary();
+
+    if (!autoImportInfo || autoImportInfo.count === 0) {
+      return `# Last Auto-Import Summary
+
+No auto-import has run yet, or no MCPs were found.
+
+## What is Auto-Import?
+
+NCP automatically imports MCPs from your MCP client (Claude Desktop, Perplexity, etc.) on startup.
+
+This means:
+- You configure MCPs once in your client
+- NCP automatically discovers and imports them
+- No manual configuration needed
+- Continuous sync on every startup
+
+## How It Works
+
+1. NCP detects it's running as an extension
+2. Scans client configuration files
+3. Imports all MCPs to your profile
+4. Skips NCP instances (avoids recursion)
+
+## Manual Import
+
+If auto-import didn't run or you want to import from a file:
+
+\`\`\`
+run("ncp:import", {from: "clipboard"})  // Copy config first
+run("ncp:import", {from: "file", source: "~/path/to/config.json"})
+\`\`\`
+`;
+    }
+
+    let content = `# Last Auto-Import Summary
+
+## ✅ Import Successful
+
+**${autoImportInfo.count} MCP${autoImportInfo.count > 1 ? 's' : ''} imported** from ${autoImportInfo.source || 'client'}
+
+`;
+
+    if (autoImportInfo.mcps && autoImportInfo.mcps.length > 0) {
+      content += `## Imported MCPs\n\n`;
+      autoImportInfo.mcps.forEach(mcp => {
+        const transport = mcp.transport || 'stdio';
+        content += `- **${mcp.name}** (${transport})\n`;
+      });
+    }
+
+    if (autoImportInfo.skipped && autoImportInfo.skipped > 0) {
+      content += `\n## ℹ️  Skipped\n\n`;
+      content += `${autoImportInfo.skipped} NCP instance${autoImportInfo.skipped > 1 ? 's' : ''} skipped (avoids recursion)\n`;
+    }
+
+    content += `\n---\n\n`;
+    content += `**Profile**: ${autoImportInfo.profile || 'all'}\n`;
+    content += `**Timestamp**: ${autoImportInfo.timestamp ? new Date(autoImportInfo.timestamp).toLocaleString() : 'Unknown'}\n\n`;
+
+    content += `## Next Import\n\n`;
+    content += `Auto-import runs automatically on every NCP startup.\n`;
+    content += `New MCPs will be detected and imported next time NCP restarts.\n`;
+
+    return content;
   }
 
   async cleanup(): Promise<void> {
