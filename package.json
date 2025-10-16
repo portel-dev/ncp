@@ -30,6 +30,8 @@
     "test:pre-publish": "npm run test:critical && npm run test:integration",
     "test:package": "node scripts/test-package-locally.cjs",
     "build:dxt": "npm run build && npm prune --production && npx @anthropic-ai/mcpb pack . ncp.dxt && npm install",
+    "build:dxt:signed": "npm run build:dxt && npx @anthropic-ai/mcpb sign ncp.dxt --self-signed",
+    "build:dxt:prod": "npm run build:dxt && npx @anthropic-ai/mcpb sign ncp.dxt --cert cert.pem --key key.pem",
     "stats": "node scripts/check-dxt-downloads.js",
     "prepack": "npm run build && npm run test:pre-publish",
     "prepublishOnly": "npm run build && npm run test:pre-publish && node scripts/sync-server-version.cjs",

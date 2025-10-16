@@ -9,6 +9,12 @@
     "name": "Portel",
     "url": "https://github.com/portel-dev/ncp"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/portel-dev/ncp"
+  },
+  "homepage": "https://github.com/portel-dev/ncp#readme",
+  "support": "https://github.com/portel-dev/ncp/issues",
   "user_config": {
     "profile": {
       "type": "string",

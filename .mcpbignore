@@ -42,6 +42,13 @@ dist/index.js.map
 .travis.yml
 .dockerignore
 
+# Signing certificates (never include in bundle)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
 # Other unnecessary files
 CHANGELOG.md
 CONTRIBUTING.md
@@ -49,3 +56,5 @@ CODE_OF_CONDUCT.md
 LICENSE
 .release-it.json
 .npmignore
+.dxtignore
+.mcpbignore
