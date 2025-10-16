@@ -1314,7 +1314,6 @@ testCmd
   .option('--profile <name>', 'Profile to test against (default: all)', 'all')
   .action(async (options) => {
     const { loadGlobalSettings } = await import('../utils/global-settings.js');
-    const { DiscoveryEngine } = await import('../discovery/engine.js');
     const { getCacheDirectory } = await import('../utils/ncp-paths.js');
     const { CSVCache } = await import('../cache/csv-cache.js');
     const { writeFileSync } = await import('fs');
@@ -1348,36 +1347,34 @@ testCmd
     const uniqueMCPs = new Set(allTools.map((t: any) => t.mcpName));
     console.log(chalk.green(`✓ Loaded ${allTools.length} tools from ${uniqueMCPs.size} MCPs\n`));
 
-    // Initialize discovery engine (vector search only, no MCP connections)
-    console.log(chalk.dim('Initializing vector search engine...'));
-    const discovery = new DiscoveryEngine();
-    await discovery.initialize();
+    // Initialize embedding model (just load model, no indexing!)
+    console.log(chalk.dim('Loading embedding model...'));
+    const { pipeline } = await import('@xenova/transformers');
+    const model = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { quantized: true });
+    console.log(chalk.green('✓ Model loaded\n'));
 
-    // Index cached tools into discovery engine
-    console.log(chalk.dim('Indexing tools for vector search...'));
-    const toolsByMCP = new Map<string, any[]>();
-    for (const tool of allTools) {
-      if (!toolsByMCP.has(tool.mcpName)) {
-        toolsByMCP.set(tool.mcpName, []);
+    // Generate embedding for the pattern (ONCE!)
+    console.log(chalk.dim('Creating embedding for modifier pattern...'));
+    const patternEmbedding = await model(pattern, { pooling: 'mean', normalize: true });
+    console.log(chalk.green('✓ Pattern embedding created\n'));
+
+    // Helper function for cosine similarity
+    const cosineSimilarity = (a: any, b: any): number => {
+      let dotProduct = 0;
+      let normA = 0;
+      let normB = 0;
+
+      for (let i = 0; i < a.length; i++) {
+        dotProduct += Number(a[i]) * Number(b[i]);
+        normA += Number(a[i]) * Number(a[i]);
+        normB += Number(b[i]) * Number(b[i]);
       }
-      toolsByMCP.get(tool.mcpName)!.push({
-        name: tool.toolName,
-        description: tool.description || ''
-      });
-    }
 
-    for (const [mcpName, tools] of toolsByMCP) {
-      await discovery.indexMCPToolsFromCache(mcpName, tools);
-    }
-    console.log(chalk.green(`✓ Indexed ${allTools.length} tools\n`));
+      return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    };
 
-    // Search for matches using the modifier pattern
-    console.log(chalk.dim('Analyzing tools against pattern...'));
-    const matches = await discovery.findRelevantTools(pattern, allTools.length, 0); // Get all matches with any confidence
-    console.log(chalk.green(`✓ Analysis complete\n`));
-
-    // Create lookup map for quick access
-    const matchMap = new Map(matches.map((m: any) => [m.name, m.confidence]));
+    // Analyze each tool against the pattern
+    console.log(chalk.dim(`Analyzing ${allTools.length} tools...\n`));
 
     // Prepare CSV data
     const csvRows: string[] = [];
@@ -1391,10 +1388,17 @@ testCmd
       confidence: number;
     }> = [];
 
+    let processed = 0;
+    const startTime = Date.now();
+
     // Process each tool
     for (const tool of allTools) {
-      const fullToolName = `${tool.mcpName}:${tool.toolName}`;
-      const confidence = matchMap.get(fullToolName) ?? 0;
+      // Create embedding for tool description
+      const toolText = `${tool.mcpName}:${tool.toolName} ${tool.description || ''}`;
+      const toolEmbedding = await model(toolText, { pooling: 'mean', normalize: true });
+
+      // Calculate similarity with pattern
+      const confidence = cosineSimilarity(patternEmbedding.data, toolEmbedding.data);
       const wouldTrigger = confidence >= threshold;
 
       if (wouldTrigger) {
@@ -1423,7 +1427,20 @@ testCmd
         wouldTrigger ? 'YES' : 'NO',
         confidence >= threshold ? 'YES' : 'NO'
       ].join(','));
+
+      // Progress indicator
+      processed++;
+      if (processed % 50 === 0) {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        const rate = (processed / (Date.now() - startTime) * 1000).toFixed(1);
+        process.stdout.write(`\r  Processed: ${processed}/${allTools.length} (${rate} tools/sec, ${elapsed}s elapsed)`);
+      }
     }
+
+    // Final progress update
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`\r  Processed: ${processed}/${allTools.length} (completed in ${totalTime}s)        `);
+    console.log();
 
     // Write CSV file
     writeFileSync(options.output, csvRows.join('\n'), 'utf-8');
