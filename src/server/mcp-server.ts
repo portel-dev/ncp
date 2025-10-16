@@ -11,7 +11,8 @@ import { ToolFinder } from '../services/tool-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { TextUtils } from '../utils/text-utils.js';
 import { RegistryClient } from '../services/registry-client.js';
-import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput } from './mcp-prompts.js';
+import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation, parseOperationConfirmationResponse } from './mcp-prompts.js';
+import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist } from '../utils/global-settings.js';
 import chalk from 'chalk';
 
 interface MCPRequest {
@@ -732,6 +733,105 @@ export class MCPServer {
     // Extract _meta for transparent passthrough (session_id, etc.)
     const meta = request.params?._meta;
 
+    // ===== CONFIRM-BEFORE-RUN FEATURE =====
+    // Check if this operation requires user confirmation
+    const userResponse = args._userResponse; // User's response from previous confirmation dialog
+
+    const settings = await loadGlobalSettings();
+    const confirmSettings = settings.confirmBeforeRun;
+
+    if (confirmSettings.enabled && !userResponse) {
+      // Check whitelist first
+      const isWhitelisted = await isToolWhitelisted(toolIdentifier);
+
+      if (!isWhitelisted) {
+        // Get tool description by searching for the tool
+        const toolSearchResults = await this.orchestrator.find(toolIdentifier, 1, true);
+        const toolDescription = toolSearchResults.length > 0 ? toolSearchResults[0].description || '' : '';
+
+        // Use vector search to check if tool matches modifier pattern
+        // Search the modifier pattern to see if the tool description matches
+        const searchQuery = `${toolIdentifier} ${toolDescription}`;
+        const matchResults = await this.orchestrator.find(confirmSettings.modifierPattern, 20, false, confirmSettings.vectorThreshold);
+
+        // Check if our tool is in the match results
+        const toolMatch = matchResults.find(result => result.toolName === toolIdentifier);
+
+        if (toolMatch && toolMatch.confidence >= confirmSettings.vectorThreshold) {
+          // Confirmation required - return error with prompt details
+          const confidencePercent = Math.round(toolMatch.confidence * 100);
+
+          // Format parameters for display
+          let parametersText = '';
+          if (Object.keys(parameters).length > 0) {
+            parametersText = '\n\nParameters:';
+            for (const [key, value] of Object.entries(parameters)) {
+              const valueStr = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+              parametersText += `\n  ${key}: ${valueStr}`;
+            }
+          } else {
+            parametersText = '\n\nParameters: (none)';
+          }
+
+          const [mcpName, toolName] = toolIdentifier.split(':');
+
+          const confirmationMessage = `⚠️ CONFIRMATION REQUIRED
+
+Tool: ${toolName}
+MCP: ${mcpName}
+
+Description:
+${toolDescription || 'No description available'}${parametersText}
+
+Reason: Matches modifier pattern (${confidencePercent}% confidence)
+Pattern: "${confirmSettings.modifierPattern}"
+
+This operation may modify data or have side effects.
+
+Do you want to proceed?
+- Reply "YES" to approve this once
+- Reply "ALWAYS" to approve and add to whitelist (won't ask again)
+- Reply "NO" to cancel
+
+Then call this tool again with your response in the _userResponse parameter.`;
+
+          return {
+            jsonrpc: '2.0',
+            id: request.id,
+            error: {
+              code: -32001, // Custom error code for confirmation required
+              message: confirmationMessage
+            }
+          };
+        }
+      }
+    }
+
+    // Handle user response if provided
+    if (userResponse) {
+      const response = parseOperationConfirmationResponse(userResponse);
+
+      if (response === 'cancel') {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32000,
+            message: `Operation cancelled by user. The tool "${toolIdentifier}" was not executed.`
+          }
+        };
+      }
+
+      if (response === 'always') {
+        // Add to whitelist
+        await addToolToWhitelist(toolIdentifier);
+        logger.info(`Tool ${toolIdentifier} added to whitelist by user`);
+      }
+
+      // For both 'once' and 'always', proceed with execution below
+    }
+    // ===== END CONFIRM-BEFORE-RUN =====
+
     if (dryRun) {
       // Dry run mode - show what would happen without executing
       const previewText = this.generateDryRunPreview(toolIdentifier, parameters);
@@ -849,6 +949,16 @@ export class MCPServer {
             args.mcp_name || 'unknown',
             args.config_type || 'configuration',
             args.description || 'Please provide configuration value'
+          );
+          break;
+
+        case 'confirm_operation':
+          messages = generateOperationConfirmation(
+            args.tool || 'unknown',
+            args.tool_description || '',
+            args.parameters ? (typeof args.parameters === 'string' ? JSON.parse(args.parameters) : args.parameters) : {},
+            args.matched_pattern || '',
+            args.confidence || 0
           );
           break;
 

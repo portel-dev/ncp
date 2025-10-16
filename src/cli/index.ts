@@ -1107,6 +1107,198 @@ configCmd
     await manager.showConfigLocations();
   });
 
+// Settings command group (human control only - NOT exposed to AI)
+const settingsCmd = program
+  .command('settings')
+  .description('Manage NCP global settings (confirm-before-run, etc.)');
+
+settingsCmd
+  .command('show')
+  .description('Show all global settings')
+  .action(async () => {
+    const { loadGlobalSettings, DEFAULT_SETTINGS } = await import('../utils/global-settings.js');
+    const settings = await loadGlobalSettings();
+
+    console.log(chalk.bold.white('\n⚙️  NCP Global Settings\n'));
+    console.log(chalk.cyan('Confirm Before Run:'));
+    console.log(`  Enabled: ${settings.confirmBeforeRun.enabled ? chalk.green('true') : chalk.yellow('false')}`);
+    console.log(`  Vector Threshold: ${chalk.cyan(settings.confirmBeforeRun.vectorThreshold.toString())} ${chalk.dim('(internal - tune manually)')}`);
+    console.log(`  Approved Tools: ${chalk.cyan(settings.confirmBeforeRun.approvedTools.length.toString())} whitelisted`);
+    console.log(chalk.dim(`  Pattern: ${settings.confirmBeforeRun.modifierPattern.substring(0, 80)}...`));
+
+    console.log(chalk.dim('\n💡 Use "ncp settings set <key> <value>" to change settings'));
+    console.log(chalk.dim('💡 Use "ncp settings whitelist" to manage approved tools\n'));
+  });
+
+settingsCmd
+  .command('get <key>')
+  .description('Get a specific setting value')
+  .action(async (key) => {
+    const { loadGlobalSettings } = await import('../utils/global-settings.js');
+    const settings = await loadGlobalSettings();
+
+    // Parse nested key (e.g., "confirmBeforeRun.enabled")
+    const keys = key.split('.');
+    let value: any = settings;
+    for (const k of keys) {
+      if (value && typeof value === 'object' && k in value) {
+        value = value[k];
+      } else {
+        console.log(chalk.red(`❌ Setting "${key}" not found`));
+        console.log(chalk.dim('\n💡 Available settings:'));
+        console.log(chalk.dim('  confirmBeforeRun.enabled'));
+        console.log(chalk.dim('  confirmBeforeRun.modifierPattern'));
+        console.log(chalk.dim('  confirmBeforeRun.vectorThreshold'));
+        return;
+      }
+    }
+
+    if (Array.isArray(value)) {
+      console.log(chalk.cyan(`${key}:`), chalk.white(JSON.stringify(value)));
+    } else if (typeof value === 'boolean') {
+      console.log(chalk.cyan(`${key}:`), value ? chalk.green('true') : chalk.yellow('false'));
+    } else {
+      console.log(chalk.cyan(`${key}:`), chalk.white(value.toString()));
+    }
+  });
+
+settingsCmd
+  .command('set <key> <value>')
+  .description('Set a specific setting value')
+  .action(async (key, value) => {
+    const { loadGlobalSettings, saveGlobalSettings } = await import('../utils/global-settings.js');
+    const settings = await loadGlobalSettings();
+
+    // Parse nested key (e.g., "confirmBeforeRun.enabled")
+    const keys = key.split('.');
+
+    // Validate key exists
+    let current: any = settings;
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (current && typeof current === 'object' && keys[i] in current) {
+        current = current[keys[i]];
+      } else {
+        console.log(chalk.red(`❌ Setting "${key}" not found`));
+        return;
+      }
+    }
+
+    const finalKey = keys[keys.length - 1];
+    if (!(finalKey in current)) {
+      console.log(chalk.red(`❌ Setting "${key}" not found`));
+      return;
+    }
+
+    // Parse value based on type
+    let parsedValue: any = value;
+    if (value === 'true') parsedValue = true;
+    else if (value === 'false') parsedValue = false;
+    else if (!isNaN(Number(value))) parsedValue = Number(value);
+
+    // Set the value
+    current[finalKey] = parsedValue;
+
+    await saveGlobalSettings(settings);
+    console.log(chalk.green(`✅ Updated ${key} = ${parsedValue}`));
+    console.log(chalk.dim('💡 Changes will take effect immediately\n'));
+  });
+
+settingsCmd
+  .command('reset')
+  .description('Reset all settings to defaults')
+  .action(async () => {
+    const { DEFAULT_SETTINGS, saveGlobalSettings } = await import('../utils/global-settings.js');
+
+    // Show confirmation
+    const prompts = (await import('prompts')).default;
+    const { confirm } = await prompts({
+      type: 'confirm',
+      name: 'confirm',
+      message: 'Reset all settings to defaults?',
+      initial: false
+    });
+
+    if (!confirm) {
+      console.log(chalk.yellow('❌ Cancelled'));
+      return;
+    }
+
+    await saveGlobalSettings({ ...DEFAULT_SETTINGS });
+    console.log(chalk.green('✅ Settings reset to defaults'));
+    console.log(chalk.dim('💡 Confirm-before-run is now ON by default\n'));
+  });
+
+settingsCmd
+  .command('whitelist')
+  .description('List all whitelisted tools')
+  .action(async () => {
+    const { loadGlobalSettings } = await import('../utils/global-settings.js');
+    const settings = await loadGlobalSettings();
+
+    console.log(chalk.bold.white('\n📋 Whitelisted Tools\n'));
+
+    if (settings.confirmBeforeRun.approvedTools.length === 0) {
+      console.log(chalk.dim('No tools whitelisted yet'));
+      console.log(chalk.dim('💡 Tools will be added when you click "Approve Always" in confirmation dialogs\n'));
+      return;
+    }
+
+    settings.confirmBeforeRun.approvedTools.forEach((tool, index) => {
+      console.log(`  ${index + 1}. ${chalk.cyan(tool)}`);
+    });
+
+    console.log(chalk.dim('\n💡 Use "ncp settings whitelist remove <tool>" to un-whitelist'));
+    console.log(chalk.dim('💡 Use "ncp settings whitelist clear" to remove all\n'));
+  });
+
+// Settings whitelist subcommand group
+const whitelistCmd = settingsCmd
+  .command('whitelist');
+
+whitelistCmd
+  .command('clear')
+  .description('Clear all whitelisted tools')
+  .action(async () => {
+    const { loadGlobalSettings, saveGlobalSettings } = await import('../utils/global-settings.js');
+    const settings = await loadGlobalSettings();
+
+    if (settings.confirmBeforeRun.approvedTools.length === 0) {
+      console.log(chalk.yellow('⚠️  Whitelist is already empty'));
+      return;
+    }
+
+    const count = settings.confirmBeforeRun.approvedTools.length;
+    settings.confirmBeforeRun.approvedTools = [];
+
+    await saveGlobalSettings(settings);
+    console.log(chalk.green(`✅ Cleared ${count} tool(s) from whitelist\n`));
+  });
+
+whitelistCmd
+  .command('remove <tool>')
+  .description('Remove a specific tool from whitelist')
+  .action(async (tool) => {
+    const { loadGlobalSettings, removeToolFromWhitelist } = await import('../utils/global-settings.js');
+    const settings = await loadGlobalSettings();
+
+    if (!settings.confirmBeforeRun.approvedTools.includes(tool)) {
+      console.log(chalk.yellow(`⚠️  Tool "${tool}" is not whitelisted`));
+
+      // Show similar tools
+      const similar = findSimilarNames(tool, settings.confirmBeforeRun.approvedTools);
+      if (similar.length > 0) {
+        console.log(chalk.dim('\n💡 Did you mean:'));
+        similar.forEach((suggestion, index) => {
+          console.log(`  ${index + 1}. ${chalk.cyan(suggestion)}`);
+        });
+      }
+      return;
+    }
+
+    await removeToolFromWhitelist(tool);
+    console.log(chalk.green(`✅ Removed "${tool}" from whitelist\n`));
+  });
+
 
 // Repair command - fix failed MCPs interactively
 program

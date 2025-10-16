@@ -97,6 +97,37 @@ export const NCP_PROMPTS: Prompt[] = [
         required: true
       }
     ]
+  },
+  {
+    name: 'confirm_operation',
+    description: 'Request user confirmation before executing modifier operations',
+    arguments: [
+      {
+        name: 'tool',
+        description: 'Tool identifier (mcp:tool format)',
+        required: true
+      },
+      {
+        name: 'tool_description',
+        description: 'Description of what the tool does',
+        required: false
+      },
+      {
+        name: 'parameters',
+        description: 'JSON string of parameters being passed',
+        required: false
+      },
+      {
+        name: 'matched_pattern',
+        description: 'The modifier pattern that matched',
+        required: false
+      },
+      {
+        name: 'confidence',
+        description: 'Match confidence (0.0-1.0)',
+        required: false
+      }
+    ]
   }
 ];
 
@@ -178,11 +209,94 @@ export function generateConfigInput(
 }
 
 /**
+ * Generate prompt message for operation confirmation (confirm-before-run feature)
+ *
+ * Shows rich dialog with tool description, parameters, and reason for confirmation.
+ * User can approve once, approve always (whitelist), or cancel.
+ */
+export function generateOperationConfirmation(
+  toolIdentifier: string,
+  toolDescription: string,
+  parameters: Record<string, any>,
+  matchedPattern: string,
+  confidence: number
+): PromptMessage[] {
+  const [mcpName, toolName] = toolIdentifier.split(':');
+
+  // Format parameters nicely
+  let parametersText = '';
+  if (Object.keys(parameters).length > 0) {
+    parametersText = '\n\nParameters:';
+    for (const [key, value] of Object.entries(parameters)) {
+      const valueStr = typeof value === 'string'
+        ? value
+        : JSON.stringify(value, null, 2);
+      parametersText += `\n  ${key}: ${valueStr}`;
+    }
+  } else {
+    parametersText = '\n\nParameters: (none)';
+  }
+
+  const confidencePercent = Math.round(confidence * 100);
+
+  return [
+    {
+      role: 'user',
+      content: {
+        type: 'text',
+        text: `⚠️ CONFIRMATION REQUIRED
+
+Tool: ${toolName}
+MCP: ${mcpName}
+
+Description:
+${toolDescription || 'No description available'}${parametersText}
+
+Reason: Matches modifier pattern (${confidencePercent}% confidence)
+Pattern: "${matchedPattern}"
+
+This operation may modify data or have side effects.
+
+Do you want to proceed?
+- Reply "YES" to approve this once
+- Reply "ALWAYS" to approve and add to whitelist (won't ask again)
+- Reply "NO" to cancel`
+      }
+    },
+    {
+      role: 'assistant',
+      content: {
+        type: 'text',
+        text: 'Please respond with YES (once), ALWAYS (whitelist), or NO (cancel).'
+      }
+    }
+  ];
+}
+
+/**
  * Parse user response from prompt
  */
 export function parseConfirmationResponse(response: string): boolean {
   const normalized = response.trim().toLowerCase();
   return normalized === 'yes' || normalized === 'y' || normalized === 'confirm';
+}
+
+/**
+ * Parse operation confirmation response
+ * Returns: 'once' | 'always' | 'cancel'
+ */
+export function parseOperationConfirmationResponse(response: string): 'once' | 'always' | 'cancel' {
+  const normalized = response.trim().toLowerCase();
+
+  if (normalized === 'always' || normalized === 'whitelist') {
+    return 'always';
+  }
+
+  if (normalized === 'yes' || normalized === 'y' || normalized === 'approve' || normalized === 'confirm') {
+    return 'once';
+  }
+
+  return 'cancel';
 }
 
 /**
