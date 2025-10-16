@@ -1300,6 +1300,161 @@ whitelistCmd
   });
 
 
+// Test command group
+const testCmd = program
+  .command('test')
+  .description('Run diagnostic tests and analysis');
+
+testCmd
+  .command('confirm-pattern')
+  .description('Test confirm-before-run pattern against all MCP tools')
+  .option('--threshold <number>', 'Override vector threshold (0.0-1.0)', parseFloat)
+  .option('--pattern <text>', 'Override modifier pattern to test')
+  .option('--output <file>', 'Output CSV file path', './confirm-pattern-results.csv')
+  .option('--profile <name>', 'Profile to test against (default: all)', 'all')
+  .action(async (options) => {
+    const { loadGlobalSettings } = await import('../utils/global-settings.js');
+    const { DiscoveryEngine } = await import('../discovery/engine.js');
+    const { getCacheDirectory } = await import('../utils/ncp-paths.js');
+    const { CSVCache } = await import('../cache/csv-cache.js');
+    const { writeFileSync } = await import('fs');
+
+    console.log(chalk.bold.white('\n🧪 Testing Confirm-Before-Run Pattern\n'));
+
+    // Load settings
+    const settings = await loadGlobalSettings();
+    const threshold = options.threshold ?? settings.confirmBeforeRun.vectorThreshold;
+    const pattern = options.pattern ?? settings.confirmBeforeRun.modifierPattern;
+    const profileName = options.profile;
+
+    console.log(chalk.cyan('Profile:'), chalk.white(profileName));
+    console.log(chalk.cyan('Pattern:'), chalk.dim(pattern.substring(0, 100) + '...'));
+    console.log(chalk.cyan('Threshold:'), chalk.white(threshold.toString()));
+    console.log(chalk.cyan('Output:'), chalk.white(options.output));
+    console.log();
+
+    // Load cached tools (no MCP connections needed!)
+    console.log(chalk.dim('Loading cached MCP tools...'));
+    const cache = new CSVCache(getCacheDirectory(), profileName);
+    await cache.initialize();
+    const allTools = cache.loadCachedTools();
+
+    if (allTools.length === 0) {
+      console.log(chalk.yellow('⚠️  No tools found in cache.'));
+      console.log(chalk.dim('💡 Run "ncp start" first to index your MCPs\n'));
+      return;
+    }
+
+    const uniqueMCPs = new Set(allTools.map((t: any) => t.mcpName));
+    console.log(chalk.green(`✓ Loaded ${allTools.length} tools from ${uniqueMCPs.size} MCPs\n`));
+
+    // Initialize discovery engine (vector search only, no MCP connections)
+    console.log(chalk.dim('Initializing vector search engine...'));
+    const discovery = new DiscoveryEngine();
+    await discovery.initialize();
+
+    // Index cached tools into discovery engine
+    console.log(chalk.dim('Indexing tools for vector search...'));
+    const toolsByMCP = new Map<string, any[]>();
+    for (const tool of allTools) {
+      if (!toolsByMCP.has(tool.mcpName)) {
+        toolsByMCP.set(tool.mcpName, []);
+      }
+      toolsByMCP.get(tool.mcpName)!.push({
+        name: tool.toolName,
+        description: tool.description || ''
+      });
+    }
+
+    for (const [mcpName, tools] of toolsByMCP) {
+      await discovery.indexMCPToolsFromCache(mcpName, tools);
+    }
+    console.log(chalk.green(`✓ Indexed ${allTools.length} tools\n`));
+
+    // Search for matches using the modifier pattern
+    console.log(chalk.dim('Analyzing tools against pattern...'));
+    const matches = await discovery.findRelevantTools(pattern, allTools.length, 0); // Get all matches with any confidence
+    console.log(chalk.green(`✓ Analysis complete\n`));
+
+    // Create lookup map for quick access
+    const matchMap = new Map(matches.map((m: any) => [m.name, m.confidence]));
+
+    // Prepare CSV data
+    const csvRows: string[] = [];
+    csvRows.push('MCP,Tool,Description,Confidence,Would Trigger,Above Threshold');
+
+    let triggeredCount = 0;
+    const triggeredTools: Array<{
+      mcp: string;
+      tool: string;
+      description: string;
+      confidence: number;
+    }> = [];
+
+    // Process each tool
+    for (const tool of allTools) {
+      const fullToolName = `${tool.mcpName}:${tool.toolName}`;
+      const confidence = matchMap.get(fullToolName) ?? 0;
+      const wouldTrigger = confidence >= threshold;
+
+      if (wouldTrigger) {
+        triggeredCount++;
+        triggeredTools.push({
+          mcp: tool.mcpName,
+          tool: tool.toolName,
+          description: tool.description || '',
+          confidence
+        });
+      }
+
+      // Escape CSV fields
+      const escapeCsv = (field: string) => {
+        if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+          return `"${field.replace(/"/g, '""')}"`;
+        }
+        return field;
+      };
+
+      csvRows.push([
+        escapeCsv(tool.mcpName),
+        escapeCsv(tool.toolName),
+        escapeCsv(tool.description || ''),
+        confidence.toFixed(4),
+        wouldTrigger ? 'YES' : 'NO',
+        confidence >= threshold ? 'YES' : 'NO'
+      ].join(','));
+    }
+
+    // Write CSV file
+    writeFileSync(options.output, csvRows.join('\n'), 'utf-8');
+    console.log(chalk.green(`✓ Results written to ${options.output}\n`));
+
+    // Display statistics
+    console.log(chalk.bold.white('📊 Statistics:\n'));
+    console.log(`  Total tools: ${chalk.cyan(allTools.length.toString())}`);
+    console.log(`  Would trigger: ${chalk.yellow(triggeredCount.toString())} (${chalk.yellow((triggeredCount / allTools.length * 100).toFixed(1) + '%')})`);
+    console.log(`  Would not trigger: ${chalk.green((allTools.length - triggeredCount).toString())} (${chalk.green(((allTools.length - triggeredCount) / allTools.length * 100).toFixed(1) + '%')})`);
+    console.log();
+
+    // Show top triggered tools
+    if (triggeredTools.length > 0) {
+      console.log(chalk.bold.white('🔝 Top 10 Triggered Tools (by confidence):\n'));
+      const sorted = triggeredTools.sort((a, b) => b.confidence - a.confidence).slice(0, 10);
+
+      sorted.forEach((t, index) => {
+        const confidencePercent = Math.round(t.confidence * 100);
+        const confidenceColor = t.confidence >= 0.8 ? chalk.red : t.confidence >= 0.7 ? chalk.yellow : chalk.cyan;
+        console.log(`  ${index + 1}. ${chalk.cyan(t.mcp + ':' + t.tool)} ${confidenceColor(confidencePercent + '%')}`);
+        console.log(`     ${chalk.dim(t.description.substring(0, 80))}${t.description.length > 80 ? '...' : ''}`);
+      });
+      console.log();
+    }
+
+    console.log(chalk.dim('💡 Review the CSV file to analyze all results'));
+    console.log(chalk.dim('💡 Use --threshold to test different sensitivity levels'));
+    console.log(chalk.dim('💡 Use --pattern to test different modifier patterns\n'));
+  });
+
 // Repair command - fix failed MCPs interactively
 program
   .command('repair')
