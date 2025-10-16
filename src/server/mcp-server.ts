@@ -11,6 +11,7 @@ import { ToolFinder } from '../services/tool-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { TextUtils } from '../utils/text-utils.js';
 import { RegistryClient } from '../services/registry-client.js';
+import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput } from './mcp-prompts.js';
 import chalk from 'chalk';
 
 interface MCPRequest {
@@ -121,6 +122,9 @@ export class MCPServer {
         case 'prompts/list':
           return this.handleListPrompts(request);
 
+        case 'prompts/get':
+          return this.handleGetPrompt(request);
+
         case 'resources/list':
           return this.handleListResources(request);
 
@@ -168,7 +172,8 @@ export class MCPServer {
       result: {
         protocolVersion: '2024-11-05',
         capabilities: {
-          tools: {}
+          tools: {},
+          prompts: {}
         },
         serverInfo: {
           name: 'ncp',
@@ -770,12 +775,12 @@ export class MCPServer {
 
   private async handleListPrompts(request: MCPRequest): Promise<MCPResponse> {
     try {
-      const prompts = await this.orchestrator.getAllPrompts();
+      // Return NCP's own prompts for user approval during MCP management
       return {
         jsonrpc: '2.0',
         id: request.id,
         result: {
-          prompts: prompts || []
+          prompts: NCP_PROMPTS
         }
       };
     } catch (error: any) {
@@ -785,6 +790,95 @@ export class MCPServer {
         id: request.id,
         result: {
           prompts: []
+        }
+      };
+    }
+  }
+
+  private async handleGetPrompt(request: MCPRequest): Promise<MCPResponse> {
+    const promptName = request.params?.name;
+    const args = request.params?.arguments || {};
+
+    if (!promptName) {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32602,
+          message: 'Missing required parameter: name'
+        }
+      };
+    }
+
+    try {
+      // Find the prompt definition
+      const promptDef = NCP_PROMPTS.find(p => p.name === promptName);
+
+      if (!promptDef) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32602,
+            message: `Unknown prompt: ${promptName}`
+          }
+        };
+      }
+
+      // Generate prompt content based on prompt name
+      let messages;
+      switch (promptName) {
+        case 'confirm_add_mcp':
+          messages = generateAddConfirmation(
+            args.mcp_name || 'unknown',
+            args.command || 'unknown',
+            args.args || [],
+            args.profile || 'all'
+          );
+          break;
+
+        case 'confirm_remove_mcp':
+          messages = generateRemoveConfirmation(
+            args.mcp_name || 'unknown',
+            args.profile || 'all'
+          );
+          break;
+
+        case 'configure_mcp':
+          messages = generateConfigInput(
+            args.mcp_name || 'unknown',
+            args.config_type || 'configuration',
+            args.description || 'Please provide configuration value'
+          );
+          break;
+
+        default:
+          return {
+            jsonrpc: '2.0',
+            id: request.id,
+            error: {
+              code: -32602,
+              message: `Prompt ${promptName} not implemented`
+            }
+          };
+      }
+
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          description: promptDef.description,
+          messages
+        }
+      };
+    } catch (error: any) {
+      logger.error(`Error getting prompt: ${error.message}`);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32603,
+          message: `Failed to get prompt: ${error.message}`
         }
       };
     }
