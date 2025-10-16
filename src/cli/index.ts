@@ -642,6 +642,159 @@ program
     console.log(chalk.dim('  •') + ' Test discovery: ' + chalk.cyan('ncp find <query>'));
   });
 
+// Add HTTP/SSE MCP command
+program
+  .command('add-http <name> <url>')
+  .description('Add an HTTP/SSE MCP server to a profile')
+  .option('--profile <names...>', 'Profile(s) to add to (can specify multiple, default: all)')
+  .option('--auth-type <type>', 'Authentication type: bearer, oauth, apiKey, basic')
+  .option('--token <token>', 'Bearer token or API key')
+  .option('--client-id <id>', 'OAuth client ID')
+  .option('--client-secret <secret>', 'OAuth client secret')
+  .option('--device-auth-url <url>', 'OAuth device authorization URL')
+  .option('--token-url <url>', 'OAuth token URL')
+  .option('--scopes <scopes...>', 'OAuth scopes')
+  .option('--username <username>', 'Basic auth username')
+  .option('--password <password>', 'Basic auth password')
+  .action(async (name, url, options) => {
+    console.log(`\n${chalk.blue(`🌐 Adding HTTP/SSE MCP server: ${chalk.bold(name)}`)}`);
+    console.log(chalk.dim(`   URL: ${url}`));
+
+    const manager = new ProfileManager();
+    await manager.initialize();
+
+    // Build auth config
+    let auth: any | undefined;
+
+    if (options.authType) {
+      console.log(chalk.dim(`   Auth type: ${options.authType}`));
+
+      switch (options.authType) {
+        case 'bearer':
+          if (!options.token) {
+            console.log(chalk.red('\n❌ --token required for bearer authentication'));
+            return;
+          }
+          auth = {
+            type: 'bearer',
+            token: options.token
+          };
+          break;
+
+        case 'oauth':
+          if (!options.clientId || !options.deviceAuthUrl || !options.tokenUrl) {
+            console.log(chalk.red('\n❌ --client-id, --device-auth-url, and --token-url required for OAuth'));
+            return;
+          }
+          auth = {
+            type: 'oauth',
+            oauth: {
+              clientId: options.clientId,
+              clientSecret: options.clientSecret,
+              deviceAuthUrl: options.deviceAuthUrl,
+              tokenUrl: options.tokenUrl,
+              scopes: options.scopes || []
+            }
+          };
+          console.log(chalk.dim(`   OAuth client: ${options.clientId}`));
+          console.log(chalk.dim(`   Scopes: ${(options.scopes || []).join(', ') || 'none'}`));
+          break;
+
+        case 'apiKey':
+          if (!options.token) {
+            console.log(chalk.red('\n❌ --token required for API key authentication'));
+            return;
+          }
+          auth = {
+            type: 'apiKey',
+            token: options.token
+          };
+          break;
+
+        case 'basic':
+          if (!options.username || !options.password) {
+            console.log(chalk.red('\n❌ --username and --password required for basic authentication'));
+            return;
+          }
+          auth = {
+            type: 'basic',
+            username: options.username,
+            password: options.password
+          };
+          console.log(chalk.dim(`   Username: ${options.username}`));
+          break;
+
+        default:
+          console.log(chalk.red(`\n❌ Invalid auth type: ${options.authType}`));
+          console.log(chalk.dim('   Supported: bearer, oauth, apiKey, basic'));
+          return;
+      }
+    } else {
+      console.log(chalk.dim('   Auth: None (public endpoint)'));
+    }
+
+    const config: any = {
+      url,
+      ...(auth && { auth })
+    };
+
+    // Determine which profiles to add to
+    const profiles = options.profile || ['all'];
+
+    console.log('\n📋 Profile configuration:');
+    console.log(`   ${chalk.cyan('Target profiles:')} ${profiles.join(', ')}`);
+    console.log(`   ${chalk.cyan('Transport:')} HTTP/SSE`);
+
+    // Test connection before adding
+    console.log(chalk.dim('\n🔍 Testing connection to HTTP/SSE endpoint...'));
+
+    try {
+      // Simple connectivity test
+      const testStart = Date.now();
+      const response = await fetch(url, { method: 'HEAD' });
+      const testTime = Date.now() - testStart;
+
+      if (!response.ok) {
+        console.log(chalk.yellow(`⚠️  Warning: HTTP ${response.status} - ${response.statusText} (${testTime}ms)`));
+        console.log(chalk.dim('   Proceeding anyway - server may require authentication'));
+      } else {
+        console.log(chalk.green(`✅ Connection successful (${testTime}ms)`));
+      }
+    } catch (error: any) {
+      console.log(chalk.yellow(`⚠️  Warning: ${error.message}`));
+      console.log(chalk.dim('   Proceeding anyway - server may require authentication'));
+    }
+
+    // Initialize cache patcher
+    const cachePatcher = new CachePatcher();
+
+    for (const profileName of profiles) {
+      try {
+        // Add to profile
+        await manager.addMCPToProfile(profileName, name, config);
+        console.log(`\n${chalk.green('✅')} Added ${name} to profile: ${profileName}`);
+
+        // Update profile hash
+        const profile = await manager.getProfile(profileName);
+        if (profile) {
+          const profileHash = cachePatcher.generateProfileHash(profile);
+          await cachePatcher.updateProfileHash(profileHash);
+        }
+
+        console.log(chalk.dim('   Profile updated successfully'));
+      } catch (error: any) {
+        console.log(`\n${chalk.red('❌')} Failed to add to ${profileName}: ${error.message}`);
+      }
+    }
+
+    console.log(chalk.dim('\n💡 Next steps:'));
+    console.log(chalk.dim('  •') + ' View profiles: ' + chalk.cyan('ncp list'));
+    console.log(chalk.dim('  •') + ' Test discovery: ' + chalk.cyan('ncp find <query>'));
+    if (auth?.type === 'oauth') {
+      console.log(chalk.dim('  •') + ' OAuth flow will start on first connection');
+    }
+  });
+
 
 // Lightweight function to read MCP info from cache without full orchestrator initialization
 async function loadMCPInfoFromCache(mcpDescriptions: Record<string, string>, mcpToolCounts: Record<string, number>, mcpVersions: Record<string, string>): Promise<boolean> {
@@ -1225,11 +1378,61 @@ settingsCmd
 
     await saveGlobalSettings({ ...DEFAULT_SETTINGS });
     console.log(chalk.green('✅ Settings reset to defaults'));
-    console.log(chalk.dim('💡 Confirm-before-run is now ON by default\n'));
+    console.log(chalk.dim('💡 Confirm modifications before executing is now ON by default\n'));
   });
 
 settingsCmd
+  .command('modifications [state]')
+  .description('Configure modification confirmations (on/off)')
+  .action(async (state?: string) => {
+    const { loadGlobalSettings, saveGlobalSettings } = await import('../utils/global-settings.js');
+    const settings = await loadGlobalSettings();
+
+    // Show current state if no argument
+    if (!state) {
+      const enabled = settings.confirmBeforeRun.enabled;
+      const statusText = enabled ? chalk.green('ENABLED') : chalk.red('DISABLED');
+      console.log(chalk.bold.white('\n⚙️  Confirm Modifications Before Executing\n'));
+      console.log(`  Status: ${statusText}`);
+      console.log(chalk.dim('  Protects against unwanted writes, deletes, and executions'));
+
+      if (enabled) {
+        const approvedCount = settings.confirmBeforeRun.approvedTools.length;
+        if (approvedCount > 0) {
+          console.log(chalk.dim(`  Approved tools: ${approvedCount}`));
+        }
+      }
+
+      console.log(chalk.dim('\n  Usage:'));
+      console.log(chalk.dim('    ncp settings modifications on   - Enable confirmations'));
+      console.log(chalk.dim('    ncp settings modifications off  - Disable confirmations\n'));
+      return;
+    }
+
+    // Toggle state
+    if (state === 'on' || state === 'true' || state === 'enable') {
+      settings.confirmBeforeRun.enabled = true;
+      await saveGlobalSettings(settings);
+      console.log(chalk.green('✅ Confirm modifications: ENABLED'));
+      console.log(chalk.dim('💡 You will be asked before tools make changes\n'));
+    } else if (state === 'off' || state === 'false' || state === 'disable') {
+      settings.confirmBeforeRun.enabled = false;
+      await saveGlobalSettings(settings);
+      console.log(chalk.yellow('⚠️  Confirm modifications: DISABLED'));
+      console.log(chalk.dim('💡 Tools can make changes without confirmation\n'));
+    } else {
+      console.log(chalk.red('❌ Invalid state. Use: on, off'));
+      console.log(chalk.dim('💡 Example: ncp settings modifications on\n'));
+    }
+  });
+
+// Settings whitelist subcommand group
+const whitelistCmd = settingsCmd
   .command('whitelist')
+  .description('Manage whitelisted tools');
+
+whitelistCmd
+  .command('list')
   .description('List all whitelisted tools')
   .action(async () => {
     const { loadGlobalSettings } = await import('../utils/global-settings.js');
@@ -1250,10 +1453,6 @@ settingsCmd
     console.log(chalk.dim('\n💡 Use "ncp settings whitelist remove <tool>" to un-whitelist'));
     console.log(chalk.dim('💡 Use "ncp settings whitelist clear" to remove all\n'));
   });
-
-// Settings whitelist subcommand group
-const whitelistCmd = settingsCmd
-  .command('whitelist');
 
 whitelistCmd
   .command('clear')
@@ -1307,8 +1506,8 @@ const testCmd = program
 
 testCmd
   .command('confirm-pattern')
-  .description('Test confirm-before-run pattern against all MCP tools with multiple thresholds')
-  .option('--pattern <text>', 'Override modifier pattern to test')
+  .description('Test confirm-before-run tag pattern against all MCP tools with multiple thresholds')
+  .option('--pattern <text>', 'Override tag pattern to test (space-separated tags with hyphens)')
   .option('--output <file>', 'Output CSV file path', './confirm-pattern-results.csv')
   .option('--profile <name>', 'Profile to test against (default: all)', 'all')
   .action(async (options) => {
