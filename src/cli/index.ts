@@ -1307,8 +1307,7 @@ const testCmd = program
 
 testCmd
   .command('confirm-pattern')
-  .description('Test confirm-before-run pattern against all MCP tools')
-  .option('--threshold <number>', 'Override vector threshold (0.0-1.0)', parseFloat)
+  .description('Test confirm-before-run pattern against all MCP tools with multiple thresholds')
   .option('--pattern <text>', 'Override modifier pattern to test')
   .option('--output <file>', 'Output CSV file path', './confirm-pattern-results.csv')
   .option('--profile <name>', 'Profile to test against (default: all)', 'all')
@@ -1322,13 +1321,11 @@ testCmd
 
     // Load settings
     const settings = await loadGlobalSettings();
-    const threshold = options.threshold ?? settings.confirmBeforeRun.vectorThreshold;
     const pattern = options.pattern ?? settings.confirmBeforeRun.modifierPattern;
     const profileName = options.profile;
 
     console.log(chalk.cyan('Profile:'), chalk.white(profileName));
     console.log(chalk.cyan('Pattern:'), chalk.dim(pattern.substring(0, 100) + '...'));
-    console.log(chalk.cyan('Threshold:'), chalk.white(threshold.toString()));
     console.log(chalk.cyan('Output:'), chalk.white(options.output));
     console.log();
 
@@ -1373,68 +1370,54 @@ testCmd
       return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     };
 
-    // Analyze each tool against the pattern
-    console.log(chalk.dim(`Analyzing ${allTools.length} tools...\n`));
+    // Test multiple threshold levels
+    const thresholds = [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80];
+    console.log(chalk.dim(`Testing ${thresholds.length} threshold levels: ${thresholds.join(', ')}\n`));
 
-    // Prepare CSV data
-    const csvRows: string[] = [];
-    csvRows.push('MCP,Tool,Description,Confidence,Would Trigger,Above Threshold');
+    // Analyze each tool against the pattern (with parallel processing)
+    console.log(chalk.dim(`Analyzing ${allTools.length} tools with 10 parallel workers...\n`));
 
-    let triggeredCount = 0;
-    const triggeredTools: Array<{
-      mcp: string;
-      tool: string;
-      description: string;
-      confidence: number;
-    }> = [];
+    // Escape CSV fields helper
+    const escapeCsv = (field: string) => {
+      if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+        return `"${field.replace(/"/g, '""')}"`;
+      }
+      return field;
+    };
 
+    // Process a single tool
+    const processTool = async (tool: any) => {
+      const toolText = `${tool.mcpName}:${tool.toolName} ${tool.description || ''}`;
+      const toolEmbedding = await model(toolText, { pooling: 'mean', normalize: true });
+      const confidence = cosineSimilarity(patternEmbedding.data, toolEmbedding.data);
+
+      // Check against all thresholds
+      const thresholdResults = thresholds.map(t => confidence >= t ? 'YES' : 'NO');
+
+      return {
+        mcpName: tool.mcpName,
+        toolName: tool.toolName,
+        description: tool.description || '',
+        confidence,
+        thresholdResults
+      };
+    };
+
+    // Process tools in parallel batches
+    const BATCH_SIZE = 10;
+    const results: any[] = [];
     let processed = 0;
     const startTime = Date.now();
 
-    // Process each tool
-    for (const tool of allTools) {
-      // Create embedding for tool description
-      const toolText = `${tool.mcpName}:${tool.toolName} ${tool.description || ''}`;
-      const toolEmbedding = await model(toolText, { pooling: 'mean', normalize: true });
+    for (let i = 0; i < allTools.length; i += BATCH_SIZE) {
+      const batch = allTools.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(batch.map(processTool));
+      results.push(...batchResults);
 
-      // Calculate similarity with pattern
-      const confidence = cosineSimilarity(patternEmbedding.data, toolEmbedding.data);
-      const wouldTrigger = confidence >= threshold;
-
-      if (wouldTrigger) {
-        triggeredCount++;
-        triggeredTools.push({
-          mcp: tool.mcpName,
-          tool: tool.toolName,
-          description: tool.description || '',
-          confidence
-        });
-      }
-
-      // Escape CSV fields
-      const escapeCsv = (field: string) => {
-        if (field.includes(',') || field.includes('"') || field.includes('\n')) {
-          return `"${field.replace(/"/g, '""')}"`;
-        }
-        return field;
-      };
-
-      csvRows.push([
-        escapeCsv(tool.mcpName),
-        escapeCsv(tool.toolName),
-        escapeCsv(tool.description || ''),
-        confidence.toFixed(4),
-        wouldTrigger ? 'YES' : 'NO',
-        confidence >= threshold ? 'YES' : 'NO'
-      ].join(','));
-
-      // Progress indicator
-      processed++;
-      if (processed % 50 === 0) {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        const rate = (processed / (Date.now() - startTime) * 1000).toFixed(1);
-        process.stdout.write(`\r  Processed: ${processed}/${allTools.length} (${rate} tools/sec, ${elapsed}s elapsed)`);
-      }
+      processed += batch.length;
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      const rate = (processed / (Date.now() - startTime) * 1000).toFixed(1);
+      process.stdout.write(`\r  Processed: ${processed}/${allTools.length} (${rate} tools/sec, ${elapsed}s elapsed)`);
     }
 
     // Final progress update
@@ -1442,34 +1425,74 @@ testCmd
     console.log(`\r  Processed: ${processed}/${allTools.length} (completed in ${totalTime}s)        `);
     console.log();
 
+    // Prepare CSV data
+    const csvRows: string[] = [];
+    const thresholdHeaders = thresholds.map(t => `Trigger_${t.toFixed(2)}`).join(',');
+    csvRows.push(`MCP,Tool,Description,Confidence,${thresholdHeaders}`);
+
+    for (const result of results) {
+      csvRows.push([
+        escapeCsv(result.mcpName),
+        escapeCsv(result.toolName),
+        escapeCsv(result.description),
+        result.confidence.toFixed(4),
+        ...result.thresholdResults
+      ].join(','));
+    }
+
     // Write CSV file
     writeFileSync(options.output, csvRows.join('\n'), 'utf-8');
     console.log(chalk.green(`✓ Results written to ${options.output}\n`));
 
-    // Display statistics
-    console.log(chalk.bold.white('📊 Statistics:\n'));
-    console.log(`  Total tools: ${chalk.cyan(allTools.length.toString())}`);
-    console.log(`  Would trigger: ${chalk.yellow(triggeredCount.toString())} (${chalk.yellow((triggeredCount / allTools.length * 100).toFixed(1) + '%')})`);
-    console.log(`  Would not trigger: ${chalk.green((allTools.length - triggeredCount).toString())} (${chalk.green(((allTools.length - triggeredCount) / allTools.length * 100).toFixed(1) + '%')})`);
+    // Calculate statistics for each threshold
+    console.log(chalk.bold.white('📊 Statistics by Threshold:\n'));
+    console.log(`  Total tools: ${chalk.cyan(allTools.length.toString())}\n`);
+
+    thresholds.forEach((thresh, idx) => {
+      const triggeredCount = results.filter(r => r.confidence >= thresh).length;
+      const percentage = (triggeredCount / allTools.length * 100).toFixed(1);
+      const color = triggeredCount < allTools.length * 0.1 ? chalk.green :
+                    triggeredCount < allTools.length * 0.3 ? chalk.yellow : chalk.red;
+
+      console.log(`  Threshold ${thresh.toFixed(2)}: ${color(triggeredCount.toString())} tools triggered (${color(percentage + '%')})`);
+    });
     console.log();
 
-    // Show top triggered tools
-    if (triggeredTools.length > 0) {
-      console.log(chalk.bold.white('🔝 Top 10 Triggered Tools (by confidence):\n'));
-      const sorted = triggeredTools.sort((a, b) => b.confidence - a.confidence).slice(0, 10);
+    // Show top 10 most dangerous tools (highest confidence)
+    console.log(chalk.bold.white('🔝 Top 10 Most Likely Modifier Operations:\n'));
+    const sorted = results.sort((a, b) => b.confidence - a.confidence).slice(0, 10);
 
-      sorted.forEach((t, index) => {
-        const confidencePercent = Math.round(t.confidence * 100);
-        const confidenceColor = t.confidence >= 0.8 ? chalk.red : t.confidence >= 0.7 ? chalk.yellow : chalk.cyan;
-        console.log(`  ${index + 1}. ${chalk.cyan(t.mcp + ':' + t.tool)} ${confidenceColor(confidencePercent + '%')}`);
-        console.log(`     ${chalk.dim(t.description.substring(0, 80))}${t.description.length > 80 ? '...' : ''}`);
-      });
-      console.log();
+    sorted.forEach((t, index) => {
+      const confidencePercent = Math.round(t.confidence * 100);
+      const confidenceColor = t.confidence >= 0.8 ? chalk.red : t.confidence >= 0.7 ? chalk.yellow : chalk.cyan;
+      console.log(`  ${index + 1}. ${chalk.cyan(t.mcpName + ':' + t.toolName)} ${confidenceColor(confidencePercent + '%')}`);
+      console.log(`     ${chalk.dim(t.description.substring(0, 80))}${t.description.length > 80 ? '...' : ''}`);
+    });
+    console.log();
+
+    // Recommend optimal threshold
+    console.log(chalk.bold.white('💡 Threshold Recommendation:\n'));
+
+    // Find threshold with reasonable trigger rate (10-30%)
+    let recommendedThreshold = thresholds[0];
+    for (const thresh of thresholds) {
+      const triggeredCount = results.filter(r => r.confidence >= thresh).length;
+      const percentage = triggeredCount / allTools.length;
+      if (percentage >= 0.10 && percentage <= 0.30) {
+        recommendedThreshold = thresh;
+        break;
+      }
     }
 
-    console.log(chalk.dim('💡 Review the CSV file to analyze all results'));
-    console.log(chalk.dim('💡 Use --threshold to test different sensitivity levels'));
-    console.log(chalk.dim('💡 Use --pattern to test different modifier patterns\n'));
+    const recommendedCount = results.filter(r => r.confidence >= recommendedThreshold).length;
+    const recommendedPercentage = (recommendedCount / allTools.length * 100).toFixed(1);
+
+    console.log(`  Recommended: ${chalk.cyan(recommendedThreshold.toFixed(2))}`);
+    console.log(`  Would trigger: ${chalk.yellow(recommendedCount.toString())} tools (${chalk.yellow(recommendedPercentage + '%')})`);
+    console.log(`  Rationale: Balances safety (catches dangerous operations) with usability (avoids too many prompts)\n`);
+
+    console.log(chalk.dim('💡 Review the CSV file to analyze all results in detail'));
+    console.log(chalk.dim('💡 Adjust threshold in ~/.ncp/settings.json if needed\n'));
   });
 
 // Repair command - fix failed MCPs interactively
