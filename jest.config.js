@@ -9,8 +9,9 @@ export default {
     '^.+\\.ts$': ['ts-jest', {
       useESM: true,
       tsconfig: {
-        module: 'ES2020',
-        target: 'ES2020'
+        module: 'ESNext',
+        target: 'ES2022',
+        moduleResolution: 'bundler'
       }
     }]
   },
@@ -33,10 +34,11 @@ export default {
   moduleFileExtensions: ['ts', 'js', 'json'],
   extensionsToTreatAsEsm: ['.ts'],
   moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1',
     '@xenova/transformers': '<rootDir>/test/__mocks__/transformers.js',
     '^chalk$': '<rootDir>/test/__mocks__/chalk.js',
-    '../utils/updater.js': '<rootDir>/test/__mocks__/updater.js',
+    '^.*\\/utils\\/updater\\.js$': '<rootDir>/test/__mocks__/updater.js',
+    '^.*\\/cache\\/csv-cache\\.js$': '<rootDir>/test/__mocks__/csv-cache.ts',
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   // '^.*/utils/version\\.js$': '<rootDir>/test/__mocks__/version.ts'
   },
   setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
