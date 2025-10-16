@@ -661,10 +661,55 @@ export class NCPOrchestrator {
         config.args || []
       );
 
+      // Ensure PATH includes all necessary directories (critical for Claude Desktop extension sandbox)
+      // Claude Desktop may provide limited PATH that doesn't include Homebrew, npm global, etc.
+      // This matches what Claude Desktop provides when spawning MCPs directly
+      const processEnv = env as Record<string, string>;
+      const platform = process.platform;
+
+      // Get platform-specific path separator and standard paths
+      const pathSeparator = platform === 'win32' ? ';' : ':';
+      let standardPaths: string;
+      let pathCheckNeeded = false;
+
+      if (platform === 'darwin') {
+        // macOS: Include both Homebrew locations (Intel and Apple Silicon)
+        standardPaths = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin';
+        // Check if Homebrew directories are missing
+        pathCheckNeeded = !!processEnv.PATH &&
+          !processEnv.PATH.includes('/opt/homebrew/bin') &&
+          !processEnv.PATH.includes('/usr/local/bin');
+      } else if (platform === 'win32') {
+        // Windows: Standard system paths
+        standardPaths = 'C:\\Windows\\System32;C:\\Windows;C:\\Program Files\\nodejs';
+        // Check if standard Windows directories are missing
+        pathCheckNeeded = !!processEnv.PATH &&
+          !processEnv.PATH.includes('C:\\Windows\\System32') &&
+          !processEnv.PATH.includes('C:\\Program Files\\nodejs');
+      } else {
+        // Linux: Standard system paths
+        standardPaths = '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
+        // Check if standard Linux directories are missing
+        pathCheckNeeded = !!processEnv.PATH &&
+          !processEnv.PATH.includes('/usr/local/bin') &&
+          !processEnv.PATH.includes('/usr/bin');
+      }
+
+      // Set or augment PATH
+      if (!processEnv.PATH) {
+        // No PATH at all - set standard paths
+        processEnv.PATH = standardPaths;
+        logger.debug(`Set PATH for ${config.name}: ${processEnv.PATH}`);
+      } else if (pathCheckNeeded) {
+        // PATH exists but doesn't include standard directories - prepend them
+        processEnv.PATH = `${standardPaths}${pathSeparator}${processEnv.PATH}`;
+        logger.debug(`Augmented PATH for ${config.name}: ${processEnv.PATH}`);
+      }
+
       return new StdioClientTransport({
         command: wrappedCommand.command,
         args: wrappedCommand.args,
-        env: env as Record<string, string>
+        env: processEnv
       });
     }
 

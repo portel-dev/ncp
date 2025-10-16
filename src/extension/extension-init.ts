@@ -76,10 +76,8 @@ export async function initializeExtension(): Promise<void> {
     await setupGlobalCLI(config.debug);
   }
 
-  // 3. Auto-import Claude Desktop MCPs if enabled
-  if (config.autoImport) {
-    await autoImportClaudeMCPs(config.profile, config.debug);
-  }
+  // Note: Auto-import is handled by ProfileManager.initialize()
+  // No need to call it here - avoids duplicate imports
 
   logger.info(`✅ NCP extension initialized (profile: ${config.profile})`);
 }

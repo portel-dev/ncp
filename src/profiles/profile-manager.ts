@@ -57,8 +57,9 @@ export class ProfileManager {
       await this.createDefaultProfile();
     }
 
-    // Note: Auto-import is now triggered separately via tryAutoImportFromClient()
-    // after MCP client is identified in the initialize request
+    // Auto-import from Claude Desktop on startup (restores 1.5.3 behavior)
+    // This ensures profile is populated BEFORE orchestrator initialization
+    await this.tryAutoImportFromClient('claude-desktop');
   }
 
   /**
