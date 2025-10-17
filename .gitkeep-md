@@ -3,9 +3,20 @@
 #
 # Format: One filename per line, no wildcards
 
+# Core documentation
 README.md
 CHANGELOG.md
 CONTRIBUTING.md
 LICENSE.md
 CODE_OF_CONDUCT.md
 SECURITY.md
+
+# Client-specific documentation (linked from README)
+claude.md
+CLAUDE.md
+cursor.md
+CURSOR.md
+zed.md
+ZED.md
+windsurf.md
+WINDSURF.md
