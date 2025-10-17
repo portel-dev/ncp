@@ -92,7 +92,8 @@ export class MCPServerSDK {
   }
 
   private getToolDefinitions(): Tool[] {
-    return [
+    // Start with core NCP tools
+    const coreTools: Tool[] = [
       {
         name: 'find',
         description: 'Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task as user story for best results: "I want to save configuration to a file", "I need to analyze logs for errors". (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools with depth control (0=tool names only, 1=tool names + descriptions, 2=full details with parameters).',
@@ -117,7 +118,7 @@ export class MCPServerSDK {
             },
             depth: {
               type: 'number',
-              description: 'Information depth level: 0=Tool names only, 1=Tool names + descriptions, 2=Full details with parameters (default, recommended for AI). Higher depth shows more complete information.',
+              description: 'Information depth level: 0=Tool names only, 1=Tool names + descriptions, 2=Full details with parameters (default, recommended). Higher depth shows more complete information.',
               enum: [0, 1, 2],
             }
           }
@@ -146,6 +147,11 @@ export class MCPServerSDK {
         }
       }
     ];
+
+    // TODO: Add internal MCP tools (ncp:add, ncp:import, etc.) once orchestrator is initialized
+    // This will be populated after initialize() completes
+
+    return coreTools;
   }
 
   async initialize(): Promise<void> {
