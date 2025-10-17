@@ -1,7 +1,7 @@
 [![npm version](https://img.shields.io/npm/v/@portel/ncp.svg)](https://www.npmjs.com/package/@portel/ncp)
 [![npm downloads](https://img.shields.io/npm/dm/@portel/ncp.svg)](https://www.npmjs.com/package/@portel/ncp)
-[![GitHub release downloads](https://img.shields.io/github/downloads/portel-dev/ncp/total?label=.mcpb%20downloads)](https://github.com/portel-dev/ncp/releases)
-[![Latest release](https://img.shields.io/github/downloads/portel-dev/ncp/latest/total?label=latest%20.mcpb)](https://github.com/portel-dev/ncp/releases/latest)
+[![GitHub release downloads](https://img.shields.io/github/downloads/portel-dev/ncp/total?label=.dxt%20downloads)](https://github.com/portel-dev/ncp/releases)
+[![Latest release](https://img.shields.io/github/downloads/portel-dev/ncp/latest/total?label=latest%20.dxt)](https://github.com/portel-dev/ncp/releases/latest)
 [![License: Elastic-2.0](https://img.shields.io/badge/License-Elastic--2.0-blue.svg)](https://www.elastic.co/licensing/elastic-license)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-blue.svg)](https://modelcontextprotocol.io/)
 
@@ -131,10 +131,10 @@ Choose your preferred installation method:
 
 | Method | Best For | Downloads |
 |--------|----------|-----------|
-| **📦 .mcpb Bundle** | Claude Desktop users | ![.mcpb downloads](https://img.shields.io/github/downloads/portel-dev/ncp/total?label=downloads&color=green) |
+| **📦 .dxt Bundle** | Claude Desktop users | ![.dxt downloads](https://img.shields.io/github/downloads/portel-dev/ncp/total?label=downloads&color=green) |
 | **📥 npm Package** | All MCP clients, CLI users | ![npm downloads](https://img.shields.io/npm/dt/@portel/ncp?label=downloads&color=blue) |
 
-### **⚡ Option 1: One-Click Installation (.mcpb)** - Claude Desktop Only
+### **⚡ Option 1: One-Click Installation (.dxt)** - Claude Desktop Only
 
 **For Claude Desktop users** - Download and double-click to install:
 
@@ -143,7 +143,7 @@ Choose your preferred installation method:
 3. **Claude Desktop** will prompt you to install - click "Install"
 4. **Auto-sync with Claude Desktop** - NCP continuously syncs MCPs:
    - Detects MCPs from `claude_desktop_config.json`
-   - Detects .mcpb-installed extensions
+   - Detects .dxt-installed extensions
    - **Runs on every startup** to find new MCPs
    - Uses internal `add` command for cache coherence
 
@@ -176,14 +176,14 @@ nano ~/.ncp/profiles/all.json
 
 5. **Restart Claude Desktop** and NCP will load your configured MCPs
 
-> ℹ️ **About .dxt (Desktop Extension) installation:**
+> ℹ️ **About .dxt (Desktop Extension) format:**
 > - **Slim & Fast:** Desktop extension is MCP-only (126KB, no CLI code)
 > - **Manual config:** Edit JSON files directly (no `ncp add` command)
 > - **Power users:** Fastest startup, direct control over configuration
 > - **Optional CLI:** Install `npm install -g @portel/ncp` separately if you want CLI tools
 >
 > **Why .dxt is slim:**
-> The desktop extension excludes all CLI code, making it 13% smaller and faster to load than the full npm package. Perfect for production use where you manage configs manually or via automation.
+> The .dxt (Desktop Extension) format excludes all CLI code, making it 13% smaller and faster to load than the full npm package. Perfect for production use where you manage configs manually or via automation.
 
 ---
 
