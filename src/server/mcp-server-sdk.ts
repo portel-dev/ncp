@@ -8,6 +8,10 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
@@ -16,8 +20,11 @@ import { ToolFinder } from '../services/tool-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { RegistryClient } from '../services/registry-client.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
+import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist } from '../utils/global-settings.js';
+import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation } from './mcp-prompts.js';
 import chalk from 'chalk';
 import type { ElicitationServer } from '../utils/elicitation-helper.js';
+import { version } from '../utils/version.js';
 
 export class MCPServerSDK implements ElicitationServer {
   private server: Server;
@@ -30,18 +37,28 @@ export class MCPServerSDK implements ElicitationServer {
     this.server = new Server(
       {
         name: 'ncp',
-        version: '1.0.4',
+        version: version,  // Read version from package.json dynamically
       },
       {
         capabilities: {
           tools: {},
           elicitation: {},  // Enable elicitation for credential collection
+          prompts: {},      // Enable prompts for user confirmation dialogs
+          resources: {},    // Enable resources for help docs and health status
         },
       }
     );
 
     // Profile-aware orchestrator using real MCP connections
     this.orchestrator = new NCPOrchestrator(profileName, showProgress, forceRetry);
+
+    // Wire up elicitation server to internal MCPs IMMEDIATELY
+    // This must happen before initialization so confirmations work from the start
+    const internalMCPManager = this.orchestrator.getInternalMCPManager();
+    if (internalMCPManager) {
+      internalMCPManager.setElicitationServer(this);
+      logger.info('Elicitation enabled for internal MCPs (clipboard-based credential collection)');
+    }
 
     // Set up request handlers
     this.setupHandlers();
@@ -89,6 +106,44 @@ export class MCPServerSDK implements ElicitationServer {
           }],
           isError: true,
         };
+      }
+    });
+
+    // Handle prompts/list
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      return {
+        prompts: NCP_PROMPTS
+      };
+    });
+
+    // Handle prompts/get
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+
+      try {
+        return await this.handleGetPrompt(name, args || {});
+      } catch (error: any) {
+        logger.error(`Prompt generation failed: ${name} - ${error.message}`);
+        throw error;
+      }
+    });
+
+    // Handle resources/list
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      return {
+        resources: await this.handleListResources()
+      };
+    });
+
+    // Handle resources/read
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const { uri } = request.params;
+
+      try {
+        return await this.handleReadResource(uri);
+      } catch (error: any) {
+        logger.error(`Resource read failed: ${uri} - ${error.message}`);
+        throw error;
       }
     });
   }
@@ -471,6 +526,133 @@ export class MCPServerSDK implements ElicitationServer {
       };
     }
 
+    // ===== CONFIRM-BEFORE-RUN FEATURE =====
+    // Check if this operation requires user confirmation
+    try {
+      const settings = await loadGlobalSettings();
+      const confirmSettings = settings.confirmBeforeRun;
+
+      if (confirmSettings.enabled) {
+        // Check whitelist first
+        const isWhitelisted = await isToolWhitelisted(toolIdentifier);
+
+        if (!isWhitelisted) {
+          // Get tool description by searching for the tool
+          const finder = new ToolFinder(this.orchestrator);
+          const findResult = await finder.find({
+            query: toolIdentifier,
+            page: 1,
+            limit: 1,
+            depth: 2,
+            confidenceThreshold: 0
+          });
+
+          const toolDescription = findResult.tools.length > 0 ? findResult.tools[0].description || '' : '';
+
+          // Use vector search to check if tool matches modifier pattern
+          // We search the tools against the modifier pattern to see if this tool is dangerous
+          const searchQuery = `${toolIdentifier} ${toolDescription}`;
+          const patternResults = await finder.find({
+            query: confirmSettings.modifierPattern,
+            page: 1,
+            limit: 20,
+            depth: 0,
+            confidenceThreshold: confirmSettings.vectorThreshold
+          });
+
+          // Check if our tool is in the match results
+          const toolMatch = patternResults.tools.find(result => result.toolName === toolIdentifier);
+
+          if (toolMatch && toolMatch.confidence >= confirmSettings.vectorThreshold) {
+            // Confirmation required - use elicitation
+            logger.info(`Tool "${toolIdentifier}" requires confirmation (${Math.round(toolMatch.confidence * 100)}% confidence)`);
+
+            // Format parameters for display
+            let parametersText = '';
+            if (Object.keys(parameters).length > 0) {
+              parametersText = '\n\nParameters:';
+              for (const [key, value] of Object.entries(parameters)) {
+                const valueStr = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+                parametersText += `\n  ${key}: ${valueStr}`;
+              }
+            } else {
+              parametersText = '\n\nParameters: (none)';
+            }
+
+            const [mcpName, toolName] = toolIdentifier.split(':');
+            const confidencePercent = Math.round(toolMatch.confidence * 100);
+
+            const confirmationMessage = `⚠️ CONFIRMATION REQUIRED
+
+Tool: ${toolName}
+MCP: ${mcpName}
+
+Description:
+${toolDescription || 'No description available'}${parametersText}
+
+Reason: Matches modifier pattern (${confidencePercent}% confidence)
+Pattern: "${confirmSettings.modifierPattern.substring(0, 100)}..."
+
+This operation may modify data or have side effects.`;
+
+            // Use elicitation to get user confirmation
+            const elicitationResult = await this.elicitInput({
+              message: confirmationMessage,
+              requestedSchema: {
+                type: 'object',
+                properties: {
+                  action: {
+                    type: 'string',
+                    enum: ['approve_once', 'approve_always', 'cancel'],
+                    description: 'Choose: approve_once (run this time only), approve_always (add to whitelist), or cancel (don\'t execute)'
+                  }
+                },
+                required: ['action']
+              }
+            });
+
+            // Handle user response
+            if (elicitationResult.action === 'decline' || elicitationResult.action === 'cancel') {
+              return {
+                content: [{
+                  type: 'text',
+                  text: `⛔ Operation cancelled by user. The tool "${toolIdentifier}" was not executed.`
+                }],
+                isError: true
+              };
+            }
+
+            if (elicitationResult.action === 'accept' && elicitationResult.content) {
+              const userAction = elicitationResult.content.action;
+
+              if (userAction === 'cancel') {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `⛔ Operation cancelled by user. The tool "${toolIdentifier}" was not executed.`
+                  }],
+                  isError: true
+                };
+              }
+
+              if (userAction === 'approve_always') {
+                // Add to whitelist
+                await addToolToWhitelist(toolIdentifier);
+                logger.info(`Tool ${toolIdentifier} added to whitelist by user`);
+              }
+
+              // For both 'approve_once' and 'approve_always', proceed with execution below
+              logger.info(`User approved execution of "${toolIdentifier}" (${userAction})`);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      // Log but don't block execution if confirmation logic fails
+      logger.warn(`Confirmation check failed: ${error.message}`);
+    }
+    // ===== END CONFIRM-BEFORE-RUN =====
+
     // Normal execution
     const result = await this.orchestrator.run(toolIdentifier, parameters);
 
@@ -574,8 +756,403 @@ export class MCPServerSDK implements ElicitationServer {
   }
 
   /**
+   * Handle prompts/get request
+   */
+  private async handleGetPrompt(promptName: string, args: Record<string, any>): Promise<any> {
+    // Find the prompt definition
+    const promptDef = NCP_PROMPTS.find(p => p.name === promptName);
+
+    if (!promptDef) {
+      throw new Error(`Unknown prompt: ${promptName}`);
+    }
+
+    // Generate prompt content based on prompt name
+    let messages;
+    switch (promptName) {
+      case 'confirm_add_mcp':
+        messages = generateAddConfirmation(
+          args.mcp_name || 'unknown',
+          args.command || 'unknown',
+          args.args || [],
+          args.profile || 'all'
+        );
+        break;
+
+      case 'confirm_remove_mcp':
+        messages = generateRemoveConfirmation(
+          args.mcp_name || 'unknown',
+          args.profile || 'all'
+        );
+        break;
+
+      case 'configure_mcp':
+        messages = generateConfigInput(
+          args.mcp_name || 'unknown',
+          args.config_type || 'configuration',
+          args.description || 'Please provide configuration value'
+        );
+        break;
+
+      case 'confirm_operation':
+        messages = generateOperationConfirmation(
+          args.tool || 'unknown',
+          args.tool_description || '',
+          args.parameters ? (typeof args.parameters === 'string' ? JSON.parse(args.parameters) : args.parameters) : {},
+          args.matched_pattern || '',
+          args.confidence || 0
+        );
+        break;
+
+      default:
+        throw new Error(`Prompt ${promptName} not implemented`);
+    }
+
+    return {
+      description: promptDef.description,
+      messages
+    };
+  }
+
+  /**
+   * Handle resources/list request
+   */
+  private async handleListResources(): Promise<any[]> {
+    // Add NCP-specific help resources first (always available)
+    const ncpResources = [
+      {
+        uri: 'ncp://help/getting-started',
+        name: 'NCP Getting Started Guide',
+        description: 'Learn how to use NCP effectively - search tips, parameters, and best practices',
+        mimeType: 'text/markdown'
+      },
+      {
+        uri: 'ncp://status/health',
+        name: 'MCP Health Dashboard',
+        description: 'Shows health status of all configured MCPs',
+        mimeType: 'text/markdown'
+      },
+      {
+        uri: 'ncp://status/auto-import',
+        name: 'Last Auto-Import Summary',
+        description: 'Shows MCPs imported from Claude Desktop on last startup',
+        mimeType: 'text/markdown'
+      }
+    ];
+
+    // Only get MCP resources if orchestrator is initialized (non-blocking)
+    if (this.isInitialized) {
+      try {
+        const mcpResources = await this.orchestrator.getAllResources();
+        return [...ncpResources, ...(mcpResources || [])];
+      } catch (error: any) {
+        logger.warn(`Failed to get MCP resources: ${error.message}`);
+        return ncpResources;
+      }
+    }
+
+    // Return just NCP resources if still initializing
+    return ncpResources;
+  }
+
+  /**
+   * Handle resources/read request
+   */
+  private async handleReadResource(uri: string): Promise<any> {
+    // Handle NCP-specific resources (always available)
+    if (uri.startsWith('ncp://')) {
+      const content = await this.generateNCPResourceContent(uri);
+      return {
+        contents: [{
+          uri,
+          mimeType: 'text/markdown',
+          text: content
+        }]
+      };
+    }
+
+    // Delegate to orchestrator for MCP resources (only if initialized)
+    if (this.isInitialized) {
+      try {
+        const mcpContent = await this.orchestrator.readResource(uri);
+        return {
+          contents: [{
+            uri,
+            mimeType: 'text/plain',
+            text: mcpContent
+          }]
+        };
+      } catch (error: any) {
+        throw new Error(`Failed to read resource: ${error.message}`);
+      }
+    }
+
+    // If still initializing, return error
+    throw new Error(`Resource not available during initialization: ${uri}`);
+  }
+
+  /**
+   * Generate NCP-specific resource content
+   */
+  private async generateNCPResourceContent(uri: string): Promise<string> {
+    switch (uri) {
+      case 'ncp://help/getting-started':
+        return this.generateGettingStartedGuide();
+
+      case 'ncp://status/health':
+        return this.generateHealthDashboard();
+
+      case 'ncp://status/auto-import':
+        return this.generateAutoImportSummary();
+
+      default:
+        throw new Error(`Unknown NCP resource: ${uri}`);
+    }
+  }
+
+  /**
+   * Generate getting started guide
+   */
+  private generateGettingStartedGuide(): string {
+    return `# NCP Getting Started Guide
+
+## 🎯 Quick Start
+
+NCP provides two simple tools:
+
+1. **find()** - Discover tools across all your MCPs
+2. **run()** - Execute tools from any MCP
+
+## 🔍 Using find() - Tool Discovery
+
+### Search Mode (Describe Your Need)
+\`\`\`
+find("I want to read a file")
+find("send an email to the team")
+find("query my database")
+\`\`\`
+
+### Listing Mode (Browse All Tools)
+\`\`\`
+find()  // Shows all available tools
+\`\`\`
+
+## ⚙️ Advanced Parameters
+
+### Depth Control
+- **depth=0**: Tool names only (quick scan)
+- **depth=1**: Names + descriptions (overview)
+- **depth=2**: Full details with parameters (default, recommended)
+
+\`\`\`
+find("file operations", depth=1)
+\`\`\`
+
+### Confidence Threshold
+Control how strictly tools must match your query:
+- **0.1**: Show all loosely related tools
+- **0.35**: Balanced (default)
+- **0.5**: Strict matching
+- **0.7**: Very precise matches only
+
+\`\`\`
+find("database query", confidence_threshold=0.5)
+\`\`\`
+
+### Pagination
+\`\`\`
+find("file tools", page=2, limit=10)
+\`\`\`
+
+## 🚀 Using run() - Execute Tools
+
+Format: \`mcp_name:tool_name\`
+
+\`\`\`
+run("filesystem:read_file", {path: "/path/to/file.txt"})
+run("github:create_issue", {title: "Bug report", body: "..."})
+\`\`\`
+
+### Dry Run (Preview Only)
+\`\`\`
+run("filesystem:write_file", {path: "/tmp/test.txt", content: "..."}, dry_run=true)
+\`\`\`
+
+## 💡 Pro Tips
+
+1. **Describe intent, not tools**: "send notification" not "slack message"
+2. **Start broad, refine**: Lower confidence first, then increase
+3. **Use depth wisely**: depth=0 for quick scan, depth=2 for details
+4. **Check health**: Health status shows in find() results
+
+## 🔧 Managing MCPs
+
+### Install New MCPs
+When find() shows no results, NCP suggests MCPs from the registry:
+\`\`\`
+run("ncp:import", {from: "discovery", source: "your query", selection: "1"})
+\`\`\`
+
+### List Configured MCPs
+\`\`\`
+run("ncp:list", {profile: "all"})
+\`\`\`
+
+### Check Health
+Use the health dashboard resource (you're reading resources now!)
+
+## 🆘 Troubleshooting
+
+**No results?**
+- Try broader search terms
+- Lower confidence_threshold
+- Check MCP health status
+
+**Tool not found?**
+- Use find() to discover correct tool name
+- Format must be \`mcp:tool\` with colon
+
+**Slow indexing?**
+- NCP indexes in background
+- Partial results available immediately
+- Full results after indexing completes
+`;
+  }
+
+  /**
+   * Generate health dashboard
+   */
+  private generateHealthDashboard(): string {
+    const healthStatus = this.orchestrator.getMCPHealthStatus();
+
+    let content = `# MCP Health Dashboard
+
+## Overall Status
+
+**${healthStatus.healthy}/${healthStatus.total} MCPs Healthy**
+
+`;
+
+    if (healthStatus.total === 0) {
+      content += `⚠️  No MCPs configured yet.
+
+To add MCPs, use:
+\`\`\`
+run("ncp:import", {from: "discovery", source: "your search"})
+\`\`\`
+
+Or manually:
+\`\`\`
+run("ncp:add", {mcp_name: "...", command: "...", args: [...]})
+\`\`\`
+`;
+      return content;
+    }
+
+    content += `## MCP Status\n\n`;
+
+    healthStatus.mcps.forEach(mcp => {
+      const icon = mcp.healthy ? '✅' : '❌';
+      const status = mcp.healthy ? 'Running' : 'Unavailable';
+      content += `${icon} **${mcp.name}**: ${status}\n`;
+    });
+
+    if (healthStatus.unhealthy > 0) {
+      content += `\n## ⚠️  Issues Found\n\n`;
+      content += `${healthStatus.unhealthy} MCP${healthStatus.unhealthy > 1 ? 's are' : ' is'} unavailable. This may be due to:\n\n`;
+      content += `- Missing dependencies or permissions\n`;
+      content += `- Incorrect configuration\n`;
+      content += `- Network connectivity issues\n`;
+      content += `- MCP server crashed or not running\n\n`;
+
+      content += `**To troubleshoot:**\n`;
+      content += `1. Check logs: \`~/.ncp/logs/ncp-debug-*.log\` (if debug enabled)\n`;
+      content += `2. Verify configuration: \`run("ncp:list")\`\n`;
+      content += `3. Try restarting NCP\n`;
+    }
+
+    content += `\n---\n\n`;
+    content += `**Last Updated**: ${new Date().toLocaleString()}\n`;
+
+    return content;
+  }
+
+  /**
+   * Generate auto-import summary
+   */
+  private generateAutoImportSummary(): string {
+    // Try to get auto-import info from orchestrator
+    const autoImportInfo = this.orchestrator.getAutoImportSummary();
+
+    if (!autoImportInfo || autoImportInfo.count === 0) {
+      return `# Last Auto-Import Summary
+
+No auto-import has run yet, or no MCPs were found.
+
+## What is Auto-Import?
+
+NCP automatically imports MCPs from your MCP client (Claude Desktop, Perplexity, etc.) on startup.
+
+This means:
+- You configure MCPs once in your client
+- NCP automatically discovers and imports them
+- No manual configuration needed
+- Continuous sync on every startup
+
+## How It Works
+
+1. NCP detects it's running as an extension
+2. Scans client configuration files
+3. Imports all MCPs to your profile
+4. Skips NCP instances (avoids recursion)
+
+## Manual Import
+
+If auto-import didn't run or you want to import from a file:
+
+\`\`\`
+run("ncp:import", {from: "clipboard"})  // Copy config first
+run("ncp:import", {from: "file", source: "~/path/to/config.json"})
+\`\`\`
+`;
+    }
+
+    let content = `# Last Auto-Import Summary
+
+## ✅ Import Successful
+
+**${autoImportInfo.count} MCP${autoImportInfo.count > 1 ? 's' : ''} imported** from ${autoImportInfo.source || 'client'}
+
+`;
+
+    if (autoImportInfo.mcps && autoImportInfo.mcps.length > 0) {
+      content += `## Imported MCPs\n\n`;
+      autoImportInfo.mcps.forEach(mcp => {
+        const transport = mcp.transport || 'stdio';
+        content += `- **${mcp.name}** (${transport})\n`;
+      });
+    }
+
+    if (autoImportInfo.skipped && autoImportInfo.skipped > 0) {
+      content += `\n## ℹ️  Skipped\n\n`;
+      content += `${autoImportInfo.skipped} NCP instance${autoImportInfo.skipped > 1 ? 's' : ''} skipped (avoids recursion)\n`;
+    }
+
+    content += `\n---\n\n`;
+    content += `**Profile**: ${autoImportInfo.profile || 'all'}\n`;
+    content += `**Timestamp**: ${autoImportInfo.timestamp ? new Date(autoImportInfo.timestamp).toLocaleString() : 'Unknown'}\n\n`;
+
+    content += `## Next Import\n\n`;
+    content += `Auto-import runs automatically on every NCP startup.\n`;
+    content += `New MCPs will be detected and imported next time NCP restarts.\n`;
+
+    return content;
+  }
+
+  /**
    * Elicitation API for credential collection
    * Implements the ElicitationServer interface to enable clipboard-based credential collection
+   *
+   * Note: Includes 5-second timeout to detect unsupported clients quickly
    */
   async elicitInput(params: {
     message: string;
@@ -589,8 +1166,20 @@ export class MCPServerSDK implements ElicitationServer {
     content?: Record<string, any>;
   }> {
     try {
-      // Use SDK's elicitInput method to send request to client (Claude Desktop)
-      const result = await this.server.elicitInput(params);
+      // Add 5-second timeout to detect if client doesn't support elicitation
+      // If client supports it, response comes immediately
+      // If client doesn't support it, request hangs - we treat timeout as "not supported"
+      const result = await Promise.race([
+        this.server.elicitInput(params),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => {
+            // Throw error -32601 (Method not found) to trigger native dialog fallback
+            const error: any = new Error('Elicitation not supported by client (timeout after 5s)');
+            error.code = -32601;
+            reject(error);
+          }, 5000)
+        )
+      ]);
 
       // Transform SDK result to our interface format
       return {
@@ -599,10 +1188,8 @@ export class MCPServerSDK implements ElicitationServer {
       };
     } catch (error: any) {
       logger.error(`Elicitation failed: ${error.message}`);
-      // Return cancel on error
-      return {
-        action: 'cancel'
-      };
+      // Re-throw the error so ncp-management.ts can catch it and use native dialog fallback
+      throw error;
     }
   }
 }

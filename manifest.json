@@ -45,6 +45,12 @@
       "title": "Enable Debug Logging",
       "description": "Show detailed logs for troubleshooting (runtime detection, MCP loading, etc.)",
       "default": false
+    },
+    "confirm_before_run": {
+      "type": "boolean",
+      "title": "Confirm Modifications Before Run",
+      "description": "Show confirmation dialog before executing modification operations (adding/removing MCPs, file changes, deletions, etc.). Protects against unintended changes by requiring explicit user approval.",
+      "default": true
     }
   },
   "server": {
@@ -63,6 +69,7 @@
         "NCP_ENABLE_GLOBAL_CLI": "${user_config.enable_global_cli}",
         "NCP_AUTO_IMPORT": "${user_config.auto_import_client_mcps}",
         "NCP_DEBUG": "${user_config.enable_debug_logging}",
+        "NCP_CONFIRM_BEFORE_RUN": "${user_config.confirm_before_run}",
         "NCP_MODE": "extension"
       }
     }

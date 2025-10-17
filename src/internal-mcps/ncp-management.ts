@@ -14,6 +14,7 @@ import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { RegistryClient, RegistryMCPCandidate } from '../services/registry-client.js';
 import { collectCredentials, detectRequiredEnvVars } from '../utils/elicitation-helper.js';
+import { showConfirmDialog } from '../utils/native-dialog.js';
 
 export class NCPManagementMCP implements InternalMCP {
   name = 'ncp';
@@ -25,7 +26,7 @@ export class NCPManagementMCP implements InternalMCP {
   tools: InternalTool[] = [
     {
       name: 'add',
-      description: 'Add a new MCP server to NCP configuration. IMPORTANT: AI must first call confirm_add_mcp prompt for user approval. User can securely provide API keys via clipboard before approving.',
+      description: 'Add a new MCP server to NCP configuration. User confirmation required (automatic popup). User can securely provide API keys via clipboard during credential collection.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -53,7 +54,7 @@ export class NCPManagementMCP implements InternalMCP {
     },
     {
       name: 'remove',
-      description: 'Remove an MCP server from NCP configuration. IMPORTANT: AI must first call confirm_remove_mcp prompt for user approval.',
+      description: 'Remove an MCP server from NCP configuration. User confirmation required (automatic popup).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -202,6 +203,132 @@ export class NCPManagementMCP implements InternalMCP {
     const commandArgs = params.args || [];
     const profile = params.profile || 'all';
 
+    // ===== CONFIRM BEFORE ADD (Server-side enforcement) =====
+    if (this.elicitationServer) {
+      const argsStr = commandArgs.length > 0 ? ` ${commandArgs.join(' ')}` : '';
+      const confirmationMessage = `⚠️ CONFIRM MCP INSTALLATION
+
+Adding new MCP server: ${mcpName}
+Profile: ${profile}
+Command: ${command}${argsStr}
+
+⚠️ Installing MCPs can execute arbitrary code on your system. Only proceed if you trust this MCP server.
+
+Do you want to install this MCP?`;
+
+      let approved = false;
+
+      try {
+        // Try elicitation first (works with supporting MCP clients)
+        const result = await this.elicitationServer.elicitInput({
+          message: confirmationMessage,
+          requestedSchema: {
+            type: 'object',
+            properties: {
+              action: {
+                type: 'string',
+                enum: ['approve', 'cancel'],
+                description: 'Choose: approve (install MCP) or cancel (don\'t install)'
+              }
+            },
+            required: ['action']
+          }
+        });
+
+        approved = !(result.action === 'decline' || result.action === 'cancel' ||
+                    (result.action === 'accept' && result.content?.action === 'cancel'));
+
+      } catch (error: any) {
+        // Check if client doesn't support elicitation (error -32601: Method not found)
+        const isMethodNotFound = error.code === -32601 ||
+                                 (error.message && error.message.includes('Method not found'));
+
+        if (isMethodNotFound) {
+          logger.warn('Elicitation not supported by client, falling back to native OS dialog');
+
+          // Fallback to native OS dialog
+          try {
+            const result = await showConfirmDialog(
+              'NCP: Confirm MCP Installation',
+              confirmationMessage,
+              'Approve',
+              'Cancel'
+            );
+
+            // Handle timeout with retry instruction
+            if (result.timedOut && result.stillPending) {
+              return {
+                success: false,
+                error: `⏳ Waiting for user confirmation...\n\n` +
+                       `A confirmation dialog is still open on your system. Please:\n` +
+                       `1. Check for a dialog box asking to approve MCP installation\n` +
+                       `2. Click "Approve" or "Cancel" in that dialog\n` +
+                       `3. Retry this operation (I'll check if you already responded)\n\n` +
+                       `💡 If you already clicked Approve, just retry this exact same operation and it will proceed.`
+              };
+            }
+
+            approved = result.approved;
+          } catch (nativeError: any) {
+            // Dialog system failed (missing zenity, PowerShell error, etc.)
+            // This is our limitation, not user's choice - provide manual installation instructions
+            logger.error(`Native dialog failed: ${nativeError.message}`);
+
+            const profilePath = await this.profileManager!.getProfilePath(profile);
+            const argsStr = commandArgs.length > 0 ? commandArgs.join(' ') : '';
+            const configToAdd = {
+              command,
+              args: commandArgs
+            };
+
+            // Check if running as extension with global CLI disabled
+            const isExtension = process.env.NCP_MODE === 'extension';
+            const globalCliEnabled = process.env.NCP_ENABLE_GLOBAL_CLI === 'true';
+
+            let errorMessage = `⚠️  Cannot show confirmation dialog: ${nativeError.message}\n\n` +
+                               `For security, NCP requires user confirmation before installing MCPs.\n\n`;
+
+            // If extension without global CLI, suggest enabling it first
+            if (isExtension && !globalCliEnabled) {
+              errorMessage += `📌 EASIEST OPTION: Enable the global NCP command\n\n` +
+                              `1. Edit your Claude Desktop extension settings (.dxt file)\n` +
+                              `2. Set: "enableGlobalCLI": true\n` +
+                              `3. Restart Claude Desktop\n` +
+                              `4. Use command: ncp add ${mcpName} ${command} ${argsStr}\n\n` +
+                              `────────────────────────────────────────\n\n`;
+            }
+
+            errorMessage += `📝 OR: Install manually by editing configuration\n\n` +
+                            `1. Open your profile configuration file:\n` +
+                            `   ${profilePath}\n\n` +
+                            `2. Add this to the "mcpServers" section:\n` +
+                            `   "${mcpName}": ${JSON.stringify(configToAdd, null, 2).split('\n').join('\n   ')}\n\n` +
+                            `3. Save the file\n\n` +
+                            `4. Restart NCP or your MCP client\n\n` +
+                            `⚙️  Full command for reference: ${command} ${argsStr}\n\n` +
+                            `💡 If this MCP requires API keys/credentials, add them to the "env" field in the config.`;
+
+            return {
+              success: false,
+              error: errorMessage
+            };
+          }
+        } else {
+          // Other elicitation error
+          logger.error(`Elicitation error: ${error.message}`);
+          throw error;
+        }
+      }
+
+      if (!approved) {
+        return {
+          success: false,
+          error: `⛔ Installation cancelled by user. MCP "${mcpName}" was not added.`
+        };
+      }
+    }
+    // ===== END CONFIRM BEFORE ADD =====
+
     // Build base config
     const config: any = {
       command,
@@ -265,6 +392,123 @@ export class NCPManagementMCP implements InternalMCP {
 
     const mcpName = params.mcp_name;
     const profile = params.profile || 'all';
+
+    // ===== CONFIRM BEFORE REMOVE (Server-side enforcement) =====
+    if (this.elicitationServer) {
+      const confirmationMessage = `⚠️ CONFIRM MCP REMOVAL
+
+Removing MCP server: ${mcpName}
+Profile: ${profile}
+
+This will remove the MCP configuration. You can always add it back later.
+
+Do you want to remove this MCP?`;
+
+      let approved = false;
+
+      try {
+        // Try elicitation first (works with supporting MCP clients)
+        const result = await this.elicitationServer.elicitInput({
+          message: confirmationMessage,
+          requestedSchema: {
+            type: 'object',
+            properties: {
+              action: {
+                type: 'string',
+                enum: ['approve', 'cancel'],
+                description: 'Choose: approve (remove MCP) or cancel (keep it)'
+              }
+            },
+            required: ['action']
+          }
+        });
+
+        approved = !(result.action === 'decline' || result.action === 'cancel' ||
+                    (result.action === 'accept' && result.content?.action === 'cancel'));
+
+      } catch (error: any) {
+        // Check if client doesn't support elicitation (error -32601: Method not found)
+        const isMethodNotFound = error.code === -32601 ||
+                                 (error.message && error.message.includes('Method not found'));
+
+        if (isMethodNotFound) {
+          logger.warn('Elicitation not supported by client, falling back to native OS dialog');
+
+          // Fallback to native OS dialog
+          try {
+            const result = await showConfirmDialog(
+              'NCP: Confirm MCP Removal',
+              confirmationMessage,
+              'Approve',
+              'Cancel'
+            );
+
+            // Handle timeout with retry instruction
+            if (result.timedOut && result.stillPending) {
+              return {
+                success: false,
+                error: `⏳ Waiting for user confirmation...\n\n` +
+                       `A confirmation dialog is still open on your system. Please:\n` +
+                       `1. Check for a dialog box asking to approve MCP removal\n` +
+                       `2. Click "Approve" or "Cancel" in that dialog\n` +
+                       `3. Retry this operation (I'll check if you already responded)\n\n` +
+                       `💡 If you already clicked Approve, just retry this exact same operation and it will proceed.`
+              };
+            }
+
+            approved = result.approved;
+          } catch (nativeError: any) {
+            // Dialog system failed (missing zenity, PowerShell error, etc.)
+            // This is our limitation, not user's choice - provide manual removal instructions
+            logger.error(`Native dialog failed: ${nativeError.message}`);
+
+            const profilePath = await this.profileManager!.getProfilePath(profile);
+
+            // Check if running as extension with global CLI disabled
+            const isExtension = process.env.NCP_MODE === 'extension';
+            const globalCliEnabled = process.env.NCP_ENABLE_GLOBAL_CLI === 'true';
+
+            let errorMessage = `⚠️  Cannot show confirmation dialog: ${nativeError.message}\n\n` +
+                               `For security, NCP requires user confirmation before removing MCPs.\n\n`;
+
+            // If extension without global CLI, suggest enabling it first
+            if (isExtension && !globalCliEnabled) {
+              errorMessage += `📌 EASIEST OPTION: Enable the global NCP command\n\n` +
+                              `1. Edit your Claude Desktop extension settings (.dxt file)\n` +
+                              `2. Set: "enableGlobalCLI": true\n` +
+                              `3. Restart Claude Desktop\n` +
+                              `4. Use command: ncp remove ${mcpName}\n\n` +
+                              `────────────────────────────────────────\n\n`;
+            }
+
+            errorMessage += `📝 OR: Remove manually by editing configuration\n\n` +
+                            `1. Open your profile configuration file:\n` +
+                            `   ${profilePath}\n\n` +
+                            `2. Find and delete the "${mcpName}" entry from the "mcpServers" section\n\n` +
+                            `3. Save the file\n\n` +
+                            `4. Restart NCP or your MCP client\n\n` +
+                            `💡 Make sure to preserve valid JSON format (watch for trailing commas).`;
+
+            return {
+              success: false,
+              error: errorMessage
+            };
+          }
+        } else {
+          // Other elicitation error
+          logger.error(`Elicitation error: ${error.message}`);
+          throw error;
+        }
+      }
+
+      if (!approved) {
+        return {
+          success: false,
+          error: `⛔ Removal cancelled by user. MCP "${mcpName}" was not removed.`
+        };
+      }
+    }
+    // ===== END CONFIRM BEFORE REMOVE =====
 
     // Remove MCP from profile
     await this.profileManager!.removeMCPFromProfile(profile, mcpName);

@@ -58,30 +58,40 @@ function getSettingsPath(): string {
 /**
  * Load global settings
  * Returns default settings if file doesn't exist
+ * Respects NCP_CONFIRM_BEFORE_RUN environment variable from extension settings
  */
 export async function loadGlobalSettings(): Promise<GlobalSettings> {
   const settingsPath = getSettingsPath();
 
-  if (!existsSync(settingsPath)) {
-    return { ...DEFAULT_SETTINGS };
+  // Start with defaults
+  let settings: GlobalSettings = { ...DEFAULT_SETTINGS };
+
+  // Load from file if it exists
+  if (existsSync(settingsPath)) {
+    try {
+      const content = await fs.readFile(settingsPath, 'utf-8');
+      const fileSettings = JSON.parse(content);
+
+      // Merge with defaults to ensure all fields exist
+      settings = {
+        confirmBeforeRun: {
+          ...DEFAULT_SETTINGS.confirmBeforeRun,
+          ...(fileSettings.confirmBeforeRun || {})
+        }
+        // Add other settings here in the future
+      };
+    } catch (error) {
+      console.warn('Failed to load settings, using defaults:', error);
+    }
   }
 
-  try {
-    const content = await fs.readFile(settingsPath, 'utf-8');
-    const settings = JSON.parse(content);
-
-    // Merge with defaults to ensure all fields exist
-    return {
-      confirmBeforeRun: {
-        ...DEFAULT_SETTINGS.confirmBeforeRun,
-        ...(settings.confirmBeforeRun || {})
-      }
-      // Add other settings here in the future
-    };
-  } catch (error) {
-    console.warn('Failed to load settings, using defaults:', error);
-    return { ...DEFAULT_SETTINGS };
+  // Override with environment variable from extension UI toggle
+  if (process.env.NCP_CONFIRM_BEFORE_RUN !== undefined) {
+    const envValue = process.env.NCP_CONFIRM_BEFORE_RUN;
+    settings.confirmBeforeRun.enabled = envValue === 'true';
   }
+
+  return settings;
 }
 
 /**
