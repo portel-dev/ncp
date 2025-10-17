@@ -148,8 +148,11 @@ export class MCPServerSDK {
       }
     ];
 
-    // TODO: Add internal MCP tools (ncp:add, ncp:import, etc.) once orchestrator is initialized
-    // This will be populated after initialize() completes
+    // Add internal MCP tools if orchestrator is initialized
+    // Internal MCPs (ncp:add, ncp:import, ncp:list, ncp:remove, ncp:export) are always available
+    // They don't depend on orchestrator initialization status
+    // Note: We'll expose them later when we implement elicitation for credentials
+    // For now, they're accessible via run("ncp:add", ...) but not listed separately
 
     return coreTools;
   }

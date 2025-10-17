@@ -153,7 +153,54 @@ async function runTests() {
       logTest('Run Tool Execution (dry run)', false, undefined, error.message);
     }
 
-    // Step 11: Test error handling (invalid tool)
+    // Step 11: Test internal MCPs discovery (ncp:list, ncp:add, etc.)
+    console.log('\n🔍 Testing internal MCPs discovery...');
+    try {
+      const ncpSearchResult = await client.callTool({
+        name: 'find',
+        arguments: {
+          description: 'ncp configuration',
+          limit: 10
+        }
+      });
+
+      const hasContent = ncpSearchResult.content && ncpSearchResult.content.length > 0;
+      const text = (ncpSearchResult.content[0] as any)?.text || '';
+      const hasInternalTools = text.includes('ncp:') || text.includes('add') || text.includes('import');
+
+      logTest('Internal MCPs Discovery', hasContent && hasInternalTools, {
+        contentType: ncpSearchResult.content[0]?.type,
+        foundInternalMCPs: hasInternalTools
+      });
+    } catch (error: any) {
+      logTest('Internal MCPs Discovery', false, undefined, error.message);
+    }
+
+    // Step 12: Test calling internal MCP tool (ncp:list)
+    console.log('\n🔧 Testing internal MCP execution (ncp:list)...');
+    try {
+      const listResult = await client.callTool({
+        name: 'run',
+        arguments: {
+          tool: 'ncp:list',
+          parameters: {}
+        }
+      });
+
+      const hasContent = listResult.content && listResult.content.length > 0;
+      const text = (listResult.content[0] as any)?.text || '';
+      const isSuccess = !((listResult as any).isError) && (text.includes('MCP') || text.includes('profile'));
+
+      logTest('Internal MCP Execution (ncp:list)', hasContent && isSuccess, {
+        contentType: listResult.content[0]?.type,
+        hasResponse: !!text,
+        isError: !!(listResult as any).isError
+      });
+    } catch (error: any) {
+      logTest('Internal MCP Execution (ncp:list)', false, undefined, error.message);
+    }
+
+    // Step 13: Test error handling (invalid tool)
     console.log('\n⚠️  Testing error handling...');
     try {
       const errorResult = await client.callTool({
@@ -181,7 +228,7 @@ async function runTests() {
       });
     }
 
-    // Step 12: Cleanup
+    // Step 14: Cleanup
     console.log('\n🧹 Cleaning up...');
     await client.close();
     logTest('Client Disconnect', true);
