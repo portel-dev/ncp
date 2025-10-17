@@ -1,0 +1,11 @@
+# Markdown files to keep in OSS repository
+# Files NOT listed here will be automatically moved to commercial repo on commit
+#
+# Format: One filename per line, no wildcards
+
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE.md
+CODE_OF_CONDUCT.md
+SECURITY.md
