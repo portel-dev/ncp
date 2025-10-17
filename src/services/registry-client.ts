@@ -24,6 +24,18 @@ export interface RegistryServer {
         name: string;
         description?: string;
         isRequired?: boolean;
+        isSecret?: boolean;
+        default?: string;
+      }>;
+    }>;
+    remotes?: Array<{
+      type: string; // "sse" | "streamable-http"
+      url: string;
+      environmentVariables?: Array<{
+        name: string;
+        description?: string;
+        isRequired?: boolean;
+        isSecret?: boolean;
         default?: string;
       }>;
     }>;
@@ -45,6 +57,10 @@ export interface ServerSearchResult {
       version: string;
       runtimeHint?: string;
     }>;
+    remotes?: Array<{
+      type: string;
+      url: string;
+    }>;
   };
   _meta?: {
     'io.modelcontextprotocol.registry/official'?: {
@@ -59,12 +75,19 @@ export interface RegistryMCPCandidate {
   displayName: string;
   description: string;
   version: string;
-  command: string;
-  args: string[];
+  transport: 'stdio' | 'http' | 'sse';
+  // For stdio servers
+  command?: string;
+  args?: string[];
+  // For HTTP/SSE servers
+  url?: string;
+  remoteType?: string; // "sse" | "streamable-http"
+  // Common fields
   envVars?: Array<{
     name: string;
     description?: string;
     isRequired?: boolean;
+    isSecret?: boolean;
     default?: string;
   }>;
   downloadCount?: number;
@@ -145,46 +168,86 @@ export class RegistryClient {
 
     return results.map((result, index) => {
       const pkg = result.server.packages?.[0];
+      const remote = result.server.remotes?.[0];
       const shortName = this.extractShortName(result.server.name);
 
-      return {
+      // Determine transport type
+      let transport: 'stdio' | 'http' | 'sse' = 'stdio';
+      if (remote) {
+        transport = remote.type === 'sse' ? 'sse' : 'http';
+      }
+
+      const candidate: RegistryMCPCandidate = {
         number: index + 1,
         name: result.server.name,
         displayName: shortName,
         description: result.server.description || 'No description',
         version: result.server.version,
-        command: pkg?.runtimeHint || 'npx',
-        args: pkg ? [pkg.identifier] : [],
+        transport,
         status: result._meta?.['io.modelcontextprotocol.registry/official']?.status
       };
+
+      // Add stdio-specific fields
+      if (pkg) {
+        candidate.command = pkg.runtimeHint || 'npx';
+        candidate.args = [pkg.identifier];
+      }
+
+      // Add HTTP/SSE-specific fields
+      if (remote) {
+        candidate.url = remote.url;
+        candidate.remoteType = remote.type;
+      }
+
+      return candidate;
     });
   }
 
   /**
    * Get detailed info for selected MCPs (including env vars)
+   * Returns unified configuration for both stdio and HTTP/SSE servers
    */
   async getDetailedInfo(serverName: string): Promise<{
-    command: string;
-    args: string[];
+    transport: 'stdio' | 'http' | 'sse';
+    // For stdio servers
+    command?: string;
+    args?: string[];
+    // For HTTP/SSE servers
+    url?: string;
+    remoteType?: string;
+    // Common fields
     envVars?: Array<{
       name: string;
       description?: string;
       isRequired?: boolean;
+      isSecret?: boolean;
       default?: string;
     }>;
   }> {
     const server = await this.getServer(serverName);
     const pkg = server.server.packages?.[0];
+    const remote = server.server.remotes?.[0];
 
-    if (!pkg) {
-      throw new Error(`No package information available for ${serverName}`);
+    // Prefer remotes over packages if both exist
+    if (remote) {
+      return {
+        transport: remote.type === 'sse' ? 'sse' : 'http',
+        url: remote.url,
+        remoteType: remote.type,
+        envVars: remote.environmentVariables
+      };
     }
 
-    return {
-      command: pkg.runtimeHint || 'npx',
-      args: [pkg.identifier],
-      envVars: pkg.environmentVariables
-    };
+    if (pkg) {
+      return {
+        transport: 'stdio',
+        command: pkg.runtimeHint || 'npx',
+        args: [pkg.identifier],
+        envVars: pkg.environmentVariables
+      };
+    }
+
+    throw new Error(`No package or remote information available for ${serverName}`);
   }
 
   /**

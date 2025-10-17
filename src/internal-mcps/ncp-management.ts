@@ -263,14 +263,24 @@ export class NCPManagementMCP implements InternalMCP {
 
     const mcpList = Object.entries(mcps)
       .map(([name, config]) => {
-        const argsStr = config.args?.join(' ') || '';
-        const envKeys = config.env ? Object.keys(config.env).join(', ') : '';
-        const envInfo = envKeys ? `\n  Environment: ${envKeys}` : '';
-        return `• ${name}\n  Command: ${config.command} ${argsStr}${envInfo}`;
+        const isRemote = 'url' in config;
+        const transportBadge = isRemote ? '🌐' : '💻';
+
+        if (isRemote) {
+          // HTTP/SSE server
+          const authType = config.auth?.type || 'none';
+          return `${transportBadge} ${name}\n  URL: ${config.url}\n  Auth: ${authType}`;
+        } else {
+          // stdio server
+          const argsStr = config.args?.join(' ') || '';
+          const envKeys = config.env ? Object.keys(config.env).join(', ') : '';
+          const envInfo = envKeys ? `\n  Environment: ${envKeys}` : '';
+          return `${transportBadge} ${name}\n  Command: ${config.command} ${argsStr}${envInfo}`;
+        }
       })
       .join('\n\n');
 
-    const successMessage = `📋 Configured MCPs in profile "${profile}":\n\n${mcpList}`;
+    const successMessage = `📋 Configured MCPs in profile "${profile}":\n\n${mcpList}\n\n💡 Badges: 💻=stdio 🌐=HTTP/SSE`;
 
     return {
       success: true,
@@ -412,8 +422,10 @@ export class NCPManagementMCP implements InternalMCP {
       if (!selection) {
         const listItems = candidates.map(c => {
           const statusBadge = c.status === 'active' ? '⭐' : '📦';
+          const transportBadge = c.transport === 'stdio' ? '💻' : '🌐';
           const envInfo = c.envVars?.length ? ` (${c.envVars.length} env vars required)` : '';
-          return `${c.number}. ${statusBadge} ${c.displayName}${envInfo}\n   ${c.description}\n   Version: ${c.version}`;
+          const transportInfo = c.transport !== 'stdio' ? ` [${c.transport.toUpperCase()}]` : '';
+          return `${c.number}. ${statusBadge}${transportBadge} ${c.displayName}${transportInfo}${envInfo}\n   ${c.description}\n   Version: ${c.version}`;
         }).join('\n\n');
 
         const message = `📋 Found ${candidates.length} MCPs matching "${query}":\n\n${listItems}\n\n` +
@@ -421,7 +433,8 @@ export class NCPManagementMCP implements InternalMCP {
           `   Example: { from: "discovery", source: "${query}", selection: "1,3,5" }\n\n` +
           `   - Select individual: "1,3,5"\n` +
           `   - Select range: "1-5"\n` +
-          `   - Select all: "*"`;
+          `   - Select all: "*"\n\n` +
+          `💡 Badges: ⭐=active 📦=package 💻=stdio 🌐=HTTP/SSE`;
 
         return {
           success: true,
@@ -457,19 +470,43 @@ export class NCPManagementMCP implements InternalMCP {
           // Get detailed info including env vars
           const details = await registryClient.getDetailedInfo(candidate.name);
 
-          // For now, add without env vars (user can configure later or use clipboard)
-          // TODO: Integrate with prompts to show confirm_add_mcp and get clipboard config
-          const config = {
-            command: details.command,
-            args: details.args,
-            env: {}
-          };
+          // Try to read clipboard for additional config (env vars, secrets)
+          // This is the clipboard security pattern - user can provide secrets before importing
+          const clipboardConfig = await tryReadClipboardConfig();
+
+          // Build config based on transport type
+          let config: any;
+
+          if (details.transport === 'stdio') {
+            // stdio server
+            const baseConfig = {
+              command: details.command!,
+              args: details.args || [],
+              env: {}
+            };
+            // Merge with clipboard config
+            config = mergeWithClipboardConfig(baseConfig, clipboardConfig);
+          } else {
+            // HTTP/SSE server
+            config = {
+              url: details.url!,
+              auth: {
+                type: 'bearer', // Default auth type
+                ...clipboardConfig?.env // Clipboard can override with full auth config
+              }
+            };
+
+            // If clipboard has env.BEARER_TOKEN or similar, use it
+            if (clipboardConfig?.env) {
+              config.env = clipboardConfig.env;
+            }
+          }
 
           await this.profileManager!.addMCPToProfile('all', candidate.displayName, config);
           imported++;
           importedNames.push(candidate.displayName);
 
-          logger.info(`Imported ${candidate.displayName} from registry`);
+          logger.info(`Imported ${candidate.displayName} from registry (${details.transport})`);
         } catch (error: any) {
           errors.push(`${candidate.displayName}: ${error.message}`);
           logger.error(`Failed to import ${candidate.displayName}: ${error.message}`);
