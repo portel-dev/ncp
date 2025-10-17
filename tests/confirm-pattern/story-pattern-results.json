@@ -1,0 +1,472 @@
+{
+  "winner": {
+    "name": "Current (list form)",
+    "text": "operations that delete files, remove data permanently, create or write files to disk, send emails or messages, post or publish content online, execute shell commands or scripts, modify database records, deploy or push to production, make HTTP POST PUT or DELETE requests, update or patch existing data, drop or truncate tables, commit or push to git repositories, transfer money or charge payments, revoke access or permissions, or make any changes that cannot be easily undone",
+    "maxScore": 0.44698264164624724,
+    "avgScore": 0.15758760468372585,
+    "recommendedThreshold": 0.35,
+    "triggeredCount": 5,
+    "top10": [
+      {
+        "toolId": "docker:run_command",
+        "confidence": 0.44698264164624724,
+        "description": "Execute a command inside a Docker container service"
+      },
+      {
+        "toolId": "kubernetes:kubectl_generic",
+        "confidence": 0.43795512840326567,
+        "description": "Execute any kubectl command with the provided arguments and flags"
+      },
+      {
+        "toolId": "filesystem:write_file",
+        "confidence": 0.4314323758063077,
+        "description": "Create a new file or completely overwrite an existing file with new content. Use with caution as it will overwrite existing files without warning. Handles text content with proper encoding. Only works within allowed directories."
+      },
+      {
+        "toolId": "kubernetes:exec_in_pod",
+        "confidence": 0.4246572829290102,
+        "description": "Execute a command in a Kubernetes pod or container and return the output"
+      },
+      {
+        "toolId": "filesystem:move_file",
+        "confidence": 0.4013751076878735,
+        "description": "Move or rename files and directories. Can move files between directories and rename them in a single operation. If the destination exists, the operation will fail. Works across different directories and can be used for simple renaming within the same directory. Both source and destination must be within allowed directories."
+      },
+      {
+        "toolId": "filesystem:edit_file",
+        "confidence": 0.34612428607626,
+        "description": "Make line-based edits to a text file. Each edit replaces exact line sequences with new content. Returns a git-style diff showing the changes made. Only works within allowed directories."
+      },
+      {
+        "toolId": "notion:API-update-a-database",
+        "confidence": 0.33701841988605147,
+        "description": "Notion | Update a database"
+      },
+      {
+        "toolId": "kubernetes:cleanup",
+        "confidence": 0.3271721197984324,
+        "description": "Cleanup all managed resources"
+      },
+      {
+        "toolId": "github:create_or_update_file",
+        "confidence": 0.3015721696342499,
+        "description": "Create or update a single file in a GitHub repository"
+      },
+      {
+        "toolId": "kubernetes:kubectl_rollout",
+        "confidence": 0.28989773494597426,
+        "description": "Manage the rollout of a resource (e.g., deployment, daemonset, statefulset)"
+      }
+    ]
+  },
+  "allPatterns": [
+    {
+      "name": "Current (list form)",
+      "text": "operations that delete files, remove data permanently, create or write files to disk, send emails or messages, post or publish content online, execute shell commands or scripts, modify database records, deploy or push to production, make HTTP POST PUT or DELETE requests, update or patch existing data, drop or truncate tables, commit or push to git repositories, transfer money or charge payments, revoke access or permissions, or make any changes that cannot be easily undone",
+      "length": 477,
+      "maxScore": 0.44698264164624724,
+      "avgScore": 0.15758760468372585,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 5,
+          "percentage": "6.1"
+        },
+        {
+          "threshold": 0.4,
+          "count": 5,
+          "percentage": "6.1"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top5": [
+        {
+          "toolId": "docker:run_command",
+          "confidence": 0.44698264164624724
+        },
+        {
+          "toolId": "kubernetes:kubectl_generic",
+          "confidence": 0.43795512840326567
+        },
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.4314323758063077
+        },
+        {
+          "toolId": "kubernetes:exec_in_pod",
+          "confidence": 0.4246572829290102
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.4013751076878735
+        }
+      ]
+    },
+    {
+      "name": "Story: Safety warning narrative",
+      "text": "Be careful: this operation modifies your system in ways that persist. It may delete files, and those files will be gone. It may write new data, and that data will be stored. It may execute commands, and those commands will run. It may send messages, and those messages will be delivered. It may publish content, and that content will be public. It may modify databases, and those changes will be saved. It may deploy to production, and that code will be live. It may make destructive HTTP requests. It may drop database tables. It may revoke permissions. These are not read-only operations—they make real, permanent changes that affect your system state.",
+      "length": 654,
+      "maxScore": 0.40950670596745997,
+      "avgScore": 0.15633434246914976,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.4,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top5": [
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.40950670596745997
+        },
+        {
+          "toolId": "filesystem:read_multiple_files",
+          "confidence": 0.33791344024329945
+        },
+        {
+          "toolId": "filesystem:get_file_info",
+          "confidence": 0.3373833934133872
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.33498898699322893
+        },
+        {
+          "toolId": "filesystem:list_allowed_directories",
+          "confidence": 0.32191555585017484
+        }
+      ]
+    },
+    {
+      "name": "Story: Classification narrative",
+      "text": "We classify an operation as a modifier when it exhibits certain behaviors. A modifier operation writes data, whether by creating new files, updating existing ones, or appending to storage. A modifier operation destroys data through deletion, removal, or truncation. A modifier operation executes code such as shell commands, scripts, or arbitrary programs. A modifier operation communicates externally by sending emails, posting messages, or publishing content. A modifier operation transforms system state through database updates, configuration changes, or permission modifications. A modifier operation deploys changes to production environments or pushes code to repositories. These operations share a common trait: they make permanent changes to state that cannot be trivially reversed.",
+      "length": 791,
+      "maxScore": 0.39439663340829423,
+      "avgScore": 0.191396763225915,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 3,
+          "percentage": "3.7"
+        },
+        {
+          "threshold": 0.4,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top5": [
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.39439663340829423
+        },
+        {
+          "toolId": "notion:API-update-a-database",
+          "confidence": 0.3832484180448307
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.37720511918377003
+        },
+        {
+          "toolId": "filesystem:get_file_info",
+          "confidence": 0.3388666976601423
+        },
+        {
+          "toolId": "notion:API-update-a-block",
+          "confidence": 0.32376941046014346
+        }
+      ]
+    },
+    {
+      "name": "Story: Definition",
+      "text": "This is a modifying operation when it performs actions that change the system state. These operations include deleting files or removing data permanently from storage. They include creating new files or writing content to disk. They include sending emails, posting messages, or publishing content online. They include executing shell commands or running scripts. They include modifying database records or updating data. They include deploying to production or pushing changes to live systems. They include making HTTP requests that modify data through POST, PUT, or DELETE methods. They include dropping database tables or revoking permissions. These are operations that make permanent changes which cannot be easily undone.",
+      "length": 725,
+      "maxScore": 0.39030776628667474,
+      "avgScore": 0.14625720676800807,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 2,
+          "percentage": "2.4"
+        },
+        {
+          "threshold": 0.4,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top5": [
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.39030776628667474
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.36120669531525007
+        },
+        {
+          "toolId": "notion:API-update-a-database",
+          "confidence": 0.3133192173789993
+        },
+        {
+          "toolId": "filesystem:get_file_info",
+          "confidence": 0.2994596782711733
+        },
+        {
+          "toolId": "filesystem:list_allowed_directories",
+          "confidence": 0.29875029700793126
+        }
+      ]
+    },
+    {
+      "name": "Story: Question form",
+      "text": "Does this operation modify the system? Does it delete files or remove data permanently? Does it create new files or write to disk? Does it send emails or messages? Does it publish content online? Does it execute shell commands or scripts? Does it modify database records or update data? Does it deploy to production or push changes? Does it make HTTP POST, PUT, or DELETE requests? Does it drop tables or truncate data? Does it commit or push to repositories? Does it transfer money or charge payments? Does it revoke access or change permissions? If yes to any of these, it makes permanent changes that cannot be easily undone.",
+      "length": 628,
+      "maxScore": 0.38802284297647616,
+      "avgScore": 0.16853441318084433,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 3,
+          "percentage": "3.7"
+        },
+        {
+          "threshold": 0.4,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top5": [
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.38802284297647616
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.37443005216146924
+        },
+        {
+          "toolId": "kubernetes:exec_in_pod",
+          "confidence": 0.3530168067913512
+        },
+        {
+          "toolId": "docker:run_command",
+          "confidence": 0.34550374822569824
+        },
+        {
+          "toolId": "kubernetes:kubectl_generic",
+          "confidence": 0.3452511802365956
+        }
+      ]
+    },
+    {
+      "name": "Story: Impact-centered",
+      "text": "This operation has a permanent impact. When it runs, it changes files by writing, deleting, or moving them. When it runs, it modifies data in databases or storage systems. When it runs, it executes commands that alter system state. When it runs, it sends communications like emails or messages. When it runs, it publishes content that becomes visible to others. When it runs, it deploys code or pushes changes to production. When it runs, it makes HTTP requests that create, update, or remove data. When it runs, it changes permissions, access rights, or configurations. The impact of these operations persists after execution and cannot be easily undone.",
+      "length": 655,
+      "maxScore": 0.3653546184158678,
+      "avgScore": 0.14027856183505966,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.4,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top5": [
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.3653546184158678
+        },
+        {
+          "toolId": "kubernetes:cleanup",
+          "confidence": 0.3240345335686633
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.32265999020613895
+        },
+        {
+          "toolId": "filesystem:get_file_info",
+          "confidence": 0.28941517040308434
+        },
+        {
+          "toolId": "kubernetes:node_management",
+          "confidence": 0.2848271060406405
+        }
+      ]
+    },
+    {
+      "name": "Story: Consequence-focused",
+      "text": "This tool makes permanent changes to your system. It might delete files that cannot be recovered. It might write new data to disk or modify existing files. It might send messages or publish content that others will see. It might execute commands that change your system state. It might modify database records or update data permanently. It might deploy code to production servers. It might make HTTP requests that create, update, or delete data. It might remove database tables or revoke access permissions. These actions have lasting consequences and cannot be easily reversed.",
+      "length": 579,
+      "maxScore": 0.358506276352769,
+      "avgScore": 0.16131274593763345,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.4,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top5": [
+        {
+          "toolId": "filesystem:get_file_info",
+          "confidence": 0.358506276352769
+        },
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.34652442410021717
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.33015236972574047
+        },
+        {
+          "toolId": "kubernetes:cleanup",
+          "confidence": 0.3281070203380332
+        },
+        {
+          "toolId": "notion:API-update-a-database",
+          "confidence": 0.3125139905241977
+        }
+      ]
+    },
+    {
+      "name": "Story: Behavior description",
+      "text": "A modifier operation changes things. It deletes files and removes data permanently. It creates new files and writes content to disk. It sends emails and messages. It publishes content online. It executes shell commands and runs scripts. It modifies database records and updates data. It deploys code and pushes to production. It makes HTTP POST, PUT, and DELETE requests. It drops database tables and truncates data. It commits to git repositories and pushes changes. It transfers money and charges payments. It revokes access and changes permissions. These operations modify state and make permanent changes.",
+      "length": 609,
+      "maxScore": 0.31678070845695677,
+      "avgScore": 0.1337154009042673,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.4,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top5": [
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.31678070845695677
+        },
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.30772258204797487
+        },
+        {
+          "toolId": "filesystem:get_file_info",
+          "confidence": 0.275707450027018
+        },
+        {
+          "toolId": "docker:run_command",
+          "confidence": 0.2623261120071753
+        },
+        {
+          "toolId": "notion:API-update-a-database",
+          "confidence": 0.2578918553728067
+        }
+      ]
+    }
+  ]
+}

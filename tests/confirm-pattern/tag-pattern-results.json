@@ -1,0 +1,719 @@
+{
+  "bestByPeak": {
+    "name": "Tags: Hyphenated concepts",
+    "text": "delete-files remove-data-permanently create-files write-to-disk send-emails send-messages publish-content-online execute-shell-commands run-scripts modify-database-records deploy-to-production push-to-production http-post-requests http-put-requests http-delete-requests update-data patch-data drop-database-tables truncate-tables git-commit git-push transfer-money charge-payments revoke-access revoke-permissions permanent-changes irreversible-changes",
+    "maxScore": 0.4642929923453042,
+    "avgScore": 0.1894087465266676
+  },
+  "bestBalanced": {
+    "name": "Tags: Hyphenated concepts",
+    "text": "delete-files remove-data-permanently create-files write-to-disk send-emails send-messages publish-content-online execute-shell-commands run-scripts modify-database-records deploy-to-production push-to-production http-post-requests http-put-requests http-delete-requests update-data patch-data drop-database-tables truncate-tables git-commit git-push transfer-money charge-payments revoke-access revoke-permissions permanent-changes irreversible-changes",
+    "maxScore": 0.4642929923453042,
+    "avgScore": 0.1894087465266676,
+    "recommendedThreshold": 0.35,
+    "triggeredCount": 5,
+    "top15": [
+      {
+        "toolId": "filesystem:write_file",
+        "confidence": 0.4642929923453042,
+        "description": "Create a new file or completely overwrite an existing file with new content. Use with caution as it will overwrite existing files without warning. Handles text content with proper encoding. Only works within allowed directories."
+      },
+      {
+        "toolId": "docker:run_command",
+        "confidence": 0.44737383495721017,
+        "description": "Execute a command inside a Docker container service"
+      },
+      {
+        "toolId": "filesystem:edit_file",
+        "confidence": 0.42897961093124914,
+        "description": "Make line-based edits to a text file. Each edit replaces exact line sequences with new content. Returns a git-style diff showing the changes made. Only works within allowed directories."
+      },
+      {
+        "toolId": "kubernetes:kubectl_generic",
+        "confidence": 0.42600079024562254,
+        "description": "Execute any kubectl command with the provided arguments and flags"
+      },
+      {
+        "toolId": "kubernetes:exec_in_pod",
+        "confidence": 0.4059424484662057,
+        "description": "Execute a command in a Kubernetes pod or container and return the output"
+      },
+      {
+        "toolId": "github:push_files",
+        "confidence": 0.33565900501840334,
+        "description": "Push multiple files to a GitHub repository in a single commit"
+      },
+      {
+        "toolId": "notion:API-update-a-database",
+        "confidence": 0.32983675956805125,
+        "description": "Notion | Update a database"
+      },
+      {
+        "toolId": "kubernetes:cleanup",
+        "confidence": 0.32914509128466474,
+        "description": "Cleanup all managed resources"
+      },
+      {
+        "toolId": "github:create_or_update_file",
+        "confidence": 0.32347791942304266,
+        "description": "Create or update a single file in a GitHub repository"
+      },
+      {
+        "toolId": "kubernetes:kubectl_rollout",
+        "confidence": 0.3155695629599175,
+        "description": "Manage the rollout of a resource (e.g., deployment, daemonset, statefulset)"
+      },
+      {
+        "toolId": "filesystem:move_file",
+        "confidence": 0.31531918489544897,
+        "description": "Move or rename files and directories. Can move files between directories and rename them in a single operation. If the destination exists, the operation will fail. Works across different directories and can be used for simple renaming within the same directory. Both source and destination must be within allowed directories."
+      },
+      {
+        "toolId": "filesystem:read_file",
+        "confidence": 0.30778068968920197,
+        "description": "Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead."
+      },
+      {
+        "toolId": "filesystem:get_file_info",
+        "confidence": 0.29690906323448835,
+        "description": "Retrieve detailed metadata about a file or directory. Returns comprehensive information including size, creation time, last modified time, permissions, and type. This tool is perfect for understanding file characteristics without reading the actual content. Only works within allowed directories."
+      },
+      {
+        "toolId": "github:get_pull_request_files",
+        "confidence": 0.29482242211864845,
+        "description": "Get the list of files changed in a pull request"
+      },
+      {
+        "toolId": "kubernetes:node_management",
+        "confidence": 0.2812187519377232,
+        "description": "Manage Kubernetes nodes with cordon, drain, and uncordon operations"
+      }
+    ]
+  },
+  "allPatterns": [
+    {
+      "name": "Current (list with connectors)",
+      "text": "operations that delete files, remove data permanently, create or write files to disk, send emails or messages, post or publish content online, execute shell commands or scripts, modify database records, deploy or push to production, make HTTP POST PUT or DELETE requests, update or patch existing data, drop or truncate tables, commit or push to git repositories, transfer money or charge payments, revoke access or permissions, or make any changes that cannot be easily undone",
+      "length": 477,
+      "words": 75,
+      "hyphens": 0,
+      "maxScore": 0.44698264164624724,
+      "avgScore": 0.15758760468372585,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 5,
+          "percentage": "6.1"
+        },
+        {
+          "threshold": 0.4,
+          "count": 5,
+          "percentage": "6.1"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top10": [
+        {
+          "toolId": "docker:run_command",
+          "confidence": 0.44698264164624724
+        },
+        {
+          "toolId": "kubernetes:kubectl_generic",
+          "confidence": 0.43795512840326567
+        },
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.4314323758063077
+        },
+        {
+          "toolId": "kubernetes:exec_in_pod",
+          "confidence": 0.4246572829290102
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.4013751076878735
+        },
+        {
+          "toolId": "filesystem:edit_file",
+          "confidence": 0.34612428607626
+        },
+        {
+          "toolId": "notion:API-update-a-database",
+          "confidence": 0.33701841988605147
+        },
+        {
+          "toolId": "kubernetes:cleanup",
+          "confidence": 0.3271721197984324
+        },
+        {
+          "toolId": "github:create_or_update_file",
+          "confidence": 0.3015721696342499
+        },
+        {
+          "toolId": "kubernetes:kubectl_rollout",
+          "confidence": 0.28989773494597426
+        }
+      ]
+    },
+    {
+      "name": "Tags: Hyphenated concepts",
+      "text": "delete-files remove-data-permanently create-files write-to-disk send-emails send-messages publish-content-online execute-shell-commands run-scripts modify-database-records deploy-to-production push-to-production http-post-requests http-put-requests http-delete-requests update-data patch-data drop-database-tables truncate-tables git-commit git-push transfer-money charge-payments revoke-access revoke-permissions permanent-changes irreversible-changes",
+      "length": 452,
+      "words": 27,
+      "hyphens": 38,
+      "maxScore": 0.4642929923453042,
+      "avgScore": 0.1894087465266676,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 5,
+          "percentage": "6.1"
+        },
+        {
+          "threshold": 0.4,
+          "count": 5,
+          "percentage": "6.1"
+        },
+        {
+          "threshold": 0.45,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top10": [
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.4642929923453042
+        },
+        {
+          "toolId": "docker:run_command",
+          "confidence": 0.44737383495721017
+        },
+        {
+          "toolId": "filesystem:edit_file",
+          "confidence": 0.42897961093124914
+        },
+        {
+          "toolId": "kubernetes:kubectl_generic",
+          "confidence": 0.42600079024562254
+        },
+        {
+          "toolId": "kubernetes:exec_in_pod",
+          "confidence": 0.4059424484662057
+        },
+        {
+          "toolId": "github:push_files",
+          "confidence": 0.33565900501840334
+        },
+        {
+          "toolId": "notion:API-update-a-database",
+          "confidence": 0.32983675956805125
+        },
+        {
+          "toolId": "kubernetes:cleanup",
+          "confidence": 0.32914509128466474
+        },
+        {
+          "toolId": "github:create_or_update_file",
+          "confidence": 0.32347791942304266
+        },
+        {
+          "toolId": "kubernetes:kubectl_rollout",
+          "confidence": 0.3155695629599175
+        }
+      ]
+    },
+    {
+      "name": "Tags: Core actions hyphenated",
+      "text": "write-file delete-file modify-file move-file create-file execute-command run-command shell-command database-update database-delete database-modify deploy-code push-code send-message post-content publish-data revoke-permission change-access drop-table commit-code permanent-change",
+      "length": 279,
+      "words": 21,
+      "hyphens": 21,
+      "maxScore": 0.42550103085521185,
+      "avgScore": 0.11538834518216579,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 3,
+          "percentage": "3.7"
+        },
+        {
+          "threshold": 0.4,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top10": [
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.42550103085521185
+        },
+        {
+          "toolId": "filesystem:edit_file",
+          "confidence": 0.37712001175359766
+        },
+        {
+          "toolId": "kubernetes:kubectl_generic",
+          "confidence": 0.35447095937488626
+        },
+        {
+          "toolId": "docker:run_command",
+          "confidence": 0.34684523113152127
+        },
+        {
+          "toolId": "kubernetes:exec_in_pod",
+          "confidence": 0.33116164122802016
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.32069511124898004
+        },
+        {
+          "toolId": "github:create_or_update_file",
+          "confidence": 0.31794856949570216
+        },
+        {
+          "toolId": "github:push_files",
+          "confidence": 0.2784278136206051
+        },
+        {
+          "toolId": "notion:API-update-a-database",
+          "confidence": 0.25115454940868076
+        },
+        {
+          "toolId": "github:get_pull_request_files",
+          "confidence": 0.2433784449592966
+        }
+      ]
+    },
+    {
+      "name": "Tags: Minimal hyphens",
+      "text": "delete remove write create modify execute deploy publish send post update patch drop truncate commit push transfer charge revoke permanent irreversible file-write file-delete database-update command-execution code-deployment",
+      "length": 224,
+      "words": 26,
+      "hyphens": 5,
+      "maxScore": 0.287498260602507,
+      "avgScore": 0.06335231070052176,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.4,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top10": [
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.287498260602507
+        },
+        {
+          "toolId": "github:update_issue",
+          "confidence": 0.2762155121015056
+        },
+        {
+          "toolId": "kubernetes:kubectl_delete",
+          "confidence": 0.2614430715475495
+        },
+        {
+          "toolId": "github:create_or_update_file",
+          "confidence": 0.25465725022461494
+        },
+        {
+          "toolId": "filesystem:edit_file",
+          "confidence": 0.2502374437148022
+        },
+        {
+          "toolId": "github:push_files",
+          "confidence": 0.24846080104123586
+        },
+        {
+          "toolId": "kubernetes:kubectl_patch",
+          "confidence": 0.21429288092559598
+        },
+        {
+          "toolId": "github:create_issue",
+          "confidence": 0.20204109730209693
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.19833940481847062
+        },
+        {
+          "toolId": "notion:API-update-a-database",
+          "confidence": 0.19771037160654156
+        }
+      ]
+    },
+    {
+      "name": "Tags: Action-object pairs",
+      "text": "delete-file delete-data write-file write-data modify-file modify-data execute-command execute-script send-email send-message publish-content deploy-application update-database drop-table commit-repository push-repository revoke-permission change-permission",
+      "length": 256,
+      "words": 18,
+      "hyphens": 18,
+      "maxScore": 0.37335384565247504,
+      "avgScore": 0.12093602764561302,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.4,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top10": [
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.37335384565247504
+        },
+        {
+          "toolId": "kubernetes:kubectl_generic",
+          "confidence": 0.34174123334334666
+        },
+        {
+          "toolId": "kubernetes:exec_in_pod",
+          "confidence": 0.333860111505118
+        },
+        {
+          "toolId": "filesystem:edit_file",
+          "confidence": 0.33369136641454994
+        },
+        {
+          "toolId": "docker:run_command",
+          "confidence": 0.3292455881140749
+        },
+        {
+          "toolId": "github:push_files",
+          "confidence": 0.31308338150711873
+        },
+        {
+          "toolId": "github:create_or_update_file",
+          "confidence": 0.3091194756359674
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.27660385167015605
+        },
+        {
+          "toolId": "kubernetes:kubectl_delete",
+          "confidence": 0.25587265336190035
+        },
+        {
+          "toolId": "github:get_pull_request_files",
+          "confidence": 0.244031913960899
+        }
+      ]
+    },
+    {
+      "name": "Tags: Semantic clusters",
+      "text": "file-operations: write delete modify move create. database-operations: update delete drop truncate modify. execution-operations: run-command execute-shell run-script. deployment-operations: deploy push publish. communication-operations: send-email send-message post-content. permission-operations: revoke grant modify. financial-operations: transfer-money charge-payment. permanent destructive irreversible",
+      "length": 406,
+      "words": 34,
+      "hyphens": 15,
+      "maxScore": 0.42761145078984036,
+      "avgScore": 0.139474589631404,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 2,
+          "percentage": "2.4"
+        },
+        {
+          "threshold": 0.4,
+          "count": 2,
+          "percentage": "2.4"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top10": [
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.42761145078984036
+        },
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.4121100844950626
+        },
+        {
+          "toolId": "filesystem:edit_file",
+          "confidence": 0.3231512870706361
+        },
+        {
+          "toolId": "notion:API-update-a-database",
+          "confidence": 0.315609275917855
+        },
+        {
+          "toolId": "docker:run_command",
+          "confidence": 0.3076835687286882
+        },
+        {
+          "toolId": "github:push_files",
+          "confidence": 0.3050813361401783
+        },
+        {
+          "toolId": "kubernetes:exec_in_pod",
+          "confidence": 0.30270559539938763
+        },
+        {
+          "toolId": "kubernetes:kubectl_generic",
+          "confidence": 0.3015972582008357
+        },
+        {
+          "toolId": "github:create_or_update_file",
+          "confidence": 0.29061055577989237
+        },
+        {
+          "toolId": "kubernetes:cleanup",
+          "confidence": 0.2869577546157819
+        }
+      ]
+    },
+    {
+      "name": "Tags: Single words + key phrases",
+      "text": "delete remove write create modify execute deploy publish send post update patch drop truncate commit push transfer charge revoke file disk database command shell script production email message content access permission money payment permanent irreversible",
+      "length": 256,
+      "words": 35,
+      "hyphens": 0,
+      "maxScore": 0.2798812669981137,
+      "avgScore": 0.05656604201334729,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.4,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top10": [
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.2798812669981137
+        },
+        {
+          "toolId": "kubernetes:kubectl_delete",
+          "confidence": 0.23074828590860927
+        },
+        {
+          "toolId": "filesystem:edit_file",
+          "confidence": 0.22014114715317706
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.21657707802842646
+        },
+        {
+          "toolId": "github:push_files",
+          "confidence": 0.18974036162957025
+        },
+        {
+          "toolId": "kubernetes:kubectl_generic",
+          "confidence": 0.17616588533904315
+        },
+        {
+          "toolId": "filesystem:read_file",
+          "confidence": 0.1717960883240678
+        },
+        {
+          "toolId": "github:create_or_update_file",
+          "confidence": 0.16994051201794216
+        },
+        {
+          "toolId": "kubernetes:exec_in_pod",
+          "confidence": 0.16695360556253375
+        },
+        {
+          "toolId": "docker:run_command",
+          "confidence": 0.1629336790566574
+        }
+      ]
+    },
+    {
+      "name": "Tags: Dense hyphenated",
+      "text": "file-write file-delete file-modify file-create file-move data-delete data-modify data-update data-remove command-execute shell-execute script-run database-update database-drop database-modify deploy production-push code-deploy email-send message-send content-publish permission-revoke access-revoke table-drop repo-commit repo-push payment-charge money-transfer permanent-change irreversible-action",
+      "length": 398,
+      "words": 30,
+      "hyphens": 29,
+      "maxScore": 0.4209094368427435,
+      "avgScore": 0.1286117769372359,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 8,
+          "percentage": "9.8"
+        },
+        {
+          "threshold": 0.4,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ],
+      "top10": [
+        {
+          "toolId": "filesystem:write_file",
+          "confidence": 0.4209094368427435
+        },
+        {
+          "toolId": "github:push_files",
+          "confidence": 0.37591870368848346
+        },
+        {
+          "toolId": "kubernetes:kubectl_generic",
+          "confidence": 0.3696475052634387
+        },
+        {
+          "toolId": "docker:run_command",
+          "confidence": 0.36822292263817286
+        },
+        {
+          "toolId": "kubernetes:exec_in_pod",
+          "confidence": 0.3620854335089056
+        },
+        {
+          "toolId": "filesystem:move_file",
+          "confidence": 0.36173239006623353
+        },
+        {
+          "toolId": "filesystem:edit_file",
+          "confidence": 0.3546931517005093
+        },
+        {
+          "toolId": "github:create_or_update_file",
+          "confidence": 0.3544584871193926
+        },
+        {
+          "toolId": "kubernetes:kubectl_rollout",
+          "confidence": 0.29017765551723523
+        },
+        {
+          "toolId": "notion:API-update-a-database",
+          "confidence": 0.2716585146003823
+        }
+      ]
+    }
+  ]
+}

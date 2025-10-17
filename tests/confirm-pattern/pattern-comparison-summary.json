@@ -1,0 +1,315 @@
+{
+  "recommendation": {
+    "patternName": "Current (verbose)",
+    "patternText": "operations that delete files, remove data permanently, create or write files to disk, send emails or messages, post or publish content online, execute shell commands or scripts, modify database records, deploy or push to production, make HTTP POST PUT or DELETE requests, update or patch existing data, drop or truncate tables, commit or push to git repositories, transfer money or charge payments, revoke access or permissions, or make any changes that cannot be easily undone",
+    "threshold": 0.4,
+    "expectedTriggers": 5,
+    "expectedPercentage": "6.1%"
+  },
+  "allPatterns": [
+    {
+      "name": "Current (verbose)",
+      "text": "operations that delete files, remove data permanently, create or write files to disk, send emails or messages, post or publish content online, execute shell commands or scripts, modify database records, deploy or push to production, make HTTP POST PUT or DELETE requests, update or patch existing data, drop or truncate tables, commit or push to git repositories, transfer money or charge payments, revoke access or permissions, or make any changes that cannot be easily undone",
+      "maxScore": 0.44698264164624724,
+      "avgScore": 0.15758760468372585,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 5,
+          "percentage": "6.1"
+        },
+        {
+          "threshold": 0.4,
+          "count": 5,
+          "percentage": "6.1"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.6,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ]
+    },
+    {
+      "name": "Simplified verbs",
+      "text": "operations that write, delete, modify, execute, deploy, publish, or change data permanently",
+      "maxScore": 0.41537008533828756,
+      "avgScore": 0.15132503390116156,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 2,
+          "percentage": "2.4"
+        },
+        {
+          "threshold": 0.4,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.6,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ]
+    },
+    {
+      "name": "Core concepts",
+      "text": "modify delete write execute change deploy publish",
+      "maxScore": 0.30030293929065693,
+      "avgScore": 0.054210560107718776,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.4,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.6,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ]
+    },
+    {
+      "name": "Danger focus",
+      "text": "dangerous operations that make permanent changes like deleting, writing, executing, or modifying data",
+      "maxScore": 0.3660373568693016,
+      "avgScore": 0.0971036922153697,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.4,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.6,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ]
+    },
+    {
+      "name": "State-changing",
+      "text": "operations that change system state, modify files, execute commands, or alter data",
+      "maxScore": 0.4397906229113319,
+      "avgScore": 0.18384091495435123,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 9,
+          "percentage": "11.0"
+        },
+        {
+          "threshold": 0.4,
+          "count": 2,
+          "percentage": "2.4"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.6,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ]
+    },
+    {
+      "name": "Non-idempotent",
+      "text": "non-idempotent operations that write, delete, execute, or permanently modify data",
+      "maxScore": 0.4456978523978503,
+      "avgScore": 0.13178509665390514,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 2,
+          "percentage": "2.4"
+        },
+        {
+          "threshold": 0.4,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.6,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ]
+    },
+    {
+      "name": "Side-effects",
+      "text": "operations with side effects including file writes, deletions, executions, and data modifications",
+      "maxScore": 0.45436506953772327,
+      "avgScore": 0.10505353274547595,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 3,
+          "percentage": "3.7"
+        },
+        {
+          "threshold": 0.4,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.45,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.6,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ]
+    },
+    {
+      "name": "Mutating operations",
+      "text": "mutating operations that write files, delete data, execute commands, or change database records",
+      "maxScore": 0.400868644633476,
+      "avgScore": 0.1020738760821459,
+      "thresholdCounts": [
+        {
+          "threshold": 0.35,
+          "count": 3,
+          "percentage": "3.7"
+        },
+        {
+          "threshold": 0.4,
+          "count": 1,
+          "percentage": "1.2"
+        },
+        {
+          "threshold": 0.45,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.5,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.55,
+          "count": 0,
+          "percentage": "0.0"
+        },
+        {
+          "threshold": 0.6,
+          "count": 0,
+          "percentage": "0.0"
+        }
+      ]
+    }
+  ]
+}

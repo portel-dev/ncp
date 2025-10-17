@@ -1,0 +1,84 @@
+MCP,Tool,Description,Confidence,Trigger_0.50,Trigger_0.55,Trigger_0.60,Trigger_0.65,Trigger_0.70,Trigger_0.75,Trigger_0.80
+param-mcp,write_file,Write or append to file contents,NaN,NO,NO,NO,NO,NO,NO,NO
+filesystem,read_file,Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead.,0.2189,NO,NO,NO,NO,NO,NO,NO
+filesystem,read_text_file,"Read the complete contents of a file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Use the 'head' parameter to read only the first N lines of a file, or the 'tail' parameter to read only the last N lines of a file. Operates on the file as text regardless of extension. Only works within allowed directories.",0.0589,NO,NO,NO,NO,NO,NO,NO
+filesystem,read_media_file,Read an image or audio file. Returns the base64 encoded data and MIME type. Only works within allowed directories.,0.1015,NO,NO,NO,NO,NO,NO,NO
+filesystem,read_multiple_files,Read the contents of multiple files simultaneously. This is more efficient than reading files one by one when you need to analyze or compare multiple files. Each file's content is returned with its path as a reference. Failed reads for individual files won't stop the entire operation. Only works within allowed directories.,0.1541,NO,NO,NO,NO,NO,NO,NO
+filesystem,write_file,Create a new file or completely overwrite an existing file with new content. Use with caution as it will overwrite existing files without warning. Handles text content with proper encoding. Only works within allowed directories.,0.4314,NO,NO,NO,NO,NO,NO,NO
+filesystem,edit_file,Make line-based edits to a text file. Each edit replaces exact line sequences with new content. Returns a git-style diff showing the changes made. Only works within allowed directories.,0.3461,NO,NO,NO,NO,NO,NO,NO
+filesystem,create_directory,"Create a new directory or ensure a directory exists. Can create multiple nested directories in one operation. If the directory already exists, this operation will succeed silently. Perfect for setting up directory structures for projects or ensuring required paths exist. Only works within allowed directories.",0.2070,NO,NO,NO,NO,NO,NO,NO
+filesystem,list_directory,Get a detailed listing of all files and directories in a specified path. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is essential for understanding directory structure and finding specific files within a directory. Only works within allowed directories.,0.2043,NO,NO,NO,NO,NO,NO,NO
+filesystem,list_directory_with_sizes,"Get a detailed listing of all files and directories in a specified path, including sizes. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is useful for understanding directory structure and finding specific files within a directory. Only works within allowed directories.",0.1316,NO,NO,NO,NO,NO,NO,NO
+filesystem,directory_tree,"Get a recursive tree view of files and directories as a JSON structure. Each entry includes 'name', 'type' (file/directory), and 'children' for directories. Files have no children array, while directories always have a children array (which may be empty). The output is formatted with 2-space indentation for readability. Only works within allowed directories.",0.1149,NO,NO,NO,NO,NO,NO,NO
+filesystem,move_file,"Move or rename files and directories. Can move files between directories and rename them in a single operation. If the destination exists, the operation will fail. Works across different directories and can be used for simple renaming within the same directory. Both source and destination must be within allowed directories.",0.4014,NO,NO,NO,NO,NO,NO,NO
+filesystem,search_files,Recursively search for files and directories matching a pattern. Searches through all subdirectories from the starting path. The search is case-insensitive and matches partial names. Returns full paths to all matching items. Great for finding files when you don't know their exact location. Only searches within allowed directories.,0.1716,NO,NO,NO,NO,NO,NO,NO
+filesystem,get_file_info,"Retrieve detailed metadata about a file or directory. Returns comprehensive information including size, creation time, last modified time, permissions, and type. This tool is perfect for understanding file characteristics without reading the actual content. Only works within allowed directories.",0.2499,NO,NO,NO,NO,NO,NO,NO
+filesystem,list_allowed_directories,Returns the list of directories that this server is allowed to access. Subdirectories within these allowed directories are also accessible. Use this to understand which directories and their nested paths are available before trying to access files.,0.1932,NO,NO,NO,NO,NO,NO,NO
+github,create_or_update_file,Create or update a single file in a GitHub repository,0.3016,NO,NO,NO,NO,NO,NO,NO
+github,search_repositories,Search for GitHub repositories,0.2100,NO,NO,NO,NO,NO,NO,NO
+github,create_repository,Create a new GitHub repository in your account,0.1983,NO,NO,NO,NO,NO,NO,NO
+github,get_file_contents,Get the contents of a file or directory from a GitHub repository,0.1504,NO,NO,NO,NO,NO,NO,NO
+github,push_files,Push multiple files to a GitHub repository in a single commit,0.2606,NO,NO,NO,NO,NO,NO,NO
+github,create_issue,Create a new issue in a GitHub repository,0.1642,NO,NO,NO,NO,NO,NO,NO
+github,create_pull_request,Create a new pull request in a GitHub repository,0.1750,NO,NO,NO,NO,NO,NO,NO
+github,fork_repository,Fork a GitHub repository to your account or specified organization,0.2698,NO,NO,NO,NO,NO,NO,NO
+github,create_branch,Create a new branch in a GitHub repository,0.1230,NO,NO,NO,NO,NO,NO,NO
+github,list_commits,Get list of commits of a branch in a GitHub repository,0.1116,NO,NO,NO,NO,NO,NO,NO
+github,list_issues,List issues in a GitHub repository with filtering options,0.1166,NO,NO,NO,NO,NO,NO,NO
+github,update_issue,Update an existing issue in a GitHub repository,0.2086,NO,NO,NO,NO,NO,NO,NO
+github,add_issue_comment,Add a comment to an existing issue,0.0804,NO,NO,NO,NO,NO,NO,NO
+github,search_code,Search for code across GitHub repositories,0.1334,NO,NO,NO,NO,NO,NO,NO
+github,search_issues,Search for issues and pull requests across GitHub repositories,0.2081,NO,NO,NO,NO,NO,NO,NO
+github,search_users,Search for users on GitHub,0.1420,NO,NO,NO,NO,NO,NO,NO
+github,get_issue,Get details of a specific issue in a GitHub repository.,0.1223,NO,NO,NO,NO,NO,NO,NO
+github,get_pull_request,Get details of a specific pull request,0.1141,NO,NO,NO,NO,NO,NO,NO
+github,list_pull_requests,List and filter repository pull requests,0.1872,NO,NO,NO,NO,NO,NO,NO
+github,create_pull_request_review,Create a review on a pull request,0.1153,NO,NO,NO,NO,NO,NO,NO
+github,merge_pull_request,Merge a pull request,0.1374,NO,NO,NO,NO,NO,NO,NO
+github,get_pull_request_files,Get the list of files changed in a pull request,0.2141,NO,NO,NO,NO,NO,NO,NO
+github,get_pull_request_status,Get the combined status of all status checks for a pull request,0.0977,NO,NO,NO,NO,NO,NO,NO
+github,update_pull_request_branch,Update a pull request branch with the latest changes from the base branch,0.1852,NO,NO,NO,NO,NO,NO,NO
+github,get_pull_request_comments,Get the review comments on a pull request,0.0364,NO,NO,NO,NO,NO,NO,NO
+github,get_pull_request_reviews,Get the reviews on a pull request,0.0338,NO,NO,NO,NO,NO,NO,NO
+docker,run_command,Execute a command inside a Docker container service,0.4470,NO,NO,NO,NO,NO,NO,NO
+notion,API-get-user,Notion | Retrieve a user,-0.0201,NO,NO,NO,NO,NO,NO,NO
+notion,API-get-users,Notion | List all users,-0.0050,NO,NO,NO,NO,NO,NO,NO
+notion,API-get-self,Notion | Retrieve your token's bot user,0.0155,NO,NO,NO,NO,NO,NO,NO
+notion,API-post-database-query,Notion | Query a database,0.2073,NO,NO,NO,NO,NO,NO,NO
+notion,API-post-search,Notion | Search by title,0.0846,NO,NO,NO,NO,NO,NO,NO
+notion,API-get-block-children,Notion | Retrieve block children,-0.0404,NO,NO,NO,NO,NO,NO,NO
+notion,API-patch-block-children,Notion | Append block children,0.0876,NO,NO,NO,NO,NO,NO,NO
+notion,API-retrieve-a-block,Notion | Retrieve a block,-0.0045,NO,NO,NO,NO,NO,NO,NO
+notion,API-update-a-block,Notion | Update a block,0.2029,NO,NO,NO,NO,NO,NO,NO
+notion,API-delete-a-block,Notion | Delete a block,0.2130,NO,NO,NO,NO,NO,NO,NO
+notion,API-retrieve-a-page,Notion | Retrieve a page,-0.0050,NO,NO,NO,NO,NO,NO,NO
+notion,API-patch-page,Notion | Update page properties,0.1515,NO,NO,NO,NO,NO,NO,NO
+notion,API-post-page,Notion | Create a page,0.0883,NO,NO,NO,NO,NO,NO,NO
+notion,API-create-a-database,Notion | Create a database,0.2115,NO,NO,NO,NO,NO,NO,NO
+notion,API-update-a-database,Notion | Update a database,0.3370,NO,NO,NO,NO,NO,NO,NO
+notion,API-retrieve-a-database,Notion | Retrieve a database,0.1681,NO,NO,NO,NO,NO,NO,NO
+notion,API-retrieve-a-page-property,Notion | Retrieve a page property item,-0.0094,NO,NO,NO,NO,NO,NO,NO
+notion,API-retrieve-a-comment,Notion | Retrieve comments,0.0534,NO,NO,NO,NO,NO,NO,NO
+notion,API-create-a-comment,Notion | Create comment,0.0649,NO,NO,NO,NO,NO,NO,NO
+kubernetes,cleanup,Cleanup all managed resources,0.3272,NO,NO,NO,NO,NO,NO,NO
+kubernetes,kubectl_get,"Get or list Kubernetes resources by resource type, name, and optionally namespace",0.0465,NO,NO,NO,NO,NO,NO,NO
+kubernetes,kubectl_describe,"Describe Kubernetes resources by resource type, name, and optionally namespace",0.1283,NO,NO,NO,NO,NO,NO,NO
+kubernetes,kubectl_apply,Apply a Kubernetes YAML manifest from a string or file,0.0529,NO,NO,NO,NO,NO,NO,NO
+kubernetes,kubectl_delete,"Delete Kubernetes resources by resource type, name, labels, or from a manifest file",0.1911,NO,NO,NO,NO,NO,NO,NO
+kubernetes,kubectl_create,Create Kubernetes resources using various methods (from file or using subcommands),0.1917,NO,NO,NO,NO,NO,NO,NO
+kubernetes,kubectl_logs,"Get logs from Kubernetes resources like pods, deployments, or jobs",0.1949,NO,NO,NO,NO,NO,NO,NO
+kubernetes,kubectl_scale,Scale a Kubernetes deployment,0.1947,NO,NO,NO,NO,NO,NO,NO
+kubernetes,kubectl_patch,"Update field(s) of a resource using strategic merge patch, JSON merge patch, or JSON patch",0.2613,NO,NO,NO,NO,NO,NO,NO
+kubernetes,kubectl_rollout,"Manage the rollout of a resource (e.g., deployment, daemonset, statefulset)",0.2899,NO,NO,NO,NO,NO,NO,NO
+kubernetes,kubectl_context,"Manage Kubernetes contexts - list, get, or set the current context",0.0558,NO,NO,NO,NO,NO,NO,NO
+kubernetes,explain_resource,Get documentation for a Kubernetes resource or field,0.1290,NO,NO,NO,NO,NO,NO,NO
+kubernetes,install_helm_chart,Install a Helm chart with support for both standard and template-based installation,0.0184,NO,NO,NO,NO,NO,NO,NO
+kubernetes,upgrade_helm_chart,Upgrade an existing Helm chart release,0.0598,NO,NO,NO,NO,NO,NO,NO
+kubernetes,uninstall_helm_chart,Uninstall a Helm chart release,0.0918,NO,NO,NO,NO,NO,NO,NO
+kubernetes,node_management,"Manage Kubernetes nodes with cordon, drain, and uncordon operations",0.2847,NO,NO,NO,NO,NO,NO,NO
+kubernetes,port_forward,Forward a local port to a port on a Kubernetes resource,0.0422,NO,NO,NO,NO,NO,NO,NO
+kubernetes,stop_port_forward,Stop a port-forward process,0.1016,NO,NO,NO,NO,NO,NO,NO
+kubernetes,exec_in_pod,Execute a command in a Kubernetes pod or container and return the output,0.4247,NO,NO,NO,NO,NO,NO,NO
+kubernetes,list_api_resources,List the API resources available in the cluster,0.0183,NO,NO,NO,NO,NO,NO,NO
+kubernetes,kubectl_generic,Execute any kubectl command with the provided arguments and flags,0.4380,NO,NO,NO,NO,NO,NO,NO
+kubernetes,ping,Verify that the counterpart is still responsive and the connection is alive.,0.0493,NO,NO,NO,NO,NO,NO,NO

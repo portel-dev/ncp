@@ -1,0 +1,27 @@
+{
+  "server": {
+    "name": "io.example/test-sse-mcp",
+    "description": "Test HTTP/SSE MCP for unified discovery",
+    "version": "1.0.0",
+    "remotes": [
+      {
+        "type": "sse",
+        "url": "http://localhost:3000/sse",
+        "environmentVariables": [
+          {
+            "name": "API_TOKEN",
+            "description": "Bearer token for authentication",
+            "isRequired": true,
+            "isSecret": true
+          },
+          {
+            "name": "BASE_URL",
+            "description": "Optional base URL override",
+            "isRequired": false,
+            "default": "http://localhost:3000"
+          }
+        ]
+      }
+    ]
+  }
+}
