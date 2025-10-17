@@ -5,7 +5,7 @@
  * These appear in tool discovery like external MCPs but are handled internally
  */
 
-import { InternalMCP, InternalToolResult } from './types.js';
+import { InternalMCP, InternalToolResult, ElicitationCapable } from './types.js';
 import { NCPManagementMCP } from './ncp-management.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
@@ -33,6 +33,18 @@ export class InternalMCPManager {
     for (const mcp of this.internalMCPs.values()) {
       if ('setProfileManager' in mcp && typeof mcp.setProfileManager === 'function') {
         mcp.setProfileManager(profileManager);
+      }
+    }
+  }
+
+  /**
+   * Set elicitation server for internal MCPs that support user interaction
+   */
+  setElicitationServer(server: ElicitationCapable): void {
+    for (const mcp of this.internalMCPs.values()) {
+      if (mcp.setElicitationServer) {
+        mcp.setElicitationServer(server);
+        logger.debug(`Set elicitation server for internal MCP: ${mcp.name}`);
       }
     }
   }

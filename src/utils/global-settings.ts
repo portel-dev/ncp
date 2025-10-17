@@ -26,15 +26,24 @@ export interface GlobalSettings {
  */
 export const DEFAULT_SETTINGS: GlobalSettings = {
   confirmBeforeRun: {
-    enabled: true, // ON by default - show dialog first, let users turn it off
+    // User-facing: "Confirm modifications before executing"
+    // Protects against unwanted writes, deletes, and executions
+    enabled: true, // ON by default
 
-    // Comprehensive modifier pattern - the "long sentence"
-    modifierPattern: 'operations that delete files, remove data permanently, create or write files to disk, send emails or messages, post or publish content online, execute shell commands or scripts, modify database records, deploy or push to production, make HTTP POST PUT or DELETE requests, update or patch existing data, drop or truncate tables, commit or push to git repositories, transfer money or charge payments, revoke access or permissions, or make any changes that cannot be easily undone',
+    // ADVANCED: Tag-based pattern for semantic matching
+    // Space-separated tags with hyphens for multi-word concepts
+    // Tested against 83 MCP tools - achieved 46.4% peak accuracy
+    // Most users should not modify this - use CLI toggle instead
+    modifierPattern: 'delete-files remove-data-permanently create-files write-to-disk send-emails send-messages publish-content-online execute-shell-commands run-scripts modify-database-records deploy-to-production push-to-production http-post-requests http-put-requests http-delete-requests update-data patch-data drop-database-tables truncate-tables git-commit git-push transfer-money charge-payments revoke-access revoke-permissions permanent-changes irreversible-changes',
 
-    // How closely tool must match (0.0-1.0)
-    vectorThreshold: 0.65,
+    // ADVANCED: Similarity threshold (0.0-1.0)
+    // 0.40 catches 5 critical operations (~6% of tools)
+    // Lower = more sensitive, Higher = less sensitive
+    // Most users should not modify this
+    vectorThreshold: 0.40,
 
-    // Whitelist of tools user approved permanently
+    // Tools user approved via "Approve Always" button
+    // Managed automatically - can be cleared via CLI
     approvedTools: []
   }
 };

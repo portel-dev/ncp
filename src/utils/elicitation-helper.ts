@@ -1,0 +1,182 @@
+/**
+ * Elicitation Helper for User Input via MCP Dialogs
+ *
+ * Provides utilities to show UI dialogs (via MCP elicitation) to collect
+ * sensitive information from users without exposing it in chat.
+ */
+
+import { logger } from './logger.js';
+import clipboardy from 'clipboardy';
+
+export interface ElicitationServer {
+  elicitInput(params: {
+    message: string;
+    requestedSchema: {
+      type: 'object';
+      properties: Record<string, any>;
+      required?: string[];
+    };
+  }): Promise<{
+    action: 'accept' | 'decline' | 'cancel';
+    content?: Record<string, any>;
+  }>;
+}
+
+/**
+ * Collect a single credential value from user via elicitation dialog
+ *
+ * Shows UI dialog asking user to copy value to clipboard, then reads it server-side.
+ * Secrets never appear in chat!
+ *
+ * @param server MCP server instance with elicitInput capability
+ * @param credentialName Human-readable name (e.g., "GitHub Token", "API Key")
+ * @param envVarName Environment variable name (e.g., "GITHUB_TOKEN")
+ * @param example Optional example value to show user
+ * @returns The credential value from clipboard, or null if user cancelled
+ */
+export async function collectCredential(
+  server: ElicitationServer,
+  credentialName: string,
+  envVarName: string,
+  example?: string
+): Promise<string | null> {
+  const exampleText = example ? `\n\nExample: ${example}` : '';
+
+  const result = await server.elicitInput({
+    message: `Please provide your ${credentialName}
+
+1. Copy the value to clipboard
+2. Click Accept below${exampleText}
+
+Your credential will be read from clipboard and never exposed in this chat.`,
+
+    requestedSchema: {
+      type: 'object',
+      properties: {
+        ready: {
+          type: 'boolean',
+          description: 'I have copied the value to clipboard'
+        }
+      },
+      required: ['ready']
+    }
+  });
+
+  if (result.action !== 'accept') {
+    logger.info(`User ${result.action} providing ${credentialName}`);
+    return null;
+  }
+
+  // Read raw value from clipboard
+  try {
+    const value = await clipboardy.read();
+
+    if (!value || value.trim().length === 0) {
+      logger.warn(`Clipboard was empty when collecting ${credentialName}`);
+      return null;
+    }
+
+    logger.info(`Successfully collected ${credentialName} from clipboard (${value.length} chars)`);
+    return value.trim();
+  } catch (error: any) {
+    logger.error(`Failed to read clipboard for ${credentialName}: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Collect multiple credentials from user, one at a time
+ *
+ * For each credential, shows a dialog and collects the value from clipboard.
+ * Returns a map of environment variable names to values.
+ *
+ * @param server MCP server instance
+ * @param credentials Array of credentials to collect
+ * @returns Map of env var names to values, or null if user cancelled
+ */
+export async function collectCredentials(
+  server: ElicitationServer,
+  credentials: Array<{
+    envVarName: string;
+    displayName: string;
+    example?: string;
+    required?: boolean;
+  }>
+): Promise<Record<string, string> | null> {
+  const collected: Record<string, string> = {};
+
+  for (const cred of credentials) {
+    const value = await collectCredential(
+      server,
+      cred.displayName,
+      cred.envVarName,
+      cred.example
+    );
+
+    if (value === null) {
+      if (cred.required !== false) {
+        // User cancelled and this was required
+        logger.info(`User cancelled collecting required credential: ${cred.envVarName}`);
+        return null;
+      }
+      // Optional credential, skip it
+      continue;
+    }
+
+    collected[cred.envVarName] = value;
+  }
+
+  return collected;
+}
+
+/**
+ * Format environment variable name for display
+ * Converts: "GITHUB_TOKEN" -> "GitHub Token"
+ */
+export function formatEnvVarName(envVar: string): string {
+  return envVar
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+/**
+ * Detect required environment variables from MCP metadata
+ *
+ * This can be extended to parse from:
+ * - Registry metadata
+ * - Package.json
+ * - README files
+ * - Auto-detection from errors
+ */
+export function detectRequiredEnvVars(mcpName: string): Array<{
+  envVarName: string;
+  displayName: string;
+  example?: string;
+}> {
+  // Common patterns for well-known MCPs
+  const knownPatterns: Record<string, Array<{ envVarName: string; displayName: string; example?: string }>> = {
+    'github': [
+      { envVarName: 'GITHUB_TOKEN', displayName: 'GitHub Personal Access Token', example: 'ghp_xxxxxxxxxxxx' }
+    ],
+    'slack': [
+      { envVarName: 'SLACK_BOT_TOKEN', displayName: 'Slack Bot Token', example: 'xoxb-xxxxxxxxxxxx' },
+      { envVarName: 'SLACK_TEAM_ID', displayName: 'Slack Team ID', example: 'T01234567' }
+    ],
+    'postgres': [
+      { envVarName: 'POSTGRES_CONNECTION_STRING', displayName: 'PostgreSQL Connection String', example: 'postgresql://user:pass@host:5432/db' }
+    ],
+    'openai': [
+      { envVarName: 'OPENAI_API_KEY', displayName: 'OpenAI API Key', example: 'sk-xxxxxxxxxxxx' }
+    ]
+  };
+
+  // Check if MCP name matches known patterns
+  for (const [pattern, envVars] of Object.entries(knownPatterns)) {
+    if (mcpName.toLowerCase().includes(pattern)) {
+      return envVars;
+    }
+  }
+
+  return [];
+}

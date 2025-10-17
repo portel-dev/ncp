@@ -9,17 +9,18 @@
  * - export: Export configuration
  */
 
-import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
+import { InternalMCP, InternalTool, InternalToolResult, ElicitationCapable } from './types.js';
 import ProfileManager from '../profiles/profile-manager.js';
-import { tryReadClipboardConfig, mergeWithClipboardConfig } from '../server/mcp-prompts.js';
 import { logger } from '../utils/logger.js';
 import { RegistryClient, RegistryMCPCandidate } from '../services/registry-client.js';
+import { collectCredentials, detectRequiredEnvVars } from '../utils/elicitation-helper.js';
 
 export class NCPManagementMCP implements InternalMCP {
   name = 'ncp';
   description = 'NCP configuration management tools';
 
   private profileManager: ProfileManager | null = null;
+  private elicitationServer: ElicitationCapable | null = null;
 
   tools: InternalTool[] = [
     {
@@ -140,6 +141,14 @@ export class NCPManagementMCP implements InternalMCP {
     this.profileManager = profileManager;
   }
 
+  /**
+   * Set the elicitation server for user interaction
+   * Called by MCP server after initialization
+   */
+  setElicitationServer(server: ElicitationCapable): void {
+    this.elicitationServer = server;
+  }
+
   async executeTool(toolName: string, parameters: any): Promise<InternalToolResult> {
     if (!this.profileManager) {
       return {
@@ -193,30 +202,52 @@ export class NCPManagementMCP implements InternalMCP {
     const commandArgs = params.args || [];
     const profile = params.profile || 'all';
 
-    // Try to read clipboard for additional config (env vars, args)
-    // This is the clipboard security pattern - user was instructed to copy config before approving
-    const clipboardConfig = await tryReadClipboardConfig();
-
     // Build base config
-    const baseConfig = {
+    const config: any = {
       command,
-      args: commandArgs,
-      env: {}
+      args: commandArgs
     };
 
-    // Merge with clipboard config (clipboard takes precedence)
-    const finalConfig = mergeWithClipboardConfig(baseConfig, clipboardConfig);
+    // Detect if this MCP needs environment variables
+    const requiredCredentials = detectRequiredEnvVars(mcpName);
+
+    if (requiredCredentials.length > 0 && this.elicitationServer) {
+      // Use elicitation to collect credentials one by one
+      logger.info(`MCP "${mcpName}" requires ${requiredCredentials.length} credentials`);
+
+      const credentials = await collectCredentials(
+        this.elicitationServer,
+        requiredCredentials.map(c => ({
+          ...c,
+          required: true
+        }))
+      );
+
+      if (credentials === null) {
+        return {
+          success: false,
+          error: 'User cancelled credential collection'
+        };
+      }
+
+      // Add collected credentials to config
+      if (Object.keys(credentials).length > 0) {
+        config.env = credentials;
+        logger.info(`Collected ${Object.keys(credentials).length} credentials for "${mcpName}"`);
+      }
+    }
 
     // Add MCP to profile
-    await this.profileManager!.addMCPToProfile(profile, mcpName, finalConfig);
+    await this.profileManager!.addMCPToProfile(profile, mcpName, config);
 
     // Log success (without revealing secrets)
-    const hasSecrets = clipboardConfig?.env ? ' with credentials' : '';
-    const successMessage = `✅ MCP server "${mcpName}" added to profile "${profile}"${hasSecrets}\n\n` +
-      `Command: ${command} ${finalConfig.args?.join(' ') || ''}\n\n` +
+    const hasCredentials = config.env && Object.keys(config.env).length > 0;
+    const credInfo = hasCredentials ? ` with ${Object.keys(config.env).length} credential(s)` : '';
+    const successMessage = `✅ MCP server "${mcpName}" added to profile "${profile}"${credInfo}\n\n` +
+      `Command: ${command} ${config.args?.join(' ') || ''}\n\n` +
       `The MCP server will be available after NCP is restarted.`;
 
-    logger.info(`Added MCP "${mcpName}" to profile "${profile}"`);
+    logger.info(`Added MCP "${mcpName}" to profile "${profile}"${hasCredentials ? ' with credentials' : ''}`);
 
     return {
       success: true,
