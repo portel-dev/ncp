@@ -169,6 +169,18 @@ export class MCPServerSDK {
       this.isInitialized = true; // Mark as initialized even on error to unblock
     });
 
+    // TODO: Implement elicitation support for credential collection
+    // The MCP protocol doesn't have a standard way for servers to request user input interactively.
+    // For now, users must provide credentials manually via:
+    // 1. Environment variables in MCP config
+    // 2. MCP prompts that guide credential collection
+    // 3. Manual config file editing
+    //
+    // Future options:
+    // - Implement MCP prompts for guided credential collection
+    // - Use custom protocol extension for interactive dialogs
+    // - Let MCP client (Claude Desktop) handle credential elicitation
+
     // Don't wait for indexing to complete - return immediately
     logger.info('NCP MCP server ready (indexing in background)');
   }
