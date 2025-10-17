@@ -2,7 +2,7 @@
   "name": "@portel/ncp",
   "version": "1.5.3",
   "mcpName": "io.github.portel-dev/ncp",
-  "description": "Natural Context Provider - N-to-1 MCP Orchestration for AI Assistants",
+  "description": "1 MCP to rule them all - Discover, configure, and orchestrate any MCP server (stdio, HTTP, SSE)",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "exports": {

@@ -9,7 +9,7 @@
 
 # NCP - Natural Context Provider
 
-## 🎯 **One MCP to Rule Them All**
+## 💍 **1 MCP to rule them all**
 
 ![NCP Transformation Flow](docs/images/ncp-transformation-flow.png)
 
