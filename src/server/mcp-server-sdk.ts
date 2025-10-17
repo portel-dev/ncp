@@ -17,15 +17,16 @@ import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { RegistryClient } from '../services/registry-client.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import chalk from 'chalk';
+import type { ElicitationServer } from '../utils/elicitation-helper.js';
 
-export class MCPServerSDK {
+export class MCPServerSDK implements ElicitationServer {
   private server: Server;
   private orchestrator: NCPOrchestrator;
   private initializationPromise: Promise<void> | null = null;
   private isInitialized: boolean = false;
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
-    // Create SDK Server instance
+    // Create SDK Server instance with elicitation capability
     this.server = new Server(
       {
         name: 'ncp',
@@ -34,6 +35,7 @@ export class MCPServerSDK {
       {
         capabilities: {
           tools: {},
+          elicitation: {},  // Enable elicitation for credential collection
         },
       }
     );
@@ -163,23 +165,20 @@ export class MCPServerSDK {
     // Start initialization in the background, don't await it
     this.initializationPromise = this.orchestrator.initialize().then(() => {
       this.isInitialized = true;
+
+      // Wire up elicitation server to internal MCPs after initialization
+      // This enables clipboard-based credential collection for ncp:add and other management tools
+      const internalMCPManager = this.orchestrator.getInternalMCPManager();
+      if (internalMCPManager) {
+        internalMCPManager.setElicitationServer(this);
+        logger.info('Elicitation enabled for internal MCPs (clipboard-based credential collection)');
+      }
+
       logger.info('NCP MCP server indexing complete');
     }).catch((error) => {
       logger.error('Failed to initialize orchestrator:', error);
       this.isInitialized = true; // Mark as initialized even on error to unblock
     });
-
-    // TODO: Implement elicitation support for credential collection
-    // The MCP protocol doesn't have a standard way for servers to request user input interactively.
-    // For now, users must provide credentials manually via:
-    // 1. Environment variables in MCP config
-    // 2. MCP prompts that guide credential collection
-    // 3. Manual config file editing
-    //
-    // Future options:
-    // - Implement MCP prompts for guided credential collection
-    // - Use custom protocol extension for interactive dialogs
-    // - Let MCP client (Claude Desktop) handle credential elicitation
 
     // Don't wait for indexing to complete - return immediately
     logger.info('NCP MCP server ready (indexing in background)');
@@ -571,6 +570,39 @@ export class MCPServerSDK {
       logger.info('NCP MCP server shut down gracefully');
     } catch (error: any) {
       logger.error(`Error during shutdown: ${error.message}`);
+    }
+  }
+
+  /**
+   * Elicitation API for credential collection
+   * Implements the ElicitationServer interface to enable clipboard-based credential collection
+   */
+  async elicitInput(params: {
+    message: string;
+    requestedSchema: {
+      type: 'object';
+      properties: Record<string, any>;
+      required?: string[];
+    };
+  }): Promise<{
+    action: 'accept' | 'decline' | 'cancel';
+    content?: Record<string, any>;
+  }> {
+    try {
+      // Use SDK's elicitInput method to send request to client (Claude Desktop)
+      const result = await this.server.elicitInput(params);
+
+      // Transform SDK result to our interface format
+      return {
+        action: result.action,
+        content: result.content
+      };
+    } catch (error: any) {
+      logger.error(`Elicitation failed: ${error.message}`);
+      // Return cancel on error
+      return {
+        action: 'cancel'
+      };
     }
   }
 }

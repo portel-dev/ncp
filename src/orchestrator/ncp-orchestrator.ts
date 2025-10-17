@@ -1982,6 +1982,14 @@ export class NCPOrchestrator {
   }
 
   /**
+   * Get the InternalMCPManager instance
+   * Used by MCP server to wire up elicitation for credential collection
+   */
+  getInternalMCPManager() {
+    return this.internalMCPManager;
+  }
+
+  /**
    * Get the profile name
    * Used by MCP server for resource generation
    */
