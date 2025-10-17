@@ -501,36 +501,25 @@ export class NCPManagementMCP implements InternalMCP {
           // Get detailed info including env vars
           const details = await registryClient.getDetailedInfo(candidate.name);
 
-          // Try to read clipboard for additional config (env vars, secrets)
-          // This is the clipboard security pattern - user can provide secrets before importing
-          const clipboardConfig = await tryReadClipboardConfig();
-
           // Build config based on transport type
+          // TODO: Add elicitation support for bulk import credentials
           let config: any;
 
           if (details.transport === 'stdio') {
             // stdio server
-            const baseConfig = {
+            config = {
               command: details.command!,
               args: details.args || [],
               env: {}
             };
-            // Merge with clipboard config
-            config = mergeWithClipboardConfig(baseConfig, clipboardConfig);
           } else {
             // HTTP/SSE server
             config = {
               url: details.url!,
               auth: {
-                type: 'bearer', // Default auth type
-                ...clipboardConfig?.env // Clipboard can override with full auth config
+                type: 'bearer'
               }
             };
-
-            // If clipboard has env.BEARER_TOKEN or similar, use it
-            if (clipboardConfig?.env) {
-              config.env = clipboardConfig.env;
-            }
           }
 
           await this.profileManager!.addMCPToProfile('all', candidate.displayName, config);

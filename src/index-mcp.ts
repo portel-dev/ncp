@@ -14,7 +14,8 @@
  *   - No CLI commands needed
  */
 
-import { MCPServer } from './server/mcp-server.js';
+// Testing SDK-based server implementation
+import { MCPServerSDK as MCPServer } from './server/mcp-server-sdk.js';
 import { setOverrideWorkingDirectory } from './utils/ncp-paths.js';
 
 // Handle --working-dir parameter for MCP server mode
