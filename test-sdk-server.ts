@@ -156,21 +156,25 @@ async function runTests() {
     // Step 11: Test internal MCPs discovery (ncp:list, ncp:add, etc.)
     console.log('\n🔍 Testing internal MCPs discovery...');
     try {
+      // Wait a moment for initialization to complete
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       const ncpSearchResult = await client.callTool({
         name: 'find',
         arguments: {
-          description: 'ncp configuration',
+          description: 'add MCP server configuration',
           limit: 10
         }
       });
 
       const hasContent = ncpSearchResult.content && ncpSearchResult.content.length > 0;
       const text = (ncpSearchResult.content[0] as any)?.text || '';
-      const hasInternalTools = text.includes('ncp:') || text.includes('add') || text.includes('import');
+      const hasInternalTools = text.includes('ncp:') && (text.includes('add') || text.includes('list') || text.includes('import'));
 
       logTest('Internal MCPs Discovery', hasContent && hasInternalTools, {
         contentType: ncpSearchResult.content[0]?.type,
-        foundInternalMCPs: hasInternalTools
+        foundInternalMCPs: hasInternalTools,
+        textSample: text.substring(0, 300)
       });
     } catch (error: any) {
       logTest('Internal MCPs Discovery', false, undefined, error.message);

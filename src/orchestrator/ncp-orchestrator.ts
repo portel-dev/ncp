@@ -264,6 +264,10 @@ export class NCPOrchestrator {
     // Initialize discovery engine first
     await this.discovery.initialize();
 
+    // Add internal MCPs immediately so they're always available
+    // This ensures management tools (ncp:add, ncp:list, etc.) work even during external MCP indexing
+    await this.addInternalMCPsToDiscovery();
+
     // Initialize CSV cache
     await this.csvCache.initialize();
 
@@ -355,9 +359,6 @@ export class NCPOrchestrator {
 
     // Clear progress tracking once complete
     this.indexingProgress = null;
-
-    // Add internal MCPs to discovery
-    this.addInternalMCPsToDiscovery();
 
     // Start cleanup timer for idle connections
     this.cleanupTimer = setInterval(
@@ -1920,7 +1921,7 @@ export class NCPOrchestrator {
    * Add internal MCPs to tool discovery
    * Called after external MCPs are indexed
    */
-  private addInternalMCPsToDiscovery(): void {
+  private async addInternalMCPsToDiscovery(): Promise<void> {
     const internalMCPs = this.internalMCPManager.getAllInternalMCPs();
 
     for (const mcp of internalMCPs) {
@@ -1947,11 +1948,12 @@ export class NCPOrchestrator {
       // Add tools to allTools and discovery
       for (const tool of mcp.tools) {
         const toolId = `${mcp.name}:${tool.name}`;
+        const prefixedDescription = `${mcp.name}: ${tool.description}`;
 
-        // Add to allTools
+        // Add to allTools with prefixed name (consistent with external MCPs)
         this.allTools.push({
-          name: tool.name,
-          description: tool.description,
+          name: toolId,  // Prefixed: "ncp:add", "ncp:remove", etc.
+          description: prefixedDescription,
           mcpName: mcp.name
         });
 
@@ -1960,14 +1962,14 @@ export class NCPOrchestrator {
         this.toolToMCP.set(toolId, mcp.name);          // Prefixed: "ncp:add" -> "ncp"
       }
 
-      // Index in discovery engine
+      // Index in discovery engine with prefixed descriptions
       const discoveryTools = mcp.tools.map(t => ({
         id: `${mcp.name}:${t.name}`,
         name: t.name,
-        description: t.description
+        description: t.description  // Use unprefixed description for discovery
       }));
 
-      this.discovery.indexMCPTools(mcp.name, discoveryTools);
+      await this.discovery.indexMCPTools(mcp.name, discoveryTools);
 
       logger.info(`Added internal MCP "${mcp.name}" with ${mcp.tools.length} tools`);
     }
