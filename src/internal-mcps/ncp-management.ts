@@ -13,7 +13,7 @@ import { InternalMCP, InternalTool, InternalToolResult, ElicitationCapable } fro
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { RegistryClient, RegistryMCPCandidate } from '../services/registry-client.js';
-import { collectCredentials, detectRequiredEnvVars } from '../utils/elicitation-helper.js';
+import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials } from '../utils/elicitation-helper.js';
 import { showConfirmDialog } from '../utils/native-dialog.js';
 
 export class NCPManagementMCP implements InternalMCP {
@@ -26,7 +26,7 @@ export class NCPManagementMCP implements InternalMCP {
   tools: InternalTool[] = [
     {
       name: 'add',
-      description: 'Add a new MCP server to NCP configuration. User confirmation required (automatic popup). User can securely provide API keys via clipboard during credential collection.',
+      description: 'Add a new MCP server to NCP configuration (stdio or HTTP/SSE). User confirmation required (automatic popup). User can securely provide API keys via clipboard during credential collection. For stdio servers, provide command+args. For HTTP/SSE servers, provide url.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -36,12 +36,16 @@ export class NCPManagementMCP implements InternalMCP {
           },
           command: {
             type: 'string',
-            description: 'Command to execute (e.g., "npx", "node", "python")'
+            description: 'Command to execute for stdio servers (e.g., "npx", "node", "python"). Required for stdio, not used for HTTP/SSE.'
           },
           args: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Command arguments (e.g., ["-y", "@modelcontextprotocol/server-github"])'
+            description: 'Command arguments for stdio servers (e.g., ["-y", "@modelcontextprotocol/server-github"]). Optional for stdio, not used for HTTP/SSE.'
+          },
+          url: {
+            type: 'string',
+            description: 'URL for HTTP/SSE servers (e.g., "https://api.example.com/mcp"). Required for HTTP/SSE, not used for stdio.'
           },
           profile: {
             type: 'string',
@@ -49,7 +53,7 @@ export class NCPManagementMCP implements InternalMCP {
             default: 'all'
           }
         },
-        required: ['mcp_name', 'command']
+        required: ['mcp_name']
       }
     },
     {
@@ -191,22 +195,57 @@ export class NCPManagementMCP implements InternalMCP {
   }
 
   private async handleAdd(params: any): Promise<InternalToolResult> {
-    if (!params?.mcp_name || !params?.command) {
+    if (!params?.mcp_name) {
       return {
         success: false,
-        error: 'Missing required parameters: mcp_name and command are required'
+        error: 'Missing required parameter: mcp_name is required'
       };
     }
 
     const mcpName = params.mcp_name;
     const command = params.command;
     const commandArgs = params.args || [];
+    const url = params.url;
     const profile = params.profile || 'all';
+
+    // Validate transport type parameters
+    const hasCommand = !!command;
+    const hasUrl = !!url;
+
+    if (!hasCommand && !hasUrl) {
+      return {
+        success: false,
+        error: 'Either command (for stdio) or url (for HTTP/SSE) must be provided'
+      };
+    }
+
+    if (hasCommand && hasUrl) {
+      return {
+        success: false,
+        error: 'Cannot specify both command and url. Use command for stdio servers, url for HTTP/SSE servers.'
+      };
+    }
+
+    const transportType = hasUrl ? 'http' : 'stdio';
 
     // ===== CONFIRM BEFORE ADD (Server-side enforcement) =====
     if (this.elicitationServer) {
-      const argsStr = commandArgs.length > 0 ? ` ${commandArgs.join(' ')}` : '';
-      const confirmationMessage = `⚠️ CONFIRM MCP INSTALLATION
+      // Build confirmation message based on transport type
+      let confirmationMessage: string;
+
+      if (transportType === 'http') {
+        confirmationMessage = `⚠️ CONFIRM MCP INSTALLATION
+
+Adding new HTTP/SSE MCP server: ${mcpName}
+Profile: ${profile}
+URL: ${url}
+
+⚠️ This will allow the MCP server to access your system through HTTP/SSE. Only proceed if you trust this server.
+
+Do you want to install this MCP?`;
+      } else {
+        const argsStr = commandArgs.length > 0 ? ` ${commandArgs.join(' ')}` : '';
+        confirmationMessage = `⚠️ CONFIRM MCP INSTALLATION
 
 Adding new MCP server: ${mcpName}
 Profile: ${profile}
@@ -215,6 +254,7 @@ Command: ${command}${argsStr}
 ⚠️ Installing MCPs can execute arbitrary code on your system. Only proceed if you trust this MCP server.
 
 Do you want to install this MCP?`;
+      }
 
       let approved = false;
 
@@ -275,11 +315,24 @@ Do you want to install this MCP?`;
             logger.error(`Native dialog failed: ${nativeError.message}`);
 
             const profilePath = await this.profileManager!.getProfilePath(profile);
-            const argsStr = commandArgs.length > 0 ? commandArgs.join(' ') : '';
-            const configToAdd = {
-              command,
-              args: commandArgs
-            };
+
+            // Build config based on transport type
+            let configToAdd: any;
+            let cliCommand: string;
+
+            if (transportType === 'http') {
+              configToAdd = {
+                url
+              };
+              cliCommand = `ncp add-http ${mcpName} ${url}`;
+            } else {
+              const argsStr = commandArgs.length > 0 ? commandArgs.join(' ') : '';
+              configToAdd = {
+                command,
+                args: commandArgs
+              };
+              cliCommand = `ncp add ${mcpName} ${command} ${argsStr}`;
+            }
 
             // Check if running as extension with global CLI disabled
             const isExtension = process.env.NCP_MODE === 'extension';
@@ -294,9 +347,13 @@ Do you want to install this MCP?`;
                               `1. Edit your Claude Desktop extension settings (.dxt file)\n` +
                               `2. Set: "enableGlobalCLI": true\n` +
                               `3. Restart Claude Desktop\n` +
-                              `4. Use command: ncp add ${mcpName} ${command} ${argsStr}\n\n` +
+                              `4. Use command: ${cliCommand}\n\n` +
                               `────────────────────────────────────────\n\n`;
             }
+
+            const credentialHint = transportType === 'http'
+              ? `💡 If this MCP requires authentication, add the "auth" field in the config.`
+              : `💡 If this MCP requires API keys/credentials, add them to the "env" field in the config.`;
 
             errorMessage += `📝 OR: Install manually by editing configuration\n\n` +
                             `1. Open your profile configuration file:\n` +
@@ -305,8 +362,8 @@ Do you want to install this MCP?`;
                             `   "${mcpName}": ${JSON.stringify(configToAdd, null, 2).split('\n').join('\n   ')}\n\n` +
                             `3. Save the file\n\n` +
                             `4. Restart NCP or your MCP client\n\n` +
-                            `⚙️  Full command for reference: ${command} ${argsStr}\n\n` +
-                            `💡 If this MCP requires API keys/credentials, add them to the "env" field in the config.`;
+                            `⚙️  Full reference: ${cliCommand}\n\n` +
+                            credentialHint;
 
             return {
               success: false,
@@ -329,52 +386,96 @@ Do you want to install this MCP?`;
     }
     // ===== END CONFIRM BEFORE ADD =====
 
-    // Build base config
-    const config: any = {
-      command,
-      args: commandArgs
-    };
+    // Build config and collect credentials based on transport type
+    let config: any;
+    let credentialInfo = '';
 
-    // Detect if this MCP needs environment variables
-    const requiredCredentials = detectRequiredEnvVars(mcpName);
+    if (transportType === 'http') {
+      // HTTP/SSE server configuration
+      config = {
+        url
+      };
 
-    if (requiredCredentials.length > 0 && this.elicitationServer) {
-      // Use elicitation to collect credentials one by one
-      logger.info(`MCP "${mcpName}" requires ${requiredCredentials.length} credentials`);
+      // Try to collect HTTP credentials (bearer tokens) if needed
+      if (this.elicitationServer) {
+        try {
+          const httpAuth = await collectHTTPCredentials(this.elicitationServer, mcpName, url);
 
-      const credentials = await collectCredentials(
-        this.elicitationServer,
-        requiredCredentials.map(c => ({
-          ...c,
-          required: true
-        }))
-      );
-
-      if (credentials === null) {
-        return {
-          success: false,
-          error: 'User cancelled credential collection'
-        };
+          if (httpAuth) {
+            config.auth = httpAuth;
+            credentialInfo = ' with authentication';
+            logger.info(`Collected HTTP authentication for "${mcpName}"`);
+          } else {
+            logger.info(`No authentication required for HTTP MCP "${mcpName}"`);
+          }
+        } catch (error: any) {
+          // User cancelled credential collection
+          if (error.message && error.message.includes('cancelled')) {
+            return {
+              success: false,
+              error: 'User cancelled credential collection'
+            };
+          }
+          // Other errors - log but continue without auth (might be public endpoint)
+          logger.warn(`Failed to collect HTTP credentials: ${error.message}`);
+        }
       }
+    } else {
+      // stdio server configuration
+      config = {
+        command,
+        args: commandArgs
+      };
 
-      // Add collected credentials to config
-      if (Object.keys(credentials).length > 0) {
-        config.env = credentials;
-        logger.info(`Collected ${Object.keys(credentials).length} credentials for "${mcpName}"`);
+      // Detect if this MCP needs environment variables
+      const requiredCredentials = detectRequiredEnvVars(mcpName);
+
+      if (requiredCredentials.length > 0 && this.elicitationServer) {
+        // Use elicitation to collect credentials one by one
+        logger.info(`MCP "${mcpName}" requires ${requiredCredentials.length} credentials`);
+
+        const credentials = await collectCredentials(
+          this.elicitationServer,
+          requiredCredentials.map(c => ({
+            ...c,
+            required: true
+          }))
+        );
+
+        if (credentials === null) {
+          return {
+            success: false,
+            error: 'User cancelled credential collection'
+          };
+        }
+
+        // Add collected credentials to config
+        if (Object.keys(credentials).length > 0) {
+          config.env = credentials;
+          credentialInfo = ` with ${Object.keys(credentials).length} credential(s)`;
+          logger.info(`Collected ${Object.keys(credentials).length} credentials for "${mcpName}"`);
+        }
       }
     }
 
     // Add MCP to profile
     await this.profileManager!.addMCPToProfile(profile, mcpName, config);
 
-    // Log success (without revealing secrets)
-    const hasCredentials = config.env && Object.keys(config.env).length > 0;
-    const credInfo = hasCredentials ? ` with ${Object.keys(config.env).length} credential(s)` : '';
-    const successMessage = `✅ MCP server "${mcpName}" added to profile "${profile}"${credInfo}\n\n` +
-      `Command: ${command} ${config.args?.join(' ') || ''}\n\n` +
-      `The MCP server will be available after NCP is restarted.`;
+    // Build success message based on transport type
+    let successMessage: string;
 
-    logger.info(`Added MCP "${mcpName}" to profile "${profile}"${hasCredentials ? ' with credentials' : ''}`);
+    if (transportType === 'http') {
+      const authInfo = config.auth ? ` (${config.auth.type} auth)` : ' (no auth)';
+      successMessage = `✅ HTTP/SSE MCP server "${mcpName}" added to profile "${profile}"${credentialInfo}\n\n` +
+        `URL: ${url}${authInfo}\n\n` +
+        `The MCP server will be available after NCP is restarted.`;
+    } else {
+      successMessage = `✅ MCP server "${mcpName}" added to profile "${profile}"${credentialInfo}\n\n` +
+        `Command: ${command} ${config.args?.join(' ') || ''}\n\n` +
+        `The MCP server will be available after NCP is restarted.`;
+    }
+
+    logger.info(`Added MCP "${mcpName}" to profile "${profile}" (${transportType})${credentialInfo}`);
 
     return {
       success: true,
@@ -693,23 +794,65 @@ Do you want to remove this MCP?`;
         };
       }
 
-      // If no selection, show numbered list
+      // If no selection, show numbered list with security indicators
       if (!selection) {
         const listItems = candidates.map(c => {
-          const statusBadge = c.status === 'active' ? '⭐' : '📦';
+          // Trust badge (show first for visibility)
+          const trustBadge = c.isTrusted ? '✓' : '';
+
+          // Transport badge
           const transportBadge = c.transport === 'stdio' ? '💻' : '🌐';
+
+          // Build main line
           const envInfo = c.envVars?.length ? ` (${c.envVars.length} env vars required)` : '';
           const transportInfo = c.transport !== 'stdio' ? ` [${c.transport.toUpperCase()}]` : '';
-          return `${c.number}. ${statusBadge}${transportBadge} ${c.displayName}${transportInfo}${envInfo}\n   ${c.description}\n   Version: ${c.version}`;
+          let mainLine = `${c.number}. ${trustBadge}${transportBadge} ${c.displayName}${transportInfo}${envInfo}`;
+
+          // Description
+          let details = `   ${c.description}`;
+
+          // Version
+          details += `\n   Version: ${c.version}`;
+
+          // Repository status (security indicator)
+          if (c.repository?.url) {
+            details += `\n   ✓ Repository: ${c.repository.url}`;
+          } else {
+            details += `\n   ⚠️  NO REPOSITORY - Unverified source`;
+          }
+
+          // Age warning (if very new)
+          if (c.publishedAt) {
+            const ageMs = Date.now() - new Date(c.publishedAt).getTime();
+            const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+            if (ageDays < 7) {
+              details += `\n   ⚠️  Published ${ageDays} day${ageDays !== 1 ? 's' : ''} ago - Very new`;
+            }
+          }
+
+          return mainLine + '\n' + details;
         }).join('\n\n');
 
-        const message = `📋 Found ${candidates.length} MCPs matching "${query}":\n\n${listItems}\n\n` +
-          `⚙️  To import, call ncp:import again with selection:\n` +
+        const trustedCount = candidates.filter(c => c.isTrusted).length;
+        const unverifiedCount = candidates.filter(c => !c.repository?.url).length;
+
+        let message = `📋 Found ${candidates.length} MCPs matching "${query}"`;
+        if (trustedCount > 0) {
+          message += ` (${trustedCount} from trusted sources)`;
+        }
+        message += `:\n\n${listItems}\n\n`;
+
+        if (unverifiedCount > 0) {
+          message += `⚠️  WARNING: ${unverifiedCount} server${unverifiedCount !== 1 ? 's have' : ' has'} no repository.\n` +
+                     `   Only install MCPs from sources you trust.\n\n`;
+        }
+
+        message += `⚙️  To import, call ncp:import again with selection:\n` +
           `   Example: { from: "discovery", source: "${query}", selection: "1,3,5" }\n\n` +
           `   - Select individual: "1,3,5"\n` +
           `   - Select range: "1-5"\n` +
           `   - Select all: "*"\n\n` +
-          `💡 Badges: ⭐=active 📦=package 💻=stdio 🌐=HTTP/SSE`;
+          `💡 Badges: ✓=Trusted 💻=stdio 🌐=HTTP/SSE`;
 
         return {
           success: true,
