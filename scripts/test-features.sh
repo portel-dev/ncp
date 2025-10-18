@@ -3,7 +3,7 @@ set -e
 
 echo ""
 echo "=========================================="
-echo "NCP Feature Test Suite - Version 1.5.4"
+echo "NCP Feature Test Suite - Version 1.6.0"
 echo "=========================================="
 echo ""
 
@@ -78,7 +78,7 @@ if [ $FAILED -eq 0 ]; then
   echo "  ✅ Protocol Transparency (feature complete, E2E test pending)"
   echo ""
   echo "Total: 34 automated tests passing"
-  echo "Features: All v1.5.4 features fully implemented"
+  echo "Features: All v1.6.0 features fully implemented"
   echo ""
   exit 0
 else
