@@ -177,6 +177,9 @@ export class NCPOrchestrator {
 
   private forceRetry: boolean = false;
 
+  // Actual client info (passthrough to downstream MCPs for transparency)
+  private clientInfo: { name: string; version: string } = { name: 'ncp-oss', version: '1.0.0' };
+
   /**
    * ⚠️ CRITICAL: Default profile MUST be 'all' - DO NOT CHANGE!
    *
@@ -788,8 +791,9 @@ export class NCPOrchestrator {
 
       transport = await this.createTransport(config, silentEnv);
 
+      // Use actual client info for transparent passthrough to downstream MCPs
       client = new Client(
-        { name: 'ncp-oss', version: '1.0.0' },
+        this.clientInfo,
         { capabilities: {} }
       );
 
@@ -1062,8 +1066,9 @@ export class NCPOrchestrator {
 
       const transport = await this.createTransport(definition.config, silentEnv);
 
+      // Use actual client info for transparent passthrough to downstream MCPs
       const client = new Client(
-        { name: 'ncp-oss', version: '1.0.0' },
+        this.clientInfo,
         { capabilities: {} }
       );
 
@@ -1612,8 +1617,9 @@ export class NCPOrchestrator {
 
       const transport = await this.createTransport(definition.config, silentEnv);
 
+      // Use actual client info for transparent passthrough to downstream MCPs
       const client = new Client(
-        { name: 'ncp-oss-resources', version: '1.0.0' },
+        this.clientInfo,
         { capabilities: {} }
       );
 
@@ -1664,8 +1670,9 @@ export class NCPOrchestrator {
 
       const transport = await this.createTransport(definition.config, silentEnv);
 
+      // Use actual client info for transparent passthrough to downstream MCPs
       const client = new Client(
-        { name: 'ncp-oss-prompts', version: '1.0.0' },
+        this.clientInfo,
         { capabilities: {} }
       );
 
@@ -2033,8 +2040,9 @@ export class NCPOrchestrator {
 
       const transport = await this.createTransport(definition.config, silentEnv);
 
+      // Use actual client info for transparent passthrough to downstream MCPs
       const client = new Client(
-        { name: 'ncp-oss-resources', version: '1.0.0' },
+        this.clientInfo,
         { capabilities: {} }
       );
 
@@ -2082,6 +2090,15 @@ export class NCPOrchestrator {
     // In the future, this could track actual auto-import data
     // For now, we'll just return null which will trigger the appropriate message in the resource
     return null;
+  }
+
+  /**
+   * Set actual client information for transparent passthrough to downstream MCPs
+   * Called by MCPServer after receiving clientInfo from initialize request
+   */
+  setClientInfo(clientInfo: { name: string; version: string }): void {
+    this.clientInfo = clientInfo;
+    logger.debug(`Client info updated: ${clientInfo.name} v${clientInfo.version}`);
   }
 
   /**

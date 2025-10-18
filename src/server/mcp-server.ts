@@ -3,6 +3,7 @@
  * Exposes exactly 2 methods: discover + execute
  */
 
+import * as crypto from 'crypto';
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
 import { logger } from '../utils/logger.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
@@ -48,6 +49,13 @@ export class MCPServer {
   private initializationPromise: Promise<void> | null = null;
   private isInitialized: boolean = false;
   private initializationProgress: { current: number; total: number; currentMCP: string } | null = null;
+
+  // NCP connection tracking (distinct from protocol session_id)
+  private ncpTrackingId: string | null = null;
+  private clientSessionId: string | null = null; // Client's original session_id
+  private clientName: string | null = null;
+  private clientInfo: { name: string; version: string } | null = null; // Full client info for passthrough
+  private sessionStartTime: number | null = null;
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
     // Profile-aware orchestrator using real MCP connections
@@ -157,14 +165,50 @@ export class MCPServer {
   }
 
   private handleInitialize(request: MCPRequest): MCPResponse {
-    // Extract client name from initialize request for auto-import
-    const clientName = request.params?.clientInfo?.name;
+    // Generate NCP-specific tracking ID (not session_id - we don't own that)
+    this.ncpTrackingId = crypto.randomUUID();
+    this.sessionStartTime = Date.now();
+
+    // Extract client's original session_id (if provided)
+    this.clientSessionId = request.params?._meta?.session_id || null;
+
+    // Extract full clientInfo for transparent passthrough to downstream MCPs
+    const clientInfo = request.params?.clientInfo;
+    this.clientInfo = clientInfo ? {
+      name: clientInfo.name || 'unknown',
+      version: clientInfo.version || '1.0.0'
+    } : null;
+
+    // Extract client name for logging and auto-import
+    this.clientName = this.clientInfo?.name || 'unknown';
+
+    // Pass client info to orchestrator for transparent passthrough to downstream MCPs
+    if (this.clientInfo) {
+      this.orchestrator.setClientInfo(this.clientInfo);
+    }
+
+    // Log connection start with tracking info
+    const sessionInfo = this.clientSessionId
+      ? `session=${this.clientSessionId}, tracking=${this.ncpTrackingId}`
+      : `tracking=${this.ncpTrackingId}`;
+    logger.info(`Connection started: client=${this.clientName}, ${sessionInfo}`);
 
     // Trigger auto-import asynchronously (don't block initialize response)
-    if (clientName) {
-      this.orchestrator.triggerAutoImport(clientName).catch(error => {
-        logger.error(`Auto-import failed for ${clientName}: ${error.message}`);
+    if (this.clientName) {
+      this.orchestrator.triggerAutoImport(this.clientName).catch(error => {
+        logger.error(`[${this.ncpTrackingId}] Auto-import failed for ${this.clientName}: ${error.message}`);
       });
+    }
+
+    // Build response _meta - preserve client's session_id if provided
+    const responseMeta: any = {
+      ncp_tracking_id: this.ncpTrackingId,
+      ncp_client: this.clientName
+    };
+
+    // If client provided session_id, echo it back (transparent passthrough)
+    if (this.clientSessionId) {
+      responseMeta.session_id = this.clientSessionId;
     }
 
     return {
@@ -180,7 +224,8 @@ export class MCPServer {
           name: 'ncp',
           title: 'Natural Context Provider - Unified MCP Orchestrator',
           version: '1.0.4'
-        }
+        },
+        _meta: responseMeta
       }
     };
   }
@@ -730,8 +775,15 @@ export class MCPServer {
     const parameters = args.parameters || {};
     const dryRun = args.dry_run || false;
 
-    // Extract _meta for transparent passthrough (session_id, etc.)
-    const meta = request.params?._meta;
+    // Extract _meta for transparent passthrough and merge with NCP tracking
+    const clientMeta = request.params?._meta || {};
+    const meta = {
+      ...clientMeta,
+      // Preserve client's session_id if present (don't overwrite!)
+      // Add NCP tracking info in separate namespace
+      ncp_tracking_id: this.ncpTrackingId,
+      ncp_client: this.clientName
+    };
 
     // ===== CONFIRM-BEFORE-RUN FEATURE =====
     // Check if this operation requires user confirmation
@@ -1349,6 +1401,16 @@ run("ncp:import", {from: "file", source: "~/path/to/config.json"})
 
   async shutdown(): Promise<void> {
     try {
+      // Log connection duration if connection was established
+      if (this.ncpTrackingId && this.sessionStartTime) {
+        const duration = Date.now() - this.sessionStartTime;
+        const durationSec = Math.round(duration / 1000);
+        const sessionInfo = this.clientSessionId
+          ? `session=${this.clientSessionId}, tracking=${this.ncpTrackingId}`
+          : `tracking=${this.ncpTrackingId}`;
+        logger.info(`Connection ended: ${sessionInfo}, duration=${durationSec}s, client=${this.clientName}`);
+      }
+
       await this.orchestrator.cleanup();
       logger.info('NCP MCP server shut down gracefully');
     } catch (error: any) {
