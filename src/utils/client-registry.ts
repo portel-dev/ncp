@@ -147,6 +147,139 @@ export const CLIENT_REGISTRY: Record<string, ClientDefinition> = {
       darwin: '~/Library/Containers/ai.perplexity.mac/Data/Documents/connectors/dxt/installed',
     },
     mcpServersPath: 'servers' // Array format, not object
+  },
+
+  /**
+   * Zed (IDE)
+   * Uses JSON config with MCP settings
+   */
+  'zed': {
+    displayName: 'Zed',
+    configPaths: {
+      darwin: '~/.config/zed/settings.json',
+      linux: '~/.config/zed/settings.json',
+      // Windows path TBD
+    },
+    configFormat: 'json',
+    mcpServersPath: 'context_servers'
+  },
+
+  /**
+   * Windsurf (Codeium's IDE)
+   * Uses JSON config similar to Cursor
+   */
+  'windsurf': {
+    displayName: 'Windsurf',
+    configPaths: {
+      darwin: '~/Library/Application Support/Windsurf/User/globalStorage/Codeium.windsurf/mcp_settings.json',
+      win32: '%APPDATA%/Windsurf/User/globalStorage/Codeium.windsurf/mcp_settings.json',
+      linux: '~/.config/Windsurf/User/globalStorage/Codeium.windsurf/mcp_settings.json'
+    },
+    configFormat: 'json',
+    mcpServersPath: 'mcpServers'
+  },
+
+  /**
+   * Enconvo (Mac AI Assistant)
+   * Uses JSON config in application support
+   */
+  'enconvo': {
+    displayName: 'Enconvo',
+    configPaths: {
+      darwin: '~/Library/Application Support/Enconvo/mcp_config.json'
+      // macOS only currently
+    },
+    configFormat: 'json',
+    mcpServersPath: 'mcpServers'
+  },
+
+  /**
+   * Raycast (Mac Launcher)
+   * Uses JSON config for AI/MCP integration
+   */
+  'raycast': {
+    displayName: 'Raycast',
+    configPaths: {
+      darwin: '~/Library/Application Support/com.raycast.macos/mcp_servers.json'
+      // macOS only
+    },
+    configFormat: 'json',
+    mcpServersPath: 'servers'
+  },
+
+  /**
+   * VS Code (with native MCP support)
+   * Uses settings.json for MCP configuration
+   */
+  'vscode': {
+    displayName: 'VS Code',
+    configPaths: {
+      darwin: '~/Library/Application Support/Code/User/settings.json',
+      win32: '%APPDATA%/Code/User/settings.json',
+      linux: '~/.config/Code/User/settings.json'
+    },
+    configFormat: 'json',
+    mcpServersPath: 'mcp.servers'
+  },
+
+  /**
+   * GitHub Copilot (VS Code Extension with MCP)
+   * Uses workspace or global settings
+   */
+  'github-copilot': {
+    displayName: 'GitHub Copilot',
+    configPaths: {
+      darwin: '~/Library/Application Support/Code/User/settings.json',
+      win32: '%APPDATA%/Code/User/settings.json',
+      linux: '~/.config/Code/User/settings.json'
+    },
+    configFormat: 'json',
+    mcpServersPath: 'github.copilot.mcp.servers'
+  },
+
+  /**
+   * Pieces (Developer productivity tool)
+   * Uses JSON config in application support
+   */
+  'pieces': {
+    displayName: 'Pieces',
+    configPaths: {
+      darwin: '~/Library/Application Support/Pieces/mcp_config.json',
+      win32: '%APPDATA%/Pieces/mcp_config.json',
+      linux: '~/.config/Pieces/mcp_config.json'
+    },
+    configFormat: 'json',
+    mcpServersPath: 'mcpServers'
+  },
+
+  /**
+   * Tabnine (AI Code Assistant)
+   * Uses JSON config for MCP integration
+   */
+  'tabnine': {
+    displayName: 'Tabnine',
+    configPaths: {
+      darwin: '~/.tabnine/mcp_config.json',
+      win32: '%USERPROFILE%/.tabnine/mcp_config.json',
+      linux: '~/.tabnine/mcp_config.json'
+    },
+    configFormat: 'json',
+    mcpServersPath: 'mcpServers'
+  },
+
+  /**
+   * Claude Code (Anthropic's IDE)
+   * Uses NCP natively, but may have fallback config
+   */
+  'claude-code': {
+    displayName: 'Claude Code',
+    configPaths: {
+      darwin: '~/Library/Application Support/Claude Code/mcp_config.json',
+      win32: '%APPDATA%/Claude Code/mcp_config.json',
+      linux: '~/.config/Claude Code/mcp_config.json'
+    },
+    configFormat: 'json',
+    mcpServersPath: 'mcpServers'
   }
 };
 
