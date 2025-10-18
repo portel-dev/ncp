@@ -130,6 +130,55 @@ export async function collectCredentials(
 }
 
 /**
+ * Collect HTTP/SSE authentication credentials from user
+ *
+ * Currently supports bearer tokens. Returns auth config for HTTP/SSE servers.
+ *
+ * @param server MCP server instance
+ * @param mcpName Name of the MCP
+ * @param url URL of the HTTP/SSE server
+ * @returns Auth configuration object, or null if user cancelled
+ */
+export async function collectHTTPCredentials(
+  server: ElicitationServer,
+  mcpName: string,
+  url: string
+): Promise<{ type: string; token?: string } | null> {
+  const credentialRequirements = detectHTTPCredentials(mcpName, url);
+
+  if (credentialRequirements.length === 0) {
+    // No credentials needed (public endpoint)
+    return null;
+  }
+
+  // For now, we only support bearer token collection
+  // OAuth and basic auth would require more complex flows
+  const bearerCred = credentialRequirements.find(c => c.credentialType === 'bearer');
+
+  if (!bearerCred) {
+    logger.info(`HTTP MCP "${mcpName}" requires non-bearer auth, skipping auto-collection`);
+    return null;
+  }
+
+  // Collect bearer token via clipboard
+  const token = await collectCredential(
+    server,
+    bearerCred.displayName,
+    'AUTH_TOKEN',
+    bearerCred.example
+  );
+
+  if (token === null) {
+    return null; // User cancelled
+  }
+
+  return {
+    type: 'bearer',
+    token
+  };
+}
+
+/**
  * Format environment variable name for display
  * Converts: "GITHUB_TOKEN" -> "GitHub Token"
  */
@@ -138,6 +187,59 @@ export function formatEnvVarName(envVar: string): string {
     .split('_')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
+}
+
+/**
+ * Detect required credentials for HTTP/SSE servers
+ *
+ * Returns bearer token requirements for known HTTP/SSE MCPs
+ */
+export function detectHTTPCredentials(mcpName: string, url?: string): Array<{
+  credentialType: 'bearer' | 'apiKey' | 'oauth' | 'basic';
+  displayName: string;
+  example?: string;
+}> {
+  // Common patterns for HTTP/SSE MCPs that need authentication
+  const httpPatterns: Record<string, Array<{ credentialType: 'bearer' | 'apiKey' | 'oauth' | 'basic'; displayName: string; example?: string }>> = {
+    'github': [
+      { credentialType: 'bearer', displayName: 'GitHub Personal Access Token', example: 'ghp_xxxxxxxxxxxx' }
+    ],
+    'gitlab': [
+      { credentialType: 'bearer', displayName: 'GitLab Personal Access Token', example: 'glpat-xxxxxxxxxxxx' }
+    ],
+    'stripe': [
+      { credentialType: 'bearer', displayName: 'Stripe API Key', example: 'sk_test_xxxxxxxxxxxx' }
+    ],
+    'openai': [
+      { credentialType: 'bearer', displayName: 'OpenAI API Key', example: 'sk-xxxxxxxxxxxx' }
+    ],
+    'anthropic': [
+      { credentialType: 'bearer', displayName: 'Anthropic API Key', example: 'sk-ant-xxxxxxxxxxxx' }
+    ],
+    'slack': [
+      { credentialType: 'bearer', displayName: 'Slack Bot Token', example: 'xoxb-xxxxxxxxxxxx' }
+    ]
+  };
+
+  // Check URL for patterns
+  if (url) {
+    const urlLower = url.toLowerCase();
+    for (const [pattern, creds] of Object.entries(httpPatterns)) {
+      if (urlLower.includes(pattern)) {
+        return creds;
+      }
+    }
+  }
+
+  // Check MCP name for patterns
+  const nameLower = mcpName.toLowerCase();
+  for (const [pattern, creds] of Object.entries(httpPatterns)) {
+    if (nameLower.includes(pattern)) {
+      return creds;
+    }
+  }
+
+  return [];
 }
 
 /**
@@ -154,10 +256,13 @@ export function detectRequiredEnvVars(mcpName: string): Array<{
   displayName: string;
   example?: string;
 }> {
-  // Common patterns for well-known MCPs
+  // Common patterns for well-known stdio MCPs
   const knownPatterns: Record<string, Array<{ envVarName: string; displayName: string; example?: string }>> = {
     'github': [
       { envVarName: 'GITHUB_TOKEN', displayName: 'GitHub Personal Access Token', example: 'ghp_xxxxxxxxxxxx' }
+    ],
+    'gitlab': [
+      { envVarName: 'GITLAB_TOKEN', displayName: 'GitLab Personal Access Token', example: 'glpat-xxxxxxxxxxxx' }
     ],
     'slack': [
       { envVarName: 'SLACK_BOT_TOKEN', displayName: 'Slack Bot Token', example: 'xoxb-xxxxxxxxxxxx' },
@@ -168,6 +273,9 @@ export function detectRequiredEnvVars(mcpName: string): Array<{
     ],
     'openai': [
       { envVarName: 'OPENAI_API_KEY', displayName: 'OpenAI API Key', example: 'sk-xxxxxxxxxxxx' }
+    ],
+    'google-drive': [
+      { envVarName: 'GOOGLE_DRIVE_CREDENTIALS', displayName: 'Google Drive Credentials JSON', example: '{"client_id": "...", ...}' }
     ]
   };
 
