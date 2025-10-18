@@ -66,6 +66,8 @@ yarn-error.log*
 scripts/
 !scripts/*.cjs
 !scripts/cleanup/
+!scripts/test-*.js
+!scripts/test-*.sh
 
 # Ignore image files in project root (temporary screenshots)
 /*.png
