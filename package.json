@@ -34,6 +34,7 @@
     "test:features": "bash scripts/test-features.sh",
     "test:client-registry": "node scripts/test-client-registry.js",
     "test:registry-security": "node scripts/test-registry-security.js",
+    "test:http-auth": "node scripts/test-http-auth.js",
     "build:dxt": "npm run build && npm prune --production && npx @anthropic-ai/mcpb pack . ncp.dxt && npm install",
     "build:dxt:patched": "npm run build:dxt && ./scripts/patch-dxt-zip.sh",
     "build:dxt:signed": "npm run build:dxt:patched && npx @anthropic-ai/mcpb sign ncp.dxt --self-signed",
