@@ -49,8 +49,12 @@ export class MCPServerSDK implements ElicitationServer {
       }
     );
 
+    // Profile-aware orchestrator using real MCP connections
+    this.orchestrator = new NCPOrchestrator(profileName, showProgress, forceRetry);
+
     // Set up callback to capture clientInfo from actual client (e.g., Claude Desktop, Cursor)
     // This enables protocol transparency - passing through actual client identity to downstream MCPs
+    // IMPORTANT: Must be set AFTER orchestrator creation to avoid race condition
     this.server.oninitialized = () => {
       const clientVersion = this.server.getClientVersion();
       if (clientVersion) {
@@ -62,9 +66,6 @@ export class MCPServerSDK implements ElicitationServer {
         logger.debug(`Client info captured: ${clientInfo.name} v${clientInfo.version}`);
       }
     };
-
-    // Profile-aware orchestrator using real MCP connections
-    this.orchestrator = new NCPOrchestrator(profileName, showProgress, forceRetry);
 
     // Wire up elicitation server to internal MCPs IMMEDIATELY
     // This must happen before initialization so confirmations work from the start
