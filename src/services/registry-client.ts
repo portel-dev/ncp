@@ -43,6 +43,8 @@ export interface RegistryServer {
   _meta?: {
     'io.modelcontextprotocol.registry/official'?: {
       status: string;
+      publishedAt?: string;
+      updatedAt?: string;
     };
   };
 }
@@ -52,6 +54,10 @@ export interface ServerSearchResult {
     name: string;
     description: string;
     version: string;
+    repository?: {
+      url: string;
+      source?: string;
+    };
     packages?: Array<{
       identifier: string;
       version: string;
@@ -65,6 +71,8 @@ export interface ServerSearchResult {
   _meta?: {
     'io.modelcontextprotocol.registry/official'?: {
       status: string;
+      publishedAt?: string;
+      updatedAt?: string;
     };
   };
 }
@@ -92,46 +100,226 @@ export interface RegistryMCPCandidate {
   }>;
   downloadCount?: number;
   status?: string;
+  // Security indicators
+  repository?: {
+    url: string;
+    source?: string;
+  };
+  publishedAt?: string;
+  isTrusted?: boolean;
+  qualityScore?: number; // For debugging/transparency
+}
+
+export interface RegistrySearchOptions {
+  /** Maximum number of results to return */
+  limit?: number;
+  /** Pagination cursor */
+  cursor?: string;
+  /** Security filtering options */
+  security?: {
+    /** Only include servers with GitHub repositories */
+    requireRepository?: boolean;
+    /** Trusted namespaces to prioritize (e.g., ['io.github.modelcontextprotocol']) */
+    trustedNamespaces?: string[];
+    /** Minimum age in days (avoid brand new servers) */
+    minAgeDays?: number;
+  };
 }
 
 export class RegistryClient {
   private baseURL = 'https://registry.modelcontextprotocol.io/v0';
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
-  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly CACHE_TTL = 30 * 60 * 1000; // 30 minutes (longer for large dataset)
+  private allServersCache: ServerSearchResult[] | null = null;
+  private allServersCacheTime: number = 0;
 
   /**
-   * Search for MCP servers in the registry
+   * Fetch ALL servers from registry (up to 100 - API limit) for comprehensive dataset
+   * This allows intelligent client-side sorting and filtering
    */
-  async search(query: string, limit: number = 50): Promise<ServerSearchResult[]> {
+  private async fetchAllServers(): Promise<ServerSearchResult[]> {
+    // Check cache first (30 min TTL)
+    if (this.allServersCache && Date.now() - this.allServersCacheTime < this.CACHE_TTL) {
+      logger.debug('Using cached registry dataset');
+      return this.allServersCache;
+    }
+
+    logger.debug('Fetching comprehensive registry dataset...');
+
     try {
-      const cacheKey = `search:${query}:${limit}`;
-      const cached = this.getFromCache(cacheKey);
-      if (cached) return cached;
+      // Fetch maximum allowed dataset (100 servers - API limit)
+      const url = `${this.baseURL}/servers?limit=100`;
+      const response = await fetch(url);
 
-      logger.debug(`Searching registry for: ${query}`);
-
-      const response = await fetch(`${this.baseURL}/servers?limit=${limit}`);
       if (!response.ok) {
         throw new Error(`Registry API error: ${response.statusText}`);
       }
 
       const data = await response.json();
+      const servers = data.servers || [];
 
-      // Filter results by query (search in name and description)
-      const lowerQuery = query.toLowerCase();
-      const filtered = (data.servers || []).filter((s: ServerSearchResult) =>
-        s.server.name.toLowerCase().includes(lowerQuery) ||
-        s.server.description?.toLowerCase().includes(lowerQuery)
-      );
+      // Cache the full dataset
+      this.allServersCache = servers;
+      this.allServersCacheTime = Date.now();
 
-      this.setCache(cacheKey, filtered);
-      logger.debug(`Found ${filtered.length} results for: ${query}`);
+      logger.debug(`Fetched and cached ${servers.length} servers from registry`);
 
-      return filtered;
+      return servers;
+    } catch (error: any) {
+      logger.error(`Failed to fetch registry dataset: ${error.message}`);
+      // If we have stale cache, use it
+      if (this.allServersCache) {
+        logger.warn('Using stale cache due to fetch error');
+        return this.allServersCache;
+      }
+      throw new Error(`Failed to fetch registry: ${error.message}`);
+    }
+  }
+
+  /**
+   * Calculate quality score for a server (higher = better quality)
+   */
+  private calculateQualityScore(server: ServerSearchResult, trustedNamespaces: string[] = []): number {
+    let score = 0;
+
+    // Has repository: +100 (critical for security)
+    if (server.server.repository?.url) {
+      score += 100;
+
+      // GitHub repository: +20 (easier to audit)
+      if (server.server.repository.source === 'github' ||
+          server.server.repository.url.includes('github.com')) {
+        score += 20;
+      }
+    }
+
+    // Trusted namespace: +200 (highest priority)
+    const isTrusted = trustedNamespaces.some(ns => server.server.name.startsWith(ns));
+    if (isTrusted) {
+      score += 200;
+    }
+
+    // Age scoring (sweet spot: 30-180 days)
+    const publishedAt = server._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt;
+    if (publishedAt) {
+      const ageMs = Date.now() - new Date(publishedAt).getTime();
+      const ageDays = ageMs / (1000 * 60 * 60 * 24);
+
+      if (ageDays >= 30 && ageDays <= 180) {
+        // Sweet spot: established but not abandoned
+        score += 50;
+      } else if (ageDays < 7) {
+        // Very new: penalize
+        score -= 50;
+      } else if (ageDays > 365) {
+        // Very old: slight penalty (might be abandoned)
+        score -= 10;
+      } else if (ageDays >= 7 && ageDays < 30) {
+        // New but not brand new: slight boost
+        score += 25;
+      }
+    }
+
+    // Recently updated: +30 (shows active maintenance)
+    const updatedAt = server._meta?.['io.modelcontextprotocol.registry/official']?.updatedAt;
+    if (updatedAt) {
+      const updateAgeMs = Date.now() - new Date(updatedAt).getTime();
+      const updateAgeDays = updateAgeMs / (1000 * 60 * 60 * 24);
+
+      if (updateAgeDays < 30) {
+        score += 30;
+      } else if (updateAgeDays < 90) {
+        score += 15;
+      }
+    }
+
+    return score;
+  }
+
+  /**
+   * Search for MCP servers with intelligent quality-based sorting
+   * Fetches large dataset and sorts by quality indicators
+   */
+  async search(query: string, options: RegistrySearchOptions = {}): Promise<ServerSearchResult[]> {
+    try {
+      logger.debug(`Searching registry for: "${query}"`);
+
+      // Fetch full dataset
+      const allServers = await this.fetchAllServers();
+
+      // Filter by search query (client-side text matching)
+      let results = allServers;
+      if (query && query.trim()) {
+        const lowerQuery = query.toLowerCase();
+        results = allServers.filter(s =>
+          s.server.name.toLowerCase().includes(lowerQuery) ||
+          s.server.description?.toLowerCase().includes(lowerQuery)
+        );
+      }
+
+      // Apply security filters
+      results = this.applySecurityFilters(results, options.security);
+
+      // Calculate quality scores and sort
+      const trustedNamespaces = options.security?.trustedNamespaces || [];
+      const scoredResults = results.map(server => ({
+        server,
+        score: this.calculateQualityScore(server, trustedNamespaces)
+      }));
+
+      // Sort by quality score (highest first)
+      scoredResults.sort((a, b) => b.score - a.score);
+
+      // Return sorted servers (remove scores)
+      const sortedResults = scoredResults.map(r => r.server);
+
+      // Apply limit if specified
+      const limit = options.limit || sortedResults.length;
+      const finalResults = sortedResults.slice(0, limit);
+
+      logger.debug(`Found ${results.length} matches, returning top ${finalResults.length} by quality`);
+
+      return finalResults;
     } catch (error: any) {
       logger.error(`Registry search failed: ${error.message}`);
       throw new Error(`Failed to search registry: ${error.message}`);
     }
+  }
+
+  /**
+   * Apply client-side security filters to search results
+   * Note: Sorting is handled separately by quality scoring
+   */
+  private applySecurityFilters(
+    servers: ServerSearchResult[],
+    security?: RegistrySearchOptions['security']
+  ): ServerSearchResult[] {
+    if (!security) return servers;
+
+    let filtered = servers;
+
+    // Filter: Require repository
+    if (security.requireRepository) {
+      filtered = filtered.filter(s =>
+        s.server.repository?.url &&
+        s.server.repository.url.trim() !== ''
+      );
+      logger.debug(`After requireRepository filter: ${filtered.length} servers`);
+    }
+
+    // Filter: Minimum age
+    if (security.minAgeDays) {
+      const minAgeMs = security.minAgeDays * 24 * 60 * 60 * 1000;
+      filtered = filtered.filter(s => {
+        const publishedAt = s._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt;
+        if (!publishedAt) return true; // Include if no date available
+        const age = Date.now() - new Date(publishedAt).getTime();
+        return age >= minAgeMs;
+      });
+      logger.debug(`After minAgeDays filter: ${filtered.length} servers`);
+    }
+
+    return filtered;
   }
 
   /**
@@ -162,9 +350,27 @@ export class RegistryClient {
 
   /**
    * Search and format results as numbered candidates for user selection
+   * Includes security filtering and trust indicators
    */
-  async searchForSelection(query: string): Promise<RegistryMCPCandidate[]> {
-    const results = await this.search(query, 20); // Get up to 20 results
+  async searchForSelection(query: string, options: RegistrySearchOptions = {}): Promise<RegistryMCPCandidate[]> {
+    // Apply default security settings for user-facing search
+    const searchOptions: RegistrySearchOptions = {
+      limit: options.limit || 20,
+      security: {
+        // Default: prioritize trusted namespaces
+        trustedNamespaces: options.security?.trustedNamespaces || [
+          'io.github.modelcontextprotocol',  // Official Anthropic servers
+          'com.github.microsoft',            // Microsoft
+          'io.github.anthropics'             // Anthropic alternative namespace
+        ],
+        requireRepository: options.security?.requireRepository,
+        minAgeDays: options.security?.minAgeDays,
+        ...options.security
+      },
+      ...options
+    };
+
+    const results = await this.search(query, searchOptions);
 
     return results.map((result, index) => {
       const pkg = result.server.packages?.[0];
@@ -177,6 +383,15 @@ export class RegistryClient {
         transport = remote.type === 'sse' ? 'sse' : 'http';
       }
 
+      // Check if trusted namespace
+      const trustedNamespaces = searchOptions.security?.trustedNamespaces || [];
+      const isTrusted = trustedNamespaces.some(ns =>
+        result.server.name.startsWith(ns)
+      );
+
+      // Calculate quality score
+      const qualityScore = this.calculateQualityScore(result, trustedNamespaces);
+
       const candidate: RegistryMCPCandidate = {
         number: index + 1,
         name: result.server.name,
@@ -184,7 +399,12 @@ export class RegistryClient {
         description: result.server.description || 'No description',
         version: result.server.version,
         transport,
-        status: result._meta?.['io.modelcontextprotocol.registry/official']?.status
+        status: result._meta?.['io.modelcontextprotocol.registry/official']?.status,
+        // Security indicators
+        repository: result.server.repository,
+        publishedAt: result._meta?.['io.modelcontextprotocol.registry/official']?.publishedAt,
+        isTrusted,
+        qualityScore
       };
 
       // Add stdio-specific fields
