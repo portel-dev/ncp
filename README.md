@@ -1,5 +1,5 @@
 [![npm version](https://img.shields.io/npm/v/@portel/ncp.svg)](https://www.npmjs.com/package/@portel/ncp)
-[![npm downloads](https://img.shields.io/npm/dm/@portel/ncp.svg)](https://www.npmjs.com/package/@portel/ncp)
+[![npm downloads](https://img.shields.io/npm/dt/@portel/ncp.svg)](https://www.npmjs.com/package/@portel/ncp)
 [![GitHub release downloads](https://img.shields.io/github/downloads/portel-dev/ncp/total?label=.dxt%20downloads)](https://github.com/portel-dev/ncp/releases)
 [![Latest release](https://img.shields.io/github/downloads/portel-dev/ncp/latest/total?label=latest%20.dxt)](https://github.com/portel-dev/ncp/releases/latest)
 [![License: Elastic-2.0](https://img.shields.io/badge/License-Elastic--2.0-blue.svg)](https://www.elastic.co/licensing/elastic-license)
@@ -10,6 +10,11 @@
 # NCP - Natural Context Provider
 
 ## 💍 **1 MCP to rule them all**
+
+**MCP turns AI into your assistant.
+NCP turns your assistant into an executive.**
+
+From desperation to delegation - your AI goes from overwhelmed to unstoppable.
 
 ![NCP Transformation Flow](docs/images/ncp-transformation-flow.png)
 
@@ -23,14 +28,14 @@
 
 ---
 
-## 😤 **The MCP Paradox: More Tools = Less Productivity**
+## 😤 **The MCP Paradox: From Assistant to Desperate**
 
-You added MCPs to make your AI more powerful. Instead:
+You gave your AI assistant 50 tools to be more capable. Instead, you got desperation:
 
-- **AI picks wrong tools** ("Should I use `read_file` or `get_file_content`?")
-- **Sessions end early** ("I've reached my context limit analyzing tools")
-- **Costs explode** (50+ schemas burn tokens before work even starts)
-- **AI becomes indecisive** (used to act fast, now asks clarifying questions)
+- **Paralyzed by choice** ("Should I use `read_file` or `get_file_content`?")
+- **Exhausted before starting** ("I've spent my context limit analyzing which tool to use")
+- **Costs explode** (50+ tool schemas burn tokens before any real work happens)
+- **Asks instead of acts** (used to be decisive, now constantly asks for clarification)
 
 ---
 
@@ -65,9 +70,9 @@ The most creative people thrive with **constraints**, not infinite options. Your
 
 ## 📊 **The Before & After Reality**
 
-### **Before NCP: Tool Schema Explosion** 😵‍💫
+### **Before NCP: Desperate Assistant** 😵‍💫
 
-When your AI connects to multiple MCPs directly:
+When your AI assistant manages 50 tools directly:
 
 ```
 🤖 AI Assistant Context:
@@ -88,9 +93,9 @@ When your AI connects to multiple MCPs directly:
 - Often picks wrong tool due to schema confusion
 - Hits context limits mid-conversation
 
-### **After NCP: Unified Intelligence** ✨
+### **After NCP: Executive Assistant** ✨
 
-With NCP's orchestration:
+With NCP as Chief of Staff:
 
 ```
 🤖 AI Assistant Context:
@@ -326,24 +331,24 @@ npx @portel/ncp find "file operations"
 
 ## 💡 **Why NCP Transforms Your AI Experience**
 
-### **🧠 Restores AI Focus**
-- **Before:** "I see 50 tools... which should I use... let me think..."
-- **After:** "I need file access. Done." *(sub-second decision)*
+### **🧠 From Desperation to Delegation**
+- **Desperate Assistant:** "I see 50 tools... which should I use... let me think..."
+- **Executive Assistant:** "I need file access. Done." *(NCP handles the details)*
 
 ### **💰 Massive Token Savings**
-- **Before:** 100k+ tokens just for tool schemas
-- **After:** 2.5k tokens for unified interface
+- **Before:** 100k+ tokens burned on tool confusion
+- **After:** 2.5k tokens for focused execution
 - **Result:** 40x token efficiency = 40x longer conversations
 
-### **🎯 Eliminates Tool Confusion**
-- **Before:** AI picks `read_file` when you meant `search_files`
-- **After:** NCP's semantic engine finds the RIGHT tool for the task
+### **🎯 Eliminates Choice Paralysis**
+- **Desperate:** AI freezes, picks wrong tool, asks for clarification
+- **Executive:** NCP's Chief of Staff finds the RIGHT tool instantly
 
-### **🚀 Faster, Smarter Responses**
-- **Before:** 8-second delay analyzing tool options
-- **After:** Instant tool selection, immediate action
+### **🚀 Confident Action**
+- **Before:** 8-second delays, hesitation, "Which tool should I use?"
+- **After:** Instant decisions, immediate execution, zero doubt
 
-**Bottom line:** Your AI goes from overwhelmed to **laser-focused**.
+**Bottom line:** Your AI goes from desperate assistant to **executive assistant**.
 
 ---
 
@@ -532,6 +537,53 @@ api-backend/
   server/
 ```
 
+### **HTTP/SSE Transport & Hibernation Support**
+
+NCP supports both **stdio** (local) and **HTTP/SSE** (remote) MCP servers:
+
+**Stdio Transport** (Traditional):
+```bash
+# Local MCP servers running as processes
+ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/Documents
+```
+
+**HTTP/SSE Transport** (Remote):
+```json
+{
+  "mcpServers": {
+    "remote-mcp": {
+      "url": "https://mcp.example.com/api",
+      "auth": {
+        "type": "bearer",
+        "token": "your-token-here"
+      }
+    }
+  }
+}
+```
+
+**🔋 Hibernation-Enabled Servers:**
+
+NCP automatically supports hibernation-enabled MCP servers (like Cloudflare Durable Objects or Metorial):
+- **Zero configuration needed** - Hibernation works transparently
+- **Automatic wake-up** - Server wakes on demand when NCP makes requests
+- **State preservation** - Server state is maintained across hibernation cycles
+- **Cost savings** - Only pay when MCPs are actively processing requests
+
+**How it works:**
+1. Server hibernates when idle (consumes zero resources)
+2. NCP sends a request → Server wakes instantly
+3. Server processes request and responds
+4. Server returns to hibernation after idle timeout
+
+**Perfect for:**
+- 💰 **Cost optimization** - Only pay for active processing time
+- 🌐 **Cloud-hosted MCPs** - Metorial, Cloudflare Workers, serverless platforms
+- ♻️ **Resource efficiency** - No idle server costs
+- 🚀 **Scale to zero** - Servers automatically sleep when not needed
+
+> **Note:** Hibernation is a server-side feature. NCP's standard HTTP/SSE client automatically works with both traditional and hibernation-enabled servers without any special configuration.
+
 ### **Import from Anywhere**
 ```bash
 # From clipboard (any JSON config)
@@ -576,6 +628,29 @@ rm -rf ~/.ncp/cache
 # Monitor with debug logs
 DEBUG=ncp:* ncp find "test"
 ```
+
+---
+
+## 🌓 **Why We Built This**
+
+**Like Yin and Yang, everything relies on the balance of things.**
+
+**Compute** gives us precision and certainty.
+**AI** gives us creativity and probability.
+
+We believe breakthrough products emerge when you combine these forces in the right ratio.
+
+**How NCP embodies this balance:**
+
+| What NCP Does | AI (Creativity) | Compute (Precision) | The Balance |
+|---------------|-----------------|---------------------|-------------|
+| **Tool Discovery** | Understands "read a file" semantically | Routes to exact tool deterministically | Natural request → Precise execution |
+| **Orchestration** | Flexible to your intent | Reliable tool execution | Natural flow → Certain outcomes |
+| **Health Monitoring** | Adapts to patterns | Monitors connections, auto-failover | Smart adaptation → Reliable uptime |
+
+Neither pure AI (too unpredictable) nor pure compute (too rigid).
+
+Your AI stays creative. NCP handles the precision.
 
 ---
 
