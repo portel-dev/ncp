@@ -56,6 +56,12 @@ export class CSVCache {
   private metadata: CacheMetadata | null = null;
 
   constructor(private cacheDir: string, private profileName: string) {
+    // Debug logging to track profile name
+    if (process.env.NCP_DEBUG === 'true') {
+      console.error(`[DEBUG CSV] CSVCache initialized with profileName: ${profileName}`);
+      console.error(`[DEBUG CSV] csvPath: ${join(cacheDir, `${profileName}-tools.csv`)}`);
+      console.error(`[DEBUG CSV] metaPath: ${join(cacheDir, `${profileName}-cache-meta.json`)}`);
+    }
     this.csvPath = join(cacheDir, `${profileName}-tools.csv`);
     this.metaPath = join(cacheDir, `${profileName}-cache-meta.json`);
   }

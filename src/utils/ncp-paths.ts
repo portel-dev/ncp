@@ -29,21 +29,33 @@ export function getEffectiveWorkingDirectory(): string {
 
 /**
  * Determines the base .ncp directory to use
- * Only uses local .ncp if directory already exists, otherwise falls back to global ~/.ncp
+ * Uses local .ncp if directory exists in CWD or parent directories, otherwise falls back to global ~/.ncp
  */
 export function getNcpBaseDirectory(): string {
-  if (_ncpBaseDir) return _ncpBaseDir;
+  if (_ncpBaseDir) {
+    if (process.env.NCP_DEBUG === 'true') {
+      console.error(`[DEBUG PATHS] Using cached _ncpBaseDir: ${_ncpBaseDir}`);
+    }
+    return _ncpBaseDir;
+  }
 
   // Start from effective working directory and traverse up
   let currentDir = getEffectiveWorkingDirectory();
   const root = path.parse(currentDir).root;
 
+  if (process.env.NCP_DEBUG === 'true') {
+    console.error(`[DEBUG PATHS] Searching for .ncp starting from: ${currentDir}`);
+  }
+
   while (currentDir !== root) {
     const localNcpDir = path.join(currentDir, '.ncp');
 
-    // Only use local .ncp if the directory already exists
+    // Use local .ncp if directory exists - will create subdirectories (profiles/, cache/, logs/) as needed
     if (existsSync(localNcpDir)) {
       _ncpBaseDir = localNcpDir;
+      if (process.env.NCP_DEBUG === 'true') {
+        console.error(`[DEBUG PATHS] Using local .ncp: ${_ncpBaseDir}`);
+      }
       return _ncpBaseDir;
     }
 
@@ -52,6 +64,9 @@ export function getNcpBaseDirectory(): string {
 
   // Fallback to global ~/.ncp directory (will be created if needed)
   _ncpBaseDir = path.join(os.homedir(), '.ncp');
+  if (process.env.NCP_DEBUG === 'true') {
+    console.error(`[DEBUG PATHS] Using global .ncp: ${_ncpBaseDir}`);
+  }
   return _ncpBaseDir;
 }
 

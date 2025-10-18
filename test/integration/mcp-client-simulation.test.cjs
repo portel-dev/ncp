@@ -19,7 +19,8 @@ const path = require('path');
 const os = require('os');
 
 // Test configuration
-const NCP_DIR = path.join(os.homedir(), '.ncp');
+// Use local .ncp directory for integration tests to avoid conflicts with user's global config
+const NCP_DIR = path.join(process.cwd(), '.ncp');
 const PROFILES_DIR = path.join(NCP_DIR, 'profiles');
 const CACHE_DIR = path.join(NCP_DIR, 'cache');
 const TEST_PROFILE = 'integration-test';
@@ -36,13 +37,20 @@ function setupTestProfile() {
   }
 
   // Create minimal test profile with filesystem MCP
+  // filesystem MCP requires allowed directories as arguments
   const profilePath = path.join(PROFILES_DIR, `${TEST_PROFILE}.json`);
   const testProfile = {
+    name: TEST_PROFILE, // IMPORTANT: profile.name must match filename for ProfileManager to load it correctly
+    description: 'Integration test profile',
     mcpServers: {
       filesystem: {
         command: 'npx',
-        args: ['@modelcontextprotocol/server-filesystem']
+        args: ['@modelcontextprotocol/server-filesystem', '/tmp']
       }
+    },
+    metadata: {
+      created: new Date().toISOString(),
+      modified: new Date().toISOString()
     }
   };
 
@@ -168,8 +176,19 @@ class MCPClientSimulator {
 
   async stop() {
     if (this.ncp) {
-      this.ncp.kill();
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Close stdin to trigger graceful shutdown (allows cache finalization)
+      this.ncp.stdin.end();
+      // Wait for process to exit gracefully
+      await new Promise(resolve => {
+        this.ncp.once('exit', resolve);
+        // Fallback: force kill after 2 seconds if it doesn't exit
+        setTimeout(() => {
+          if (!this.ncp.killed) {
+            this.ncp.kill();
+            resolve();
+          }
+        }, 2000);
+      });
     }
   }
 }
