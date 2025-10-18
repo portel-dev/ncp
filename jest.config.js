@@ -33,9 +33,13 @@ export default {
   },
   moduleFileExtensions: ['ts', 'js', 'json'],
   extensionsToTreatAsEsm: ['.ts'],
+  transformIgnorePatterns: [
+    'node_modules/(?!(clipboardy)/)'
+  ],
   moduleNameMapper: {
     '@xenova/transformers': '<rootDir>/test/__mocks__/transformers.js',
     '^chalk$': '<rootDir>/test/__mocks__/chalk.js',
+    '^clipboardy$': '<rootDir>/test/__mocks__/clipboardy.js',
     '^.*\\/utils\\/updater\\.js$': '<rootDir>/test/__mocks__/updater.js',
     '^.*\\/cache\\/csv-cache\\.js$': '<rootDir>/test/__mocks__/csv-cache.ts',
     '^(\\.{1,2}/.*)\\.js$': '$1',
