@@ -13,6 +13,8 @@ import { logger } from '../utils/logger.js';
 
 export class InternalMCPManager {
   private internalMCPs: Map<string, InternalMCP> = new Map();
+  private disabledInternalMCPs: Set<string> = new Set();
+  private ragEngine: any = null; // PersistentRAGEngine instance (set via setRAGEngine)
 
   constructor() {
     // Register internal MCPs
@@ -136,5 +138,87 @@ export class InternalMCPManager {
     }
 
     return current === true;
+  }
+
+  /**
+   * Set the RAG engine instance for managing disabled MCPs
+   */
+  setRAGEngine(ragEngine: any): void {
+    this.ragEngine = ragEngine;
+    logger.debug('RAG engine connected to InternalMCPManager');
+  }
+
+  /**
+   * Disable an internal MCP (removes from discovery, triggers re-indexing)
+   */
+  async disableInternalMCP(mcpName: string): Promise<void> {
+    if (!this.internalMCPs.has(mcpName)) {
+      throw new Error(`Internal MCP not found: ${mcpName}`);
+    }
+
+    if (this.disabledInternalMCPs.has(mcpName)) {
+      logger.warn(`Internal MCP ${mcpName} is already disabled`);
+      return;
+    }
+
+    this.disabledInternalMCPs.add(mcpName);
+    logger.info(`🚫 Disabled internal MCP: ${mcpName}`);
+
+    // Mark as disabled in RAG engine for live filtering
+    if (this.ragEngine) {
+      this.ragEngine.setMCPDisabled(mcpName);
+
+      // Trigger background re-indexing to rebuild index without disabled MCP
+      await this.ragEngine.triggerBackgroundReindex();
+    }
+  }
+
+  /**
+   * Enable an internal MCP (adds to discovery, triggers re-indexing)
+   */
+  async enableInternalMCP(mcpName: string): Promise<void> {
+    if (!this.internalMCPs.has(mcpName)) {
+      throw new Error(`Internal MCP not found: ${mcpName}`);
+    }
+
+    if (!this.disabledInternalMCPs.has(mcpName)) {
+      logger.warn(`Internal MCP ${mcpName} is already enabled`);
+      return;
+    }
+
+    this.disabledInternalMCPs.delete(mcpName);
+    logger.info(`✅ Enabled internal MCP: ${mcpName}`);
+
+    // Mark as enabled in RAG engine
+    if (this.ragEngine) {
+      this.ragEngine.setMCPEnabled(mcpName);
+
+      // Trigger background re-indexing to rebuild index with newly enabled MCP
+      // Note: This assumes the MCP tools will be re-indexed when the orchestrator re-indexes
+      await this.ragEngine.triggerBackgroundReindex();
+    }
+  }
+
+  /**
+   * Check if an internal MCP is disabled
+   */
+  isInternalMCPDisabled(mcpName: string): boolean {
+    return this.disabledInternalMCPs.has(mcpName);
+  }
+
+  /**
+   * Get list of disabled internal MCPs
+   */
+  getDisabledInternalMCPs(): string[] {
+    return Array.from(this.disabledInternalMCPs);
+  }
+
+  /**
+   * Get all internal MCPs for tool discovery (excludes disabled MCPs)
+   */
+  getAllEnabledInternalMCPs(): InternalMCP[] {
+    return Array.from(this.internalMCPs.values()).filter(
+      mcp => !this.disabledInternalMCPs.has(mcp.name)
+    );
   }
 }

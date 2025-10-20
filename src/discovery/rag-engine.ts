@@ -45,7 +45,16 @@ export interface DiscoveryResult {
 }
 
 export class PersistentRAGEngine {
-  
+  // Smart re-indexing: dual index files for atomic swaps
+  private primaryDbPath: string;
+  private swapDbPath: string;
+  private activeIndexPath: string; // Points to current active index
+  private isUsingSwapIndex: boolean = false;
+
+  // Smart re-indexing: disabled MCP tracking
+  private disabledMCPs: Set<string> = new Set();
+  private isReindexing: boolean = false;
+
   /**
    * Get domain classification for an MCP to improve cross-domain disambiguation
    */
@@ -166,7 +175,6 @@ export class PersistentRAGEngine {
 
   private model: any;
   private vectorDB: Map<string, ToolEmbedding> = new Map();
-  private dbPath: string;
   private metadataPath: string;
   private cacheMetadata: CacheMetadata | null = null;
   private isInitialized = false;
@@ -176,7 +184,11 @@ export class PersistentRAGEngine {
 
   constructor() {
     const ncpDir = getNcpBaseDirectory();
-    this.dbPath = path.join(ncpDir, 'embeddings.json');
+
+    // Smart re-indexing: dual index file paths
+    this.primaryDbPath = path.join(ncpDir, 'embeddings.json');
+    this.swapDbPath = path.join(ncpDir, 'embeddings-swap.json');
+    this.activeIndexPath = this.primaryDbPath; // Start with primary
     this.metadataPath = path.join(ncpDir, 'embeddings-metadata.json');
 
     // Initialize semantic enhancement engine with industry-standard architecture
@@ -193,7 +205,7 @@ export class PersistentRAGEngine {
    */
   async validateCache(currentConfig?: any): Promise<boolean> {
     try {
-      if (!existsSync(this.dbPath) || !existsSync(this.metadataPath)) {
+      if (!existsSync(this.activeIndexPath) || !existsSync(this.metadataPath)) {
         logger.debug('🔍 Cache files missing, needs rebuild');
         return false;
       }
@@ -520,6 +532,7 @@ export class PersistentRAGEngine {
 
   /**
    * Discover tools using semantic similarity (or fallback to keyword matching)
+   * Includes smart re-indexing: live filtering with over-fetching
    */
   async discover(query: string, maxResults = 5, confidenceThreshold = 0.35): Promise<DiscoveryResult[]> {
     if (!this.isInitialized) {
@@ -540,7 +553,15 @@ export class PersistentRAGEngine {
 
     try {
       logger.debug(`🔍 RAG discovery: "${query}"`);
-      
+
+      // Smart re-indexing: calculate over-fetch multiplier based on disabled MCPs
+      const overFetchMultiplier = this.calculateOverFetchMultiplier(maxResults);
+      const adjustedLimit = Math.ceil(maxResults * overFetchMultiplier);
+
+      if (overFetchMultiplier > 1.0) {
+        logger.debug(`🔄 Over-fetching: requesting ${adjustedLimit} results (${overFetchMultiplier.toFixed(2)}x) to compensate for ${this.disabledMCPs.size} disabled MCPs`);
+      }
+
       // Check if any tools have actual embeddings
       let toolsWithEmbeddings = 0;
       for (const [toolId, toolData] of this.vectorDB) {
@@ -548,9 +569,9 @@ export class PersistentRAGEngine {
           toolsWithEmbeddings++;
         }
       }
-      
+
       logger.debug(`Tools with embeddings: ${toolsWithEmbeddings}/${this.vectorDB.size}`);
-      
+
       // If no tools have embeddings, fall back to keyword search
       if (toolsWithEmbeddings === 0) {
         logger.debug('No tools have embeddings, falling back to keyword search');
@@ -598,9 +619,9 @@ export class PersistentRAGEngine {
       const inferredDomains = this.inferQueryDomains(queryLower);
 
       // Sort by similarity and apply enhancement system
-      const results = similarities
+      const rawResults = similarities
         .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, maxResults * 2) // Get more candidates for domain filtering
+        .slice(0, adjustedLimit * 2) // Get more candidates for domain filtering (use adjusted limit)
         .filter(result => result.similarity > 0.25) // Lower initial threshold for domain filtering
         .map(result => {
           const toolData = this.vectorDB.get(result.toolId);
@@ -634,7 +655,7 @@ export class PersistentRAGEngine {
               enhancementReasons.push(`legacy: domain match (${toolData.mcpDomain})`);
             }
           }
-          
+
           const baseReason = toolData?.mcpDomain ?
             `${toolData.mcpDomain} tool (RAG)` :
             'Semantic similarity (RAG)';
@@ -653,11 +674,15 @@ export class PersistentRAGEngine {
           };
         })
         .sort((a, b) => b.similarity - a.similarity) // Re-sort after boosting
-        .slice(0, maxResults) // Take final top results
+        .slice(0, adjustedLimit) // Take adjusted limit (over-fetched results)
         .filter(result => result.similarity > confidenceThreshold); // Apply configurable confidence threshold
 
-      logger.debug(`🎯 Found ${results.length} matches for "${query}" (threshold: ${confidenceThreshold})`);
-      
+      // Smart re-indexing: filter out disabled MCPs, then take final maxResults
+      const filteredResults = this.filterDisabledMCPs(rawResults);
+      const results = filteredResults.slice(0, maxResults);
+
+      logger.debug(`🎯 Found ${results.length} matches for "${query}" (threshold: ${confidenceThreshold}, filtered ${rawResults.length - filteredResults.length} disabled)`);
+
       return results;
 
     } catch (error) {
@@ -916,20 +941,24 @@ export class PersistentRAGEngine {
       }
     }
     
-    return Array.from(scores.entries())
+    // Smart re-indexing: calculate over-fetch multiplier
+    const overFetchMultiplier = this.calculateOverFetchMultiplier(maxResults);
+    const adjustedLimit = Math.ceil(maxResults * overFetchMultiplier);
+
+    const rawResults = Array.from(scores.entries())
       .sort((a, b) => {
         // Prioritize domain pattern matches
         const aDomainMatches = a[1].matches.filter(m => m.startsWith('domain:')).length;
         const bDomainMatches = b[1].matches.filter(m => m.startsWith('domain:')).length;
-        
+
         if (aDomainMatches !== bDomainMatches) {
           return bDomainMatches - aDomainMatches; // More domain matches first
         }
-        
+
         // If domain matches are equal, sort by score
         return b[1].score - a[1].score;
       })
-      .slice(0, maxResults)
+      .slice(0, adjustedLimit) // Use adjusted limit for over-fetching
       .map(([toolId, data]) => {
         const maxScore = Math.max(...Array.from(scores.values()).map(v => v.score));
         return {
@@ -939,6 +968,10 @@ export class PersistentRAGEngine {
           similarity: data.score / maxScore
         };
       });
+
+    // Smart re-indexing: filter out disabled MCPs, then take final maxResults
+    const filteredResults = this.filterDisabledMCPs(rawResults);
+    return filteredResults.slice(0, maxResults);
   }
 
   /**
@@ -968,14 +1001,16 @@ export class PersistentRAGEngine {
   /**
    * Load cached embeddings from disk
    */
-  private async loadPersistedEmbeddings(): Promise<void> {
+  private async loadPersistedEmbeddings(indexPath?: string): Promise<void> {
+    const pathToLoad = indexPath || this.activeIndexPath;
+
     try {
-      if (!existsSync(this.dbPath)) {
+      if (!existsSync(pathToLoad)) {
         logger.info('📄 No cached embeddings found, starting fresh');
         return;
       }
 
-      const data = await fs.readFile(this.dbPath, 'utf-8');
+      const data = await fs.readFile(pathToLoad, 'utf-8');
       const cached = JSON.parse(data);
       
       for (const [toolId, embedding] of Object.entries(cached)) {
@@ -1000,12 +1035,17 @@ export class PersistentRAGEngine {
 
   /**
    * Persist embeddings to disk
+   * @param indexPath Optional path to write to (defaults to active index)
+   * @param vectorDB Optional vectorDB to persist (defaults to current vectorDB)
    */
-  private async persistEmbeddings(): Promise<void> {
+  private async persistEmbeddings(indexPath?: string, vectorDB?: Map<string, ToolEmbedding>): Promise<void> {
+    const pathToWrite = indexPath || this.activeIndexPath;
+    const dbToWrite = vectorDB || this.vectorDB;
+
     try {
       const toSerialize: Record<string, any> = {};
-      
-      for (const [toolId, embedding] of this.vectorDB) {
+
+      for (const [toolId, embedding] of dbToWrite) {
         toSerialize[toolId] = {
           embedding: Array.from(embedding.embedding), // Convert Float32Array to regular array
           hash: embedding.hash,
@@ -1015,8 +1055,8 @@ export class PersistentRAGEngine {
         };
       }
 
-      await fs.writeFile(this.dbPath, JSON.stringify(toSerialize, null, 2));
-      logger.debug(`💾 Persisted ${this.vectorDB.size} embeddings to cache`);
+      await fs.writeFile(pathToWrite, JSON.stringify(toSerialize, null, 2));
+      logger.debug(`💾 Persisted ${dbToWrite.size} embeddings to ${pathToWrite}`);
     } catch (error) {
       logger.error(`❌ Failed to persist embeddings: ${error}`);
     }
@@ -1039,20 +1079,26 @@ export class PersistentRAGEngine {
     totalEmbeddings: number;
     queuedTasks: number;
     isIndexing: boolean;
+    isReindexing: boolean;
     cacheSize: string;
+    disabledMCPs: string[];
+    activeIndex: string;
   } {
     const stats = {
       isInitialized: this.isInitialized,
       totalEmbeddings: this.vectorDB.size,
       queuedTasks: this.indexingQueue.length,
       isIndexing: this.isIndexing,
-      cacheSize: '0 KB'
+      isReindexing: this.isReindexing,
+      cacheSize: '0 KB',
+      disabledMCPs: Array.from(this.disabledMCPs),
+      activeIndex: this.isUsingSwapIndex ? 'swap' : 'primary'
     };
 
     // Calculate cache size
     try {
-      if (existsSync(this.dbPath)) {
-        const size = statSync(this.dbPath).size;
+      if (existsSync(this.activeIndexPath)) {
+        const size = statSync(this.activeIndexPath).size;
         stats.cacheSize = `${Math.round(size / 1024)} KB`;
       }
     } catch {
@@ -1077,17 +1123,194 @@ export class PersistentRAGEngine {
   async clearCache(): Promise<void> {
     this.vectorDB.clear();
     this.cacheMetadata = null;
-    
+
     try {
-      if (existsSync(this.dbPath)) {
-        await fs.unlink(this.dbPath);
+      // Clear both primary and swap index files
+      if (existsSync(this.primaryDbPath)) {
+        await fs.unlink(this.primaryDbPath);
+      }
+      if (existsSync(this.swapDbPath)) {
+        await fs.unlink(this.swapDbPath);
       }
       if (existsSync(this.metadataPath)) {
         await fs.unlink(this.metadataPath);
       }
+
+      // Reset to primary index
+      this.activeIndexPath = this.primaryDbPath;
+      this.isUsingSwapIndex = false;
+
       logger.info('🗑️ Cleared embedding cache and metadata');
     } catch (error) {
       logger.error(`❌ Failed to clear cache: ${error}`);
+    }
+  }
+
+  /**
+   * Mark an MCP as disabled (for live filtering during re-indexing)
+   */
+  setMCPDisabled(mcpName: string): void {
+    this.disabledMCPs.add(mcpName);
+    logger.info(`🚫 MCP ${mcpName} marked as disabled`);
+  }
+
+  /**
+   * Mark an MCP as enabled (for live filtering during re-indexing)
+   */
+  setMCPEnabled(mcpName: string): void {
+    this.disabledMCPs.delete(mcpName);
+    logger.info(`✅ MCP ${mcpName} marked as enabled`);
+  }
+
+  /**
+   * Check if an MCP is disabled
+   */
+  isMCPDisabled(mcpName: string): boolean {
+    return this.disabledMCPs.has(mcpName);
+  }
+
+  /**
+   * Calculate over-fetch multiplier based on percentage of disabled MCPs
+   */
+  private calculateOverFetchMultiplier(requestedLimit: number): number {
+    if (this.disabledMCPs.size === 0) {
+      return 1.0; // No over-fetching needed
+    }
+
+    // Estimate percentage of tools from disabled MCPs
+    // Count how many tools in current index are from disabled MCPs
+    let disabledToolCount = 0;
+    for (const [toolId] of this.vectorDB) {
+      const mcpName = toolId.split(':')[0];
+      if (this.disabledMCPs.has(mcpName)) {
+        disabledToolCount++;
+      }
+    }
+
+    const disabledPercentage = disabledToolCount / this.vectorDB.size;
+
+    // Over-fetch to compensate: if 20% disabled, fetch 1.25x more
+    // Formula: 1 / (1 - disabledPercentage)
+    const multiplier = 1 / (1 - disabledPercentage);
+
+    // Cap at 3x to avoid excessive fetching
+    return Math.min(3.0, Math.max(1.0, multiplier));
+  }
+
+  /**
+   * Filter out tools from disabled MCPs
+   */
+  private filterDisabledMCPs(results: DiscoveryResult[]): DiscoveryResult[] {
+    if (this.disabledMCPs.size === 0) {
+      return results;
+    }
+
+    return results.filter(result => {
+      const mcpName = result.toolId.split(':')[0];
+      const isDisabled = this.disabledMCPs.has(mcpName);
+
+      if (isDisabled) {
+        logger.debug(`🚫 Filtering out disabled MCP tool: ${result.toolId}`);
+      }
+
+      return !isDisabled;
+    });
+  }
+
+  /**
+   * Trigger background re-indexing to swap file (excludes disabled MCPs)
+   */
+  async triggerBackgroundReindex(): Promise<void> {
+    if (this.isReindexing) {
+      logger.warn('⚠️ Re-indexing already in progress');
+      return;
+    }
+
+    this.isReindexing = true;
+    logger.info('🔄 Starting background re-indexing to swap file...');
+
+    try {
+      // Create new vectorDB excluding disabled MCPs
+      const filteredVectorDB = new Map<string, ToolEmbedding>();
+
+      for (const [toolId, embedding] of this.vectorDB) {
+        const mcpName = toolId.split(':')[0];
+        if (!this.disabledMCPs.has(mcpName)) {
+          filteredVectorDB.set(toolId, embedding);
+        }
+      }
+
+      logger.info(`📊 Filtered index: ${filteredVectorDB.size} tools (excluded ${this.vectorDB.size - filteredVectorDB.size} from disabled MCPs)`);
+
+      // Determine swap file path (opposite of current active)
+      const swapFilePath = this.isUsingSwapIndex ? this.primaryDbPath : this.swapDbPath;
+
+      // Persist filtered DB to swap file
+      await this.persistEmbeddings(swapFilePath, filteredVectorDB);
+
+      logger.info(`✅ Background re-indexing complete, swap file ready at ${swapFilePath}`);
+
+      // Automatically perform atomic swap
+      await this.atomicSwap();
+
+    } catch (error) {
+      logger.error(`❌ Background re-indexing failed: ${error}`);
+    } finally {
+      this.isReindexing = false;
+    }
+  }
+
+  /**
+   * Atomically swap active index to the newly built swap file
+   */
+  private async atomicSwap(): Promise<void> {
+    logger.info('🔄 Performing atomic index swap...');
+
+    try {
+      // Determine which file to swap to
+      const newActiveIndexPath = this.isUsingSwapIndex ? this.primaryDbPath : this.swapDbPath;
+      const oldActiveIndexPath = this.activeIndexPath;
+
+      // Verify swap file exists
+      if (!existsSync(newActiveIndexPath)) {
+        throw new Error(`Swap file does not exist: ${newActiveIndexPath}`);
+      }
+
+      // Load new index into memory
+      const tempVectorDB = new Map<string, ToolEmbedding>();
+      const data = await fs.readFile(newActiveIndexPath, 'utf-8');
+      const cached = JSON.parse(data);
+
+      for (const [toolId, embedding] of Object.entries(cached)) {
+        const embeddingData = embedding as any;
+        tempVectorDB.set(toolId, {
+          embedding: new Float32Array(embeddingData.embedding),
+          hash: embeddingData.hash,
+          lastUpdated: embeddingData.lastUpdated,
+          toolName: embeddingData.toolName,
+          description: embeddingData.description,
+          enhancedDescription: embeddingData.enhancedDescription,
+          mcpName: embeddingData.mcpName,
+          mcpDomain: embeddingData.mcpDomain
+        });
+      }
+
+      // Atomic swap: replace vectorDB and update active path
+      this.vectorDB = tempVectorDB;
+      this.activeIndexPath = newActiveIndexPath;
+      this.isUsingSwapIndex = !this.isUsingSwapIndex;
+
+      logger.info(`✅ Atomic swap complete: now using ${this.isUsingSwapIndex ? 'swap' : 'primary'} index (${this.vectorDB.size} tools)`);
+
+      // Clean up old index file (optional, for disk space)
+      if (existsSync(oldActiveIndexPath)) {
+        await fs.unlink(oldActiveIndexPath);
+        logger.debug(`🗑️ Cleaned up old index file: ${oldActiveIndexPath}`);
+      }
+
+    } catch (error) {
+      logger.error(`❌ Atomic swap failed: ${error}`);
+      throw error;
     }
   }
 }
