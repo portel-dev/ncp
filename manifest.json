@@ -3,8 +3,8 @@
   "name": "ncp",
   "display_name": "NCP - Natural Context Provider",
   "version": "1.5.3",
-  "description": "N-to-1 MCP Orchestration. Unified gateway for multiple MCP servers with intelligent tool discovery and auto-import.",
-  "long_description": "NCP transforms N scattered MCP servers into 1 intelligent orchestrator. Your AI sees just 2 simple tools instead of 50+ complex ones, while NCP handles all the routing, discovery, and execution behind the scenes. Features: semantic search, token optimization (97% reduction), automatic tool discovery, multi-client auto-import (Claude Desktop, Perplexity, Cursor, Cline, Continue), dynamic runtime detection, and optional global CLI access.",
+  "description": "Your MCP Concierge - Complete platform for discovering, managing, and accessing MCPs. Auto-imports, intelligent discovery, and 2-tool simplification with 97% token reduction.",
+  "long_description": "Natural Context Provider. 1 MCP to rule them all - Your MCP Concierge. Complete platform for discovering, managing, and accessing MCPs. Transforms 50+ scattered tools into 2 simple commands, auto-syncs with Claude Desktop/Perplexity/Cursor/Cline/Continue, saves 97% tokens. Features: semantic search, intelligent routing, dynamic runtime detection, health monitoring, auto-discovery and installation, AI-assisted management, and optional global CLI. Create once, use everywhere.",
   "author": {
     "name": "Portel",
     "url": "https://github.com/portel-dev/ncp"
@@ -51,6 +51,18 @@
       "title": "Confirm Modifications Before Run",
       "description": "Show confirmation dialog before executing modification operations (adding/removing MCPs, file changes, deletions, etc.). Protects against unintended changes by requiring explicit user approval.",
       "default": true
+    },
+    "enable_schedule_mcp": {
+      "type": "boolean",
+      "title": "Enable Scheduler (Built-in)",
+      "description": "Enable the built-in scheduler MCP for scheduling tool executions with cron. Provides 5 tools: create, retrieve, update, delete, validate. When disabled, scheduler tools will not appear in discovery.",
+      "default": true
+    },
+    "enable_mcp_management": {
+      "type": "boolean",
+      "title": "Enable MCP Management (Built-in)",
+      "description": "Enable the built-in MCP management tools for adding/removing/listing MCPs in your configuration. Provides 5 tools: add, remove, list, update, search. When disabled, management tools will not appear in discovery.",
+      "default": true
     }
   },
   "server": {
@@ -70,6 +82,8 @@
         "NCP_AUTO_IMPORT": "${user_config.auto_import_client_mcps}",
         "NCP_DEBUG": "${user_config.enable_debug_logging}",
         "NCP_CONFIRM_BEFORE_RUN": "${user_config.confirm_before_run}",
+        "NCP_ENABLE_SCHEDULE_MCP": "${user_config.enable_schedule_mcp}",
+        "NCP_ENABLE_MCP_MANAGEMENT": "${user_config.enable_mcp_management}",
         "NCP_MODE": "extension"
       }
     }

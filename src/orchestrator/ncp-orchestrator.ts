@@ -9,6 +9,7 @@ import { join } from 'path';
 import { createHash } from 'crypto';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
+import { version } from '../utils/version.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -178,7 +179,7 @@ export class NCPOrchestrator {
   private forceRetry: boolean = false;
 
   // Actual client info (passthrough to downstream MCPs for transparency)
-  private clientInfo: { name: string; version: string } = { name: 'ncp-oss', version: '1.0.0' };
+  private clientInfo: { name: string; version: string } = { name: 'ncp-oss', version: version };
 
   /**
    * ⚠️ CRITICAL: Default profile MUST be 'all' - DO NOT CHANGE!
@@ -267,8 +268,29 @@ export class NCPOrchestrator {
     // Initialize discovery engine first
     await this.discovery.initialize();
 
+    // Connect RAG engine to InternalMCPManager for smart re-indexing
+    const ragEngine = (this.discovery as any).ragEngine;
+    if (ragEngine) {
+      this.internalMCPManager.setRAGEngine(ragEngine);
+    }
+
+    // Check environment variables and disable internal MCPs if requested
+    const enableScheduleMCP = process.env.NCP_ENABLE_SCHEDULE_MCP !== 'false';
+    const enableMcpManagement = process.env.NCP_ENABLE_MCP_MANAGEMENT !== 'false';
+
+    if (!enableScheduleMCP) {
+      logger.info('Schedule MCP disabled via configuration');
+      await this.internalMCPManager.disableInternalMCP('schedule');
+    }
+
+    if (!enableMcpManagement) {
+      logger.info('MCP Management disabled via configuration');
+      await this.internalMCPManager.disableInternalMCP('mcp');
+    }
+
     // Add internal MCPs immediately so they're always available
     // This ensures management tools (ncp:add, ncp:list, etc.) work even during external MCP indexing
+    // Only enabled MCPs will be added to discovery
     await this.addInternalMCPsToDiscovery();
 
     // Initialize CSV cache
@@ -1173,7 +1195,7 @@ export class NCPOrchestrator {
               ...tool,
               inputSchema: tool.inputSchema || {}
             })),
-            serverInfo: mcpData.serverInfo || { name: mcpName, version: '1.0.0' }
+            serverInfo: mcpData.serverInfo || { name: mcpName, version: 'unknown' }
           });
 
           // Build allTools array and tool mappings
@@ -1929,7 +1951,8 @@ export class NCPOrchestrator {
    * Called after external MCPs are indexed
    */
   private async addInternalMCPsToDiscovery(): Promise<void> {
-    const internalMCPs = this.internalMCPManager.getAllInternalMCPs();
+    // Only get enabled internal MCPs (respects user configuration)
+    const internalMCPs = this.internalMCPManager.getAllEnabledInternalMCPs();
 
     for (const mcp of internalMCPs) {
       // Add to definitions (for consistency with external MCPs)
@@ -1947,7 +1970,7 @@ export class NCPOrchestrator {
         })),
         serverInfo: {
           name: mcp.name,
-          version: '1.0.0',
+          version: version,
           description: mcp.description
         }
       });
