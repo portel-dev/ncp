@@ -12,13 +12,14 @@
 import { InternalMCP, InternalTool, InternalToolResult, ElicitationCapable } from './types.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
-import { RegistryClient, RegistryMCPCandidate } from '../services/registry-client.js';
+import { RegistryMCPCandidate } from '../services/registry-client.js';
+import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
 import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials } from '../utils/elicitation-helper.js';
 import { showConfirmDialog } from '../utils/native-dialog.js';
 
 export class NCPManagementMCP implements InternalMCP {
-  name = 'ncp';
-  description = 'NCP configuration management tools';
+  name = 'mcp';
+  description = 'MCP configuration management tools (built-in)';
 
   private profileManager: ProfileManager | null = null;
   private elicitationServer: ElicitationCapable | null = null;
@@ -784,7 +785,7 @@ Do you want to remove this MCP?`;
 
   private async importFromDiscovery(query: string, selection?: string): Promise<InternalToolResult> {
     try {
-      const registryClient = new RegistryClient();
+      const registryClient = new UnifiedRegistryClient();
       const candidates = await registryClient.searchForSelection(query);
 
       if (candidates.length === 0) {

@@ -17,7 +17,7 @@ export interface InternalTool {
 
 export interface InternalToolResult {
   success: boolean;
-  content?: string;
+  content?: string | Array<{ type: string; text?: string; [key: string]: any }>;
   error?: string;
 }
 
@@ -35,10 +35,42 @@ export interface ElicitationCapable {
   }>;
 }
 
+/**
+ * MCP Capabilities - what features this MCP supports
+ */
+export interface InternalMCPCapabilities {
+  /**
+   * Experimental, non-standard capabilities
+   */
+  experimental?: {
+    /**
+     * Tool validation capability - allows validating tool parameters before execution
+     */
+    toolValidation?: {
+      /**
+       * Whether this MCP supports parameter validation
+       */
+      supported: boolean;
+      /**
+       * Name of the validation tool (default: "validate")
+       */
+      method?: string;
+    };
+    [key: string]: any;
+  };
+  [key: string]: any;
+}
+
 export interface InternalMCP {
   name: string;
   description: string;
   tools: InternalTool[];
+
+  /**
+   * MCP capabilities - what features this MCP supports
+   * Follows MCP protocol capability announcement pattern
+   */
+  capabilities?: InternalMCPCapabilities;
 
   /**
    * Execute a tool from this internal MCP

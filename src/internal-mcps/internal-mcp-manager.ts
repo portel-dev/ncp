@@ -7,6 +7,7 @@
 
 import { InternalMCP, InternalToolResult, ElicitationCapable } from './types.js';
 import { NCPManagementMCP } from './ncp-management.js';
+import { SchedulerMCP } from './scheduler.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 
@@ -16,6 +17,7 @@ export class InternalMCPManager {
   constructor() {
     // Register internal MCPs
     this.registerInternalMCP(new NCPManagementMCP());
+    this.registerInternalMCP(new SchedulerMCP());
   }
 
   /**
@@ -100,5 +102,39 @@ export class InternalMCPManager {
   getInternalMCPTools(mcpName: string): string[] {
     const mcp = this.internalMCPs.get(mcpName);
     return mcp ? mcp.tools.map(t => t.name) : [];
+  }
+
+  /**
+   * Get capabilities for a specific internal MCP
+   */
+  getInternalMCPCapabilities(mcpName: string) {
+    const mcp = this.internalMCPs.get(mcpName);
+    return mcp?.capabilities || {};
+  }
+
+  /**
+   * Check if an internal MCP has a specific capability
+   * @param mcpName The MCP name (e.g., "scheduler")
+   * @param capabilityPath Dot-notation path (e.g., "experimental.toolValidation.supported")
+   */
+  hasCapability(mcpName: string, capabilityPath: string): boolean {
+    const mcp = this.internalMCPs.get(mcpName);
+    if (!mcp || !mcp.capabilities) {
+      return false;
+    }
+
+    // Navigate the capability path
+    const parts = capabilityPath.split('.');
+    let current: any = mcp.capabilities;
+
+    for (const part of parts) {
+      if (current && typeof current === 'object' && part in current) {
+        current = current[part];
+      } else {
+        return false;
+      }
+    }
+
+    return current === true;
   }
 }
