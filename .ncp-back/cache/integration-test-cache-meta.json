@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "profileName": "integration-test",
+  "profileHash": "816e25346180c9d53b3e19c5bf98d6bc19faf261eac3320836937c24c5c45df8",
+  "ncpVersion": "1.5.3",
+  "createdAt": "2025-10-18T15:39:14.087Z",
+  "lastUpdated": "2025-10-18T15:39:14.629Z",
+  "totalMCPs": 1,
+  "totalTools": 14,
+  "indexedMCPs": {
+    "filesystem": "e71883f09e142171f5f3c1ba1a2d0f3ab284e3353667df41bb0e2d8c03f9df4d"
+  },
+  "failedMCPs": {}
+}

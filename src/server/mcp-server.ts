@@ -14,6 +14,7 @@ import { TextUtils } from '../utils/text-utils.js';
 import { RegistryClient } from '../services/registry-client.js';
 import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation, parseOperationConfirmationResponse } from './mcp-prompts.js';
 import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist } from '../utils/global-settings.js';
+import { version } from '../utils/version.js';
 import chalk from 'chalk';
 
 interface MCPRequest {
@@ -176,7 +177,7 @@ export class MCPServer {
     const clientInfo = request.params?.clientInfo;
     this.clientInfo = clientInfo ? {
       name: clientInfo.name || 'unknown',
-      version: clientInfo.version || '1.0.0'
+      version: clientInfo.version || version
     } : null;
 
     // Extract client name for logging and auto-import
@@ -223,7 +224,7 @@ export class MCPServer {
         serverInfo: {
           name: 'ncp',
           title: 'Natural Context Provider - Unified MCP Orchestrator',
-          version: '1.0.4'
+          version: version
         },
         _meta: responseMeta
       }

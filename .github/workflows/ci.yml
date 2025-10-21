@@ -1,26 +1,28 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main, develop]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: Run Tests
+    runs-on: \${{ matrix.os }}
     strategy:
       matrix:
-        node-version: [18, 20]
+        os: [ubuntu-latest, macos-latest]
+        node-version: [18.x, 20.x]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: Setup Node.js \${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: \${{ matrix.node-version }}
           cache: 'npm'
 
       - name: Install dependencies
@@ -29,8 +31,97 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Run tests
-        run: npm test
+      - name: Run critical tests
+        run: npm run test:critical
 
-      - name: Test package functionality (skip in CI - too resource intensive with 1070 MCPs)
-        run: echo "Package stress test skipped in CI - requires 1070 MCP initialization which exceeds CI time limits"
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          NCP_CONFIRM_BEFORE_RUN: 'false'
+          NCP_DEBUG: 'false'
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Run DXT package tests
+        run: npm run test:dxt
+        if: matrix.os == 'macos-latest'
+
+  lint:
+    name: Lint and Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
+
+  build-dxt:
+    name: Build and Test DXT Package
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build DXT package
+        run: npm run build:dxt:patched
+
+      - name: Test DXT package
+        run: npm run test:dxt
+
+      - name: Upload DXT artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncp-dxt-\${{ github.sha }}
+          path: ncp.dxt
+          retention-days: 7

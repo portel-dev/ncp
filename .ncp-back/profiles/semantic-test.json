@@ -1,0 +1,98 @@
+{
+  "name": "semantic-test",
+  "description": "Testing profile with dummy MCPs for semantic enhancement validation",
+  "mcpServers": {
+    "shell": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/dummy-mcp-server.ts",
+        "--mcp-name",
+        "shell",
+        "--definitions-file",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/mcp-definitions.json"
+      ]
+    },
+    "git": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/dummy-mcp-server.ts",
+        "--mcp-name",
+        "git",
+        "--definitions-file",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/mcp-definitions.json"
+      ]
+    },
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/dummy-mcp-server.ts",
+        "--mcp-name",
+        "postgres",
+        "--definitions-file",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/mcp-definitions.json"
+      ]
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/dummy-mcp-server.ts",
+        "--mcp-name",
+        "github",
+        "--definitions-file",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/mcp-definitions.json"
+      ]
+    },
+    "openai": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/dummy-mcp-server.ts",
+        "--mcp-name",
+        "openai",
+        "--definitions-file",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/mcp-definitions.json"
+      ]
+    },
+    "stripe": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/dummy-mcp-server.ts",
+        "--mcp-name",
+        "stripe",
+        "--definitions-file",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/mcp-definitions.json"
+      ]
+    },
+    "aws": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/dummy-mcp-server.ts",
+        "--mcp-name",
+        "aws",
+        "--definitions-file",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/mcp-definitions.json"
+      ]
+    },
+    "docker": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/dummy-mcp-server.ts",
+        "--mcp-name",
+        "docker",
+        "--definitions-file",
+        "/Users/arul/Projects/ncp-production-clean/src/testing/mcp-definitions.json"
+      ]
+    }
+  },
+  "metadata": {
+    "created": "2025-09-24T07:55:55.149Z",
+    "modified": "2025-09-24T07:55:55.150Z"
+  }
+}

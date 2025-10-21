@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "profileName": "default",
+  "profileHash": "",
+  "createdAt": "2025-10-14T08:05:29.835Z",
+  "lastUpdated": "2025-10-14T08:05:31.651Z",
+  "totalMCPs": 1,
+  "totalTools": 26,
+  "indexedMCPs": {
+    "chrome-devtools": "f7577f825e360fdc298de8bd6f91b6029bda3bb50e5bae1013e77c3fe1f38f2b"
+  },
+  "failedMCPs": {}
+}

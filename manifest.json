@@ -55,13 +55,13 @@
     "enable_schedule_mcp": {
       "type": "boolean",
       "title": "Enable Scheduler (Built-in)",
-      "description": "Enable the built-in scheduler MCP for scheduling tool executions with cron. Provides 5 tools: create, retrieve, update, delete, validate. When disabled, scheduler tools will not appear in discovery.",
+      "description": "Schedule tool executions with cron. Provides 5 tools: create, retrieve, update, delete, validate.",
       "default": true
     },
     "enable_mcp_management": {
       "type": "boolean",
       "title": "Enable MCP Management (Built-in)",
-      "description": "Enable the built-in MCP management tools for adding/removing/listing MCPs in your configuration. Provides 5 tools: add, remove, list, update, search. When disabled, management tools will not appear in discovery.",
+      "description": "Add, remove, and manage MCPs in your configuration. Provides 5 tools: add, remove, list, update, search.",
       "default": true
     }
   },

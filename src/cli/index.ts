@@ -210,7 +210,7 @@ async function discoverSingleMCP(name: string, command: string, args: string[] =
     });
 
     client = new Client(
-      { name: 'ncp-oss', version: '1.0.0' },
+      { name: 'ncp-oss', version: version },
       { capabilities: {} }
     );
 
@@ -1979,7 +1979,7 @@ program
 
         const client = new Client({
           name: 'ncp-repair-test',
-          version: '1.0.0'
+          version: version
         }, {
           capabilities: {}
         });
@@ -2700,6 +2700,390 @@ program
       }
     } catch (error) {
       console.error(chalk.red('❌ Failed to check for updates:'), error);
+      process.exit(1);
+    }
+  });
+
+// Scheduler commands
+const scheduleCmd = program
+  .command('schedule')
+  .description('Schedule MCP tool executions with cron');
+
+// schedule create
+scheduleCmd
+  .command('create <tool> <schedule>')
+  .description('Create a new scheduled job')
+  .option('--name <name>', 'Job name (required)')
+  .option('--params <json>', 'Tool parameters as JSON string')
+  .option('--description <text>', 'Job description')
+  .option('--fire-once', 'Execute only once then stop')
+  .option('--max-executions <n>', 'Maximum number of executions', parseInt)
+  .option('--end-date <date>', 'Stop executing after this date (ISO format)')
+  .option('--test-run', 'Test execution before scheduling')
+  .option('--skip-validation', 'Skip parameter validation (not recommended)')
+  .action(async (tool, schedule, options) => {
+    try {
+      if (!options.name) {
+        console.error(chalk.red('❌ --name is required'));
+        process.exit(1);
+      }
+
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      if (!scheduler.isAvailable()) {
+        console.error(chalk.red('❌ Scheduler not available on this platform (Windows not supported)'));
+        process.exit(1);
+      }
+
+      const parameters = options.params ? JSON.parse(options.params) : {};
+
+      console.log(chalk.blue('📅 Creating scheduled job...'));
+
+      const job = await scheduler.createJob({
+        name: options.name,
+        schedule,
+        tool,
+        parameters,
+        description: options.description,
+        fireOnce: options.fireOnce,
+        maxExecutions: options.maxExecutions,
+        endDate: options.endDate,
+        testRun: options.testRun,
+        skipValidation: options.skipValidation
+      });
+
+      console.log(chalk.green('\n✅ Scheduled job created successfully!\n'));
+      console.log(chalk.bold('Job Details:'));
+      console.log(`  ${chalk.cyan('Name:')} ${job.name}`);
+      console.log(`  ${chalk.cyan('ID:')} ${job.id}`);
+      console.log(`  ${chalk.cyan('Tool:')} ${job.tool}`);
+      console.log(`  ${chalk.cyan('Schedule:')} ${job.cronExpression}`);
+      console.log(`  ${chalk.cyan('Type:')} ${job.fireOnce ? 'One-time' : 'Recurring'}`);
+      console.log(`  ${chalk.cyan('Status:')} ${job.status}`);
+      if (job.description) {
+        console.log(`  ${chalk.cyan('Description:')} ${job.description}`);
+      }
+      console.log(chalk.dim('\n💡 Use "ncp schedule list" to view all scheduled jobs'));
+    } catch (error) {
+      console.error(chalk.red('\n❌ Failed to create scheduled job'));
+      console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+      process.exit(1);
+    }
+  });
+
+// schedule list
+scheduleCmd
+  .command('list')
+  .description('List all scheduled jobs')
+  .option('--status <status>', 'Filter by status (active, paused, completed, error)')
+  .action(async (options) => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      const jobs = scheduler.listJobs(options.status);
+
+      if (jobs.length === 0) {
+        console.log(chalk.yellow('No scheduled jobs found'));
+        console.log(chalk.dim('Create one with: ncp schedule create <tool> <schedule> --name "Job Name"'));
+        return;
+      }
+
+      console.log(chalk.bold(`\n📋 Scheduled Jobs (${jobs.length})\n`));
+
+      for (const job of jobs) {
+        const statusColor = job.status === 'active' ? chalk.green :
+                           job.status === 'paused' ? chalk.yellow :
+                           job.status === 'error' ? chalk.red : chalk.gray;
+
+        console.log(`${statusColor('●')} ${chalk.bold(job.name)} ${chalk.dim(`(${job.status})`)}`);
+        console.log(`  ${chalk.dim('ID:')} ${job.id}`);
+        console.log(`  ${chalk.dim('Tool:')} ${job.tool}`);
+        console.log(`  ${chalk.dim('Schedule:')} ${job.cronExpression}`);
+        console.log(`  ${chalk.dim('Executions:')} ${job.executionCount}`);
+        if (job.lastExecutionAt) {
+          console.log(`  ${chalk.dim('Last run:')} ${new Date(job.lastExecutionAt).toLocaleString()}`);
+        }
+        console.log();
+      }
+
+      const stats = scheduler.getJobStatistics();
+      console.log(chalk.dim('Statistics:'));
+      console.log(chalk.dim(`  Active: ${stats.active}, Paused: ${stats.paused}, Completed: ${stats.completed}, Error: ${stats.error}`));
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to list jobs:'), error);
+      process.exit(1);
+    }
+  });
+
+// schedule get
+scheduleCmd
+  .command('get <job-id>')
+  .description('Get details of a specific job')
+  .action(async (jobId) => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      let job = scheduler.getJob(jobId);
+      if (!job) {
+        job = scheduler.getJobByName(jobId);
+      }
+
+      if (!job) {
+        console.error(chalk.red(`❌ Job not found: ${jobId}`));
+        process.exit(1);
+      }
+
+      const stats = scheduler.getExecutionStatistics(job.id);
+
+      console.log(chalk.bold(`\n📋 ${job.name}\n`));
+      console.log(`${chalk.cyan('ID:')} ${job.id}`);
+      console.log(`${chalk.cyan('Tool:')} ${job.tool}`);
+      console.log(`${chalk.cyan('Schedule:')} ${job.cronExpression}`);
+      console.log(`${chalk.cyan('Status:')} ${job.status}`);
+      console.log(`${chalk.cyan('Type:')} ${job.fireOnce ? 'One-time' : 'Recurring'}`);
+      if (job.description) {
+        console.log(`${chalk.cyan('Description:')} ${job.description}`);
+      }
+      if (job.maxExecutions) {
+        console.log(`${chalk.cyan('Max Executions:')} ${job.maxExecutions}`);
+      }
+      if (job.endDate) {
+        console.log(`${chalk.cyan('End Date:')} ${job.endDate}`);
+      }
+      console.log(`${chalk.cyan('Created:')} ${new Date(job.createdAt).toLocaleString()}`);
+
+      console.log(chalk.bold('\nExecution Statistics:'));
+      console.log(`  Total: ${stats.total}`);
+      console.log(`  Success: ${chalk.green(stats.success)}`);
+      console.log(`  Failure: ${chalk.red(stats.failure)}`);
+      console.log(`  Timeout: ${chalk.yellow(stats.timeout)}`);
+      if (stats.avgDuration) {
+        console.log(`  Avg Duration: ${Math.round(stats.avgDuration)}ms`);
+      }
+
+      console.log(chalk.bold('\nParameters:'));
+      console.log(JSON.stringify(job.parameters, null, 2));
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to get job:'), error);
+      process.exit(1);
+    }
+  });
+
+// schedule pause
+scheduleCmd
+  .command('pause <job-id>')
+  .description('Pause a scheduled job')
+  .action(async (jobId) => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      let job = scheduler.getJob(jobId);
+      if (!job) {
+        job = scheduler.getJobByName(jobId);
+        if (job) jobId = job.id;
+      }
+
+      if (!job) {
+        console.error(chalk.red(`❌ Job not found: ${jobId}`));
+        process.exit(1);
+      }
+
+      scheduler.pauseJob(jobId);
+      console.log(chalk.green(`✅ Job paused: ${job.name}`));
+      console.log(chalk.dim('The job will not execute until resumed'));
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to pause job:'), error);
+      process.exit(1);
+    }
+  });
+
+// schedule resume
+scheduleCmd
+  .command('resume <job-id>')
+  .description('Resume a paused job')
+  .action(async (jobId) => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      let job = scheduler.getJob(jobId);
+      if (!job) {
+        job = scheduler.getJobByName(jobId);
+        if (job) jobId = job.id;
+      }
+
+      if (!job) {
+        console.error(chalk.red(`❌ Job not found: ${jobId}`));
+        process.exit(1);
+      }
+
+      scheduler.resumeJob(jobId);
+      console.log(chalk.green(`✅ Job resumed: ${job.name}`));
+      console.log(chalk.dim('The job will now execute according to its schedule'));
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to resume job:'), error);
+      process.exit(1);
+    }
+  });
+
+// schedule delete
+scheduleCmd
+  .command('delete <job-id>')
+  .description('Delete a scheduled job')
+  .option('-y, --yes', 'Skip confirmation prompt')
+  .action(async (jobId, options) => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      let job = scheduler.getJob(jobId);
+      if (!job) {
+        job = scheduler.getJobByName(jobId);
+        if (job) jobId = job.id;
+      }
+
+      if (!job) {
+        console.error(chalk.red(`❌ Job not found: ${jobId}`));
+        process.exit(1);
+      }
+
+      if (!options.yes) {
+        const readline = await import('readline');
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+
+        const answer = await new Promise<string>((resolve) => {
+          rl.question(chalk.yellow(`⚠️  Delete job "${job.name}"? (y/N) `), resolve);
+        });
+        rl.close();
+
+        if (answer.toLowerCase() !== 'y' && answer.toLowerCase() !== 'yes') {
+          console.log(chalk.dim('Cancelled'));
+          return;
+        }
+      }
+
+      scheduler.deleteJob(jobId);
+      console.log(chalk.green(`✅ Job deleted: ${job.name}`));
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to delete job:'), error);
+      process.exit(1);
+    }
+  });
+
+// schedule executions
+scheduleCmd
+  .command('executions')
+  .description('View execution history')
+  .option('--job-id <id>', 'Filter by job ID or name')
+  .option('--status <status>', 'Filter by status (success, failure, timeout)')
+  .option('--limit <n>', 'Maximum number of executions to show', parseInt, 50)
+  .action(async (options) => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      let jobId = options.jobId;
+      if (jobId) {
+        let job = scheduler.getJob(jobId);
+        if (!job) {
+          job = scheduler.getJobByName(jobId);
+          if (job) jobId = job.id;
+        }
+        if (!job) {
+          console.error(chalk.red(`❌ Job not found: ${jobId}`));
+          process.exit(1);
+        }
+      }
+
+      const executions = scheduler.queryExecutions({
+        jobId,
+        status: options.status
+      });
+
+      const limited = executions.slice(0, options.limit);
+
+      if (limited.length === 0) {
+        console.log(chalk.yellow('No executions found'));
+        return;
+      }
+
+      console.log(chalk.bold(`\n📊 Executions (showing ${limited.length} of ${executions.length})\n`));
+
+      for (const exec of limited) {
+        const statusIcon = exec.status === 'success' ? chalk.green('✅') :
+                          exec.status === 'failure' ? chalk.red('❌') :
+                          exec.status === 'timeout' ? chalk.yellow('⏱️') : chalk.blue('🔄');
+
+        console.log(`${statusIcon} ${exec.jobName}`);
+        console.log(`  ${chalk.dim('ID:')} ${exec.executionId}`);
+        console.log(`  ${chalk.dim('Time:')} ${new Date(exec.startedAt).toLocaleString()}`);
+        if (exec.duration) {
+          console.log(`  ${chalk.dim('Duration:')} ${exec.duration}ms`);
+        }
+        if (exec.errorMessage) {
+          console.log(`  ${chalk.red('Error:')} ${exec.errorMessage}`);
+        }
+        console.log();
+      }
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to list executions:'), error);
+      process.exit(1);
+    }
+  });
+
+// schedule cleanup
+scheduleCmd
+  .command('cleanup')
+  .description('Clean up old execution records')
+  .option('--max-age <days>', 'Delete executions older than N days', parseInt, 30)
+  .option('--max-per-job <n>', 'Keep only N recent executions per job', parseInt, 100)
+  .action(async (options) => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      console.log(chalk.blue('🗑️  Cleaning up old executions...'));
+
+      await scheduler.cleanupOldExecutions(options.maxAge, options.maxPerJob);
+
+      console.log(chalk.green('✅ Cleanup completed'));
+      console.log(chalk.dim(`Deleted executions older than ${options.maxAge} days`));
+      console.log(chalk.dim(`Kept ${options.maxPerJob} most recent executions per job`));
+    } catch (error) {
+      console.error(chalk.red('❌ Cleanup failed:'), error);
+      process.exit(1);
+    }
+  });
+
+// Scheduler: Execute scheduled job (called by cron)
+program
+  .command('execute-scheduled <job-id>')
+  .description('Execute a scheduled job (internal use - called by cron)')
+  .option('--timeout <ms>', 'Execution timeout in milliseconds', '300000')
+  .action(async (jobId, options) => {
+    try {
+      const { JobExecutor } = await import('../services/scheduler/job-executor.js');
+      const executor = new JobExecutor();
+
+      const timeout = parseInt(options.timeout);
+      const result = await executor.executeJob(jobId, timeout);
+
+      if (result.status === 'success') {
+        console.log(`✅ Job ${jobId} executed successfully (${result.duration}ms)`);
+        process.exit(0);
+      } else {
+        console.error(`❌ Job ${jobId} failed: ${result.error}`);
+        process.exit(1);
+      }
+    } catch (error) {
+      console.error(`❌ Execution failed: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }
   });

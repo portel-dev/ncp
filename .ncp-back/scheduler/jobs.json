@@ -1,0 +1,109 @@
+{
+  "version": "1.0.0",
+  "jobs": {
+    "9c6d5b1f-ebc7-4d61-970d-52f7c965c6ec": {
+      "id": "9c6d5b1f-ebc7-4d61-970d-52f7c965c6ec",
+      "name": "simple-test",
+      "cronExpression": "*/5 * * * *",
+      "tool": "Shell:run_command",
+      "parameters": {
+        "command": "echo test"
+      },
+      "fireOnce": false,
+      "createdAt": "2025-10-21T10:17:50.520Z",
+      "status": "active",
+      "executionCount": 0
+    },
+    "62dc32b9-0886-44fa-9529-b6ec4462e914": {
+      "id": "62dc32b9-0886-44fa-9529-b6ec4462e914",
+      "name": "test1",
+      "cronExpression": "*/5 * * * *",
+      "tool": "Shell:run_command",
+      "parameters": {
+        "command": "echo hi"
+      },
+      "fireOnce": false,
+      "createdAt": "2025-10-21T10:18:41.725Z",
+      "status": "active",
+      "executionCount": 0
+    },
+    "9c47f706-053f-4671-a6bc-e2e3da5ab0cc": {
+      "id": "9c47f706-053f-4671-a6bc-e2e3da5ab0cc",
+      "name": "test2",
+      "cronExpression": "*/5 * * * *",
+      "tool": "Shell:run_command",
+      "parameters": {
+        "command": "echo hi"
+      },
+      "fireOnce": false,
+      "createdAt": "2025-10-21T11:02:37.282Z",
+      "status": "active",
+      "executionCount": 0
+    },
+    "e1eeb1c3-9d66-4aab-8026-f95953b74e16": {
+      "id": "e1eeb1c3-9d66-4aab-8026-f95953b74e16",
+      "name": "test-fixed",
+      "cronExpression": "*/5 * * * *",
+      "tool": "Shell:run_command",
+      "parameters": {
+        "command": "echo test"
+      },
+      "fireOnce": false,
+      "createdAt": "2025-10-21T12:43:22.247Z",
+      "status": "active",
+      "executionCount": 0
+    },
+    "35d19cdc-b369-46b2-8ee4-a873e94d58a4": {
+      "id": "35d19cdc-b369-46b2-8ee4-a873e94d58a4",
+      "name": "validation-test",
+      "cronExpression": "*/10 * * * *",
+      "tool": "Shell:run_command",
+      "parameters": {
+        "command": "echo validation works"
+      },
+      "fireOnce": false,
+      "createdAt": "2025-10-21T12:45:06.663Z",
+      "status": "active",
+      "executionCount": 0
+    },
+    "9581f940-1203-4d33-abcc-6076a3200dbe": {
+      "id": "9581f940-1203-4d33-abcc-6076a3200dbe",
+      "name": "retest-validation",
+      "cronExpression": "*/15 * * * *",
+      "tool": "Shell:run_command",
+      "parameters": {
+        "command": "echo retest"
+      },
+      "fireOnce": false,
+      "createdAt": "2025-10-21T13:13:36.527Z",
+      "status": "active",
+      "executionCount": 0
+    },
+    "f2d92f00-656f-46ed-bdf3-c56a46178ab1": {
+      "id": "f2d92f00-656f-46ed-bdf3-c56a46178ab1",
+      "name": "final-cli-test",
+      "cronExpression": "*/5 * * * *",
+      "tool": "Shell:run_command",
+      "parameters": {
+        "command": "echo final test"
+      },
+      "fireOnce": false,
+      "createdAt": "2025-10-21T13:50:02.645Z",
+      "status": "active",
+      "executionCount": 0
+    },
+    "537320a0-d624-4ea8-b8e9-2993004ce893": {
+      "id": "537320a0-d624-4ea8-b8e9-2993004ce893",
+      "name": "post-fix-test",
+      "cronExpression": "*/10 * * * *",
+      "tool": "Shell:run_command",
+      "parameters": {
+        "command": "echo this is after the fix"
+      },
+      "fireOnce": false,
+      "createdAt": "2025-10-21T14:19:14.756Z",
+      "status": "active",
+      "executionCount": 0
+    }
+  }
+}

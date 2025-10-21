@@ -165,6 +165,13 @@ export class ProfileManager {
           const profilePath = path.join(this.profilesDir, file);
           const content = await fs.readFile(profilePath, 'utf-8');
           const profile = JSON.parse(content) as Profile;
+
+          // Skip profiles without a name field (invalid profile files)
+          if (!profile.name || typeof profile.name !== 'string') {
+            console.warn(`⚠️  Skipping invalid profile ${file}: missing or invalid 'name' field`);
+            continue;
+          }
+
           this.profiles.set(profile.name, profile);
         }
       }

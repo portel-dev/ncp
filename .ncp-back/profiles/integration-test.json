@@ -1,0 +1,17 @@
+{
+  "name": "integration-test",
+  "description": "Integration test profile",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-filesystem",
+        "/tmp"
+      ]
+    }
+  },
+  "metadata": {
+    "created": "2025-10-18T15:39:07.379Z",
+    "modified": "2025-10-18T15:39:07.379Z"
+  }
+}

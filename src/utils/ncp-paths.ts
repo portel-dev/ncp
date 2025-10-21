@@ -98,3 +98,24 @@ export function isLocalNcpInstallation(): boolean {
   const baseDir = getNcpBaseDirectory();
   return !baseDir.startsWith(os.homedir());
 }
+
+/**
+ * Get the scheduler directory (local or global)
+ */
+export function getSchedulerDirectory(): string {
+  return path.join(getNcpBaseDirectory(), 'scheduler');
+}
+
+/**
+ * Get the scheduler executions directory
+ */
+export function getSchedulerExecutionsDirectory(): string {
+  return path.join(getSchedulerDirectory(), 'executions');
+}
+
+/**
+ * Get the scheduler execution results directory
+ */
+export function getSchedulerResultsDirectory(): string {
+  return path.join(getSchedulerExecutionsDirectory(), 'results');
+}

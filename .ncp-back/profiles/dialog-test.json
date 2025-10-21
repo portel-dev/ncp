@@ -1,0 +1,17 @@
+{
+  "name": "dialog-test",
+  "description": "Profile: dialog-test",
+  "mcpServers": {
+    "time": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-time"
+      ]
+    }
+  },
+  "metadata": {
+    "created": "2025-10-17T14:20:10.214Z",
+    "modified": "2025-10-17T14:20:10.214Z"
+  }
+}

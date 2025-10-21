@@ -11,6 +11,8 @@
 
 ## 💍 **1 MCP to rule them all**
 
+**Your MCP Concierge** - The complete platform for discovering, managing, and accessing MCPs.
+
 **MCP turns AI into your assistant.
 NCP turns your assistant into an executive.**
 
@@ -473,6 +475,61 @@ Add to your VS Code `settings.json`:
 ```
 
 > **Disclaimer:** Configuration format and location may vary by Cursor IDE version. Please refer to [Cursor's official documentation](https://cursor.sh/docs) for the most up-to-date setup instructions.
+
+---
+
+## 🤖 **Internal MCPs**
+
+NCP includes powerful internal MCPs that extend functionality beyond external tool orchestration:
+
+### **Scheduler MCP** - Automate Any Tool
+Schedule any MCP tool to run automatically using cron or natural language schedules.
+
+```bash
+# Schedule a daily backup check
+ncp run schedule:create --params '{
+  "name": "Daily Backup",
+  "schedule": "every day at 2am",
+  "tool": "filesystem:list_directory",
+  "parameters": {"path": "/backups"}
+}'
+```
+
+**Features:**
+- ✅ Natural language schedules ("every day at 9am", "every monday")
+- ✅ Standard cron expressions for advanced control
+- ✅ Automatic validation before scheduling
+- ✅ Execution history and monitoring
+- ✅ Works even when NCP is not running (system cron integration)
+
+**[→ Full Scheduler Guide](docs/SCHEDULER_USER_GUIDE.md)**
+
+### **MCP Management MCP** - Install MCPs from AI
+Install and configure MCPs dynamically through natural language.
+
+```bash
+# AI can discover and install MCPs for you
+ncp find "install mcp"
+# Shows: mcp:install, mcp:search, mcp:configure
+```
+
+**Features:**
+- ✅ Search and discover MCPs from registries
+- ✅ Install MCPs without manual configuration
+- ✅ Update and remove MCPs programmatically
+- ✅ AI can self-extend with new capabilities
+
+**Configuration:**
+Internal MCPs are disabled by default. Enable in your profile settings:
+
+```json
+{
+  "settings": {
+    "enable_schedule_mcp": true,
+    "enable_mcp_management": true
+  }
+}
+```
 
 ---
 
