@@ -54,8 +54,20 @@ export class ToolValidator {
 
       // Get or create orchestrator
       logger.info(`[ToolValidator] Validating ${mcpName}:${toolName}`);
+      logger.info(`[ToolValidator] Orchestrator status: ${this.orchestrator ? 'INJECTED ✅' : 'NOT INJECTED ❌ - will create temporary'}`);
       const orchestrator = this.orchestrator || await this.createTemporaryOrchestrator();
       const shouldCleanup = !this.orchestrator; // Only cleanup if we created it
+
+      // Wait for orchestrator to finish indexing before validation
+      if (orchestrator && 'waitForInitialization' in orchestrator) {
+        logger.info(`[ToolValidator] Waiting for orchestrator initialization...`);
+        const startWait = Date.now();
+        await (orchestrator as any).waitForInitialization();
+        const waitDuration = Date.now() - startWait;
+        logger.info(`[ToolValidator] Orchestrator ready for validation (waited ${waitDuration}ms)`);
+      } else {
+        logger.warn(`[ToolValidator] Orchestrator does not have waitForInitialization method`);
+      }
 
       // STEP 1: Try MCP-native validation (tools/validate)
       logger.info(`[ToolValidator] Attempting MCP-native validation for ${tool}`);

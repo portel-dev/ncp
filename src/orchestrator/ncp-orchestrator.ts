@@ -175,6 +175,7 @@ export class NCPOrchestrator {
   private indexingStartTime: number = 0;
   private profileManager: ProfileManager | null = null;
   private internalMCPManager: InternalMCPManager;
+  private backgroundInitPromise: Promise<void> | null = null;
 
   private forceRetry: boolean = false;
 
@@ -275,8 +276,9 @@ export class NCPOrchestrator {
 
     // CRITICAL: Run ALL heavy initialization in background to avoid blocking MCP startup
     // MCP protocol requires fast startup - Claude Desktop will timeout and disconnect otherwise
-    this.runBackgroundInitialization(profile).catch(err => {
+    this.backgroundInitPromise = this.runBackgroundInitialization(profile).catch(err => {
       logger.error(`Background initialization failed: ${err}`);
+      throw err; // Re-throw to propagate to waiters
     });
 
     logger.info('MCP server ready - background initialization in progress');
@@ -1521,6 +1523,18 @@ export class NCPOrchestrator {
    */
   getIndexingProgress(): { current: number; total: number; currentMCP: string; estimatedTimeRemaining?: number } | null {
     return this.indexingProgress;
+  }
+
+  /**
+   * Wait for background initialization to complete
+   * This is useful for operations that need all MCPs to be indexed before proceeding
+   */
+  async waitForInitialization(): Promise<void> {
+    if (this.backgroundInitPromise) {
+      logger.info('[NCPOrchestrator] Waiting for background initialization to complete...');
+      await this.backgroundInitPromise;
+      logger.info('[NCPOrchestrator] Background initialization completed');
+    }
   }
 
   /**
