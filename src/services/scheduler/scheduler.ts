@@ -35,11 +35,11 @@ export class Scheduler {
   private jobExecutor: JobExecutor;
   private toolValidator: ToolValidator;
 
-  constructor() {
+  constructor(orchestrator?: any) { // NCPOrchestrator - using any to avoid circular dependency
     this.jobManager = new JobManager();
     this.executionRecorder = new ExecutionRecorder();
     this.jobExecutor = new JobExecutor();
-    this.toolValidator = new ToolValidator();
+    this.toolValidator = new ToolValidator(orchestrator);
 
     // Only initialize cron manager on supported platforms
     if (platform() !== 'win32') {

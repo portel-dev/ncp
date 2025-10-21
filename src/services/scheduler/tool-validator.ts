@@ -22,6 +22,8 @@ export interface ValidationResult {
 }
 
 export class ToolValidator {
+  constructor(private orchestrator?: any) {} // NCPOrchestrator - using any to avoid circular dependency
+
   /**
    * Validate tool and parameters before scheduling
    *
@@ -50,12 +52,10 @@ export class ToolValidator {
         return { valid: false, errors, warnings };
       }
 
-      // Initialize orchestrator to validate
+      // Get or create orchestrator
       logger.info(`[ToolValidator] Validating ${mcpName}:${toolName}`);
-      const { NCPOrchestrator } = await import('../../orchestrator/ncp-orchestrator.js');
-      const orchestrator = new NCPOrchestrator('all', false);
-
-      await orchestrator.initialize();
+      const orchestrator = this.orchestrator || await this.createTemporaryOrchestrator();
+      const shouldCleanup = !this.orchestrator; // Only cleanup if we created it
 
       // STEP 1: Try MCP-native validation (tools/validate)
       logger.info(`[ToolValidator] Attempting MCP-native validation for ${tool}`);
@@ -76,7 +76,9 @@ export class ToolValidator {
           warnings.push(...nativeValidation.result.warnings);
         }
 
-        await orchestrator.cleanup();
+        if (shouldCleanup) {
+          await orchestrator.cleanup();
+        }
 
         return {
           valid: nativeValidation.result.valid,
@@ -95,7 +97,9 @@ export class ToolValidator {
       const toolInfo = await this.findTool(orchestrator, tool);
 
       if (!toolInfo) {
-        await orchestrator.cleanup();
+        if (shouldCleanup) {
+          await orchestrator.cleanup();
+        }
         errors.push(`Tool not found: ${tool}. Use 'ncp find' to discover available tools.`);
         return { valid: false, errors, warnings };
       }
@@ -111,7 +115,9 @@ export class ToolValidator {
 
       // If schema validation failed, don't proceed to test run
       if (errors.length > 0) {
-        await orchestrator.cleanup();
+        if (shouldCleanup) {
+          await orchestrator.cleanup();
+        }
         return { valid: false, errors, warnings, schema: toolInfo.schema };
       }
 
@@ -133,7 +139,9 @@ export class ToolValidator {
         }
       }
 
-      await orchestrator.cleanup();
+      if (shouldCleanup) {
+        await orchestrator.cleanup();
+      }
 
       return {
         valid: errors.length === 0,
@@ -149,6 +157,20 @@ export class ToolValidator {
       errors.push(`Validation error: ${error instanceof Error ? error.message : String(error)}`);
       return { valid: false, errors, warnings };
     }
+  }
+
+  /**
+   * Create a temporary orchestrator (fallback when none provided)
+   * WARNING: This is slow! Prefer dependency injection for production use.
+   */
+  private async createTemporaryOrchestrator(): Promise<any> {
+    logger.warn('[ToolValidator] No orchestrator provided - creating temporary instance (this is slow!)');
+    logger.warn('[ToolValidator] For better performance, inject an orchestrator via constructor');
+
+    const { NCPOrchestrator } = await import('../../orchestrator/ncp-orchestrator.js');
+    const orchestrator = new NCPOrchestrator('all', false);
+    await orchestrator.initialize();
+    return orchestrator;
   }
 
   /**

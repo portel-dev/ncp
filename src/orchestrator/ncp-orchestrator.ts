@@ -209,6 +209,14 @@ export class NCPOrchestrator {
 
         // Initialize internal MCPs with ProfileManager
         this.internalMCPManager.initialize(this.profileManager);
+
+        // Inject orchestrator into SchedulerMCP for tool validation (Phase 1 Step 4)
+        const allInternalMCPs = this.internalMCPManager.getAllEnabledInternalMCPs();
+        const schedulerMCP = allInternalMCPs.find(mcp => mcp.name === 'schedule');
+        if (schedulerMCP && 'setOrchestrator' in schedulerMCP) {
+          logger.info('[NCPOrchestrator] Injecting orchestrator into SchedulerMCP');
+          (schedulerMCP as any).setOrchestrator(this);
+        }
       }
 
       const profile = await this.profileManager.getProfile(this.profileName);
@@ -265,7 +273,20 @@ export class NCPOrchestrator {
       return;
     }
 
-    // Initialize discovery engine first
+    // CRITICAL: Run ALL heavy initialization in background to avoid blocking MCP startup
+    // MCP protocol requires fast startup - Claude Desktop will timeout and disconnect otherwise
+    this.runBackgroundInitialization(profile).catch(err => {
+      logger.error(`Background initialization failed: ${err}`);
+    });
+
+    logger.info('MCP server ready - background initialization in progress');
+  }
+
+  /**
+   * Run heavy initialization in background (non-blocking)
+   */
+  private async runBackgroundInitialization(profile: Profile): Promise<void> {
+    // Initialize discovery engine (loads embeddings from disk - can be slow)
     await this.discovery.initialize();
 
     // Connect RAG engine to InternalMCPManager for smart re-indexing
@@ -289,8 +310,6 @@ export class NCPOrchestrator {
     }
 
     // Add internal MCPs immediately so they're always available
-    // This ensures management tools (ncp:add, ncp:list, etc.) work even during external MCP indexing
-    // Only enabled MCPs will be added to discovery
     await this.addInternalMCPsToDiscovery();
 
     // Initialize CSV cache
@@ -313,13 +332,15 @@ export class NCPOrchestrator {
     if (cacheValid) {
       // Load from cache
       logger.info('Loading tools from CSV cache...');
-      const cachedMCPCount = await this.loadFromCSVCache(mcpConfigs);
+      await this.loadFromCSVCache(mcpConfigs);
     } else {
       // Cache invalid - clear it to force full re-indexing
       logger.info('Cache invalid, clearing for full re-index...');
       await this.csvCache.clear();
       await this.csvCache.initialize();
     }
+
+    const startTime = this.indexingStartTime;
 
     // Get list of MCPs that need indexing
     const indexedMCPs = this.csvCache.getIndexedMCPs();

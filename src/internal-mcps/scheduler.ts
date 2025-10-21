@@ -31,9 +31,19 @@ export class SchedulerMCP implements InternalMCP {
   };
 
   private scheduler: Scheduler;
+  private orchestrator?: any; // NCPOrchestrator
 
   constructor() {
-    this.scheduler = new Scheduler();
+    this.scheduler = new Scheduler(); // No orchestrator yet - will be injected later
+  }
+
+  /**
+   * Set the orchestrator instance (called by MCP server after initialization)
+   */
+  setOrchestrator(orchestrator: any): void {
+    logger.info('[SchedulerMCP] Orchestrator injected - re-creating scheduler with orchestrator');
+    this.orchestrator = orchestrator;
+    this.scheduler = new Scheduler(orchestrator);
   }
 
   tools: InternalTool[] = [
