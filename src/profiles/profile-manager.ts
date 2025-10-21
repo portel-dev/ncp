@@ -106,9 +106,25 @@ export class ProfileManager {
       const missingMCPs: Array<{ name: string; config: any }> = [];
 
       for (const [mcpName, mcpConfig] of Object.entries(importResult.mcpServers)) {
-        if (!existingMCPNames.has(mcpName)) {
-          missingMCPs.push({ name: mcpName, config: mcpConfig });
+        // Skip if already exists in NCP
+        if (existingMCPNames.has(mcpName)) {
+          continue;
         }
+
+        // Skip NCP itself by checking serverInfo.name from MCP protocol
+        // This is the proper, protocol-based way to identify NCP
+        try {
+          const serverInfoName = await this.getServerInfoName(mcpConfig);
+          if (serverInfoName?.toLowerCase() === 'ncp') {
+            continue; // Skip NCP itself
+          }
+        } catch (error) {
+          // If we can't get serverInfo, skip this MCP to be safe
+          console.warn(`Failed to get serverInfo for ${mcpName}, skipping: ${error}`);
+          continue;
+        }
+
+        missingMCPs.push({ name: mcpName, config: mcpConfig });
       }
 
       if (missingMCPs.length === 0) {
@@ -153,6 +169,75 @@ export class ProfileManager {
       // Silent failure - don't block startup if auto-import fails
       // User can still configure manually
       console.warn(`Auto-sync failed: ${error}`);
+    }
+  }
+
+  /**
+   * Get serverInfo.name from an MCP by briefly connecting to it
+   * This is the protocol-based way to identify an MCP server
+   */
+  private async getServerInfoName(config: any): Promise<string | null> {
+    const { spawn } = await import('child_process');
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+
+    let childProcess: any = null;
+    let client: any = null;
+
+    try {
+      // Spawn the MCP process
+      childProcess = spawn(config.command, config.args || [], {
+        env: { ...process.env, ...config.env },
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      // Create client and transport
+      const transport = new StdioClientTransport({
+        command: config.command,
+        args: config.args || [],
+        env: { ...process.env, ...config.env }
+      });
+
+      client = new Client(
+        {
+          name: 'ncp-detector',
+          version: '1.0.0'
+        },
+        {
+          capabilities: {}
+        }
+      );
+
+      // Connect with timeout
+      await Promise.race([
+        client.connect(transport),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Connection timeout')), 5000)
+        )
+      ]);
+
+      // Get server info from the initialized connection
+      const serverInfo = client.getServerVersion();
+      return serverInfo?.name || null;
+    } catch (error) {
+      throw new Error(`Failed to get serverInfo: ${error}`);
+    } finally {
+      // Clean up
+      try {
+        if (client) {
+          await client.close();
+        }
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+
+      try {
+        if (childProcess && !childProcess.killed) {
+          childProcess.kill();
+        }
+      } catch (e) {
+        // Ignore cleanup errors
+      }
     }
   }
 

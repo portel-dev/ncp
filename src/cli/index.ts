@@ -803,42 +803,65 @@ async function loadMCPInfoFromCache(mcpDescriptions: Record<string, string>, mcp
   const { join } = await import('path');
 
   const cacheDir = getCacheDirectory();
-  const cachePath = join(cacheDir, 'all-tools.json');
+  let foundAnyCache = false;
 
-  if (!existsSync(cachePath)) {
-    return false; // No cache available
-  }
+  // Try CSV cache first (most reliable for tool counts)
+  const csvPath = join(cacheDir, 'all-tools.csv');
+  if (existsSync(csvPath)) {
+    try {
+      const csvContent = readFileSync(csvPath, 'utf-8');
+      const lines = csvContent.split('\n').slice(1); // Skip header
 
-  try {
-    const cacheContent = readFileSync(cachePath, 'utf-8');
-    const cache = JSON.parse(cacheContent);
-
-    // Extract server info and tool counts from cache
-    for (const [mcpName, mcpData] of Object.entries(cache.mcps || {})) {
-      const data = mcpData as any;
-
-      // Extract server description (without version)
-      if (data.serverInfo?.description && data.serverInfo.description !== mcpName) {
-        mcpDescriptions[mcpName] = data.serverInfo.description;
-      } else if (data.serverInfo?.title) {
-        mcpDescriptions[mcpName] = data.serverInfo.title;
+      // Count tools per MCP from CSV
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const match = line.match(/^([^,]+),/);
+        if (match) {
+          const mcpName = match[1];
+          mcpToolCounts[mcpName] = (mcpToolCounts[mcpName] || 0) + 1;
+        }
       }
-
-      // Extract version separately
-      if (data.serverInfo?.version && data.serverInfo.version !== 'unknown') {
-        mcpVersions[mcpName] = data.serverInfo.version;
-      }
-
-      // Count tools
-      if (data.tools && Array.isArray(data.tools)) {
-        mcpToolCounts[mcpName] = data.tools.length;
-      }
+      foundAnyCache = true;
+    } catch (error) {
+      // Continue to try JSON cache
     }
-    return true; // Cache was successfully loaded
-  } catch (error) {
-    // Ignore cache reading errors - will just show without descriptions
-    return false;
   }
+
+  // Try JSON cache for additional metadata
+  const cachePath = join(cacheDir, 'all-tools.json');
+  if (existsSync(cachePath)) {
+    try {
+      const cacheContent = readFileSync(cachePath, 'utf-8');
+      const cache = JSON.parse(cacheContent);
+
+      // Extract server info and tool counts from cache
+      for (const [mcpName, mcpData] of Object.entries(cache.mcps || {})) {
+        const data = mcpData as any;
+
+        // Extract server description (without version)
+        if (data.serverInfo?.description && data.serverInfo.description !== mcpName) {
+          mcpDescriptions[mcpName] = data.serverInfo.description;
+        } else if (data.serverInfo?.title) {
+          mcpDescriptions[mcpName] = data.serverInfo.title;
+        }
+
+        // Extract version separately
+        if (data.serverInfo?.version && data.serverInfo.version !== 'unknown') {
+          mcpVersions[mcpName] = data.serverInfo.version;
+        }
+
+        // Count tools if not already counted from CSV
+        if (!mcpToolCounts[mcpName] && data.tools && Array.isArray(data.tools)) {
+          mcpToolCounts[mcpName] = data.tools.length;
+        }
+      }
+      foundAnyCache = true;
+    } catch (error) {
+      // Ignore cache reading errors
+    }
+  }
+
+  return foundAnyCache;
 }
 
 
@@ -2082,6 +2105,9 @@ program
     // For CLI usage, wait for indexing to complete before searching
     await server.waitForInitialization();
 
+    // Normalize query: trim whitespace and treat empty/whitespace-only as undefined for listing mode
+    const normalizedQuery = query && typeof query === 'string' && query.trim() ? query.trim() : '';
+
     const limit = parseInt(options.limit || '5');
     const page = parseInt(options.page || '1');
     const depth = parseInt(options.depth || '2');
@@ -2089,7 +2115,7 @@ program
 
     const result = await server.handleFind(
       { jsonrpc: '2.0', id: 'cli', method: 'tools/call' },
-      { description: query || '', limit, page, depth, confidence_threshold }
+      { description: normalizedQuery, limit, page, depth, confidence_threshold }
     );
 
     const formattedOutput = formatFindOutput(result.result.content[0].text);
