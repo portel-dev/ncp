@@ -307,7 +307,7 @@ export class SchedulerMCP implements InternalMCP {
     try {
       // Use ToolValidator to validate the tool being scheduled
       const { ToolValidator } = await import('../services/scheduler/tool-validator.js');
-      const validator = new ToolValidator();
+      const validator = new ToolValidator(this.orchestrator);
 
       const result = await validator.validateTool(tool, parameters);
 
