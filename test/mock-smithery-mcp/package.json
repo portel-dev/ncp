@@ -1,6 +1,0 @@
-{
-  "name": "test-smithery-mcp",
-  "version": "1.0.0",
-  "description": "Mock MCP for testing Smithery config detection",
-  "main": "index.js"
-}

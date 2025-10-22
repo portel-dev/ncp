@@ -74,9 +74,11 @@ export interface ExecutionSummary {
 }
 
 export interface SchedulerConfig {
-  // Retention policies
+  // Retention policies (hybrid: time AND count based)
   maxExecutionsPerJob?: number; // Keep last N executions per job (default: 100)
-  maxExecutionAgeDays?: number; // Delete executions older than N days (default: 30)
+  maxExecutionAgeDays?: number; // Delete executions older than N days (default: 14)
+  cleanupSchedule?: string; // Cron expression for automatic cleanup (default: "0 0 * * *" - daily at midnight)
+  enableAutoCleanup?: boolean; // Enable/disable automatic cleanup (default: true)
 
   // Execution settings
   defaultTimeout?: number; // Default timeout in milliseconds (default: 5 minutes)

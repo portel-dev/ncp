@@ -9,7 +9,8 @@ import { CronManager } from './cron-manager.js';
 import { JobExecutor } from './job-executor.js';
 import { NaturalLanguageParser } from './natural-language-parser.js';
 import { ToolValidator } from './tool-validator.js';
-import { ScheduledJob, ExecutionSummary } from '../../types/scheduler.js';
+import { SettingsManager } from './settings-manager.js';
+import { ScheduledJob, ExecutionSummary, SchedulerConfig } from '../../types/scheduler.js';
 import { logger } from '../../utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
@@ -34,17 +35,22 @@ export class Scheduler {
   private cronManager?: CronManager;
   private jobExecutor: JobExecutor;
   private toolValidator: ToolValidator;
+  private settingsManager: SettingsManager;
+  private cleanupJobId?: string; // ID of the automatic cleanup job
 
   constructor(orchestrator?: any) { // NCPOrchestrator - using any to avoid circular dependency
     this.jobManager = new JobManager();
     this.executionRecorder = new ExecutionRecorder();
     this.jobExecutor = new JobExecutor();
     this.toolValidator = new ToolValidator(orchestrator);
+    this.settingsManager = new SettingsManager();
 
     // Only initialize cron manager on supported platforms
     if (platform() !== 'win32') {
       try {
         this.cronManager = new CronManager();
+        // Note: Automatic cleanup setup is deferred until first job creation
+        // to avoid running shell commands during normal NCP operations
       } catch (error) {
         logger.warn(`[Scheduler] Cron manager initialization failed: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -58,6 +64,64 @@ export class Scheduler {
    */
   isAvailable(): boolean {
     return this.cronManager !== undefined;
+  }
+
+  /**
+   * Set up automatic cleanup job (internal system job)
+   * Creates a cron job that runs cleanup on configured schedule
+   *
+   * NOTE: Only sets up if jobs actually exist to avoid unnecessary crontab modifications
+   * on every CLI invocation (which triggers macOS admin permission dialogs)
+   */
+  private setupAutomaticCleanup(): void {
+    if (!this.cronManager) {
+      return; // No cron manager available
+    }
+
+    const config = this.settingsManager.getConfig();
+
+    // Skip if auto-cleanup is disabled
+    if (!config.enableAutoCleanup) {
+      logger.debug('[Scheduler] Automatic cleanup is disabled');
+      return;
+    }
+
+    // Skip if no jobs exist - don't modify crontab unnecessarily
+    // This prevents permission dialogs on every CLI command
+    const allJobs = this.jobManager.getAllJobs();
+    if (allJobs.length === 0) {
+      logger.debug('[Scheduler] Skipping cleanup setup - no scheduled jobs exist');
+      return;
+    }
+
+    try {
+      // Check if cleanup job already exists in crontab
+      const existingJobs = this.cronManager.getJobs();
+      const cleanupJobId = '__ncp_automatic_cleanup__';
+      const cleanupExists = existingJobs.some(j => j.id === cleanupJobId);
+
+      if (cleanupExists) {
+        logger.debug('[Scheduler] Automatic cleanup job already exists');
+        this.cleanupJobId = cleanupJobId;
+        return; // Already set up, don't modify crontab
+      }
+
+      const ncpPath = this.getNCPExecutablePath();
+      const cleanupSchedule = config.cleanupSchedule || '0 0 * * *';
+
+      // Create a special internal job ID for cleanup
+      this.cleanupJobId = cleanupJobId;
+
+      // Create cron job that calls the cleanup-runs CLI command
+      const command = `${ncpPath} cleanup-runs --max-age ${config.maxExecutionAgeDays || 14} --max-count ${config.maxExecutionsPerJob || 100}`;
+
+      this.cronManager.addJob(this.cleanupJobId, cleanupSchedule, command);
+
+      logger.info(`[Scheduler] Automatic cleanup enabled: ${cleanupSchedule}`);
+      logger.info(`[Scheduler] Cleanup policy: ${config.maxExecutionAgeDays || 14} days, ${config.maxExecutionsPerJob || 100} runs per job`);
+    } catch (error) {
+      logger.error(`[Scheduler] Failed to setup automatic cleanup: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
@@ -171,6 +235,9 @@ export class Scheduler {
     const ncpPath = this.getNCPExecutablePath();
     const command = `${ncpPath} execute-scheduled ${jobId}`;
     this.cronManager.addJob(jobId, cronExpression, command);
+
+    // Set up automatic cleanup (only runs once, is idempotent)
+    this.setupAutomaticCleanup();
 
     logger.info(`[Scheduler] Job created successfully: ${job.name} (${jobId})`);
     logger.info(`[Scheduler] Schedule: ${cronExpression}`);

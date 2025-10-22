@@ -898,6 +898,9 @@ export class NCPOrchestrator {
   }
 
   async find(query: string, limit: number = 5, detailed: boolean = false, confidenceThreshold: number = 0.35): Promise<DiscoveryResult[]> {
+    // Wait for background initialization to complete (this is where indexing + spinner happens)
+    await this.waitForInitialization();
+
     if (!query) {
       // No query = list all tools, filtered by health
       const healthyTools = this.allTools.filter(tool => this.healthMonitor.getHealthyMCPs([tool.mcpName]).length > 0);

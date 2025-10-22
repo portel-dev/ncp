@@ -104,29 +104,30 @@ export class ProfileManager {
 
       // Find MCPs that are in client but NOT in NCP (missing MCPs)
       const missingMCPs: Array<{ name: string; config: any }> = [];
-      const needBackgroundVerification: Array<{ name: string; config: any }> = [];
 
-      for (const [mcpName, mcpConfig] of Object.entries(importResult.mcpServers)) {
-        // Skip if already exists in NCP
-        if (existingMCPNames.has(mcpName)) {
-          continue;
+      // Filter to only new MCPs (not already in NCP)
+      // Use simple name-based check to avoid spawning child processes
+      const newMCPEntries = Object.entries(importResult.mcpServers).filter(([name]) => {
+        // Skip if already in NCP
+        if (existingMCPNames.has(name)) return false;
+
+        // Skip NCP itself by name (avoid protocol check that spawns processes)
+        const nameLower = name.toLowerCase();
+        if (nameLower === 'ncp' || nameLower.includes('ncp-server')) {
+          return false;
         }
 
-        // Quick check (2s timeout) - skip NCP if confirmed
-        // If timeout/error, add now and verify in background
-        try {
-          const serverInfoName = await this.getServerInfoName(mcpConfig, 2000);
-          if (serverInfoName?.toLowerCase() === 'ncp') {
-            continue; // Skip NCP itself - confirmed via protocol
-          }
-          // If serverInfo retrieved successfully and it's NOT ncp, add it
-          missingMCPs.push({ name: mcpName, config: mcpConfig });
-        } catch (error) {
-          // Quick check failed (timeout, port conflict, etc)
-          // Add it now, verify in background (silently - this is expected)
-          missingMCPs.push({ name: mcpName, config: mcpConfig });
-          needBackgroundVerification.push({ name: mcpName, config: mcpConfig });
-        }
+        return true;
+      });
+
+      // Show simple message if there are new MCPs
+      if (newMCPEntries.length > 0) {
+        console.error(`\n✨ Found ${newMCPEntries.length} new MCPs from ${importResult.clientName}`);
+      }
+
+      // Add all new MCPs without spawning them
+      for (const [mcpName, mcpConfig] of newMCPEntries) {
+        missingMCPs.push({ name: mcpName, config: mcpConfig });
       }
 
       if (missingMCPs.length === 0) {
@@ -135,7 +136,6 @@ export class ProfileManager {
 
       // Import missing MCPs using add command (ensures cache coherence)
       const imported: string[] = [];
-      const ncpInstancesToRemove: string[] = [];
 
       for (const { name, config } of missingMCPs) {
         try {
@@ -149,19 +149,6 @@ export class ProfileManager {
           // Use addMCPToProfile to ensure cache updates happen
           await this.addMCPToProfile('all', name, cleanConfig);
           imported.push(name);
-
-          // Check if this is NCP using longer verification (for those that passed quick check)
-          if (!needBackgroundVerification.some(m => m.name === name)) {
-            // This MCP passed quick check - verify it's not NCP with longer timeout
-            try {
-              const serverInfoName = await this.getServerInfoName(config, 5000);
-              if (serverInfoName?.toLowerCase() === 'ncp') {
-                ncpInstancesToRemove.push(name);
-              }
-            } catch (error) {
-              // Verification failed, assume it's not NCP
-            }
-          }
         } catch (error) {
           console.warn(`Failed to import ${name}: ${error}`);
         }
@@ -173,40 +160,11 @@ export class ProfileManager {
         const extensionsCount = missingMCPs.filter(m => m.config._source === '.dxt' || m.config._source === 'dxt').length;
 
         // Log import summary
-        console.error(`\n✨ Auto-synced ${imported.length} new MCPs from ${importResult.clientName}:`);
-        if (configCount > 0) {
-          console.error(`   - ${configCount} from config file`);
-        }
+        console.error(`   - ${configCount} from config file`);
         if (extensionsCount > 0) {
           console.error(`   - ${extensionsCount} from extensions`);
         }
         console.error(`   → Added to ~/.ncp/profiles/all.json\n`);
-      }
-
-      // Remove NCP instances that were confirmed during thorough verification
-      for (const ncpName of ncpInstancesToRemove) {
-        try {
-          await this.removeMCPFromProfile('all', ncpName);
-        } catch (error) {
-          // Ignore removal errors
-        }
-      }
-
-      // Verify MCPs that failed quick check (synchronous to ensure clean state)
-      if (needBackgroundVerification.length > 0) {
-        for (const { name, config } of needBackgroundVerification) {
-          try {
-            // Use longer timeout for thorough check (5s)
-            const serverInfoName = await this.getServerInfoName(config, 5000);
-            if (serverInfoName?.toLowerCase() === 'ncp') {
-              // Confirmed NCP - remove it from 'all' profile
-              await this.removeMCPFromProfile('all', name);
-            }
-          } catch (error) {
-            // If still can't verify after 5s, assume it's NOT NCP
-            // Keep it in the profile
-          }
-        }
       }
     } catch (error) {
       // Silent failure - don't block startup if auto-import fails

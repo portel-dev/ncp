@@ -3114,6 +3114,36 @@ program
     }
   });
 
+// Scheduler: Cleanup old execution records (called by automatic cleanup job)
+program
+  .command('cleanup-runs')
+  .description('Clean up old execution records (internal use - called by automatic cleanup)')
+  .option('--max-age <days>', 'Maximum age in days for execution records', '14')
+  .option('--max-count <count>', 'Maximum number of executions to keep per job', '100')
+  .action(async (options) => {
+    try {
+      const { ExecutionRecorder } = await import('../services/scheduler/execution-recorder.js');
+      const recorder = new ExecutionRecorder();
+
+      const maxAgeDays = parseInt(options.maxAge);
+      const maxExecutionsPerJob = parseInt(options.maxCount);
+
+      const result = recorder.cleanupOldExecutions(maxAgeDays, maxExecutionsPerJob);
+
+      if (result.errors.length === 0) {
+        console.log(`✅ Cleanup complete: deleted ${result.deletedCount} old execution records`);
+        process.exit(0);
+      } else {
+        console.log(`⚠️  Cleanup completed with warnings: deleted ${result.deletedCount} records, ${result.errors.length} errors`);
+        result.errors.forEach(err => console.error(`   - ${err}`));
+        process.exit(0); // Still exit 0 since cleanup partially succeeded
+      }
+    } catch (error) {
+      console.error(`❌ Cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
 // Check for updates on CLI startup (non-intrusive)
 // Temporarily disabled - causing hangs in some environments
 // TODO: Re-enable with proper timeout handling
