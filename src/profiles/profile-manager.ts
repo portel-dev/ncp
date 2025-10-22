@@ -104,6 +104,7 @@ export class ProfileManager {
 
       // Find MCPs that are in client but NOT in NCP (missing MCPs)
       const missingMCPs: Array<{ name: string; config: any }> = [];
+      const needBackgroundVerification: Array<{ name: string; config: any }> = [];
 
       for (const [mcpName, mcpConfig] of Object.entries(importResult.mcpServers)) {
         // Skip if already exists in NCP
@@ -111,20 +112,23 @@ export class ProfileManager {
           continue;
         }
 
-        // Skip NCP itself by checking serverInfo.name from MCP protocol
-        // This is the proper, protocol-based way to identify NCP
+        // Quick check (2s timeout) - skip NCP if confirmed
+        // If timeout/error, add now and verify in background
         try {
-          const serverInfoName = await this.getServerInfoName(mcpConfig);
+          const serverInfoName = await this.getServerInfoName(mcpConfig, 2000);
           if (serverInfoName?.toLowerCase() === 'ncp') {
-            continue; // Skip NCP itself
+            continue; // Skip NCP itself - confirmed via protocol
           }
+          // If serverInfo retrieved successfully and it's NOT ncp, add it
+          missingMCPs.push({ name: mcpName, config: mcpConfig });
         } catch (error) {
-          // If we can't get serverInfo, skip this MCP to be safe
-          console.warn(`Failed to get serverInfo for ${mcpName}, skipping: ${error}`);
-          continue;
+          // Quick check failed (timeout, port conflict, etc)
+          // Add it now, verify in background
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.warn(`Quick verification failed for ${mcpName}, will verify in background: ${errorMsg}`);
+          missingMCPs.push({ name: mcpName, config: mcpConfig });
+          needBackgroundVerification.push({ name: mcpName, config: mcpConfig });
         }
-
-        missingMCPs.push({ name: mcpName, config: mcpConfig });
       }
 
       if (missingMCPs.length === 0) {
@@ -165,6 +169,12 @@ export class ProfileManager {
         }
         console.error(`   → Added to ~/.ncp/profiles/all.json\n`);
       }
+
+      // Start background verification for MCPs that failed quick check
+      if (needBackgroundVerification.length > 0) {
+        console.warn(`⏳ ${needBackgroundVerification.length} MCPs queued for background verification...`);
+        this.verifyAndRemoveNCPInBackground(needBackgroundVerification);
+      }
     } catch (error) {
       // Silent failure - don't block startup if auto-import fails
       // User can still configure manually
@@ -175,8 +185,9 @@ export class ProfileManager {
   /**
    * Get serverInfo.name from an MCP by briefly connecting to it
    * This is the protocol-based way to identify an MCP server
+   * Uses a short timeout to avoid blocking startup
    */
-  private async getServerInfoName(config: any): Promise<string | null> {
+  private async getServerInfoName(config: any, timeoutMs: number = 2000): Promise<string | null> {
     const { spawn } = await import('child_process');
     const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
     const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
@@ -208,11 +219,11 @@ export class ProfileManager {
         }
       );
 
-      // Connect with timeout
+      // Connect with configurable timeout (default 2s for quick check)
       await Promise.race([
         client.connect(transport),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Connection timeout')), 5000)
+          setTimeout(() => reject(new Error('Connection timeout')), timeoutMs)
         )
       ]);
 
@@ -239,6 +250,30 @@ export class ProfileManager {
         // Ignore cleanup errors
       }
     }
+  }
+
+  /**
+   * Background verification of MCPs to identify NCP instances
+   * Runs after startup to avoid blocking, removes confirmed NCP instances
+   */
+  private async verifyAndRemoveNCPInBackground(mcpsToVerify: Array<{ name: string; config: any }>): Promise<void> {
+    // Run in background, don't await
+    setTimeout(async () => {
+      for (const { name, config } of mcpsToVerify) {
+        try {
+          // Use longer timeout for background check (5s)
+          const serverInfoName = await this.getServerInfoName(config, 5000);
+          if (serverInfoName?.toLowerCase() === 'ncp') {
+            // Confirmed NCP - remove it from 'all' profile
+            console.warn(`⚠️  Background check: Removing NCP instance "${name}" from auto-imported MCPs`);
+            await this.removeMCPFromProfile('all', name);
+          }
+        } catch (error) {
+          // If still can't verify after 5s, assume it's NOT NCP
+          // Keep it in the profile
+        }
+      }
+    }, 100); // Start background checks 100ms after startup
   }
 
   private async loadProfiles(): Promise<void> {
