@@ -11,6 +11,9 @@ LICENSE.md
 CODE_OF_CONDUCT.md
 SECURITY.md
 
+# Technical documentation
+HOW-IT-WORKS.md
+
 # Client-specific documentation (linked from README)
 claude.md
 CLAUDE.md
