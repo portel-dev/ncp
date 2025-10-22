@@ -123,9 +123,7 @@ export class ProfileManager {
           missingMCPs.push({ name: mcpName, config: mcpConfig });
         } catch (error) {
           // Quick check failed (timeout, port conflict, etc)
-          // Add it now, verify in background
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          console.warn(`Quick verification failed for ${mcpName}, will verify in background: ${errorMsg}`);
+          // Add it now, verify in background (silently - this is expected)
           missingMCPs.push({ name: mcpName, config: mcpConfig });
           needBackgroundVerification.push({ name: mcpName, config: mcpConfig });
         }
@@ -188,25 +186,27 @@ export class ProfileManager {
    * Uses a short timeout to avoid blocking startup
    */
   private async getServerInfoName(config: any, timeoutMs: number = 2000): Promise<string | null> {
-    const { spawn } = await import('child_process');
     const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
     const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+    const { Writable } = await import('stream');
 
-    let childProcess: any = null;
+    let transport: any = null;
     let client: any = null;
 
     try {
-      // Spawn the MCP process
-      childProcess = spawn(config.command, config.args || [], {
-        env: { ...process.env, ...config.env },
-        stdio: ['pipe', 'pipe', 'pipe']
+      // Create a null stream to suppress stderr
+      const nullStream = new Writable({
+        write(chunk, encoding, callback) {
+          callback(); // Discard all output
+        }
       });
 
-      // Create client and transport
-      const transport = new StdioClientTransport({
+      // Create transport (it will spawn the child process internally)
+      transport = new StdioClientTransport({
         command: config.command,
         args: config.args || [],
-        env: { ...process.env, ...config.env }
+        env: { ...process.env, ...config.env },
+        stderr: nullStream as any // Suppress stderr
       });
 
       client = new Client(
@@ -243,8 +243,8 @@ export class ProfileManager {
       }
 
       try {
-        if (childProcess && !childProcess.killed) {
-          childProcess.kill();
+        if (transport) {
+          await transport.close();
         }
       } catch (e) {
         // Ignore cleanup errors
