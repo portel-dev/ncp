@@ -663,6 +663,9 @@ program
     const manager = new ProfileManager();
     await manager.initialize();
 
+    // Import credential prompter
+    const { promptForCredential, promptForCredentials } = await import('../utils/credential-prompter.js');
+
     // Build auth config
     let auth: any | undefined;
 
@@ -671,57 +674,163 @@ program
 
       switch (options.authType) {
         case 'bearer':
-          if (!options.token) {
-            console.log(chalk.red('\n❌ --token required for bearer authentication'));
-            return;
+          let bearerToken = options.token;
+
+          // Prompt for token if not provided
+          if (!bearerToken) {
+            console.log(chalk.dim('\n   Token not provided, prompting for input...'));
+            bearerToken = await promptForCredential({
+              name: 'Bearer Token',
+              description: `Required for ${name} authentication`,
+              hidden: true
+            });
+
+            if (!bearerToken) {
+              console.log(chalk.yellow('\n⚠️  Credential input cancelled'));
+              return;
+            }
           }
+
           auth = {
             type: 'bearer',
-            token: options.token
+            token: bearerToken
           };
           break;
 
         case 'oauth':
-          if (!options.clientId || !options.deviceAuthUrl || !options.tokenUrl) {
-            console.log(chalk.red('\n❌ --client-id, --device-auth-url, and --token-url required for OAuth'));
-            return;
+          let clientId = options.clientId;
+          let clientSecret = options.clientSecret;
+          let deviceAuthUrl = options.deviceAuthUrl;
+          let tokenUrl = options.tokenUrl;
+          const scopes = options.scopes || [];
+
+          // Prompt for missing OAuth parameters
+          if (!clientId || !deviceAuthUrl || !tokenUrl) {
+            console.log(chalk.dim('\n   OAuth parameters not fully provided, prompting for input...'));
+
+            const prompts: any[] = [];
+
+            if (!clientId) {
+              prompts.push({
+                name: 'Client ID',
+                description: `OAuth Client ID for ${name}`,
+                hidden: false
+              });
+            }
+
+            if (!clientSecret) {
+              prompts.push({
+                name: 'Client Secret',
+                description: `OAuth Client Secret for ${name} (optional, press Enter to skip)`,
+                hidden: true
+              });
+            }
+
+            if (!deviceAuthUrl) {
+              prompts.push({
+                name: 'Device Auth URL',
+                description: `OAuth device authorization endpoint URL`,
+                hidden: false,
+                example: 'https://example.com/oauth/device/code'
+              });
+            }
+
+            if (!tokenUrl) {
+              prompts.push({
+                name: 'Token URL',
+                description: `OAuth token endpoint URL`,
+                hidden: false,
+                example: 'https://example.com/oauth/token'
+              });
+            }
+
+            const creds = await promptForCredentials(prompts);
+
+            if (!creds) {
+              console.log(chalk.yellow('\n⚠️  Credential input cancelled'));
+              return;
+            }
+
+            clientId = creds['Client ID'] || clientId;
+            clientSecret = creds['Client Secret'] || clientSecret;
+            deviceAuthUrl = creds['Device Auth URL'] || deviceAuthUrl;
+            tokenUrl = creds['Token URL'] || tokenUrl;
           }
+
           auth = {
             type: 'oauth',
             oauth: {
-              clientId: options.clientId,
-              clientSecret: options.clientSecret,
-              deviceAuthUrl: options.deviceAuthUrl,
-              tokenUrl: options.tokenUrl,
-              scopes: options.scopes || []
+              clientId,
+              clientSecret,
+              deviceAuthUrl,
+              tokenUrl,
+              scopes
             }
           };
-          console.log(chalk.dim(`   OAuth client: ${options.clientId}`));
-          console.log(chalk.dim(`   Scopes: ${(options.scopes || []).join(', ') || 'none'}`));
+          console.log(chalk.dim(`   OAuth client: ${clientId}`));
+          console.log(chalk.dim(`   Scopes: ${scopes.join(', ') || 'none'}`));
           break;
 
         case 'apiKey':
-          if (!options.token) {
-            console.log(chalk.red('\n❌ --token required for API key authentication'));
-            return;
+          let apiKey = options.token;
+
+          // Prompt for API key if not provided
+          if (!apiKey) {
+            console.log(chalk.dim('\n   API key not provided, prompting for input...'));
+            apiKey = await promptForCredential({
+              name: 'API Key',
+              description: `Required for ${name} authentication`,
+              hidden: true
+            });
+
+            if (!apiKey) {
+              console.log(chalk.yellow('\n⚠️  Credential input cancelled'));
+              return;
+            }
           }
+
           auth = {
             type: 'apiKey',
-            token: options.token
+            token: apiKey
           };
           break;
 
         case 'basic':
-          if (!options.username || !options.password) {
-            console.log(chalk.red('\n❌ --username and --password required for basic authentication'));
-            return;
+          let username = options.username;
+          let password = options.password;
+
+          // Prompt for credentials if not provided
+          if (!username || !password) {
+            console.log(chalk.dim('\n   Credentials not provided, prompting for input...'));
+
+            const creds = await promptForCredentials([
+              {
+                name: 'Username',
+                description: `Username for ${name}`,
+                hidden: false
+              },
+              {
+                name: 'Password',
+                description: `Password for ${name}`,
+                hidden: true
+              }
+            ]);
+
+            if (!creds) {
+              console.log(chalk.yellow('\n⚠️  Credential input cancelled'));
+              return;
+            }
+
+            username = creds['Username'];
+            password = creds['Password'];
           }
+
           auth = {
             type: 'basic',
-            username: options.username,
-            password: options.password
+            username,
+            password
           };
-          console.log(chalk.dim(`   Username: ${options.username}`));
+          console.log(chalk.dim(`   Username: ${username}`));
           break;
 
         default:
@@ -3094,9 +3203,13 @@ program
   .description('Execute a scheduled job (internal use - called by cron)')
   .option('--timeout <ms>', 'Execution timeout in milliseconds', '300000')
   .action(async (jobId, options) => {
+    console.log('[DEBUG] execute-scheduled action called with jobId:', jobId);
     try {
+      console.log('[DEBUG] Importing JobExecutor...');
       const { JobExecutor } = await import('../services/scheduler/job-executor.js');
+      console.log('[DEBUG] Creating JobExecutor instance...');
       const executor = new JobExecutor();
+      console.log('[DEBUG] JobExecutor instance created');
 
       const timeout = parseInt(options.timeout);
       const result = await executor.executeJob(jobId, timeout);
