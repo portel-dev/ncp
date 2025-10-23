@@ -47,6 +47,7 @@ export class JobExecutor {
     const executionId = uuidv4();
     const executionTimeout = timeout || this.defaultTimeout;
 
+    console.log('[DEBUG] executeJob called with jobId:', jobId);
     logger.info(`[JobExecutor] Starting execution ${executionId} for job ${jobId}`);
 
     // Load job
@@ -86,30 +87,30 @@ export class JobExecutor {
     });
 
     try {
-      // Parse tool format: "mcp_name:tool_name"
-      const [mcpName, toolName] = job.tool.includes(':')
-        ? job.tool.split(':')
-        : [null, job.tool];
+      logger.info(`[JobExecutor] Executing ${job.tool} with parameters: ${JSON.stringify(job.parameters)}`);
 
-      if (!mcpName || !toolName) {
-        throw new Error(`Invalid tool format: ${job.tool}. Expected format: "mcp_name:tool_name"`);
-      }
-
-      // Initialize orchestrator for this execution
-      logger.info(`[JobExecutor] Initializing orchestrator for ${mcpName}:${toolName}`);
+      // Create orchestrator (same as 'ncp run' command)
       const { NCPOrchestrator } = await import('../../orchestrator/ncp-orchestrator.js');
-      const orchestrator = new NCPOrchestrator('all', false); // Use 'all' profile, silent mode
+      const orchestrator = new NCPOrchestrator('all', true); // Silent mode
 
+      // Initialize and wait for background init to complete
       await orchestrator.initialize();
+      await orchestrator.waitForInitialization();
 
-      // Execute with timeout
-      const result = await this.executeWithTimeout(
+      // Execute tool with timeout
+      const execResult = await this.executeWithTimeout<any>(
         () => orchestrator.run(job.tool, job.parameters),
         executionTimeout
       );
 
       // Cleanup orchestrator
       await orchestrator.cleanup();
+
+      if (!execResult.success) {
+        throw new Error(execResult.error || 'Tool execution failed');
+      }
+
+      const result = execResult.content;
 
       // Record successful execution
       const duration = Date.now() - startTime;
