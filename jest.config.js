@@ -1,7 +1,7 @@
 export default {
   preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
-  roots: ['<rootDir>/test'],
+  roots: ['<rootDir>/tests'],
   testMatch: [
     '**/?(*.)+(spec|test).[tj]s'
   ],
@@ -37,15 +37,15 @@ export default {
     'node_modules/(?!(clipboardy)/)'
   ],
   moduleNameMapper: {
-    '@xenova/transformers': '<rootDir>/test/__mocks__/transformers.js',
-    '^chalk$': '<rootDir>/test/__mocks__/chalk.js',
-    '^clipboardy$': '<rootDir>/test/__mocks__/clipboardy.js',
-    '^.*\\/utils\\/updater\\.js$': '<rootDir>/test/__mocks__/updater.js',
-    '^.*\\/cache\\/csv-cache\\.js$': '<rootDir>/test/__mocks__/csv-cache.ts',
+    '@xenova/transformers': '<rootDir>/tests/__mocks__/transformers.js',
+    '^chalk$': '<rootDir>/tests/__mocks__/chalk.js',
+    '^clipboardy$': '<rootDir>/tests/__mocks__/clipboardy.js',
+    '^.*\\/utils\\/updater\\.js$': '<rootDir>/tests/__mocks__/updater.js',
+    '^.*\\/cache\\/csv-cache\\.js$': '<rootDir>/tests/__mocks__/csv-cache.ts',
     '^(\\.{1,2}/.*)\\.js$': '$1',
-  // '^.*/utils/version\\.js$': '<rootDir>/test/__mocks__/version.ts'
+  // '^.*/utils/version\\.js$': '<rootDir>/tests/__mocks__/version.ts'
   },
-  setupFilesAfterEnv: ['<rootDir>/test/setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testTimeout: 15000,
   verbose: true,
   forceExit: true,
