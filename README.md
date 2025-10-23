@@ -1,5 +1,5 @@
 [![npm version](https://img.shields.io/npm/v/%40portel%2Fncp.svg)](https://www.npmjs.com/package/@portel/ncp)
-[![npm downloads](https://img.shields.io/npm/dt/%40portel%2Fncp.svg)](https://www.npmjs.com/package/@portel/ncp)
+[![npm downloads](https://badgen.net/npm/dy/@portel/ncp?label=downloads/year)](https://www.npmjs.com/package/@portel/ncp)
 [![GitHub release downloads](https://img.shields.io/github/downloads/portel-dev/ncp/total?label=.dxt%20downloads)](https://github.com/portel-dev/ncp/releases)
 [![Latest release](https://img.shields.io/github/downloads/portel-dev/ncp/latest/total?label=latest%20.dxt)](https://github.com/portel-dev/ncp/releases/latest)
 [![License: Elastic-2.0](https://img.shields.io/badge/License-Elastic--2.0-blue.svg)](https://www.elastic.co/licensing/elastic-license)
