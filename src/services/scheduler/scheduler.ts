@@ -18,7 +18,8 @@ import { platform } from 'os';
 
 export interface CreateJobOptions {
   name: string;
-  schedule: string; // Natural language or cron expression
+  schedule: string; // Natural language, cron expression, or RFC 3339 datetime
+  timezone?: string; // IANA timezone (e.g., "America/New_York"), defaults to system timezone
   tool: string; // Format: "mcp_name:tool_name"
   parameters: Record<string, any>;
   description?: string;
@@ -148,12 +149,32 @@ export class Scheduler {
 
     logger.info(`[Scheduler] Creating job: ${options.name}`);
 
-    // Parse schedule (natural language or cron expression)
+    // Default timezone to system timezone if not provided
+    const timezone = options.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    // Parse schedule (RFC 3339 datetime, cron expression, or natural language)
     let cronExpression: string;
     let fireOnce = options.fireOnce || false;
 
+    // Check if it's RFC 3339 datetime (one-time execution with timezone)
+    if (this.isRFC3339DateTime(options.schedule)) {
+      const scheduledDate = new Date(options.schedule);
+      if (isNaN(scheduledDate.getTime())) {
+        throw new Error(`Invalid RFC 3339 datetime: ${options.schedule}`);
+      }
+
+      // Convert to cron expression for the scheduled time (in system local time)
+      const minute = scheduledDate.getMinutes();
+      const hour = scheduledDate.getHours();
+      const day = scheduledDate.getDate();
+      const month = scheduledDate.getMonth() + 1;
+      cronExpression = `${minute} ${hour} ${day} ${month} *`;
+      fireOnce = true; // RFC 3339 datetime is always one-time
+
+      logger.info(`[Scheduler] Converted RFC 3339 datetime to cron: ${cronExpression}`);
+    }
     // Check if it's already a valid cron expression
-    if (this.isCronExpression(options.schedule)) {
+    else if (this.isCronExpression(options.schedule)) {
       cronExpression = options.schedule;
     } else {
       // Parse as natural language
@@ -218,6 +239,7 @@ export class Scheduler {
       name: options.name,
       description: options.description,
       cronExpression,
+      timezone, // Store IANA timezone
       tool: options.tool,
       parameters: options.parameters,
       fireOnce,
@@ -252,6 +274,17 @@ export class Scheduler {
   private isCronExpression(schedule: string): boolean {
     const parts = schedule.trim().split(/\s+/);
     return parts.length === 5 && CronManager.validateCronExpression(schedule).valid;
+  }
+
+  /**
+   * Check if string is an RFC 3339 datetime with timezone
+   * Examples: "2025-12-25T15:00:00-05:00", "2025-12-25T20:00:00Z"
+   */
+  private isRFC3339DateTime(schedule: string): boolean {
+    // RFC 3339 format includes date, time, and timezone offset
+    // Must have 'T' separator and either 'Z' or timezone offset ('+'/'-')
+    const rfc3339Pattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+    return rfc3339Pattern.test(schedule.trim());
   }
 
   /**

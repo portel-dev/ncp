@@ -10,6 +10,7 @@ export interface ScheduledJob {
 
   // Schedule configuration
   cronExpression: string;
+  timezone?: string; // IANA timezone (e.g., "America/New_York", "UTC"), defaults to system timezone
 
   // MCP tool to execute
   tool: string; // Format: "mcp_name:tool_name"

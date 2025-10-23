@@ -88,7 +88,18 @@ export class SchedulerMCP implements InternalMCP {
           },
           schedule: {
             type: 'string',
-            description: 'Schedule: natural language ("every day at 2am", "every 5 minutes") or cron ("0 2 * * *")'
+            description: 'Schedule in one of these formats:\n' +
+              '1. One-time: RFC 3339 datetime with timezone (e.g., "2025-12-25T15:00:00-05:00" or "2025-12-25T20:00:00Z")\n' +
+              '2. Recurring: Cron expression (e.g., "0 14 * * *") - uses timezone parameter\n' +
+              '3. Natural language (e.g., "every day at 2pm") - uses timezone parameter\n' +
+              `System timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}\n` +
+              `Current server time: ${new Date().toISOString()}`
+          },
+          timezone: {
+            type: 'string',
+            description: 'IANA timezone for recurring schedules (e.g., "America/New_York", "Europe/London", "UTC"). ' +
+              `Defaults to system timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}. ` +
+              'Ignored if schedule is RFC 3339 datetime (timezone is in the datetime string).'
           },
           active: {
             type: 'boolean',
@@ -345,6 +356,7 @@ export class SchedulerMCP implements InternalMCP {
       const job = await this.scheduler.createJob({
         name: args.name,
         schedule: args.schedule,
+        timezone: args.timezone, // IANA timezone or defaults to system
         tool: args.tool,
         parameters: args.parameters,
         description: args.description,
@@ -366,6 +378,7 @@ export class SchedulerMCP implements InternalMCP {
                           `  • ID: ${job.id}\n` +
                           `  • Tool: ${job.tool}\n` +
                           `  • Schedule: ${job.cronExpression}\n` +
+                          `${job.timezone ? `  • Timezone: ${job.timezone}\n` : ''}` +
                           `  • Status: ${active ? 'active' : 'paused'}\n` +
                           `  • Type: ${job.fireOnce ? 'One-time' : 'Recurring'}\n` +
                           `${job.description ? `  • Description: ${job.description}\n` : ''}` +
