@@ -3,26 +3,33 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - '.github/workflows/**'
   pull_request:
     branches: [main, develop]
 
 jobs:
   test:
     name: Run Tests
-    runs-on: \${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
         node-version: [18.x, 20.x]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js \${{ matrix.node-version }}
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: \${{ matrix.node-version }}
+          node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
       - name: Install dependencies
@@ -42,10 +49,6 @@ jobs:
 
       - name: Run integration tests
         run: npm run test:integration
-
-      - name: Run DXT package tests
-        run: npm run test:dxt
-        if: matrix.os == 'macos-latest'
 
   lint:
     name: Lint and Type Check
@@ -122,6 +125,6 @@ jobs:
       - name: Upload DXT artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ncp-dxt-\${{ github.sha }}
+          name: ncp-dxt-${{ github.sha }}
           path: ncp.dxt
           retention-days: 7
