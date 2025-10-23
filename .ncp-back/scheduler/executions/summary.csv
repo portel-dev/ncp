@@ -1,2 +1,0 @@
-executionId,jobId,jobName,tool,startedAt,duration,status,errorMessage
-test-exec-123,test-job-456,Test Job,test:tool,2025-10-20T06:20:04.458Z,,success,

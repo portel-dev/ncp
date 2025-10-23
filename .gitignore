@@ -23,10 +23,14 @@ coverage/
 
 # Cache and temp files
 .ncp/
+.ncp-back/
 *.cache
 *.tmp
 *.temp
 *.backup.*
+
+# Claude-specific configuration (personal, not for OSS)
+.claude/
 
 # AI and draft content
 *.prd.md
