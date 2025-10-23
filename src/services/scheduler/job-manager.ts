@@ -10,10 +10,22 @@ import { ScheduledJob, JobsStorage } from '../../types/scheduler.js';
 import { logger } from '../../utils/logger.js';
 
 export class JobManager {
-  private jobsFile: string;
+  private jobsFile: string | null = null;
+  private initialized: boolean = false;
   private static STORAGE_VERSION = '1.0.0';
 
   constructor() {
+    // Lazy initialization - don't traverse directories during construction
+  }
+
+  /**
+   * Initialize paths and directories on first use
+   */
+  private ensureInitialized(): void {
+    if (this.initialized) {
+      return;
+    }
+
     const schedulerDir = getSchedulerDirectory();
     this.jobsFile = join(schedulerDir, 'jobs.json');
 
@@ -22,13 +34,16 @@ export class JobManager {
       mkdirSync(schedulerDir, { recursive: true });
       logger.info(`[JobManager] Created scheduler directory: ${schedulerDir}`);
     }
+
+    this.initialized = true;
   }
 
   /**
    * Load all jobs from storage
    */
   private loadJobs(): JobsStorage {
-    if (!existsSync(this.jobsFile)) {
+    this.ensureInitialized();
+    if (!existsSync(this.jobsFile!)) {
       return {
         version: JobManager.STORAGE_VERSION,
         jobs: {}
@@ -36,7 +51,7 @@ export class JobManager {
     }
 
     try {
-      const content = readFileSync(this.jobsFile, 'utf-8');
+      const content = readFileSync(this.jobsFile!, 'utf-8');
       const storage: JobsStorage = JSON.parse(content);
 
       // Validate storage version
@@ -59,9 +74,10 @@ export class JobManager {
    * Save jobs to storage
    */
   private saveJobs(storage: JobsStorage): void {
+    this.ensureInitialized();
     try {
       const content = JSON.stringify(storage, null, 2);
-      writeFileSync(this.jobsFile, content, 'utf-8');
+      writeFileSync(this.jobsFile!, content, 'utf-8');
       logger.debug(`[JobManager] Saved ${Object.keys(storage.jobs).length} jobs to storage`);
     } catch (error) {
       logger.error(`[JobManager] Failed to save jobs: ${error instanceof Error ? error.message : String(error)}`);

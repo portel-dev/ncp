@@ -134,93 +134,37 @@ With NCP as Chief of Staff:
 
 ## 🚀 **Installation**
 
-Choose your preferred installation method:
+Choose your MCP client for detailed installation instructions:
 
-| Method | Best For | Downloads |
-|--------|----------|-----------|
-| **📦 .dxt Bundle** | Claude Desktop users | ![.dxt downloads](https://img.shields.io/github/downloads/portel-dev/ncp/total?label=downloads&color=green) |
-| **📥 npm Package** | All MCP clients, CLI users | ![npm downloads](https://img.shields.io/npm/dt/@portel/ncp?label=downloads&color=blue) |
-
-### **⚡ Option 1: One-Click Installation (.dxt)** - Claude Desktop Only
-
-**For Claude Desktop users** - Download and double-click to install:
-
-1. **Download NCP Desktop Extension:** [ncp.dxt](https://github.com/portel-dev/ncp/releases/latest/download/ncp.dxt)
-2. **Double-click** the downloaded `ncp.dxt` file
-3. **Claude Desktop** will prompt you to install - click "Install"
-4. **Auto-sync with Claude Desktop** - NCP continuously syncs MCPs:
-   - Detects MCPs from `claude_desktop_config.json`
-   - Detects .dxt-installed extensions
-   - **Runs on every startup** to find new MCPs
-   - Uses internal `add` command for cache coherence
-
-> 🔄 **Continuous sync:** NCP automatically detects and imports new MCPs every time you start it! Add an MCP to Claude Desktop → NCP auto-syncs it on next startup. Zero manual configuration needed.
-
-If you want to add more MCPs later, **configure manually** by editing `~/.ncp/profiles/all.json`:
-
-```bash
-# Edit the profile configuration
-nano ~/.ncp/profiles/all.json
-```
-
-```json
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/yourname"]
-    },
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_xxx"
-      }
-    }
-  }
-}
-```
-
-5. **Restart Claude Desktop** and NCP will load your configured MCPs
-
-> ℹ️ **About .dxt (Desktop Extension) format:**
-> - **Slim & Fast:** Desktop extension is MCP-only (126KB, no CLI code)
-> - **Manual config:** Edit JSON files directly (no `ncp add` command)
-> - **Power users:** Fastest startup, direct control over configuration
-> - **Optional CLI:** Install `npm install -g @portel/ncp` separately if you want CLI tools
->
-> **Why .dxt is slim:**
-> The .dxt (Desktop Extension) format excludes all CLI code, making it 13% smaller and faster to load than the full npm package. Perfect for production use where you manage configs manually or via automation.
+| Client | Installation Guide | Best For |
+|--------|-------------------|----------|
+| **Claude Desktop** | **[→ Full Guide](docs/clients/claude-desktop.md)** | One-click .dxt install with auto-sync |
+| **Claude Code** | Works out of the box! | Terminal-first AI workflows |
+| **Cursor** | Coming soon | Code editor with AI |
+| **VS Code** | Coming soon | GitHub Copilot + MCPs |
+| **Cline** | Coming soon | VS Code AI extension |
+| **Continue** | Coming soon | VS Code AI assistant |
+| **Other Clients** | [Quick Start ↓](#quick-start-npm) | Any MCP-compatible client |
 
 ---
 
-### **🔧 Option 2: npm Installation** - All MCP Clients (Cursor, Cline, Continue, etc.)
+### Quick Start (npm) {#quick-start-npm}
 
-### **Step 1: Import Your Existing MCPs** ⚡
+For advanced users or MCP clients not listed above:
 
-Already have MCPs? Don't start over - import everything instantly:
-
+**Step 1: Install NCP**
 ```bash
-# Install NCP globally (recommended)
 npm install -g @portel/ncp
-
-# Copy your claude_desktop_config.json content to clipboard:
-# 1. Open your claude_desktop_config.json file (see locations above)
-# 2. Select all content (Ctrl+A / Cmd+A) and copy (Ctrl+C / Cmd+C)
-# 3. Then run:
-ncp config import
-
-# ✨ Magic! NCP auto-detects and imports ALL your MCPs from clipboard
 ```
 
-> **Note:** All commands below assume global installation (`npm install -g`). For npx usage, see the [Alternative Installation](#alternative-installation-with-npx) section.
+**Step 2: Import existing MCPs (optional)**
+```bash
+ncp config import  # Paste your config JSON when prompted
+```
 
-![NCP Import Feature](docs/images/ncp-import.png)
+**Step 3: Configure your client**
 
-### **Step 2: Connect NCP to Your AI** 🔗
-
-Replace your entire MCP configuration with this **single entry**:
-
+Replace your MCP configuration with:
 ```json
 {
   "mcpServers": {
@@ -231,13 +175,9 @@ Replace your entire MCP configuration with this **single entry**:
 }
 ```
 
-### **Step 3: Watch the Magic** ✨
-
-Your AI now sees just 2 simple tools instead of 50+ complex ones:
+**✅ Done!** Your AI now sees just 2 tools instead of 50+.
 
 ![NCP List Overview](docs/images/ncp-list.png)
-
-**🎉 Done!** Same tools, same capabilities, but your AI is now **focused** and **efficient**.
 
 ---
 
@@ -297,37 +237,6 @@ ncp run filesystem:read_file --params '{"path": "/tmp/test.txt"}' --dry-run
 - `ncp list` shows your imported MCPs
 - `ncp find` returns relevant tools
 - Your AI client shows only NCP in its tool list
-
----
-
-## 🔄 **Alternative Installation with npx**
-
-Prefer not to install globally? Use `npx` for any client configuration:
-
-```bash
-# All the above commands work with npx - just replace 'ncp' with 'npx @portel/ncp':
-
-# Import MCPs
-npx @portel/ncp config import
-
-# Add MCPs
-npx @portel/ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/Documents
-
-# Find tools
-npx @portel/ncp find "file operations"
-
-# Configure client (example: Claude Desktop)
-{
-  "mcpServers": {
-    "ncp": {
-      "command": "npx",
-      "args": ["@portel/ncp"]
-    }
-  }
-}
-```
-
-> **When to use npx:** Perfect for trying NCP, CI/CD environments, or when you can't install packages globally.
 
 ---
 
@@ -413,12 +322,9 @@ ncp add puppeteer npx @hisma/server-puppeteer
 
 ### **Claude Desktop** (Most Popular)
 
-**Configuration File Location:**
-- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux:** `~/.config/Claude/claude_desktop_config.json`
+**📖 [→ Full Installation Guide](docs/clients/claude-desktop.md)** - Complete guide with .dxt installation, auto-sync, configuration options, and troubleshooting.
 
-Replace your entire `claude_desktop_config.json` with:
+**Quick config snippet** (for npm installation):
 ```json
 {
   "mcpServers": {
@@ -430,8 +336,6 @@ Replace your entire `claude_desktop_config.json` with:
 ```
 
 **📌 Important:** Restart Claude Desktop after saving the config file.
-
-> **Note:** Configuration file locations are current as of this writing. For the most up-to-date setup instructions, please refer to the [official Claude Desktop documentation](https://claude.ai/docs).
 
 ### **Claude Code**
 NCP works automatically! Just run:

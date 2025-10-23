@@ -10,11 +10,23 @@ import { JobExecution, ExecutionSummary } from '../../types/scheduler.js';
 import { logger } from '../../utils/logger.js';
 
 export class ExecutionRecorder {
-  private summaryFile: string;
-  private resultsDir: string;
+  private summaryFile: string | null = null;
+  private resultsDir: string | null = null;
+  private initialized: boolean = false;
   private static CSV_HEADERS = 'executionId,jobId,jobName,tool,startedAt,duration,status,errorMessage\n';
 
   constructor() {
+    // Lazy initialization - don't traverse directories during construction
+  }
+
+  /**
+   * Initialize paths and directories on first use
+   */
+  private ensureInitialized(): void {
+    if (this.initialized) {
+      return;
+    }
+
     const executionsDir = getSchedulerExecutionsDirectory();
     this.resultsDir = getSchedulerResultsDirectory();
     this.summaryFile = join(executionsDir, 'summary.csv');
@@ -34,19 +46,22 @@ export class ExecutionRecorder {
       writeFileSync(this.summaryFile, ExecutionRecorder.CSV_HEADERS, 'utf-8');
       logger.info(`[ExecutionRecorder] Created summary CSV file`);
     }
+
+    this.initialized = true;
   }
 
   /**
    * Start recording an execution (creates initial record)
    */
   startExecution(execution: Omit<JobExecution, 'completedAt' | 'duration' | 'result' | 'error'>): void {
+    this.ensureInitialized();
     const fullExecution: JobExecution = {
       ...execution,
       status: 'running'
     };
 
     // Write detailed JSON result
-    const resultFile = join(this.resultsDir, `${execution.executionId}.json`);
+    const resultFile = join(this.resultsDir!, `${execution.executionId}.json`);
     writeFileSync(resultFile, JSON.stringify(fullExecution, null, 2), 'utf-8');
 
     logger.info(`[ExecutionRecorder] Started execution: ${execution.executionId} for job ${execution.jobName}`);
@@ -61,7 +76,8 @@ export class ExecutionRecorder {
     result?: any,
     error?: { message: string; code?: number; data?: any }
   ): void {
-    const resultFile = join(this.resultsDir, `${executionId}.json`);
+    this.ensureInitialized();
+    const resultFile = join(this.resultsDir!, `${executionId}.json`);
 
     if (!existsSync(resultFile)) {
       logger.error(`[ExecutionRecorder] Cannot complete execution: ${executionId} not found`);
@@ -100,8 +116,9 @@ export class ExecutionRecorder {
    * Append execution summary to CSV
    */
   private appendToCSV(execution: JobExecution): void {
+    this.ensureInitialized();
     const row = this.executionToCSVRow(execution);
-    appendFileSync(this.summaryFile, row, 'utf-8');
+    appendFileSync(this.summaryFile!, row, 'utf-8');
   }
 
   /**
@@ -133,7 +150,8 @@ export class ExecutionRecorder {
    * Get execution by ID
    */
   getExecution(executionId: string): JobExecution | null {
-    const resultFile = join(this.resultsDir, `${executionId}.json`);
+    this.ensureInitialized();
+    const resultFile = join(this.resultsDir!, `${executionId}.json`);
 
     if (!existsSync(resultFile)) {
       return null;
@@ -164,12 +182,13 @@ export class ExecutionRecorder {
     startDate?: string;
     endDate?: string;
   }): ExecutionSummary[] {
-    if (!existsSync(this.summaryFile)) {
+    this.ensureInitialized();
+    if (!existsSync(this.summaryFile!)) {
       return [];
     }
 
     try {
-      const content = readFileSync(this.summaryFile, 'utf-8');
+      const content = readFileSync(this.summaryFile!, 'utf-8');
       const lines = content.split('\n').slice(1); // Skip header
 
       const executions: ExecutionSummary[] = [];
@@ -255,6 +274,7 @@ export class ExecutionRecorder {
     deletedCount: number;
     errors: string[];
   } {
+    this.ensureInitialized();
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
     const cutoffISO = cutoffDate.toISOString();
@@ -285,7 +305,7 @@ export class ExecutionRecorder {
 
         if (shouldDelete) {
           try {
-            const resultFile = join(this.resultsDir, `${exec.executionId}.json`);
+            const resultFile = join(this.resultsDir!, `${exec.executionId}.json`);
             if (existsSync(resultFile)) {
               unlinkSync(resultFile);
               deletedCount++;
@@ -311,17 +331,18 @@ export class ExecutionRecorder {
    * Rebuild CSV from existing JSON files
    */
   private rebuildCSV(): void {
+    this.ensureInitialized();
     try {
       // Get all existing result files
-      const files = readdirSync(this.resultsDir).filter(f => f.endsWith('.json'));
+      const files = readdirSync(this.resultsDir!).filter(f => f.endsWith('.json'));
 
       // Start fresh CSV
-      writeFileSync(this.summaryFile, ExecutionRecorder.CSV_HEADERS, 'utf-8');
+      writeFileSync(this.summaryFile!, ExecutionRecorder.CSV_HEADERS, 'utf-8');
 
       // Read each JSON and append to CSV
       for (const file of files) {
         try {
-          const content = readFileSync(join(this.resultsDir, file), 'utf-8');
+          const content = readFileSync(join(this.resultsDir!, file), 'utf-8');
           const execution: JobExecution = JSON.parse(content);
 
           // Only add completed executions to CSV

@@ -10,8 +10,9 @@ import { SchedulerConfig } from '../../types/scheduler.js';
 import { logger } from '../../utils/logger.js';
 
 export class SettingsManager {
-  private configFile: string;
-  private config: SchedulerConfig;
+  private configFile: string | null = null;
+  private config: SchedulerConfig | null = null;
+  private initialized: boolean = false;
 
   // Default configuration
   private static readonly DEFAULTS: SchedulerConfig = {
@@ -23,6 +24,17 @@ export class SettingsManager {
   };
 
   constructor() {
+    // Lazy initialization - don't traverse directories during construction
+  }
+
+  /**
+   * Initialize paths and configuration on first use
+   */
+  private ensureInitialized(): void {
+    if (this.initialized) {
+      return;
+    }
+
     const schedulerDir = getSchedulerDirectory();
     this.configFile = join(schedulerDir, 'config.json');
 
@@ -34,6 +46,7 @@ export class SettingsManager {
 
     // Load or create config
     this.config = this.loadConfig();
+    this.initialized = true;
   }
 
   /**
@@ -41,8 +54,8 @@ export class SettingsManager {
    */
   private loadConfig(): SchedulerConfig {
     try {
-      if (existsSync(this.configFile)) {
-        const content = readFileSync(this.configFile, 'utf-8');
+      if (existsSync(this.configFile!)) {
+        const content = readFileSync(this.configFile!, 'utf-8');
         const loaded = JSON.parse(content) as Partial<SchedulerConfig>;
 
         // Merge with defaults (for new fields added in updates)
@@ -66,8 +79,9 @@ export class SettingsManager {
    * Save configuration to file
    */
   private saveConfig(config: SchedulerConfig): void {
+    this.ensureInitialized();
     try {
-      writeFileSync(this.configFile, JSON.stringify(config, null, 2), 'utf-8');
+      writeFileSync(this.configFile!, JSON.stringify(config, null, 2), 'utf-8');
       logger.info('[SettingsManager] Saved configuration to file');
     } catch (error) {
       logger.error(`[SettingsManager] Failed to save config: ${error instanceof Error ? error.message : String(error)}`);
@@ -78,14 +92,16 @@ export class SettingsManager {
    * Get current configuration
    */
   getConfig(): SchedulerConfig {
-    return { ...this.config };
+    this.ensureInitialized();
+    return { ...this.config! };
   }
 
   /**
    * Update configuration (partial update)
    */
   updateConfig(updates: Partial<SchedulerConfig>): void {
-    this.config = { ...this.config, ...updates };
+    this.ensureInitialized();
+    this.config = { ...this.config!, ...updates };
     this.saveConfig(this.config);
     logger.info('[SettingsManager] Updated configuration');
   }
@@ -94,6 +110,7 @@ export class SettingsManager {
    * Reset to default configuration
    */
   resetToDefaults(): void {
+    this.ensureInitialized();
     this.config = { ...SettingsManager.DEFAULTS };
     this.saveConfig(this.config);
     logger.info('[SettingsManager] Reset configuration to defaults');

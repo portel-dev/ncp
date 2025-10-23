@@ -2,12 +2,15 @@
  * Context-Aware Credential Prompter
  *
  * Collects sensitive credentials using appropriate method based on context:
- * - Terminal mode: readline with hidden input
- * - MCP Server mode: Native OS dialogs
+ * Priority:
+ * 1. MCP Elicitation (if available) - Best for AI clients
+ * 2. Native OS dialogs - Fallback for MCP server mode
+ * 3. Terminal readline - For CLI usage
  */
 
 import { createInterface } from 'readline';
 import { showNativeDialog } from './native-dialog.js';
+import { collectCredential as collectViaElicitation, ElicitationServer } from './elicitation-helper.js';
 import { logger } from './logger.js';
 
 export interface CredentialPromptOptions {
@@ -15,6 +18,7 @@ export interface CredentialPromptOptions {
   description?: string;   // Additional context
   hidden?: boolean;       // Hide input (default: true for credentials)
   example?: string;       // Example value to show user
+  elicitationServer?: ElicitationServer; // Optional elicitation server for MCP protocol
 }
 
 /**
@@ -31,6 +35,23 @@ function isTerminalMode(): boolean {
     return false;
   }
 
+  return true;
+}
+
+/**
+ * Check if elicitation is available and supported
+ */
+function hasElicitationSupport(server?: ElicitationServer): boolean {
+  if (!server) {
+    return false;
+  }
+
+  // Check if the server has the elicitInput method
+  if (typeof server.elicitInput !== 'function') {
+    return false;
+  }
+
+  // We're in MCP server mode if elicitation server is provided
   return true;
 }
 
@@ -132,15 +153,39 @@ async function promptWithDialog(options: CredentialPromptOptions): Promise<strin
 /**
  * Prompt user for a credential using context-appropriate method
  *
- * Automatically detects:
- * - Terminal mode → Uses readline with hidden input
- * - MCP Server mode → Uses native OS dialog
+ * Priority chain:
+ * 1. MCP Elicitation (if elicitationServer provided) - MCP protocol standard
+ * 2. Native OS dialog (if not terminal mode) - Fallback for MCP server
+ * 3. Terminal readline (if terminal mode) - CLI usage
  *
  * @param options Credential prompt configuration
  * @returns The credential value, or null if user cancelled
  */
 export async function promptForCredential(options: CredentialPromptOptions): Promise<string | null> {
   try {
+    // Priority 1: Use MCP elicitation if available (MCP protocol standard)
+    if (hasElicitationSupport(options.elicitationServer)) {
+      logger.debug(`Using MCP elicitation for ${options.name}`);
+      try {
+        const credential = await collectViaElicitation(
+          options.elicitationServer!,
+          options.name,
+          options.name.toUpperCase().replace(/\s+/g, '_'),
+          options.example
+        );
+
+        if (credential) {
+          return credential;
+        }
+
+        // User cancelled or elicitation failed, try fallback
+        logger.warn(`Elicitation failed or cancelled for ${options.name}, trying fallback`);
+      } catch (error: any) {
+        logger.warn(`Elicitation error for ${options.name}: ${error.message}, trying fallback`);
+      }
+    }
+
+    // Priority 2/3: Fall back to dialog or terminal based on context
     if (isTerminalMode()) {
       logger.debug(`Using terminal mode for ${options.name}`);
       return await promptInTerminal(options);
