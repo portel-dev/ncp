@@ -1,6 +1,6 @@
 {
   "name": "@portel/ncp",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "mcpName": "io.github.portel-dev/ncp",
   "description": "Natural Context Provider. 1 MCP to rule them all - Your MCP Concierge. Complete platform for discovering, managing, and accessing MCPs. Simplifies 50+ tools into 2, auto-syncs with Claude Desktop, saves 97% tokens.",
   "main": "dist/index.js",

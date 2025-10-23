@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "ncp",
   "display_name": "NCP - Natural Context Provider",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "description": "Your MCP Concierge - Complete platform for discovering, managing, and accessing MCPs. Auto-imports, intelligent discovery, and 2-tool simplification with 97% token reduction.",
   "long_description": "Natural Context Provider. 1 MCP to rule them all - Your MCP Concierge. Complete platform for discovering, managing, and accessing MCPs. Transforms 50+ scattered tools into 2 simple commands, auto-syncs with Claude Desktop/Perplexity/Cursor/Cline/Continue, saves 97% tokens. Features: semantic search, intelligent routing, dynamic runtime detection, health monitoring, auto-discovery and installation, AI-assisted management, and optional global CLI. Create once, use everywhere.",
   "author": {
