@@ -119,15 +119,11 @@ export class DeviceFlowAuthenticator {
     let pollInterval = interval;
     let cancelled = false;
 
-    // Set up keyboard listener for cancellation
+    // Track stdin state for safe cleanup
     const stdin = process.stdin;
     const wasRaw = stdin.isRaw;
-
-    if (stdin.isTTY) {
-      stdin.setRawMode(true);
-      stdin.resume();
-      stdin.setEncoding('utf8');
-    }
+    let listenerAttached = false;
+    let stdinModified = false;
 
     const onKeypress = (char: string) => {
       // Ctrl+C
@@ -136,9 +132,17 @@ export class DeviceFlowAuthenticator {
       }
     };
 
-    stdin.on('data', onKeypress);
-
     try {
+      // Set up keyboard listener for cancellation (inside try for safe cleanup)
+      if (stdin.isTTY) {
+        stdin.setRawMode(true);
+        stdin.resume();
+        stdin.setEncoding('utf8');
+        stdinModified = true;
+      }
+
+      stdin.on('data', onKeypress);
+      listenerAttached = true;
       while (Date.now() < expiresAt && !cancelled) {
         await this.sleep(pollInterval);
 
@@ -209,11 +213,20 @@ export class DeviceFlowAuthenticator {
 
       throw new Error('Authentication timed out. Please try again.');
     } finally {
-      // Clean up keyboard listener
-      stdin.removeListener('data', onKeypress);
-      if (stdin.isTTY) {
-        stdin.setRawMode(wasRaw || false);
-        stdin.pause();
+      // Clean up keyboard listener (only if it was attached)
+      if (listenerAttached) {
+        stdin.removeListener('data', onKeypress);
+      }
+
+      // Restore stdin state (only if it was modified)
+      if (stdinModified && stdin.isTTY) {
+        try {
+          stdin.setRawMode(wasRaw || false);
+          stdin.pause();
+        } catch (e) {
+          // Ignore cleanup errors (stdin might already be closed)
+          logger.debug(`Failed to restore stdin state: ${e}`);
+        }
       }
     }
   }
