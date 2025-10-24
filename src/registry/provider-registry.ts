@@ -10,7 +10,7 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const REGISTRY_API = 'https://ncp-registry.arul-e2e.workers.dev/api/providers';
+const REGISTRY_API = 'https://api.mcps.portel.dev/api/providers';
 
 export interface ProviderStdioSetup {
   description: string;
