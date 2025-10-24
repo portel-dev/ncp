@@ -262,6 +262,19 @@ export class NCPManagementMCP implements InternalMCP {
 
     const transportType = url ? 'http' : 'stdio';
 
+    // Validate stdio command before proceeding (security check)
+    if (transportType === 'stdio') {
+      const validationError = this.validateMCPCommand(command!, commandArgs);
+      if (validationError) {
+        return {
+          success: false,
+          error: `❌ Security validation failed: ${validationError}\n\n` +
+                 `For security, NCP validates all MCP commands before installation.\n` +
+                 `If you believe this is a legitimate MCP, please review the command and ensure it doesn't contain dangerous characters.`
+        };
+      }
+    }
+
     // ===== CONFIRM BEFORE ADD (Server-side enforcement) =====
     if (this.elicitationServer) {
       // Build confirmation message based on transport type
@@ -1152,6 +1165,13 @@ Do you want to remove this MCP?`;
       let client: any = null;
 
       try {
+        // Validate command for security (prevent command injection)
+        const validationError = this.validateMCPCommand(config.command, config.args || []);
+        if (validationError) {
+          logger.warn(`Command validation failed for "${mcpName}": ${validationError}`);
+          return null;
+        }
+
         // Create transport
         transport = new StdioClientTransport({
           command: config.command,
@@ -1250,5 +1270,65 @@ Do you want to remove this MCP?`;
         return null;
       }
     }
+  }
+
+  /**
+   * Validate MCP command for security
+   * Prevents command injection by checking against allowlist and validating format
+   *
+   * @returns null if valid, error message if invalid
+   */
+  private validateMCPCommand(command: string, args: string[]): string | null {
+    // Validate command is a string and not empty
+    if (!command || typeof command !== 'string') {
+      return 'Command must be a non-empty string';
+    }
+
+    // Allowlist of safe command names (base name only, not full path)
+    const SAFE_COMMANDS = [
+      'node', 'npx', 'npm', 'pnpm', 'yarn', 'bun', 'deno',  // Node.js runtimes
+      'python', 'python3', 'pip', 'pipx', 'uv',              // Python
+      'docker', 'podman',                                     // Containers
+      'bash', 'sh', 'zsh',                                    // Shells (for wrapper scripts)
+      'go', 'cargo', 'rustc',                                 // Other runtimes
+      'java', 'javac'                                         // Java
+    ];
+
+    // Extract base command name (handle paths)
+    const path = require('path');
+    const baseCommand = path.basename(command);
+
+    // Check if base command is in allowlist
+    if (!SAFE_COMMANDS.includes(baseCommand)) {
+      // Not in allowlist - log warning but allow (user may have custom MCPs)
+      logger.warn(`MCP command "${baseCommand}" not in known safe commands list. Proceeding with caution.`);
+    }
+
+    // Check for shell metacharacters that could be used for injection
+    const DANGEROUS_CHARS = /[;&|`$()<>]/;
+    if (DANGEROUS_CHARS.test(command)) {
+      return `Command contains dangerous shell metacharacters: ${command}`;
+    }
+
+    // Validate args don't contain injection attempts
+    for (const arg of args) {
+      if (typeof arg !== 'string') {
+        return `All arguments must be strings, got: ${typeof arg}`;
+      }
+
+      // Check for dangerous patterns in args (more lenient than command)
+      // Allow common arg patterns like --flag, -f, @package, ./path
+      const VERY_DANGEROUS = /[;&|`$()><]/;
+      if (VERY_DANGEROUS.test(arg)) {
+        return `Argument contains dangerous characters: ${arg}`;
+      }
+    }
+
+    // Path traversal check - ensure command doesn't escape upward
+    if (command.includes('../')) {
+      return 'Command contains path traversal (../)';
+    }
+
+    return null; // Valid
   }
 }
