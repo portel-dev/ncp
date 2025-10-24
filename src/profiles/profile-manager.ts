@@ -151,24 +151,47 @@ export class ProfileManager {
         return; // All client MCPs already in NCP
       }
 
-      // Import missing MCPs using add command (ensures cache coherence)
+      // Import missing MCPs in parallel with timeout (prevents startup delays)
+      const AUTO_IMPORT_TIMEOUT = 30000; // 30 second max for all auto-imports
       const imported: string[] = [];
 
-      for (const { name, config } of missingMCPs) {
-        try {
-          // Remove metadata fields before adding (internal use only)
-          const cleanConfig = {
-            command: config.command,
-            args: config.args || [],
-            env: config.env || {}
-          };
+      try {
+        // Parallelize MCP additions for faster startup
+        const importPromises = missingMCPs.map(async ({ name, config }) => {
+          try {
+            // Remove metadata fields before adding (internal use only)
+            const cleanConfig = {
+              command: config.command,
+              args: config.args || [],
+              env: config.env || {}
+            };
 
-          // Use addMCPToProfile to ensure cache updates happen
-          await this.addMCPToProfile('all', name, cleanConfig);
-          imported.push(name);
-        } catch (error) {
-          console.warn(`Failed to import ${name}: ${error}`);
+            // Use addMCPToProfile to ensure cache updates happen
+            await this.addMCPToProfile('all', name, cleanConfig);
+            return { name, success: true };
+          } catch (error) {
+            console.warn(`Failed to import ${name}: ${error}`);
+            return { name, success: false, error };
+          }
+        });
+
+        // Wait for all imports with timeout
+        const results = await Promise.race([
+          Promise.allSettled(importPromises),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Auto-import timeout')), AUTO_IMPORT_TIMEOUT)
+          )
+        ]);
+
+        // Collect successfully imported MCPs
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value.success) {
+            imported.push(result.value.name);
+          }
         }
+      } catch (error: any) {
+        // Timeout or critical error - log but don't block startup
+        console.warn(`Auto-import interrupted: ${error.message}`);
       }
 
       if (imported.length > 0) {
@@ -187,70 +210,6 @@ export class ProfileManager {
       // Silent failure - don't block startup if auto-import fails
       // User can still configure manually
       console.warn(`Auto-sync failed: ${error}`);
-    }
-  }
-
-  /**
-   * Get serverInfo.name from an MCP by briefly connecting to it
-   * This is the protocol-based way to identify an MCP server
-   * Uses a short timeout to avoid blocking startup
-   */
-  private async getServerInfoName(config: any, timeoutMs: number = 2000): Promise<string | null> {
-    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
-    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
-
-    let transport: any = null;
-    let client: any = null;
-
-    try {
-      // Create transport (it will spawn the child process internally)
-      transport = new StdioClientTransport({
-        command: config.command,
-        args: config.args || [],
-        env: { ...process.env, ...config.env },
-        stderr: 'ignore' // Suppress stderr output
-      });
-
-      client = new Client(
-        {
-          name: 'ncp-detector',
-          version: '1.0.0'
-        },
-        {
-          capabilities: {}
-        }
-      );
-
-      // Connect with configurable timeout (default 2s for quick check)
-      await Promise.race([
-        client.connect(transport),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Connection timeout')), timeoutMs)
-        )
-      ]);
-
-      // Get server info from the initialized connection
-      const serverInfo = client.getServerVersion();
-      return serverInfo?.name || null;
-    } catch (error) {
-      throw new Error(`Failed to get serverInfo: ${error}`);
-    } finally {
-      // Clean up
-      try {
-        if (client) {
-          await client.close();
-        }
-      } catch (e) {
-        // Ignore cleanup errors
-      }
-
-      try {
-        if (transport) {
-          await transport.close();
-        }
-      } catch (e) {
-        // Ignore cleanup errors
-      }
     }
   }
 
