@@ -433,29 +433,25 @@ export class MCPServer {
         if (registryCandidates.length > 0) {
           output += `💡 **I don't have this capability yet, but found ${registryCandidates.length} MCP${registryCandidates.length > 1 ? 's' : ''} in the registry that can help:**\n\n`;
 
-          // Show top 5 results
-          const topCandidates = registryCandidates.slice(0, 5);
-          topCandidates.forEach(candidate => {
+          // Show top 3 results with installation info
+          const topCandidates = registryCandidates.slice(0, 3);
+          topCandidates.forEach((candidate, index) => {
             const statusBadge = candidate.status === 'active' ? '⭐' : '📦';
-            const envInfo = candidate.envVars?.length ? ` ⚠️ Requires ${candidate.envVars.length} env var${candidate.envVars.length > 1 ? 's' : ''}` : '';
-            output += `${candidate.number}. ${statusBadge} **${candidate.displayName}**${envInfo}\n`;
+            const envInfo = candidate.envVars?.length ? ` 🔑 Requires credentials` : '';
+            output += `**${index + 1}. ${candidate.displayName}**${envInfo}\n`;
             output += `   ${candidate.description}\n`;
-            output += `   Version: ${candidate.version}\n\n`;
+            output += `   📦 Install: Use \`add\` tool with \`mcp_name="${candidate.name}"\`\n\n`;
           });
 
-          output += `\n🚀 **To install one of these MCPs:**\n\n`;
-          output += `**Option 1: Use discovery import (recommended):**\n`;
-          output += `\`\`\`\nrun("ncp:import", {\n`;
-          output += `  from: "discovery",\n`;
-          output += `  source: "${description}",\n`;
-          output += `  selection: "1"  // or "1,3,5" for multiple, or "*" for all\n`;
-          output += `})\n\`\`\`\n\n`;
+          if (registryCandidates.length > 3) {
+            output += `... and ${registryCandidates.length - 3} more available\n\n`;
+          }
 
-          output += `**Option 2: Direct add with clipboard secrets:**\n`;
-          output += `1. Copy config to clipboard (for secrets): \`{"env":{"API_KEY":"your_secret"}}\`\n`;
-          output += `2. Call: \`run("ncp:add", {mcp_name: "${topCandidates[0].displayName}", command: "${topCandidates[0].command}", args: ${JSON.stringify(topCandidates[0].args)}})\`\n\n`;
-
-          output += `💡 *MCPs will be available after NCP restarts.*`;
+          output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+          output += `📌 **Next step:** Call the \`add\` tool to install an MCP\n`;
+          output += `   Example: \`add\` with \`mcp_name="${topCandidates[0].name}"\`\n`;
+          output += `   Then retry your search to access the new tools.\n`;
+          output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
           return {
             jsonrpc: '2.0',
