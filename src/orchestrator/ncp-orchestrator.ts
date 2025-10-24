@@ -165,6 +165,8 @@ export class NCPOrchestrator {
   private readonly CONNECTION_TIMEOUT = 10000; // 10 seconds
   private readonly IDLE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
   private readonly CLEANUP_INTERVAL = 60 * 1000; // Check every minute
+  private readonly MAX_CONNECTIONS = 50; // Maximum concurrent connections (prevents memory leaks)
+  private readonly MAX_EXECUTIONS_PER_CONNECTION = 1000; // Force reconnect after this many uses
   private cleanupTimer?: NodeJS.Timeout;
   private discovery: DiscoveryEngine;
   private healthMonitor: MCPHealthMonitor;
@@ -1084,12 +1086,24 @@ export class NCPOrchestrator {
   }
 
   private async getOrCreateConnection(mcpName: string): Promise<MCPConnection> {
-    // Return existing connection if available
+    // Check if existing connection exists and is still healthy
     const existing = this.connections.get(mcpName);
     if (existing) {
-      existing.lastUsed = Date.now();
-      existing.executionCount++;
-      return existing;
+      // Force reconnect if connection has been used too many times (prevents resource leaks)
+      if (existing.executionCount >= this.MAX_EXECUTIONS_PER_CONNECTION) {
+        logger.info(`🔄 Reconnecting ${mcpName} (reached ${existing.executionCount} executions)`);
+        await this.disconnectMCP(mcpName);
+        // Fall through to create new connection
+      } else {
+        existing.lastUsed = Date.now();
+        existing.executionCount++;
+        return existing;
+      }
+    }
+
+    // Before creating new connection, check if we're at the limit
+    if (this.connections.size >= this.MAX_CONNECTIONS) {
+      await this.evictLRUConnection();
     }
 
     const definition = this.definitions.get(mcpName);
@@ -1761,7 +1775,32 @@ export class NCPOrchestrator {
   }
 
   /**
-   * Clean up idle connections (like commercial version)
+   * Evict least recently used connection when pool is full
+   * Implements LRU (Least Recently Used) eviction policy
+   */
+  private async evictLRUConnection(): Promise<void> {
+    if (this.connections.size === 0) return;
+
+    // Find the least recently used connection
+    let lruName: string | null = null;
+    let oldestLastUsed = Infinity;
+
+    for (const [name, connection] of this.connections) {
+      if (connection.lastUsed < oldestLastUsed) {
+        oldestLastUsed = connection.lastUsed;
+        lruName = name;
+      }
+    }
+
+    if (lruName) {
+      const idleTime = Date.now() - oldestLastUsed;
+      logger.info(`🔄 Evicting LRU connection: ${lruName} (idle for ${Math.round(idleTime / 1000)}s, pool at limit)`);
+      await this.disconnectMCP(lruName);
+    }
+  }
+
+  /**
+   * Clean up idle connections and enforce pool health
    */
   private async cleanupIdleConnections(): Promise<void> {
     const now = Date.now();
@@ -1770,15 +1809,26 @@ export class NCPOrchestrator {
     for (const [name, connection] of this.connections) {
       const idleTime = now - connection.lastUsed;
 
+      // Disconnect if idle too long
       if (idleTime > this.IDLE_TIMEOUT) {
         logger.info(`🧹 Disconnecting idle MCP: ${name} (idle for ${Math.round(idleTime / 1000)}s)`);
         toDisconnect.push(name);
       }
+      // Also disconnect if execution count is too high (should have been caught earlier, but safety check)
+      else if (connection.executionCount >= this.MAX_EXECUTIONS_PER_CONNECTION) {
+        logger.info(`🧹 Disconnecting overused MCP: ${name} (${connection.executionCount} executions)`);
+        toDisconnect.push(name);
+      }
     }
 
-    // Disconnect idle connections
+    // Disconnect marked connections
     for (const name of toDisconnect) {
       await this.disconnectMCP(name);
+    }
+
+    // Log pool health stats periodically (every 10 cleanups = 10 minutes)
+    if (Math.random() < 0.1) {
+      logger.debug(`Connection pool: ${this.connections.size}/${this.MAX_CONNECTIONS} connections active`);
     }
   }
 
