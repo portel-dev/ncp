@@ -76,8 +76,28 @@ function transformMCPToProvider(mcp: any): Provider | null {
       recommended: meta?.recommendedTransport || mcp.transport?.type || 'stdio'
     };
 
-    // Add stdio config if available
-    if (mcp.transport?.type === 'stdio' || mcp.installCommand) {
+    // Check if this is an HTTP/SSE transport
+    const hasHttpTransport = mcp.transport?.type === 'http' || mcp.transport?.type === 'sse' || mcp.transport?.endpoint;
+    const hasHttpCommand = mcp.installCommand?.includes('HTTP endpoint') || mcp.installCommand?.startsWith('http');
+    const isHttpBased = hasHttpTransport || hasHttpCommand || meta?.recommendedTransport === 'http' || meta?.recommendedTransport === 'sse';
+
+    // Add HTTP config if available
+    if (isHttpBased) {
+      provider.http = {
+        url: mcp.transport?.endpoint || (hasHttpCommand ? mcp.installCommand.replace(/^Use HTTP endpoint:\s*/, '') : ''),
+        auth: meta?.authType || 'bearer',
+        docs: mcp.homepage || '',
+        notes: meta?.notes
+      };
+
+      // Update recommended transport if HTTP command detected
+      if (hasHttpCommand && provider.recommended === 'stdio') {
+        provider.recommended = 'http';
+      }
+    }
+
+    // Add stdio config if available (but NOT if it's clearly HTTP-based)
+    if (!isHttpBased && (mcp.transport?.type === 'stdio' || mcp.installCommand)) {
       provider.stdio = {
         command: mcp.runtimeHint || 'npx',
         args: mcp.installCommand?.split(' ').slice(1) || []
@@ -91,19 +111,6 @@ function transformMCPToProvider(mcp: any): Provider | null {
           needsSetup: true
         };
       }
-    }
-
-    // Add HTTP config if available
-    const hasHttpTransport = mcp.transport?.type === 'http' || mcp.transport?.type === 'sse' || mcp.transport?.endpoint;
-    const hasHttpCommand = mcp.installCommand?.includes('HTTP endpoint') || mcp.installCommand?.startsWith('http');
-
-    if (hasHttpTransport || hasHttpCommand || meta?.recommendedTransport === 'http' || meta?.recommendedTransport === 'sse') {
-      provider.http = {
-        url: mcp.transport?.endpoint || (hasHttpCommand ? mcp.installCommand.replace(/^Use HTTP endpoint:\s*/, '') : ''),
-        auth: meta?.authType || 'bearer',
-        docs: mcp.homepage || '',
-        notes: meta?.notes
-      };
     }
 
     return provider;

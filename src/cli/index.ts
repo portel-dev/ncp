@@ -740,13 +740,36 @@ async function handleKnownProvider(provider: any, options: any) {
     console.log(chalk.dim('  •') + ' View profiles: ' + chalk.cyan('ncp list'));
 
   } else if (transport === 'http' && provider.http) {
-    // HTTP transport - redirect to add-http command
-    console.log(chalk.yellow(`\n   ⚠️  HTTP transport requires additional configuration`));
-    console.log(chalk.dim(`   Documentation: ${provider.http.docs}`));
+    // HTTP transport - add automatically
+    console.log(chalk.dim(`   Adding ${provider.name} (HTTP) to profile...`));
+
+    const httpConfig: any = {
+      url: provider.http.url
+    };
+
+    // Add auth if specified
+    if (provider.http.auth && provider.http.auth !== 'bearer') {
+      httpConfig.auth = { type: provider.http.auth };
+    }
+
+    // Show documentation if available
     if (provider.http.notes) {
       console.log(chalk.dim(`   Note: ${provider.http.notes}`));
     }
-    console.log(chalk.dim(`\n   Use: ${chalk.cyan(`ncp add-http ${provider.id} ${provider.http.url}`)}\n`));
+
+    const profiles = options.profile || ['all'];
+    for (const profileName of profiles) {
+      await manager.addMCPToProfile(profileName, provider.id, httpConfig);
+      console.log(chalk.green(`   ✅ Added ${provider.name} to profile: ${profileName}`));
+    }
+
+    console.log(chalk.dim('\n💡 Next steps:'));
+    console.log(chalk.dim('  •') + ' Test: ' + chalk.cyan(`ncp find <query>`));
+    console.log(chalk.dim('  •') + ' View profiles: ' + chalk.cyan('ncp list'));
+    if (provider.http.docs) {
+      console.log(chalk.dim('  •') + ' Docs: ' + chalk.cyan(provider.http.docs));
+    }
+
   } else {
     console.log(chalk.red(`\n   ❌ Transport '${transport}' not available for ${provider.name}`));
     console.log(chalk.dim(`   Available: ${provider.stdio ? 'stdio' : ''} ${provider.http ? 'http' : ''}\n`));
