@@ -144,11 +144,11 @@ The command validation logic is integrated into the add MCP workflow and tested 
 
 | File | Status | Notes |
 |------|--------|-------|
-| `ncp-management-security.test.ts` | ⚠️ Needs refactor | Use callTool interface |
-| `profile-manager-autoimport.test.ts` | ⚠️ Needs refactor | Integration with ProfileManager |
-| `oauth-device-flow.test.ts` | ⚠️ Needs refactor | Mock process.stdin properly |
-| `ncp-orchestrator-pool.test.ts` | ⚠️ Needs refactor | Merge with existing tests |
-| `find-add-integration.test.ts` | ⚠️ Needs refactor | End-to-end test setup |
+| `tests/command-validation.test.ts` | ✅ Passing | 26 unit tests for command injection protection |
+| `tests/profile-manager-autoimport.test.ts` | ⚠️ Stub | Ready for integration |
+| `tests/oauth-device-flow.test.ts` | ⚠️ Stub | Ready for integration |
+| `tests/ncp-orchestrator-pool.test.ts` | ⚠️ Stub | Ready for integration |
+| `tests/find-add-integration.test.ts` | ⚠️ Stub | Ready for integration |
 
 ## Running Tests
 
