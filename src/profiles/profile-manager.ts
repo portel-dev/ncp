@@ -392,11 +392,17 @@ export class ProfileManager {
     const profile = await this.getProfile(profileName);
     if (!profile?.mcpServers) return undefined;
 
-    // Filter out invalid configurations (ensure they have command property)
+    // Filter out invalid configurations (ensure they have either command or url property)
     const validMCPs: Record<string, MCPConfig> = {};
     for (const [name, config] of Object.entries(profile.mcpServers)) {
-      if (typeof config === 'object' && config !== null && 'command' in config && typeof config.command === 'string') {
-        validMCPs[name] = config as MCPConfig;
+      if (typeof config === 'object' && config !== null) {
+        // Valid if it has command (stdio) OR url (HTTP/SSE)
+        const hasStdio = 'command' in config && typeof config.command === 'string';
+        const hasHttp = 'url' in config && typeof config.url === 'string';
+
+        if (hasStdio || hasHttp) {
+          validMCPs[name] = config as MCPConfig;
+        }
       }
     }
 
