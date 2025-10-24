@@ -35,6 +35,188 @@ if (noColor) {
   }
 }
 
+/**
+ * Auto-detect authentication requirements from HTTP/SSE endpoint
+ * Makes a test request and parses WWW-Authenticate header from 401 response
+ * Also checks for OAuth metadata
+ */
+async function detectAuthRequirements(url: string): Promise<{
+  required: boolean;
+  type?: 'bearer' | 'basic' | 'apiKey' | 'oauth';
+  realm?: string;
+  oauth?: {
+    flowType: 'device' | 'authorization_code';
+    deviceAuthUrl?: string;
+    authorizationUrl?: string;
+    tokenUrl: string;
+    clientId?: string;
+    scopes?: string[];
+  };
+  error?: string;
+}> {
+  try {
+    // Make a test POST request to the MCP endpoint
+    const testUrl = new URL(url);
+    const response = await fetch(testUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'ncp', version: '1.0.0' }
+        }
+      })
+    });
+
+    // If 200 OK, no auth required
+    if (response.ok) {
+      return { required: false };
+    }
+
+    // Check for 401 Unauthorized
+    if (response.status === 401) {
+      const wwwAuth = response.headers.get('www-authenticate');
+
+      if (!wwwAuth) {
+        // 401 without WWW-Authenticate header
+        return {
+          required: true,
+          error: 'Authentication required but type could not be determined'
+        };
+      }
+
+      // Parse WWW-Authenticate header
+      // Examples:
+      // - "Bearer realm=\"canva\""
+      // - "Basic realm=\"My Server\""
+      const authType = wwwAuth.split(' ')[0].toLowerCase();
+      let realm: string | undefined;
+
+      const realmMatch = wwwAuth.match(/realm="([^"]+)"/);
+      if (realmMatch) {
+        realm = realmMatch[1];
+      }
+
+      // Check for OAuth metadata in WWW-Authenticate header
+      // Example: Bearer realm="OAuth" authorization_uri="https://..." token_uri="https://..."
+      if (authType === 'bearer') {
+        const authUriMatch = wwwAuth.match(/authorization_uri="([^"]+)"/);
+        const tokenUriMatch = wwwAuth.match(/token_uri="([^"]+)"/);
+
+        if (authUriMatch && tokenUriMatch) {
+          // OAuth endpoints provided in header (assume authorization_code flow)
+          return {
+            required: true,
+            type: 'oauth',
+            realm,
+            oauth: {
+              flowType: 'authorization_code',
+              authorizationUrl: authUriMatch[1],
+              tokenUrl: tokenUriMatch[1]
+            }
+          };
+        }
+
+        // Try to fetch OAuth metadata from well-known endpoint
+        const oauthMeta = await tryFetchOAuthMetadata(testUrl);
+        if (oauthMeta) {
+          return {
+            required: true,
+            type: 'oauth',
+            realm,
+            oauth: oauthMeta
+          };
+        }
+
+        // Fallback to manual bearer token prompt if no OAuth metadata found
+        // This ensures we gracefully degrade to simple token input for servers
+        // that don't expose OAuth endpoints via headers or .well-known
+        return { required: true, type: 'bearer', realm };
+      } else if (authType === 'basic') {
+        return { required: true, type: 'basic', realm };
+      } else {
+        return {
+          required: true,
+          error: `Unsupported auth type: ${authType}`
+        };
+      }
+    }
+
+    // Other status codes
+    return {
+      required: false,
+      error: `Unexpected response: ${response.status} ${response.statusText}`
+    };
+
+  } catch (error: any) {
+    throw new Error(`Failed to probe endpoint: ${error.message}`);
+  }
+}
+
+/**
+ * Try to fetch OAuth metadata from well-known endpoints
+ */
+async function tryFetchOAuthMetadata(serverUrl: URL): Promise<{
+  flowType: 'device' | 'authorization_code';
+  deviceAuthUrl?: string;
+  authorizationUrl?: string;
+  tokenUrl: string;
+  clientId?: string;
+  scopes?: string[];
+} | null> {
+  try {
+    // Try RFC 8414 - OAuth 2.0 Authorization Server Metadata
+    const wellKnownUrl = new URL('/.well-known/oauth-authorization-server', serverUrl.origin);
+
+    const response = await fetch(wellKnownUrl, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const metadata = await response.json();
+    const grantTypes: string[] = metadata.grant_types_supported || [];
+
+    // Check for device authorization grant (RFC 8628)
+    if (grantTypes.includes('urn:ietf:params:oauth:grant-type:device_code') &&
+        metadata.device_authorization_endpoint &&
+        metadata.token_endpoint) {
+      return {
+        flowType: 'device',
+        deviceAuthUrl: metadata.device_authorization_endpoint,
+        tokenUrl: metadata.token_endpoint,
+        scopes: metadata.scopes_supported || []
+      };
+    }
+
+    // Check for authorization code grant (standard OAuth)
+    if (grantTypes.includes('authorization_code') &&
+        metadata.authorization_endpoint &&
+        metadata.token_endpoint) {
+      return {
+        flowType: 'authorization_code',
+        authorizationUrl: metadata.authorization_endpoint,
+        tokenUrl: metadata.token_endpoint,
+        scopes: metadata.scopes_supported || []
+      };
+    }
+
+    return null;
+  } catch {
+    // Silently fail - OAuth metadata is optional
+    return null;
+  }
+}
+
 // Fuzzy matching helper for finding similar names
 function findSimilarNames(target: string, availableNames: string[], maxSuggestions = 3): string[] {
   const targetLower = target.toLowerCase();
@@ -410,6 +592,7 @@ ${chalk.bold.white('Examples:')}
 const profileIndex = process.argv.indexOf('--profile');
 const hasCommands = process.argv.includes('find') ||
   process.argv.includes('add') ||
+  process.argv.includes('add-http') ||
   process.argv.includes('list') ||
   process.argv.includes('remove') ||
   process.argv.includes('run') ||
@@ -460,17 +643,192 @@ if (shouldRunAsServer) {
 
   // Running as CLI tool
 
-// Add MCP command
+/**
+ * Handle adding a known provider from the registry
+ */
+async function handleKnownProvider(provider: any, options: any) {
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+
+  console.log(`\n${chalk.blue(`🌐 ${provider.name} MCP`)}`);
+  console.log(chalk.dim(`   ${provider.description}`));
+  console.log(chalk.dim(`   Website: ${provider.website}\n`));
+
+  // Determine transport (user preference or recommendation)
+  let transport = options.transport || provider.recommended;
+
+  if (!options.transport) {
+    console.log(chalk.dim(`   ✓ Recommended transport: ${provider.recommended}`));
+  }
+
+  const manager = new ProfileManager();
+  await manager.initialize(true);
+
+  // Handle stdio transport
+  if (transport === 'stdio' && provider.stdio) {
+    const stdioConfig = provider.stdio;
+
+    // Check if setup is needed
+    if (stdioConfig.setup?.needsSetup) {
+      console.log(chalk.dim(`\n   ${stdioConfig.setup.description}`));
+      console.log(chalk.dim(`   Command: ${chalk.cyan(stdioConfig.setup.command)}\n`));
+
+      // Ask for confirmation
+      const readline = await import('readline');
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+
+      const answer = await new Promise<string>(resolve => {
+        rl.question(chalk.yellow('   Run authentication now? (y/n): '), answer => {
+          rl.close();
+          resolve(answer.toLowerCase());
+        });
+      });
+
+      if (answer === 'y' || answer === 'yes') {
+        console.log(chalk.dim('\n   🔐 Running authentication...'));
+        try {
+          const { stdout, stderr } = await execAsync(stdioConfig.setup.command);
+          if (stdout) console.log(stdout);
+          if (stderr) console.error(stderr);
+          console.log(chalk.green('   ✅ Authentication complete!\n'));
+        } catch (error: any) {
+          console.log(chalk.red(`\n   ❌ Authentication failed: ${error.message}`));
+          console.log(chalk.dim(`   Please run manually: ${stdioConfig.setup.command}\n`));
+          return;
+        }
+      } else {
+        console.log(chalk.yellow(`\n   ⚠️  Skipped authentication`));
+        console.log(chalk.dim(`   Run this before using ${provider.name}:`));
+        console.log(chalk.dim(`   ${stdioConfig.setup.command}\n`));
+      }
+    }
+
+    // Add to profile
+    console.log(chalk.dim(`   Adding ${provider.name} to profile...`));
+
+    const mcpConfig: any = {
+      command: stdioConfig.command,
+      args: stdioConfig.args
+    };
+
+    // Parse environment variables if provided
+    if (options.env) {
+      const env: Record<string, string> = {};
+      for (const envVar of options.env) {
+        const [key, value] = envVar.split('=');
+        if (key && value) {
+          env[key] = value;
+        }
+      }
+      if (Object.keys(env).length > 0) {
+        mcpConfig.env = env;
+      }
+    }
+
+    const profiles = options.profile || ['all'];
+    for (const profileName of profiles) {
+      await manager.addMCPToProfile(profileName, provider.id, mcpConfig);
+      console.log(chalk.green(`   ✅ Added ${provider.name} to profile: ${profileName}`));
+    }
+
+    console.log(chalk.dim('\n💡 Next steps:'));
+    console.log(chalk.dim('  •') + ' Test: ' + chalk.cyan(`ncp find <query>`));
+    console.log(chalk.dim('  •') + ' View profiles: ' + chalk.cyan('ncp list'));
+
+  } else if (transport === 'http' && provider.http) {
+    // HTTP transport - redirect to add-http command
+    console.log(chalk.yellow(`\n   ⚠️  HTTP transport requires additional configuration`));
+    console.log(chalk.dim(`   Documentation: ${provider.http.docs}`));
+    if (provider.http.notes) {
+      console.log(chalk.dim(`   Note: ${provider.http.notes}`));
+    }
+    console.log(chalk.dim(`\n   Use: ${chalk.cyan(`ncp add-http ${provider.id} ${provider.http.url}`)}\n`));
+  } else {
+    console.log(chalk.red(`\n   ❌ Transport '${transport}' not available for ${provider.name}`));
+    console.log(chalk.dim(`   Available: ${provider.stdio ? 'stdio' : ''} ${provider.http ? 'http' : ''}\n`));
+  }
+}
+
+/**
+ * Handle manual add (legacy behavior)
+ */
+async function handleManualAdd(name: string, command: string, args: string[], options: any) {
+  console.log(`\n${chalk.blue(`📦 Adding MCP server: ${chalk.bold(name)}`)}`);
+
+  const manager = new ProfileManager();
+  await manager.initialize(true);
+
+  // Parse environment variables
+  const env: Record<string, string> = {};
+  if (options.env) {
+    console.log(chalk.dim('🔧 Processing environment variables...'));
+    for (const envVar of options.env) {
+      const [key, value] = envVar.split('=');
+      if (key && value) {
+        env[key] = value;
+        console.log(chalk.dim(`   ${key}=${formatCommandDisplay(value)}`));
+      }
+    }
+  }
+
+  const mcpConfig: any = {
+    command,
+    args: args || []
+  };
+
+  if (Object.keys(env).length > 0) {
+    mcpConfig.env = env;
+  }
+
+  const profiles = options.profile || ['all'];
+  for (const profileName of profiles) {
+    await manager.addMCPToProfile(profileName, name, mcpConfig);
+    console.log(chalk.green(`\n✅ Added ${name} to profile: ${profileName}`));
+  }
+
+  console.log(chalk.dim('\n💡 Next steps:'));
+  console.log(chalk.dim('  •') + ' Test: ' + chalk.cyan(`ncp find <query>`));
+  console.log(chalk.dim('  •') + ' View profiles: ' + chalk.cyan('ncp list'));
+}
+
+// Simplified add command (checks registry first)
 program
-  .command('add <name> <command> [args...]')
-  .description('Add an MCP server to a profile')
+  .command('add <provider> [command] [args...]')
+  .description('Add an MCP server to a profile (auto-detects known providers)')
+  .option('--profile <names...>', 'Profile(s) to add to (can specify multiple, default: all)')
+  .option('--transport <type>', 'Force transport type: stdio or http')
+  .option('--env <vars...>', 'Environment variables (KEY=value)')
+  .action(async (providerName, command, args, options) => {
+    // Import provider registry
+    const { fetchProvider } = await import('../registry/provider-registry.js');
+
+    // Check if this is a known provider (fetch from mcps.portel.dev)
+    const provider = await fetchProvider(providerName);
+
+    if (provider && !command) {
+      // Known provider - use simplified flow
+      await handleKnownProvider(provider, options);
+    } else {
+      // Unknown provider or manual command specified - use manual flow
+      await handleManualAdd(providerName, command, args || [], options);
+    }
+  });
+
+// Manual stdio add command (for backwards compatibility)
+program
+  .command('add-stdio <name> <command> [args...]')
+  .description('Add an MCP server with manual configuration')
   .option('--profile <names...>', 'Profile(s) to add to (can specify multiple, default: all)')
   .option('--env <vars...>', 'Environment variables (KEY=value)')
   .action(async (name, command, args, options) => {
     console.log(`\n${chalk.blue(`📦 Adding MCP server: ${chalk.bold(name)}`)}`);
 
     const manager = new ProfileManager();
-    await manager.initialize();
+    await manager.initialize(true); // Skip auto-import for explicit add command
 
     // Show helpful guidance without hard validation
     const guidance = await validateAddCommand(name, command, args);
@@ -651,6 +1009,7 @@ program
   .option('--token <token>', 'Bearer token or API key')
   .option('--client-id <id>', 'OAuth client ID')
   .option('--client-secret <secret>', 'OAuth client secret')
+  .option('--authorization-url <url>', 'OAuth authorization URL')
   .option('--device-auth-url <url>', 'OAuth device authorization URL')
   .option('--token-url <url>', 'OAuth token URL')
   .option('--scopes <scopes...>', 'OAuth scopes')
@@ -660,14 +1019,46 @@ program
     console.log(`\n${chalk.blue(`🌐 Adding HTTP/SSE MCP server: ${chalk.bold(name)}`)}`);
     console.log(chalk.dim(`   URL: ${url}`));
 
+    console.log(chalk.dim('   Initializing profile manager...'));
     const manager = new ProfileManager();
-    await manager.initialize();
+    await manager.initialize(true); // Skip auto-import for explicit add-http command
+    console.log(chalk.dim('   ✓ Profile manager ready'));
 
     // Import credential prompter
     const { promptForCredential, promptForCredentials } = await import('../utils/credential-prompter.js');
 
     // Build auth config
     let auth: any | undefined;
+    let detectedOAuthMetadata: any = null;
+
+    // Auto-detect auth requirements if not explicitly specified
+    if (!options.authType) {
+      console.log(chalk.dim('\n   Detecting authentication requirements...'));
+
+      try {
+        const authDetection = await detectAuthRequirements(url);
+
+        if (authDetection.required) {
+          console.log(chalk.dim(`   ✓ Detected: ${authDetection.type} authentication required`));
+          options.authType = authDetection.type;
+
+          if (authDetection.realm) {
+            console.log(chalk.dim(`   Realm: ${authDetection.realm}`));
+          }
+
+          // Store OAuth metadata if detected
+          if (authDetection.type === 'oauth' && authDetection.oauth) {
+            detectedOAuthMetadata = authDetection.oauth;
+            console.log(chalk.dim('   ✓ OAuth endpoints auto-detected'));
+          }
+        } else {
+          console.log(chalk.dim('   ✓ No authentication required (public endpoint)'));
+        }
+      } catch (error: any) {
+        console.log(chalk.yellow(`   ⚠️  Could not auto-detect auth: ${error.message}`));
+        console.log(chalk.dim('   Proceeding without authentication...'));
+      }
+    }
 
     if (options.authType) {
       console.log(chalk.dim(`   Auth type: ${options.authType}`));
@@ -679,6 +1070,8 @@ program
           // Prompt for token if not provided
           if (!bearerToken) {
             console.log(chalk.dim('\n   Token not provided, prompting for input...'));
+            console.log(chalk.dim(`   📖 Refer to ${name}'s documentation for how to generate an access token\n`));
+
             bearerToken = await promptForCredential({
               name: 'Bearer Token',
               description: `Required for ${name} authentication`,
@@ -701,74 +1094,120 @@ program
           let clientId = options.clientId;
           let clientSecret = options.clientSecret;
           let deviceAuthUrl = options.deviceAuthUrl;
+          let authorizationUrl = options.authorizationUrl;
           let tokenUrl = options.tokenUrl;
           const scopes = options.scopes || [];
+          let flowType: 'device' | 'authorization_code' = 'authorization_code';
 
-          // Prompt for missing OAuth parameters
-          if (!clientId || !deviceAuthUrl || !tokenUrl) {
-            console.log(chalk.dim('\n   OAuth parameters not fully provided, prompting for input...'));
-
-            const prompts: any[] = [];
-
-            if (!clientId) {
-              prompts.push({
-                name: 'Client ID',
-                description: `OAuth Client ID for ${name}`,
-                hidden: false
-              });
+          // Use auto-detected OAuth metadata if available
+          if (detectedOAuthMetadata) {
+            flowType = detectedOAuthMetadata.flowType;
+            deviceAuthUrl = deviceAuthUrl || detectedOAuthMetadata.deviceAuthUrl;
+            authorizationUrl = authorizationUrl || detectedOAuthMetadata.authorizationUrl;
+            tokenUrl = tokenUrl || detectedOAuthMetadata.tokenUrl;
+            clientId = clientId || detectedOAuthMetadata.clientId;
+            if (detectedOAuthMetadata.scopes && scopes.length === 0) {
+              scopes.push(...detectedOAuthMetadata.scopes);
             }
+          }
 
-            if (!clientSecret) {
-              prompts.push({
-                name: 'Client Secret',
-                description: `OAuth Client Secret for ${name} (optional, press Enter to skip)`,
-                hidden: true
-              });
-            }
+          // Prompt for client ID if not provided
+          if (!clientId) {
+            console.log(chalk.dim('\n   Client ID not provided, prompting for input...'));
+            console.log(chalk.dim(`   📖 Register an OAuth app with ${name} to get a Client ID\n`));
 
-            if (!deviceAuthUrl) {
-              prompts.push({
-                name: 'Device Auth URL',
-                description: `OAuth device authorization endpoint URL`,
-                hidden: false,
-                example: 'https://example.com/oauth/device/code'
-              });
-            }
+            const credResult = await promptForCredential({
+              name: 'Client ID',
+              description: `OAuth Client ID for ${name}`,
+              hidden: false
+            });
 
-            if (!tokenUrl) {
-              prompts.push({
-                name: 'Token URL',
-                description: `OAuth token endpoint URL`,
-                hidden: false,
-                example: 'https://example.com/oauth/token'
-              });
-            }
-
-            const creds = await promptForCredentials(prompts);
-
-            if (!creds) {
+            if (!credResult) {
               console.log(chalk.yellow('\n⚠️  Credential input cancelled'));
               return;
             }
-
-            clientId = creds['Client ID'] || clientId;
-            clientSecret = creds['Client Secret'] || clientSecret;
-            deviceAuthUrl = creds['Device Auth URL'] || deviceAuthUrl;
-            tokenUrl = creds['Token URL'] || tokenUrl;
+            clientId = credResult;
           }
 
-          auth = {
-            type: 'oauth',
-            oauth: {
-              clientId,
-              clientSecret,
-              deviceAuthUrl,
-              tokenUrl,
-              scopes
+          try {
+            let tokenResponse;
+
+            if (flowType === 'device') {
+              // Use Device Flow (for servers that support it)
+              const { DeviceFlowAuthenticator } = await import('../auth/oauth-device-flow.js');
+
+              if (!deviceAuthUrl || !tokenUrl) {
+                console.log(chalk.red('\n❌ Device flow requires device_auth_url and token_url'));
+                return;
+              }
+
+              console.log(chalk.dim(`\n   Using OAuth Device Flow...`));
+              console.log(chalk.dim(`   Client ID: ${clientId}`));
+              if (scopes.length > 0) {
+                console.log(chalk.dim(`   Scopes: ${scopes.join(', ')}`));
+              }
+
+              const authenticator = new DeviceFlowAuthenticator({
+                clientId,
+                clientSecret,
+                deviceAuthUrl,
+                tokenUrl,
+                scopes
+              });
+
+              tokenResponse = await authenticator.authenticate();
+            } else {
+              // Use Authorization Code Flow with PKCE (default for most servers)
+              const { AuthCodeFlowAuthenticator } = await import('../auth/oauth-auth-code-flow.js');
+
+              if (!authorizationUrl || !tokenUrl) {
+                console.log(chalk.red('\n❌ Authorization code flow requires authorization_url and token_url'));
+                return;
+              }
+
+              console.log(chalk.dim(`\n   Using OAuth Authorization Code Flow (PKCE)...`));
+              console.log(chalk.dim(`   Client ID: ${clientId}`));
+              if (scopes.length > 0) {
+                console.log(chalk.dim(`   Scopes: ${scopes.join(', ')}`));
+              }
+
+              const authenticator = new AuthCodeFlowAuthenticator({
+                clientId,
+                clientSecret,
+                authorizationUrl,
+                tokenUrl,
+                scopes
+              });
+
+              tokenResponse = await authenticator.authenticate();
             }
-          };
-          console.log(chalk.dim(`   OAuth client: ${clientId}`));
-          console.log(chalk.dim(`   Scopes: ${scopes.join(', ') || 'none'}`));
+
+            // Store the token as bearer auth
+            auth = {
+              type: 'bearer',
+              token: tokenResponse.access_token
+            };
+
+            // If refresh token provided, store OAuth config for future refresh
+            if (tokenResponse.refresh_token) {
+              auth.oauth = {
+                clientId,
+                clientSecret,
+                flowType,
+                deviceAuthUrl,
+                authorizationUrl,
+                tokenUrl,
+                scopes,
+                refreshToken: tokenResponse.refresh_token,
+                expiresIn: tokenResponse.expires_in
+              };
+            }
+
+            console.log(chalk.green('\n✅ OAuth authentication successful!'));
+          } catch (error: any) {
+            console.log(chalk.red(`\n❌ OAuth authentication failed: ${error.message}`));
+            return;
+          }
           break;
 
         case 'apiKey':

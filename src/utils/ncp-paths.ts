@@ -39,6 +39,16 @@ export function getNcpBaseDirectory(): string {
     return _ncpBaseDir;
   }
 
+  // If --working-dir was explicitly set, FORCE using that directory (don't fall back to global)
+  // This ensures isolated testing and prevents pollution from global ~/.ncp
+  if (_overrideWorkingDirectory) {
+    _ncpBaseDir = path.join(_overrideWorkingDirectory, '.ncp');
+    if (process.env.NCP_DEBUG === 'true') {
+      console.error(`[DEBUG PATHS] Using --working-dir override: ${_ncpBaseDir}`);
+    }
+    return _ncpBaseDir;
+  }
+
   // Start from effective working directory and traverse up
   let currentDir = getEffectiveWorkingDirectory();
   const root = path.parse(currentDir).root;

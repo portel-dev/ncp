@@ -60,48 +60,85 @@ function hasElicitationSupport(server?: ElicitationServer): boolean {
  * Uses hidden input for secure credential entry
  */
 async function promptInTerminal(options: CredentialPromptOptions): Promise<string | null> {
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
   return new Promise((resolve) => {
     const prompt = options.description
       ? `🔐 ${options.name}\n   ${options.description}\n   Enter value${options.hidden !== false ? ' (hidden)' : ''}: `
       : `🔐 Enter ${options.name}${options.hidden !== false ? ' (hidden)' : ''}: `;
 
     if (options.hidden !== false) {
-      // Hide input for credentials
+      // Use raw mode for hidden input
       const stdin = process.stdin;
+      let input = '';
+
+      // Show prompt
+      process.stdout.write(prompt);
+
+      // Set raw mode to capture keystrokes without echo
+      if (stdin.isTTY) {
+        stdin.setRawMode(true);
+      }
+      stdin.resume();
+      stdin.setEncoding('utf8');
+
       const onData = (char: string) => {
-        char = char.toString();
         switch (char) {
           case '\n':
           case '\r':
-          case '\u0004': // Ctrl-D
+          case '\u0004': // Ctrl-D (EOF)
+            // Cleanup
             stdin.pause();
+            if (stdin.isTTY) {
+              stdin.setRawMode(false);
+            }
+            stdin.removeListener('data', onData);
+
+            // New line after hidden input
+            process.stdout.write('\n');
+
+            // Resolve with input or null if empty
+            if (!input || input.trim().length === 0) {
+              resolve(null);
+            } else {
+              resolve(input.trim());
+            }
             break;
+
+          case '\u0003': // Ctrl-C
+            // Cleanup and cancel
+            stdin.pause();
+            if (stdin.isTTY) {
+              stdin.setRawMode(false);
+            }
+            stdin.removeListener('data', onData);
+            process.stdout.write('\n');
+            resolve(null);
+            break;
+
+          case '\u007f': // Backspace
+          case '\b': // Backspace
+            if (input.length > 0) {
+              input = input.slice(0, -1);
+              // No visual feedback for hidden input
+            }
+            break;
+
           default:
-            process.stdout.write('\b \b'); // Clear the character
+            // Add character to input (only printable characters)
+            if (char.charCodeAt(0) >= 32) {
+              input += char;
+            }
             break;
         }
       };
 
       stdin.on('data', onData);
-
-      rl.question(prompt, (answer) => {
-        stdin.removeListener('data', onData);
-        rl.close();
-        console.log(''); // New line after hidden input
-
-        if (!answer || answer.trim().length === 0) {
-          resolve(null);
-        } else {
-          resolve(answer.trim());
-        }
-      });
     } else {
-      // Regular visible input
+      // Regular visible input using readline
+      const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+
       rl.question(prompt, (answer) => {
         rl.close();
 

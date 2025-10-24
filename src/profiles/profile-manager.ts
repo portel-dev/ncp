@@ -43,23 +43,40 @@ export class ProfileManager {
     this.profilesDir = getProfilesDirectory();
   }
 
-  async initialize(): Promise<void> {
+  async initialize(skipAutoImport: boolean = false): Promise<void> {
+    // console.error(`[ProfileManager] initialize() called with skipAutoImport=${skipAutoImport}`);
+
     // Ensure profiles directory exists
     if (!existsSync(this.profilesDir)) {
       await fs.mkdir(this.profilesDir, { recursive: true });
     }
+    // console.error(`[ProfileManager] profiles directory ready: ${this.profilesDir}`);
 
     // Load existing profiles
     await this.loadProfiles();
+    // console.error(`[ProfileManager] loaded ${this.profiles.size} profiles`);
 
     // Create default universal profile if it doesn't exist
     if (!this.profiles.has('all')) {
+      // console.error(`[ProfileManager] creating default 'all' profile...`);
       await this.createDefaultProfile();
+      // console.error(`[ProfileManager] default profile created`);
+    } else {
+      // console.error(`[ProfileManager] 'all' profile already exists`);
     }
 
     // Auto-import from Claude Desktop on startup (restores 1.5.3 behavior)
     // This ensures profile is populated BEFORE orchestrator initialization
-    await this.tryAutoImportFromClient('claude-desktop');
+    // Skip for CLI commands that explicitly add MCPs (add-http, add, etc.)
+    if (!skipAutoImport) {
+      // console.error(`[ProfileManager] running auto-import...`);
+      await this.tryAutoImportFromClient('claude-desktop');
+      // console.error(`[ProfileManager] auto-import complete`);
+    } else {
+      // console.error(`[ProfileManager] skipping auto-import`);
+    }
+
+    // console.error(`[ProfileManager] initialize() completed`);
   }
 
   /**
@@ -249,7 +266,10 @@ export class ProfileManager {
 
           // Skip profiles without a name field (invalid profile files)
           if (!profile.name || typeof profile.name !== 'string') {
-            console.warn(`⚠️  Skipping invalid profile ${file}: missing or invalid 'name' field`);
+            // Log as debug only - not user's problem if internal files are corrupted
+            if (process.env.NCP_DEBUG === 'true') {
+              console.error(`[DEBUG] Skipping invalid profile ${file}: missing or invalid 'name' field`);
+            }
             continue;
           }
 

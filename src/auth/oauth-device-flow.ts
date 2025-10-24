@@ -107,6 +107,7 @@ export class DeviceFlowAuthenticator {
     const expiresInMinutes = Math.floor(auth.expires_in / 60);
     console.log(`⏱️  Code expires in ${expiresInMinutes} minutes\n`);
     console.log('⏳ Waiting for authorization...');
+    console.log('   (Press Ctrl+C to cancel)\n');
   }
 
   /**
@@ -116,65 +117,105 @@ export class DeviceFlowAuthenticator {
     const expiresAt = Date.now() + (auth.expires_in * 1000);
     const interval = auth.interval * 1000; // Convert to ms
     let pollInterval = interval;
+    let cancelled = false;
 
-    while (Date.now() < expiresAt) {
-      await this.sleep(pollInterval);
+    // Set up keyboard listener for cancellation
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
 
-      const params = new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-        device_code: auth.device_code,
-        client_id: this.config.clientId
-      });
-
-      // Add client secret if provided (for confidential clients)
-      if (this.config.clientSecret) {
-        params.set('client_secret', this.config.clientSecret);
-      }
-
-      logger.debug('Polling token endpoint...');
-
-      const response = await fetch(this.config.tokenUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
-      });
-
-      const data = await response.json();
-
-      // Success!
-      if (data.access_token) {
-        console.log('\n✅ Authentication successful!\n');
-        return data;
-      }
-
-      // Handle errors according to RFC 8628
-      if (data.error === 'authorization_pending') {
-        // User hasn't authorized yet, continue polling
-        process.stdout.write('.');
-        continue;
-      }
-
-      if (data.error === 'slow_down') {
-        // Server requests slower polling
-        pollInterval += 5000;
-        logger.debug(`Slowing down polling interval to ${pollInterval}ms`);
-        process.stdout.write('.');
-        continue;
-      }
-
-      if (data.error === 'expired_token') {
-        throw new Error('Authorization code expired. Please try again.');
-      }
-
-      if (data.error === 'access_denied') {
-        throw new Error('Authorization denied by user.');
-      }
-
-      // Other errors
-      throw new Error(`OAuth error: ${data.error} - ${data.error_description || 'Unknown error'}`);
+    if (stdin.isTTY) {
+      stdin.setRawMode(true);
+      stdin.resume();
+      stdin.setEncoding('utf8');
     }
 
-    throw new Error('Authentication timed out. Please try again.');
+    const onKeypress = (char: string) => {
+      // Ctrl+C
+      if (char === '\u0003') {
+        cancelled = true;
+      }
+    };
+
+    stdin.on('data', onKeypress);
+
+    try {
+      while (Date.now() < expiresAt && !cancelled) {
+        await this.sleep(pollInterval);
+
+        // Check if user cancelled
+        if (cancelled) {
+          console.log('\n\n❌ Authentication cancelled by user\n');
+          throw new Error('Authentication cancelled by user');
+        }
+
+        const params = new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+          device_code: auth.device_code,
+          client_id: this.config.clientId
+        });
+
+        // Add client secret if provided (for confidential clients)
+        if (this.config.clientSecret) {
+          params.set('client_secret', this.config.clientSecret);
+        }
+
+        logger.debug('Polling token endpoint...');
+
+        const response = await fetch(this.config.tokenUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString()
+        });
+
+        const data = await response.json();
+
+        // Success!
+        if (data.access_token) {
+          console.log('\n✅ Authentication successful!\n');
+          return data;
+        }
+
+        // Handle errors according to RFC 8628
+        if (data.error === 'authorization_pending') {
+          // User hasn't authorized yet, continue polling
+          process.stdout.write('.');
+          continue;
+        }
+
+        if (data.error === 'slow_down') {
+          // Server requests slower polling
+          pollInterval += 5000;
+          logger.debug(`Slowing down polling interval to ${pollInterval}ms`);
+          process.stdout.write('.');
+          continue;
+        }
+
+        if (data.error === 'expired_token') {
+          throw new Error('Authorization code expired. Please try again.');
+        }
+
+        if (data.error === 'access_denied') {
+          throw new Error('Authorization denied by user.');
+        }
+
+        // Other errors
+        throw new Error(`OAuth error: ${data.error} - ${data.error_description || 'Unknown error'}`);
+      }
+
+      if (cancelled) {
+        console.log('\n\n❌ Authentication cancelled by user\n');
+        throw new Error('Authentication cancelled by user');
+      }
+
+      throw new Error('Authentication timed out. Please try again.');
+    } finally {
+      // Clean up keyboard listener
+      stdin.removeListener('data', onKeypress);
+      if (stdin.isTTY) {
+        stdin.setRawMode(wasRaw || false);
+        stdin.pause();
+      }
+    }
   }
 
   private sleep(ms: number): Promise<void> {

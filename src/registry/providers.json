@@ -1,0 +1,94 @@
+{
+  "canva": {
+    "id": "canva",
+    "name": "Canva",
+    "description": "Design and creative tools",
+    "website": "https://www.canva.com",
+    "recommended": "stdio",
+    "stdio": {
+      "setup": {
+        "description": "Authenticate with Canva CLI",
+        "command": "npx @canva/cli@latest login",
+        "needsSetup": true
+      },
+      "command": "npx",
+      "args": ["-y", "@canva/cli@latest", "mcp"]
+    },
+    "http": {
+      "url": "https://mcp.canva.com/mcp",
+      "auth": "oauth",
+      "docs": "https://www.canva.dev/docs/connect/mcp-server/",
+      "notes": "Requires OAuth app registration. Stdio version recommended for easier setup."
+    }
+  },
+  "slack": {
+    "id": "slack",
+    "name": "Slack",
+    "description": "Team communication and collaboration",
+    "website": "https://slack.com",
+    "recommended": "stdio",
+    "stdio": {
+      "setup": {
+        "description": "Authenticate with Slack CLI",
+        "command": "npx @slack/cli login",
+        "needsSetup": true
+      },
+      "command": "npx",
+      "args": ["-y", "@slack/cli", "mcp"]
+    },
+    "http": {
+      "url": "https://mcp.slack.com/mcp",
+      "auth": "oauth",
+      "docs": "https://api.slack.com/mcp",
+      "notes": "Requires OAuth app registration. Stdio version recommended for easier setup."
+    }
+  },
+  "github": {
+    "id": "github",
+    "name": "GitHub",
+    "description": "Code hosting and collaboration",
+    "website": "https://github.com",
+    "recommended": "stdio",
+    "stdio": {
+      "setup": {
+        "description": "Authenticate with GitHub CLI",
+        "command": "gh auth login",
+        "needsSetup": true
+      },
+      "command": "gh",
+      "args": ["mcp"]
+    },
+    "http": {
+      "url": "https://mcp.github.com",
+      "auth": "bearer",
+      "docs": "https://docs.github.com/en/mcp",
+      "notes": "Requires personal access token. Stdio version recommended for easier setup."
+    }
+  },
+  "notion": {
+    "id": "notion",
+    "name": "Notion",
+    "description": "Notes and documentation",
+    "website": "https://notion.so",
+    "recommended": "http",
+    "http": {
+      "url": "https://mcp.notion.so",
+      "auth": "bearer",
+      "docs": "https://developers.notion.com/docs/mcp",
+      "notes": "Requires API key from Notion settings."
+    }
+  },
+  "linear": {
+    "id": "linear",
+    "name": "Linear",
+    "description": "Issue tracking and project management",
+    "website": "https://linear.app",
+    "recommended": "http",
+    "http": {
+      "url": "https://mcp.linear.app",
+      "auth": "bearer",
+      "docs": "https://developers.linear.app/docs/mcp",
+      "notes": "Requires API key from Linear settings."
+    }
+  }
+}
