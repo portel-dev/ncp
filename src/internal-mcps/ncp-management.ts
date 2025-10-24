@@ -495,18 +495,36 @@ Do you want to install this MCP?`;
     // Add MCP to profile
     await this.profileManager!.addMCPToProfile(profile, mcpName, config);
 
+    // Try to get tools from the newly added MCP
+    let toolsList = '';
+    try {
+      const tools = await this.getToolsFromMCP(mcpName, config, transportType);
+      if (tools && tools.length > 0) {
+        toolsList = `\n\n**Available tools** (${tools.length} total):\n`;
+        // Show first 10 tools
+        const displayTools = tools.slice(0, 10);
+        displayTools.forEach(tool => {
+          toolsList += `  • \`${tool.name}\` - ${tool.description || 'No description'}\n`;
+        });
+        if (tools.length > 10) {
+          toolsList += `  ... and ${tools.length - 10} more\n`;
+        }
+      }
+    } catch (error: any) {
+      // Failed to get tools - non-fatal, just skip the tools list
+      logger.warn(`Could not retrieve tools from "${mcpName}": ${error.message}`);
+    }
+
     // Build success message based on transport type
     let successMessage: string;
 
     if (transportType === 'http') {
       const authInfo = config.auth ? ` (${config.auth.type} auth)` : ' (no auth)';
       successMessage = `✅ HTTP/SSE MCP server "${mcpName}" added to profile "${profile}"${credentialInfo}\n\n` +
-        `URL: ${url}${authInfo}\n\n` +
-        `The MCP server will be available after NCP is restarted.`;
+        `URL: ${url}${authInfo}${toolsList}`;
     } else {
       successMessage = `✅ MCP server "${mcpName}" added to profile "${profile}"${credentialInfo}\n\n` +
-        `Command: ${command} ${config.args?.join(' ') || ''}\n\n` +
-        `The MCP server will be available after NCP is restarted.`;
+        `Command: ${command} ${config.args?.join(' ') || ''}${toolsList}`;
     }
 
     logger.info(`Added MCP "${mcpName}" to profile "${profile}" (${transportType})${credentialInfo}`);
@@ -1111,6 +1129,126 @@ Do you want to remove this MCP?`;
         success: false,
         error: `Failed to export: ${error.message}`
       };
+    }
+  }
+
+  /**
+   * Get tools from a newly added MCP by temporarily connecting to it
+   * Returns array of tools or null if connection fails
+   */
+  private async getToolsFromMCP(
+    mcpName: string,
+    config: any,
+    transportType: 'stdio' | 'http'
+  ): Promise<Array<{ name: string; description?: string }> | null> {
+    const timeoutMs = 5000; // 5 second timeout
+
+    if (transportType === 'stdio') {
+      // Stdio transport - use MCP SDK client
+      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+      const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+
+      let transport: any = null;
+      let client: any = null;
+
+      try {
+        // Create transport
+        transport = new StdioClientTransport({
+          command: config.command,
+          args: config.args || [],
+          env: { ...process.env, ...(config.env || {}) },
+          stderr: 'ignore'
+        });
+
+        client = new Client(
+          {
+            name: 'ncp-tool-discovery',
+            version: '1.0.0'
+          },
+          {
+            capabilities: {}
+          }
+        );
+
+        // Connect with timeout
+        await Promise.race([
+          client.connect(transport),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Connection timeout')), timeoutMs)
+          )
+        ]);
+
+        // Get tools list
+        const response = await Promise.race([
+          client.listTools(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('listTools timeout')), timeoutMs)
+          )
+        ]) as any;
+
+        return response.tools.map((t: any) => ({
+          name: t.name,
+          description: t.description || ''
+        }));
+      } catch (error: any) {
+        logger.warn(`Failed to get tools from stdio MCP "${mcpName}": ${error.message}`);
+        return null;
+      } finally {
+        // Clean up
+        try {
+          if (client) await client.close();
+        } catch (e) { /* ignore */ }
+        try {
+          if (transport) await transport.close();
+        } catch (e) { /* ignore */ }
+      }
+    } else {
+      // HTTP/SSE transport - make HTTP request
+      try {
+        const url = config.url;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json'
+        };
+
+        // Add auth if configured
+        if (config.auth?.type === 'bearer' && config.auth.token) {
+          headers['Authorization'] = `Bearer ${config.auth.token}`;
+        }
+
+        const response = await Promise.race([
+          fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'tools/list',
+              params: {}
+            })
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('HTTP timeout')), timeoutMs)
+          )
+        ]) as Response;
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json() as any;
+
+        if (data.error) {
+          throw new Error(data.error.message || 'Unknown error');
+        }
+
+        return data.result.tools.map((t: any) => ({
+          name: t.name,
+          description: t.description || ''
+        }));
+      } catch (error: any) {
+        logger.warn(`Failed to get tools from HTTP MCP "${mcpName}": ${error.message}`);
+        return null;
+      }
     }
   }
 }
