@@ -27,26 +27,26 @@ export class NCPManagementMCP implements InternalMCP {
   tools: InternalTool[] = [
     {
       name: 'add',
-      description: 'Add a new MCP server to NCP configuration (stdio or HTTP/SSE). User confirmation required (automatic popup). User can securely provide API keys via clipboard during credential collection. For stdio servers, provide command+args. For HTTP/SSE servers, provide url.',
+      description: 'Add a new MCP server to NCP configuration. Supports two modes: 1) Auto-detect: just provide mcp_name (e.g., "canva", "github") and NCP will look up known providers from registry. 2) Manual: provide command+args for stdio or url for HTTP/SSE. User confirmation required (automatic popup). User can securely provide API keys via clipboard during credential collection.',
       inputSchema: {
         type: 'object',
         properties: {
           mcp_name: {
             type: 'string',
-            description: 'Name for the MCP server (e.g., "github", "filesystem")'
+            description: 'Name for the MCP server. For auto-detect, use provider name like "canva", "github", "notion". For manual config, use any name.'
           },
           command: {
             type: 'string',
-            description: 'Command to execute for stdio servers (e.g., "npx", "node", "python"). Required for stdio, not used for HTTP/SSE.'
+            description: 'Command to execute for stdio servers (e.g., "npx", "node", "python"). Optional - only needed for manual configuration. Omit for auto-detect mode.'
           },
           args: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Command arguments for stdio servers (e.g., ["-y", "@modelcontextprotocol/server-github"]). Optional for stdio, not used for HTTP/SSE.'
+            description: 'Command arguments for stdio servers (e.g., ["-y", "@modelcontextprotocol/server-github"]). Optional - only needed for manual configuration.'
           },
           url: {
             type: 'string',
-            description: 'URL for HTTP/SSE servers (e.g., "https://api.example.com/mcp"). Required for HTTP/SSE, not used for stdio.'
+            description: 'URL for HTTP/SSE servers (e.g., "https://api.example.com/mcp"). Optional - only needed for manual HTTP/SSE configuration.'
           },
           profile: {
             type: 'string',
@@ -204,21 +204,14 @@ export class NCPManagementMCP implements InternalMCP {
     }
 
     const mcpName = params.mcp_name;
-    const command = params.command;
-    const commandArgs = params.args || [];
-    const url = params.url;
+    let command = params.command;
+    let commandArgs = params.args || [];
+    let url = params.url;
     const profile = params.profile || 'all';
 
     // Validate transport type parameters
     const hasCommand = !!command;
     const hasUrl = !!url;
-
-    if (!hasCommand && !hasUrl) {
-      return {
-        success: false,
-        error: 'Either command (for stdio) or url (for HTTP/SSE) must be provided'
-      };
-    }
 
     if (hasCommand && hasUrl) {
       return {
@@ -227,7 +220,47 @@ export class NCPManagementMCP implements InternalMCP {
       };
     }
 
-    const transportType = hasUrl ? 'http' : 'stdio';
+    // Auto-detect mode: no command or url provided
+    if (!hasCommand && !hasUrl) {
+      try {
+        // Try to fetch provider from registry
+        const { fetchProvider } = await import('../registry/provider-registry.js');
+        const provider = await fetchProvider(mcpName);
+
+        if (!provider) {
+          return {
+            success: false,
+            error: `Provider "${mcpName}" not found in registry. Either:\n` +
+                   `1. Use a known provider name (e.g., "canva", "github", "notion")\n` +
+                   `2. Provide manual configuration with command (for stdio) or url (for HTTP/SSE)`
+          };
+        }
+
+        // Use provider metadata to build config
+        const transport = provider.recommended || 'stdio';
+
+        if (transport === 'stdio' && provider.stdio) {
+          command = provider.stdio.command;
+          commandArgs = provider.stdio.args || [];
+        } else if (transport === 'http' && provider.http) {
+          url = provider.http.url;
+        } else {
+          return {
+            success: false,
+            error: `Provider "${mcpName}" found but missing ${transport} configuration. Please provide manual config.`
+          };
+        }
+
+        logger.info(`Auto-detected provider "${mcpName}": ${transport} transport`);
+      } catch (error: any) {
+        return {
+          success: false,
+          error: `Failed to fetch provider: ${error.message}. Provide manual configuration instead.`
+        };
+      }
+    }
+
+    const transportType = url ? 'http' : 'stdio';
 
     // ===== CONFIRM BEFORE ADD (Server-side enforcement) =====
     if (this.elicitationServer) {
