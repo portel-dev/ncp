@@ -7,6 +7,7 @@ import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { describe, it, expect, beforeAll, afterAll, jest } from '@jest/globals';
 
 // Keep a high timeout for the real operations we need
 jest.setTimeout(120000);  // Increase global timeout
