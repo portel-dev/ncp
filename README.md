@@ -11,26 +11,21 @@
 
 ## 💍 **What is NCP?**
 
-**NCP is a consolidation layer that transforms N scattered MCPs into 1 unified interface.**
+Instead of your AI juggling 50+ tools scattered across different MCPs, NCP gives it a single, unified interface.
 
-Your AI doesn't see 50+ tools. It sees 2:
-- **`find`** - Semantic discovery ("I need to read a file" → finds the right tool)
-- **`run`** - Execute any tool NCP found
+Your AI sees just **2 simple tools:**
+- **`find`** - "I need to read a file" → finds the right tool automatically
+- **`run`** - Execute any tool you discovered
 
-NCP handles all the complexity: routing, caching, health monitoring, intelligent tool selection.
+Behind the scenes, NCP manages all 50+ tools: routing requests, discovering the right tool, caching responses, monitoring health.
 
 ![NCP Transformation Flow](docs/images/ncp-transformation-flow.png)
 
-**The mechanism:**
-- 50+ MCP servers with 100+ tools → semantically indexed
-- User intent (natural language) → intelligent routing to the right tool
-- Your AI gets a unified, simple interface
-
-**Real impact:**
-- **97% token savings** (2,500 vs 103,000 tokens for 80 tools)
-- **5x faster** tool selection (sub-second vs 5-8 seconds)
-- **90% fewer** wrong tool selections
-- **Zero** choice paralysis
+**Why this matters:**
+- Your AI stops analyzing "which tool do I use?" and starts doing actual work
+- **97% fewer tokens burned** on tool confusion (2,500 vs 103,000 for 80 tools)
+- **5x faster responses** (sub-second tool selection vs 5-8 seconds)
+- **Your AI becomes focused.** Not desperate.
 
 🚀 **NEW:** Project-level configuration - each project can define its own MCPs automatically
 
