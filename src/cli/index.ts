@@ -3105,92 +3105,28 @@ program
     console.log(OutputFormatter.running(tool) + '\n');
 
     const result = await orchestrator.run(tool, parameters);
+    const { CLIResultFormatter } = await import('../services/cli-result-formatter.js');
 
     if (result.success) {
-      // Check if the content indicates an actual error despite "success" status
-      const contentStr = JSON.stringify(result.content);
-      const isActualError = contentStr.includes('"type":"text"') &&
-                           (contentStr.includes('Error:') || contentStr.includes('not found') || contentStr.includes('Unknown tool'));
+      console.log(OutputFormatter.success('Tool execution completed'));
 
-      if (isActualError) {
-        const errorText = result.content?.[0]?.text || 'Unknown error occurred';
-        let suggestions: string[] = [];
+      // Format result for CLI display
+      const formattedOutput = CLIResultFormatter.format(result);
 
-        if (errorText.includes('not configured') || errorText.includes('Unknown tool')) {
-          // Extract the query from the tool name for vector search
-          const [mcpName, toolName] = tool.split(':');
-
-          // Try multiple search strategies to find the best matches
-          let similarTools: any[] = [];
-
-          try {
-            // Strategy 1: Search with both MCP context and tool name for better domain matching
-            if (toolName && mcpName) {
-              const contextualQuery = `${mcpName} ${toolName}`;
-              similarTools = await orchestrator.find(contextualQuery, 3, false);
-            }
-
-            // Strategy 2: If no results, try just the tool name
-            if (similarTools.length === 0 && toolName) {
-              similarTools = await orchestrator.find(toolName, 3, false);
-            }
-
-            // Strategy 3: If still no results, try just the MCP name (domain search)
-            if (similarTools.length === 0) {
-              similarTools = await orchestrator.find(mcpName, 3, false);
-            }
-
-            if (similarTools.length > 0) {
-              suggestions.push('💡 Did you mean:');
-              similarTools.forEach(similar => {
-                const confidence = Math.round(similar.confidence * 100);
-                suggestions.push(`  • ${similar.toolName} (${confidence}% match)`);
-              });
-            }
-          } catch (error: any) {
-            // Fallback to basic suggestions if vector search fails
-            suggestions = ['Try \'ncp find <keyword>\' to discover similar tools'];
-          }
-        }
-
-        const context = ErrorHandler.createContext('mcp', 'run', tool, suggestions);
-        const errorResult = ErrorHandler.handle(errorText, context);
-        console.log('\n' + ErrorHandler.formatForConsole(errorResult));
+      if (options.outputFormat === 'json') {
+        // Raw JSON output
+        const { formatJson } = await import('../utils/highlighting.js');
+        console.log(formatJson(result.content, 'cli-highlight'));
       } else {
-        console.log(OutputFormatter.success('Tool execution completed'));
-
-        // Respect user's output format choice
-        if (options.outputFormat === 'json') {
-          // Raw JSON output - test different formatters to pick the best
-          const { formatJson } = await import('../utils/highlighting.js');
-          console.log(formatJson(result.content, 'cli-highlight')); // Let's test this one
-        } else {
-          // Smart response formatting (default)
-          const { ResponseFormatter } = await import('../utils/response-formatter.js');
-
-          // Check if this is text content that should be formatted naturally
-          const isTextResponse = Array.isArray(result.content) &&
-                                result.content.every((item: any) => item?.type === 'text');
-
-          if (isTextResponse || (result.content?.[0]?.type === 'text' && result.content.length === 1)) {
-            // Format as natural text with proper newlines
-            console.log(ResponseFormatter.format(result.content, true, options.yes));
-          } else if (ResponseFormatter.isPureData(result.content)) {
-            // Pure data - use JSON formatting
-            const { formatJson } = await import('../utils/highlighting.js');
-            console.log(formatJson(result.content, 'cli-highlight'));
-          } else {
-            // Mixed content or unknown - use smart formatter
-            console.log(ResponseFormatter.format(result.content, true, options.yes));
-          }
-        }
+        // Default: formatted output
+        console.log(formattedOutput);
       }
     } else {
-      // Check if this is a tool not found error and provide "did you mean" suggestions
+      // NCP-level error (tool not found, validation failed, etc.)
       const errorMessage = result.error || 'Unknown error occurred';
       let suggestions: string[] = [];
 
-      if (errorMessage.includes('not configured') || errorMessage.includes('Unknown tool')) {
+      if (errorMessage.includes('not found') || errorMessage.includes('not configured')) {
         // Extract the query from the tool name for vector search
         const [mcpName, toolName] = tool.split(':');
 
