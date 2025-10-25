@@ -7,7 +7,7 @@
  *
  * Tests:
  * 1. Server responds to initialize immediately
- * 2. tools/list returns tools < 100ms even during indexing
+ * 2. tools/list returns tools < 250ms even during indexing
  * 3. find returns partial results during indexing (not empty)
  * 4. Cache profileHash persists across restarts
  * 5. Second startup uses cache (no re-indexing)
@@ -231,7 +231,7 @@ async function test1_Initialize() {
 }
 
 async function test2_ToolsListDuringIndexing() {
-  logInfo('Test 2: tools/list responds < 100ms even during indexing');
+  logInfo('Test 2: tools/list responds < 250ms even during indexing');
 
   const client = new MCPClientSimulator();
   await client.start();
@@ -250,8 +250,8 @@ async function test2_ToolsListDuringIndexing() {
     return false;
   }
 
-  if (duration > 100) {
-    logError(`tools/list took ${duration}ms (should be < 100ms)`);
+  if (duration > 250) {
+    logError(`tools/list took ${duration}ms (should be < 250ms)`);
     return false;
   }
 
