@@ -8,8 +8,37 @@ import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 
 // Mock filesystem operations
-jest.mock('fs/promises');
-jest.mock('fs');
+jest.mock('fs/promises', () => ({
+  readFile: jest.fn(),
+  writeFile: jest.fn(),
+  mkdir: jest.fn()
+}));
+
+jest.mock('fs', () => ({
+  existsSync: jest.fn(() => false),
+  readFileSync: jest.fn(() => ''),
+  writeFileSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  readFile: jest.fn((path: any, callback: any) => callback(null, '')),
+  writeFile: jest.fn((path: any, data: any, callback: any) => callback(null)),
+  mkdir: jest.fn((path: any, callback: any) => callback(null)),
+  readdirSync: jest.fn(() => []),
+  statSync: jest.fn(() => ({ isDirectory: () => false })),
+  createWriteStream: jest.fn(() => ({
+    write: jest.fn(),
+    end: jest.fn((callback: any) => callback && callback()),
+    on: jest.fn(),
+    once: jest.fn(),
+    emit: jest.fn()
+  })),
+  createReadStream: jest.fn(() => ({
+    on: jest.fn(),
+    once: jest.fn(),
+    emit: jest.fn()
+  })),
+  rmSync: jest.fn(),
+  rm: jest.fn((path: any, opts: any, callback: any) => callback && callback(null))
+}));
 
 const mockReadFile = readFile as jest.MockedFunction<typeof readFile>;
 const mockWriteFile = writeFile as jest.MockedFunction<typeof writeFile>;
