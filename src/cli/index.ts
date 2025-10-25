@@ -1811,13 +1811,22 @@ program
 
 // Config command group
 const configCmd = program
-  .command('config')
-  .description('Manage NCP configuration (import, validate, edit)')
-  .action(async (options, command) => {
-    // If no subcommand provided, run interactive config
-    if (!command.args || command.args.length === 0) {
-      const { ConfigurationManager } = await import('./commands/config-interactive.js');
-      const configManager = new ConfigurationManager();
+  .command('config [key] [value]')
+  .description('Manage NCP configuration (interactive or direct key-value)')
+  .action(async (key, value, options) => {
+    const { ConfigurationManager } = await import('./commands/config-interactive.js');
+    const configManager = new ConfigurationManager();
+
+    // If key and value provided, set the config directly
+    if (key && value) {
+      await configManager.setConfigValue(key, value);
+    } else if (key && !value) {
+      // If only key provided (no value), show error
+      console.error(chalk.red(`\n❌ Missing value for key "${key}"\n`));
+      console.error(chalk.dim('Usage: ncp config <key> <value>\n'));
+      process.exit(1);
+    } else {
+      // No key provided, run interactive mode
       await configManager.run();
     }
   });

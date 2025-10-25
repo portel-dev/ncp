@@ -1,6 +1,6 @@
 /**
  * Interactive Configuration Command
- * Allows users to view and edit NCP settings interactively
+ * Allows users to view and edit NCP settings interactively or via command-line
  */
 
 import chalk from 'chalk';
@@ -14,6 +14,40 @@ interface ConfigOptions {
   confirmModifications: boolean;
   enableScheduler: boolean;
   enableMCPManagement: boolean;
+}
+
+/**
+ * Known configuration keys and their types
+ */
+const KNOWN_KEYS: Record<string, 'boolean' | 'number' | 'string'> = {
+  'autoImport': 'boolean',
+  'debugLogging': 'boolean',
+  'confirmModifications': 'boolean',
+  'enableScheduler': 'boolean',
+  'enableMCPManagement': 'boolean'
+};
+
+/**
+ * Parse string value to appropriate type
+ */
+function parseValue(value: string, type: 'boolean' | 'number' | 'string'): any {
+  if (type === 'boolean') {
+    const truthy = ['true', 'yes', 'on', '1', 'enabled'];
+    const falsy = ['false', 'no', 'off', '0', 'disabled'];
+    const lower = value.toLowerCase();
+
+    if (truthy.includes(lower)) return true;
+    if (falsy.includes(lower)) return false;
+    throw new Error(`Invalid boolean value: "${value}". Use true/false, yes/no, on/off, or 1/0`);
+  }
+
+  if (type === 'number') {
+    const num = Number(value);
+    if (isNaN(num)) throw new Error(`Invalid number value: "${value}"`);
+    return num;
+  }
+
+  return value;
 }
 
 export class ConfigurationManager {
@@ -140,6 +174,78 @@ export class ConfigurationManager {
     await saveGlobalSettings(globalSettings);
 
     console.log(`\n${chalk.green('✅ Configuration saved')}\n`);
+  }
+
+  /**
+   * Set a configuration value directly from command line
+   * Usage: ncp config <key> <value>
+   */
+  async setConfigValue(key: string, value: string): Promise<void> {
+    try {
+      // Check if key is known
+      if (!KNOWN_KEYS[key]) {
+        const availableKeys = Object.keys(KNOWN_KEYS).join(', ');
+        console.error(chalk.red(`\n❌ Unknown configuration key: "${key}"\n`));
+        console.error(chalk.dim(`Available keys:\n  ${availableKeys}\n`));
+        process.exit(1);
+      }
+
+      const expectedType = KNOWN_KEYS[key];
+
+      // Validate and parse value
+      let parsedValue: any;
+      try {
+        parsedValue = parseValue(value, expectedType);
+      } catch (parseError: any) {
+        console.error(chalk.red(`\n❌ ${parseError.message}\n`));
+        process.exit(1);
+      }
+
+      // Apply the setting
+      const globalSettings = await loadGlobalSettings();
+
+      switch (key) {
+        case 'autoImport':
+          if (parsedValue) {
+            delete process.env.NCP_SKIP_AUTO_IMPORT;
+          } else {
+            process.env.NCP_SKIP_AUTO_IMPORT = 'true';
+          }
+          break;
+
+        case 'debugLogging':
+          if (parsedValue) {
+            process.env.NCP_DEBUG = 'true';
+          } else {
+            delete process.env.NCP_DEBUG;
+          }
+          break;
+
+        case 'confirmModifications':
+          globalSettings.confirmBeforeRun.enabled = parsedValue;
+          await saveGlobalSettings(globalSettings);
+          break;
+
+        case 'enableScheduler':
+          // Scheduler is always available, but we could add a flag if needed
+          if (!parsedValue) {
+            console.warn(chalk.yellow('⚠️  Scheduler is always available. Setting ignored.\n'));
+          }
+          break;
+
+        case 'enableMCPManagement':
+          // MCP Management is always available
+          if (!parsedValue) {
+            console.warn(chalk.yellow('⚠️  MCP Management is always available. Setting ignored.\n'));
+          }
+          break;
+      }
+
+      console.log(chalk.green(`\n✅ Configuration updated: ${chalk.bold(key)} = ${chalk.cyan(value)}\n`));
+    } catch (error: any) {
+      console.error(chalk.red(`\n❌ Error: ${error.message}\n`));
+      process.exit(1);
+    }
   }
 
   /**
