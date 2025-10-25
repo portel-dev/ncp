@@ -97,6 +97,8 @@ jobs:
 
       - name: Run tests with coverage
         run: npm run test:coverage
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
