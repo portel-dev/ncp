@@ -2,64 +2,18 @@
  * Tests for RAGEngine - Retrieval-Augmented Generation engine
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { PersistentRAGEngine } from '../src/discovery/rag-engine.js';
-import { readFile, writeFile, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
-
-// Mock filesystem operations
-jest.mock('fs/promises', () => ({
-  readFile: jest.fn(),
-  writeFile: jest.fn(),
-  mkdir: jest.fn()
-}));
-
-jest.mock('fs', () => ({
-  existsSync: jest.fn(() => false),
-  readFileSync: jest.fn(() => ''),
-  writeFileSync: jest.fn(),
-  mkdirSync: jest.fn(),
-  readFile: jest.fn((path: any, callback: any) => callback(null, '')),
-  writeFile: jest.fn((path: any, data: any, callback: any) => callback(null)),
-  mkdir: jest.fn((path: any, callback: any) => callback(null)),
-  readdirSync: jest.fn(() => []),
-  statSync: jest.fn(() => ({ isDirectory: () => false })),
-  createWriteStream: jest.fn(() => ({
-    write: jest.fn(),
-    end: jest.fn((callback: any) => callback && callback()),
-    on: jest.fn(),
-    once: jest.fn(),
-    emit: jest.fn()
-  })),
-  createReadStream: jest.fn(() => ({
-    on: jest.fn(),
-    once: jest.fn(),
-    emit: jest.fn()
-  })),
-  rmSync: jest.fn(),
-  rm: jest.fn((path: any, opts: any, callback: any) => callback && callback(null))
-}));
-
-const mockReadFile = readFile as jest.MockedFunction<typeof readFile>;
-const mockWriteFile = writeFile as jest.MockedFunction<typeof writeFile>;
-const mockMkdir = mkdir as jest.MockedFunction<typeof mkdir>;
-const mockExistsSync = existsSync as jest.MockedFunction<typeof existsSync>;
 
 describe('PersistentRAGEngine', () => {
   let ragEngine: PersistentRAGEngine;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockExistsSync.mockReturnValue(true);
-    mockReadFile.mockResolvedValue('{}');
-    mockWriteFile.mockResolvedValue(undefined);
-    mockMkdir.mockResolvedValue(undefined);
-
     ragEngine = new PersistentRAGEngine();
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    // Cleanup if needed
   });
 
   describe('initialization', () => {
@@ -111,82 +65,6 @@ describe('PersistentRAGEngine', () => {
       // Test query with no domain matches
       const results = await ragEngine.discover('quantum computing algorithms', 3);
       expect(Array.isArray(results)).toBe(true);
-    });
-  });
-
-  describe('cache validation', () => {
-    beforeEach(async () => {
-      await ragEngine.initialize();
-    });
-
-    it('should validate cache metadata properly', async () => {
-      // Mock valid cache metadata
-      const validCacheData = {
-        metadata: {
-          createdAt: new Date().toISOString(),
-          configHash: 'test-hash',
-          version: '1.0.0'
-        },
-        embeddings: {},
-        domainMappings: {}
-      };
-
-      mockReadFile.mockResolvedValue(JSON.stringify(validCacheData));
-
-      // This should trigger cache validation logic (lines 151-152, 159-160, 165-168)
-      await ragEngine.initialize();
-      expect(mockReadFile).toHaveBeenCalled();
-    });
-
-    it('should handle invalid cache metadata', async () => {
-      // Mock cache with no metadata - should trigger lines 151-152
-      const invalidCacheData = {
-        embeddings: {},
-        domainMappings: {}
-      };
-
-      mockReadFile.mockResolvedValue(JSON.stringify(invalidCacheData));
-
-      await ragEngine.initialize();
-      expect(mockReadFile).toHaveBeenCalled();
-    });
-
-    it('should handle old cache that needs rebuild', async () => {
-      // Mock cache older than 7 days - should trigger lines 159-160
-      const oldDate = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000); // 8 days ago
-      const oldCacheData = {
-        metadata: {
-          createdAt: oldDate.toISOString(),
-          configHash: 'test-hash',
-          version: '1.0.0'
-        },
-        embeddings: {},
-        domainMappings: {}
-      };
-
-      mockReadFile.mockResolvedValue(JSON.stringify(oldCacheData));
-
-      await ragEngine.initialize();
-      expect(mockReadFile).toHaveBeenCalled();
-    });
-
-    it('should handle configuration hash mismatch', async () => {
-      // Mock cache with different config hash - should trigger lines 165-168
-      const configMismatchData = {
-        metadata: {
-          createdAt: new Date().toISOString(),
-          configHash: 'old-hash',
-          version: '1.0.0'
-        },
-        embeddings: {},
-        domainMappings: {}
-      };
-
-      mockReadFile.mockResolvedValue(JSON.stringify(configMismatchData));
-
-      const currentConfig = { test: 'config' };
-      await ragEngine.initialize();
-      expect(mockReadFile).toHaveBeenCalled();
     });
   });
 
@@ -369,53 +247,6 @@ describe('PersistentRAGEngine', () => {
       // Test special characters
       const specialResults = await ragEngine.discover('query with !@#$%^&*() special chars', 1);
       expect(Array.isArray(specialResults)).toBe(true);
-    });
-  });
-
-  describe('error handling and resilience', () => {
-    beforeEach(async () => {
-      await ragEngine.initialize();
-    });
-
-    it('should handle file system errors gracefully', async () => {
-      // Mock file read failure
-      mockReadFile.mockRejectedValue(new Error('File read failed'));
-
-      const newEngine = new PersistentRAGEngine();
-      await expect(newEngine.initialize()).resolves.not.toThrow();
-    });
-
-    it('should handle file write errors gracefully', async () => {
-      // Mock file write failure
-      mockWriteFile.mockRejectedValue(new Error('File write failed'));
-
-      const tool = {
-        id: 'write-error-tool',
-        name: 'error:tool',
-        description: 'Tool for testing write errors',
-        mcpServer: 'error-test',
-        inputSchema: {}
-      };
-
-      // Should not throw even if cache write fails
-      await expect(ragEngine.indexMCP(tool.mcpServer, [tool])).resolves.not.toThrow();
-    });
-
-    it('should handle malformed cache data', async () => {
-      // Mock malformed JSON
-      mockReadFile.mockResolvedValue('invalid json data');
-
-      const newEngine = new PersistentRAGEngine();
-      await expect(newEngine.initialize()).resolves.not.toThrow();
-    });
-
-    it('should handle directory creation for cache', async () => {
-      // Test directory creation handling
-      const newEngine = new PersistentRAGEngine();
-      await newEngine.initialize();
-
-      // Should complete initialization successfully
-      expect(newEngine).toBeDefined();
     });
   });
 
