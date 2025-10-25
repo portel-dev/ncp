@@ -40,15 +40,20 @@ jobs:
 
       - name: Run critical tests
         run: npm run test:critical
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
 
       - name: Run E2E tests
         run: npm run test:e2e
         env:
           NCP_CONFIRM_BEFORE_RUN: 'false'
           NCP_DEBUG: 'false'
+          NODE_OPTIONS: --experimental-vm-modules
 
       - name: Run integration tests
         run: npm run test:integration
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
 
   lint:
     name: Lint and Type Check
