@@ -1,63 +1,39 @@
 // Mock chalk for Jest testing
 // Provides basic color functions that return the input string
 
-const mockChalk = {
-  green: (str) => str,
-  red: (str) => str,
-  yellow: (str) => str,
-  blue: (str) => str,
-  cyan: (str) => str,
-  magenta: (str) => str,
-  white: (str) => str,
-  gray: (str) => str,
-  grey: (str) => str,
-  black: (str) => str,
+const colorFn = (str) => str;
+
+const chainable = {
   bold: (str) => str,
+  dim: (str) => str,
   italic: (str) => str,
   underline: (str) => str,
-  dim: (str) => str,
-  inverse: (str) => str,
-  strikethrough: (str) => str,
-
-  // Support for chaining
-  green: {
-    bold: (str) => str,
-    dim: (str) => str,
-    italic: (str) => str,
-    underline: (str) => str,
-  },
-
-  red: {
-    bold: (str) => str,
-    dim: (str) => str,
-    italic: (str) => str,
-    underline: (str) => str,
-  },
-
-  yellow: {
-    bold: (str) => str,
-    dim: (str) => str,
-    italic: (str) => str,
-    underline: (str) => str,
-  },
-
-  blue: {
-    bold: (str) => str,
-    dim: (str) => str,
-    italic: (str) => str,
-    underline: (str) => str,
-  },
-
-  // Default export
-  default: function(str) { return str; }
 };
 
-// Add all color functions to the default function
-Object.keys(mockChalk).forEach(key => {
-  if (key !== 'default') {
-    mockChalk.default[key] = mockChalk[key];
-  }
-});
+const mockChalk = {
+  green: colorFn,
+  red: colorFn,
+  yellow: colorFn,
+  blue: colorFn,
+  cyan: colorFn,
+  magenta: colorFn,
+  white: colorFn,
+  gray: colorFn,
+  grey: colorFn,
+  black: colorFn,
+  bold: colorFn,
+  italic: colorFn,
+  underline: colorFn,
+  dim: colorFn,
+  inverse: colorFn,
+  strikethrough: colorFn,
+};
 
-module.exports = mockChalk;
-module.exports.default = mockChalk;
+// Add chainable methods
+mockChalk.green = Object.assign(colorFn, chainable);
+mockChalk.red = Object.assign(colorFn, chainable);
+mockChalk.yellow = Object.assign(colorFn, chainable);
+mockChalk.blue = Object.assign(colorFn, chainable);
+
+export default mockChalk;
+export { mockChalk };
