@@ -30,6 +30,21 @@ From desperation to delegation - your AI goes from overwhelmed to unstoppable.
 
 ---
 
+## 📑 **Quick Navigation**
+
+- [The Problem](#the-mcp-paradox-from-assistant-to-desperate) - Why too many tools break your AI
+- [The Solution](#the-before--after-reality) - How NCP transforms your experience
+- [Getting Started](#-prerequisites) - Installation & quick start
+- [Try It Out](#-test-drive-see-the-difference-yourself) - See the CLI in action
+- [Setup by Client](#-configuration-for-different-ai-clients) - Claude Desktop, Cursor, VS Code, etc.
+- [Popular MCPs](#-popular-mcps-that-work-great-with-ncp) - Community favorites to add
+- [Advanced Features](#-advanced-features) - Project config, scheduling, remote MCPs
+- [Troubleshooting](#-troubleshooting) - Common issues & solutions
+- [How It Works](#-deep-dive-how-it-works) - Technical deep dive
+- [Contributing](#-contributing) - Help us improve NCP
+
+---
+
 ## 😤 **The MCP Paradox: From Assistant to Desperate**
 
 You gave your AI assistant 50 tools to be more capable. Instead, you got desperation:
