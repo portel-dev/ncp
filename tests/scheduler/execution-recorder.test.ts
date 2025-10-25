@@ -4,14 +4,20 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ExecutionRecorder } from '../../src/services/scheduler/execution-recorder';
 
 describe.skip('ExecutionRecorder', () => {
   let recorder: ExecutionRecorder;
+  let resultsDir: string;
+  let executionsDir: string;
 
   beforeEach(() => {
     // Create a new recorder instance
     recorder = new ExecutionRecorder();
+    resultsDir = '/tmp/results';
+    executionsDir = '/tmp/executions';
   });
 
   afterEach(() => {
