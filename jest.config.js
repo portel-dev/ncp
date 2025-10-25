@@ -8,11 +8,7 @@ export default {
   transform: {
     '^.+\\.ts$': ['ts-jest', {
       useESM: true,
-      tsconfig: {
-        module: 'ESNext',
-        target: 'ES2022',
-        moduleResolution: 'bundler'
-      }
+      tsconfig: './tsconfig.test.json'
     }]
   },
   coverageDirectory: 'coverage',
