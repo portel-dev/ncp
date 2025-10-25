@@ -1775,6 +1775,64 @@ export class NCPOrchestrator {
   }
 
   /**
+   * Get a specific prompt from an MCP and execute it
+   * Used when client requests a prefixed prompt like "github:pr-template"
+   */
+  async getPromptFromMCP(mcpName: string, promptName: string, args: Record<string, any>): Promise<any> {
+    try {
+      const definition = this.definitions.get(mcpName);
+      if (!definition) {
+        throw new Error(`MCP '${mcpName}' not found`);
+      }
+
+      // Create temporary connection for prompt request
+      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+
+      const silentEnv = {
+        ...process.env,
+        ...(definition.config.env || {}),
+        MCP_SILENT: 'true',
+        QUIET: 'true',
+        NO_COLOR: 'true'
+      };
+
+      const transport = await this.createTransport(definition.config, silentEnv);
+
+      // Use actual client info for transparent passthrough to downstream MCPs
+      const client = new Client(
+        this.clientInfo,
+        { capabilities: {} }
+      );
+
+      // Connect with timeout and filtered output
+      await withFilteredOutput(async () => {
+        await Promise.race([
+          client.connect(transport),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Prompt connection timeout')), this.QUICK_PROBE_TIMEOUT)
+          )
+        ]);
+      });
+
+      // Get the specific prompt with filtered output
+      const response = await withFilteredOutput(async () => {
+        return await client.getPrompt({ name: promptName, arguments: args });
+      });
+      await client.close();
+
+      // Return the prompt response with description and messages
+      return {
+        description: response.description,
+        messages: response.messages
+      };
+
+    } catch (error: any) {
+      logger.error(`Failed to get prompt ${promptName} from ${mcpName}: ${error.message}`);
+      throw new Error(`Failed to get prompt from ${mcpName}: ${error.message}`);
+    }
+  }
+
+  /**
    * Evict least recently used connection when pool is full
    * Implements LRU (Least Recently Used) eviction policy
    */

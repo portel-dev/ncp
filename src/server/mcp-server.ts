@@ -924,12 +924,17 @@ Then call this tool again with your response in the _userResponse parameter.`;
 
   private async handleListPrompts(request: MCPRequest): Promise<MCPResponse> {
     try {
-      // Return NCP's own prompts for user approval during MCP management
+      // Get all prompts: NCP's own + all MCP prompts with prefixes
+      const allMCPPrompts = await this.orchestrator.getAllPrompts();
+
+      // Combine NCP prompts with MCP prompts
+      const combinedPrompts = [...NCP_PROMPTS, ...allMCPPrompts];
+
       return {
         jsonrpc: '2.0',
         id: request.id,
         result: {
-          prompts: NCP_PROMPTS
+          prompts: combinedPrompts
         }
       };
     } catch (error: any) {
@@ -938,7 +943,7 @@ Then call this tool again with your response in the _userResponse parameter.`;
         jsonrpc: '2.0',
         id: request.id,
         result: {
-          prompts: []
+          prompts: NCP_PROMPTS // Fallback to NCP prompts only
         }
       };
     }
@@ -960,7 +965,24 @@ Then call this tool again with your response in the _userResponse parameter.`;
     }
 
     try {
-      // Find the prompt definition
+      // Check if prompt has MCP prefix (format: mcpname:promptname)
+      const colonIndex = promptName.indexOf(':');
+      const hasMCPPrefix = colonIndex > 0;
+
+      if (hasMCPPrefix) {
+        // Delegate to orchestrator for MCP prompts
+        const mcpName = promptName.substring(0, colonIndex);
+        const actualPromptName = promptName.substring(colonIndex + 1);
+
+        const result = await this.orchestrator.getPromptFromMCP(mcpName, actualPromptName, args);
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result
+        };
+      }
+
+      // Handle NCP's own prompts
       const promptDef = NCP_PROMPTS.find(p => p.name === promptName);
 
       if (!promptDef) {
