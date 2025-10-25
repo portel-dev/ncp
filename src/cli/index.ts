@@ -18,6 +18,8 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { mcpWrapper } from '../utils/mcp-wrapper.js';
 import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 import { UpdateChecker } from '../utils/update-checker.js';
+import { MCPUpdateChecker } from '../utils/mcp-update-checker.js';
+import { logger } from '../utils/logger.js';
 import { setOverrideWorkingDirectory } from '../utils/ncp-paths.js';
 import { ConfigSchemaReader } from '../services/config-schema-reader.js';
 import { ConfigPrompter } from '../services/config-prompter.js';
@@ -1812,7 +1814,38 @@ program
 // Config command group
 const configCmd = program
   .command('config [key] [value]')
-  .description('Manage NCP configuration (interactive or direct key-value)')
+  .description('Manage NCP configuration settings')
+  .configureHelp({
+    formatHelp: () => {
+      let output = '\n';
+      output += chalk.bold.white('NCP Config Command') + ' - ' + chalk.cyan('Configuration Management') + '\n\n';
+      output += chalk.dim('View and manage NCP settings interactively or via command-line.') + '\n';
+      output += chalk.dim('Settings control behavior like confirmation dialogs and debug logging.') + '\n\n';
+      output += chalk.bold.white('Usage:') + '\n';
+      output += '  ' + chalk.yellow('ncp config') + '                              # Show configuration and prompt to edit\n';
+      output += '  ' + chalk.yellow('ncp config <key> <value>') + '       # Set a configuration value directly\n\n';
+      output += chalk.bold.white('Available Configuration Keys:') + '\n';
+      output += '  ' + chalk.cyan('autoImport') + chalk.dim(' (boolean)') + '              Auto-import MCPs from Claude Desktop on startup\n';
+      output += '  ' + chalk.cyan('debugLogging') + chalk.dim(' (boolean)') + '            Enable detailed debug logs for troubleshooting\n';
+      output += '  ' + chalk.cyan('confirmModifications') + chalk.dim(' (boolean)') + '    Show confirmation dialog before modifying operations\n';
+      output += '  ' + chalk.cyan('enableScheduler') + chalk.dim(' (boolean)') + '        Enable built-in scheduler for automated tasks\n';
+      output += '  ' + chalk.cyan('enableMCPManagement') + chalk.dim(' (boolean)') + '    Enable adding/removing MCPs in your configuration\n\n';
+      output += chalk.bold.white('Boolean Values:') + '\n';
+      output += '  ' + chalk.gray('Accepts:') + ' true/false, yes/no, on/off, 1/0, enabled/disabled\n\n';
+      output += chalk.bold.white('Examples:') + '\n';
+      output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp config') + '\n';
+      output += chalk.dim('  Shows current settings and prompts to edit interactively\n\n');
+      output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp config debugLogging true') + '\n';
+      output += chalk.dim('  Enable debug logging directly\n\n');
+      output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp config confirmModifications off') + '\n';
+      output += chalk.dim('  Disable confirmation dialogs\n\n');
+      output += chalk.bold.white('Tips:') + '\n';
+      output += '  • Interactive mode shows current values and allows editing one setting at a time\n';
+      output += '  • Direct mode (key + value) is useful for scripts and automation\n';
+      output += '  • Settings are validated before being saved to prevent errors\n\n';
+      return output;
+    }
+  })
   .action(async (key, value, options) => {
     const { ConfigurationManager } = await import('./commands/config-interactive.js');
     const configManager = new ConfigurationManager();
@@ -2706,7 +2739,42 @@ program
       { description: normalizedQuery, limit, page, depth, confidence_threshold }
     );
 
-    const formattedOutput = formatFindOutput(result.result.content[0].text);
+    let formattedOutput = formatFindOutput(result.result.content[0].text);
+
+    // Extract MCP names from results and check for updates
+    try {
+      const mcpUpdateChecker = new MCPUpdateChecker();
+      const mcpMatches = result.result.content[0].text.match(/\*\*(\w+):[\w_]+\*\*/g) || [];
+      const uniqueMcps = new Set<string>();
+
+      for (const match of mcpMatches) {
+        const mcpName = match.replace(/\*\*|\*\*/g, '').split(':')[0];
+        uniqueMcps.add(mcpName);
+      }
+
+      // Check for updates for discovered MCPs
+      const mcpsWithUpdates: string[] = [];
+      if (uniqueMcps.size > 0) {
+        for (const mcpName of uniqueMcps) {
+          // Check with unknown version - MCPUpdateChecker will still find latest
+          const updateInfo = await mcpUpdateChecker.checkMCPUpdate(mcpName, 'unknown');
+          if (updateInfo.hasUpdate && updateInfo.latestVersion) {
+            mcpsWithUpdates.push(`  ${chalk.cyan(mcpName)}: latest available is ${chalk.green(updateInfo.latestVersion)}`);
+          }
+        }
+      }
+
+      // Add update footnotes if any MCPs have updates
+      if (mcpsWithUpdates.length > 0) {
+        formattedOutput += '\n' + chalk.dim('\n📦 Available MCP Updates:') + '\n';
+        formattedOutput += mcpsWithUpdates.join('\n');
+        formattedOutput += '\n' + chalk.dim('   Run: ncp update [mcp-name] to update\n');
+      }
+    } catch (error) {
+      // Silently ignore update check errors - don't disrupt find results
+      logger.debug(`Failed to check MCP updates in find: ${error}`);
+    }
+
     console.log(formattedOutput);
     await server.cleanup();
   });
@@ -3255,62 +3323,93 @@ program
     }
   });
 
-// Update command
+// Update command - supports both NCP and MCP updates
 program
-  .command('update')
-  .description('Update NCP to the latest version')
+  .command('update [mcp-name]')
+  .description('Update NCP or a specific MCP to the latest version')
   .option('--check', 'Check for updates without installing')
+  .option('--force', 'Force immediate update check (bypass 24h cache)')
   .configureHelp({
     formatHelp: () => {
       let output = '\n';
       output += chalk.bold.white('NCP Update Command') + ' - ' + chalk.cyan('Version Management') + '\n\n';
-      output += chalk.dim('Keep NCP up to date with the latest features and bug fixes.') + '\n\n';
+      output += chalk.dim('Update NCP or installed MCPs to the latest versions.') + '\n\n';
       output += chalk.bold.white('Usage:') + '\n';
-      output += '  ' + chalk.yellow('ncp update') + '          # Update to latest version\n';
-      output += '  ' + chalk.yellow('ncp update --check') + '   # Check for updates without installing\n\n';
+      output += '  ' + chalk.yellow('ncp update') + '              # Update NCP to latest version\n';
+      output += '  ' + chalk.yellow('ncp update github') + '        # Update github MCP\n';
+      output += '  ' + chalk.yellow('ncp update --check') + '       # Check for all updates\n';
+      output += '  ' + chalk.yellow('ncp update github --check') + ' # Check github MCP for updates\n\n';
+      output += chalk.bold.white('Options:') + '\n';
+      output += '  ' + chalk.cyan('--check') + '   Check for updates without installing\n';
+      output += '  ' + chalk.cyan('--force') + '   Force immediate check (bypass 24h cache)\n\n';
       output += chalk.bold.white('Examples:') + '\n';
       output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp update --check') + '\n';
-      output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp update') + '\n\n';
+      output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp update') + '\n';
+      output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp update github --check') + '\n';
+      output += '  ' + chalk.gray('$ ') + chalk.yellow('ncp update github') + '\n\n';
       return output;
     }
   })
-  .action(async (options) => {
+  .action(async (mcpName, options) => {
     try {
-      const updateChecker = new UpdateChecker();
+      // If no MCP name provided, update NCP itself
+      if (!mcpName) {
+        const updateChecker = new UpdateChecker();
 
-      if (options.check) {
-        // Check for updates only
-        console.log(chalk.blue('🔍 Checking for updates...'));
-        const result = await updateChecker.checkForUpdates(true);
+        if (options.check) {
+          // Check for updates only
+          console.log(chalk.blue('🔍 Checking for NCP updates...'));
+          const result = await updateChecker.checkForUpdates(true);
 
-        if (result.hasUpdate) {
-          console.log(chalk.yellow('📦 Update Available!'));
-          console.log(chalk.dim(`   Current: ${result.currentVersion}`));
-          console.log(chalk.green(`   Latest:  ${result.latestVersion}`));
-          console.log();
-          console.log(chalk.cyan('   Run: ncp update'));
-        } else {
-          console.log(chalk.green('✅ You are using the latest version!'));
-          console.log(chalk.dim(`   Version: ${result.currentVersion}`));
-        }
-      } else {
-        // Perform update
-        const result = await updateChecker.checkForUpdates(true);
-
-        if (result.hasUpdate) {
-          console.log(chalk.yellow('📦 Update Available!'));
-          console.log(chalk.dim(`   Current: ${result.currentVersion}`));
-          console.log(chalk.green(`   Latest:  ${result.latestVersion}`));
-          console.log();
-
-          const success = await updateChecker.performUpdate();
-          if (!success) {
-            process.exit(1);
+          if (result.hasUpdate) {
+            console.log(chalk.yellow('📦 NCP Update Available!'));
+            console.log(chalk.dim(`   Current: ${result.currentVersion}`));
+            console.log(chalk.green(`   Latest:  ${result.latestVersion}`));
+            console.log();
+            console.log(chalk.cyan('   Run: ncp update'));
+          } else {
+            console.log(chalk.green('✅ You are using the latest NCP version!'));
+            console.log(chalk.dim(`   Version: ${result.currentVersion}`));
           }
         } else {
-          console.log(chalk.green('✅ You are already using the latest version!'));
-          console.log(chalk.dim(`   Version: ${result.currentVersion}`));
+          // Perform update
+          const result = await updateChecker.checkForUpdates(true);
+
+          if (result.hasUpdate) {
+            console.log(chalk.yellow('📦 Update Available!'));
+            console.log(chalk.dim(`   Current: ${result.currentVersion}`));
+            console.log(chalk.green(`   Latest:  ${result.latestVersion}`));
+            console.log();
+
+            const success = await updateChecker.performUpdate();
+            if (!success) {
+              process.exit(1);
+            }
+          } else {
+            console.log(chalk.green('✅ You are already using the latest NCP version!'));
+            console.log(chalk.dim(`   Version: ${result.currentVersion}`));
+          }
         }
+        return;
+      }
+
+      // Update specific MCP
+      const mcpUpdateChecker = new MCPUpdateChecker();
+
+      if (options.check) {
+        // Check for MCP updates
+        console.log(chalk.blue(`🔍 Checking for updates to ${chalk.cyan(mcpName)} MCP...`));
+
+        // For now, show a message that MCP updates will be shown via notifications
+        console.log(chalk.yellow('ℹ️  MCP update checking via command-line is coming soon.'));
+        console.log(chalk.dim('   Updates will be shown automatically when you use MCP tools.'));
+        console.log(chalk.dim(`   Run: ncp find "${mcpName}" to verify the MCP is installed.`));
+      } else {
+        // Perform MCP update
+        console.log(chalk.blue(`🔄 Updating ${chalk.cyan(mcpName)} MCP...`));
+        console.log(chalk.yellow('ℹ️  MCP update feature coming soon'));
+        console.log(chalk.dim('   For now, you can manually update the MCP package in your profile configuration.'));
+        console.log(chalk.dim(`   Run: ncp find "${mcpName}" to verify the MCP is installed.`));
       }
     } catch (error) {
       console.error(chalk.red('❌ Failed to check for updates:'), error);
