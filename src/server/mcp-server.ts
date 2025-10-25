@@ -15,6 +15,7 @@ import { RegistryClient } from '../services/registry-client.js';
 import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation, parseOperationConfirmationResponse } from './mcp-prompts.js';
 import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist } from '../utils/global-settings.js';
 import { version } from '../utils/version.js';
+import { TEST_DRIVE_GUIDE } from '../resources/test-drive-guide.js';
 import chalk from 'chalk';
 
 interface MCPRequest {
@@ -57,6 +58,11 @@ export class MCPServer {
   private clientName: string | null = null;
   private clientInfo: { name: string; version: string } | null = null; // Full client info for passthrough
   private sessionStartTime: number | null = null;
+
+  // Cache for prompts and resources (TTL-based)
+  private promptsCache: { data: any[]; timestamp: number } | null = null;
+  private resourcesCache: { data: any[]; timestamp: number } | null = null;
+  private readonly CACHE_TTL_MS = 60000; // 60 seconds
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
     // Profile-aware orchestrator using real MCP connections
@@ -924,11 +930,25 @@ Then call this tool again with your response in the _userResponse parameter.`;
 
   private async handleListPrompts(request: MCPRequest): Promise<MCPResponse> {
     try {
-      // Get all prompts: NCP's own + all MCP prompts with prefixes
-      const allMCPPrompts = await this.orchestrator.getAllPrompts();
+      let combinedPrompts: any[];
 
-      // Combine NCP prompts with MCP prompts
-      const combinedPrompts = [...NCP_PROMPTS, ...allMCPPrompts];
+      // Check cache validity
+      if (this.promptsCache && Date.now() - this.promptsCache.timestamp < this.CACHE_TTL_MS) {
+        logger.debug('Using cached prompts list');
+        combinedPrompts = this.promptsCache.data;
+      } else {
+        // Get all prompts: NCP's own + all MCP prompts with prefixes
+        const allMCPPrompts = await this.orchestrator.getAllPrompts();
+
+        // Combine NCP prompts with MCP prompts
+        combinedPrompts = [...NCP_PROMPTS, ...allMCPPrompts];
+
+        // Cache the result
+        this.promptsCache = {
+          data: combinedPrompts,
+          timestamp: Date.now()
+        };
+      }
 
       return {
         jsonrpc: '2.0',
@@ -1067,36 +1087,58 @@ Then call this tool again with your response in the _userResponse parameter.`;
 
   private async handleListResources(request: MCPRequest): Promise<MCPResponse> {
     try {
-      // Get resources from managed MCPs
-      const mcpResources = await this.orchestrator.getAllResources();
+      let allResources: any[];
 
-      // Add NCP-specific help resources
-      const ncpResources = [
-        {
-          uri: 'ncp://help/getting-started',
-          name: 'NCP Getting Started Guide',
-          description: 'Learn how to use NCP effectively - search tips, parameters, and best practices',
-          mimeType: 'text/markdown'
-        },
-        {
-          uri: 'ncp://status/health',
-          name: 'MCP Health Dashboard',
-          description: 'Shows health status of all configured MCPs',
-          mimeType: 'text/markdown'
-        },
-        {
-          uri: 'ncp://status/auto-import',
-          name: 'Last Auto-Import Summary',
-          description: 'Shows MCPs imported from Claude Desktop on last startup',
-          mimeType: 'text/markdown'
-        }
-      ];
+      // Check cache validity
+      if (this.resourcesCache && Date.now() - this.resourcesCache.timestamp < this.CACHE_TTL_MS) {
+        logger.debug('Using cached resources list');
+        allResources = this.resourcesCache.data;
+      } else {
+        // Get resources from managed MCPs
+        const mcpResources = await this.orchestrator.getAllResources();
+
+        // Add NCP-specific help resources
+        const ncpResources = [
+          {
+            uri: 'ncp://help/getting-started',
+            name: 'NCP Getting Started Guide',
+            description: 'Learn how to use NCP effectively - search tips, parameters, and best practices',
+            mimeType: 'text/markdown'
+          },
+          {
+            uri: 'ncp://test-drive/guide',
+            name: 'NCP Test-Drive Features Guide',
+            description: 'Interactive guide to test-drive NCP features and discover its full potential',
+            mimeType: 'text/markdown'
+          },
+          {
+            uri: 'ncp://status/health',
+            name: 'MCP Health Dashboard',
+            description: 'Shows health status of all configured MCPs',
+            mimeType: 'text/markdown'
+          },
+          {
+            uri: 'ncp://status/auto-import',
+            name: 'Last Auto-Import Summary',
+            description: 'Shows MCPs imported from Claude Desktop on last startup',
+            mimeType: 'text/markdown'
+          }
+        ];
+
+        allResources = [...ncpResources, ...(mcpResources || [])];
+
+        // Cache the result
+        this.resourcesCache = {
+          data: allResources,
+          timestamp: Date.now()
+        };
+      }
 
       return {
         jsonrpc: '2.0',
         id: request.id,
         result: {
-          resources: [...ncpResources, ...(mcpResources || [])]
+          resources: allResources
         }
       };
     } catch (error: any) {
@@ -1171,6 +1213,9 @@ Then call this tool again with your response in the _userResponse parameter.`;
     switch (uri) {
       case 'ncp://help/getting-started':
         return this.generateGettingStartedGuide();
+
+      case 'ncp://test-drive/guide':
+        return TEST_DRIVE_GUIDE.content;
 
       case 'ncp://status/health':
         return this.generateHealthDashboard();
