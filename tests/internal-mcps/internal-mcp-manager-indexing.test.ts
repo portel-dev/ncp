@@ -4,6 +4,7 @@
  * Tests for disable/enable functionality and smart re-indexing integration
  */
 
+import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 import { InternalMCPManager } from '../../src/internal-mcps/internal-mcp-manager.js';
 
 describe('InternalMCPManager - Index Management', () => {
@@ -17,7 +18,7 @@ describe('InternalMCPManager - Index Management', () => {
     mockRAGEngine = {
       setMCPDisabled: jest.fn(),
       setMCPEnabled: jest.fn(),
-      triggerBackgroundReindex: jest.fn().mockResolvedValue(undefined)
+      triggerBackgroundReindex: jest.fn<() => Promise<void>>().mockResolvedValue(undefined as void)
     };
 
     manager.setRAGEngine(mockRAGEngine);

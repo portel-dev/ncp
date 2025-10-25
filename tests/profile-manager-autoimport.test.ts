@@ -4,16 +4,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
-import { ProfileManager } from '../src/profiles/profile-manager.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { tmpdir } from 'os';
 
-// Mock the client-importer module
-jest.mock('../src/utils/client-importer.js', () => ({
-  shouldAttemptClientSync: jest.fn<() => boolean>().mockReturnValue(true),
-  importFromClient: jest.fn<() => Promise<any>>()
-}));
+// Create a module-level variable to hold the test directory
+let testProfilesDir: string = path.join(tmpdir(), `ncp-test-profiles-initial`);
 
 // Mock logger to reduce noise
 jest.mock('../src/utils/logger.js', () => ({
@@ -25,24 +21,44 @@ jest.mock('../src/utils/logger.js', () => ({
   }
 }));
 
-import { shouldAttemptClientSync, importFromClient } from '../src/utils/client-importer.js';
+// Mock the client-importer module
+const mockShouldAttemptClientSync = jest.fn<() => boolean>();
+const mockImportFromClient = jest.fn<() => Promise<any>>();
+
+jest.mock('../src/utils/client-importer.js', () => ({
+  shouldAttemptClientSync: mockShouldAttemptClientSync,
+  importFromClient: mockImportFromClient
+}));
+
+// Mock ncp-paths to use test directory
+// Use a getter function to allow testProfilesDir to be updated
+jest.mock('../src/utils/ncp-paths.js', () => {
+  const actualPath = jest.requireActual<any>('path');
+  return {
+    getProfilesDirectory: jest.fn(() => testProfilesDir),
+    getNcpBaseDirectory: jest.fn(() => actualPath.dirname(testProfilesDir)),
+    getTokensDirectory: jest.fn(() => actualPath.join(actualPath.dirname(testProfilesDir), 'tokens')),
+    getIndexDirectory: jest.fn(() => actualPath.join(actualPath.dirname(testProfilesDir), 'index'))
+  };
+});
+
+// Import ProfileManager AFTER mocks are set up
+import { ProfileManager } from '../src/profiles/profile-manager.js';
 
 describe('ProfileManager Auto-Import Parallelization', () => {
   let profileManager: ProfileManager;
-  let testProfilesDir: string;
 
   beforeEach(async () => {
     // Create temporary profiles directory for testing
     testProfilesDir = path.join(tmpdir(), `ncp-test-profiles-${Date.now()}`);
     await fs.mkdir(testProfilesDir, { recursive: true });
 
-    // Create ProfileManager with test directory
+    // Create ProfileManager with test directory (will use mocked getProfilesDirectory)
     profileManager = new ProfileManager();
-    (profileManager as any).profilesDir = testProfilesDir;
 
     // Reset mocks
     jest.clearAllMocks();
-    (shouldAttemptClientSync as any).mockReturnValue(true);
+    mockShouldAttemptClientSync.mockReturnValue(true);
   });
 
   afterEach(async () => {
@@ -66,7 +82,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
         'mcp-5': { command: 'node', args: ['server5.js'], env: {} }
       };
 
-      (importFromClient as any).mockResolvedValue({
+      mockImportFromClient.mockResolvedValue({
         clientName: 'test-client',
         count: 5,
         mcpServers: mockMCPs
@@ -90,7 +106,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
         'another-valid': { command: 'python', args: ['valid.py'], env: {} }
       };
 
-      (importFromClient as any).mockResolvedValue({
+      mockImportFromClient.mockResolvedValue({
         clientName: 'test-client',
         count: 3,
         mcpServers: mockMCPs
@@ -116,7 +132,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
         };
       }
 
-      (importFromClient as any).mockResolvedValue({
+      mockImportFromClient.mockResolvedValue({
         clientName: 'test-client',
         count: 10,
         mcpServers: mockMCPs
@@ -135,7 +151,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
   describe('timeout protection', () => {
     it('should respect AUTO_IMPORT_TIMEOUT', async () => {
       // Mock a slow import that would exceed timeout
-      (importFromClient as any).mockResolvedValue({
+      mockImportFromClient.mockResolvedValue({
         clientName: 'test-client',
         count: 1,
         mcpServers: {
@@ -166,7 +182,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
 
     it('should not block startup on import timeout', async () => {
       // Mock imports that will timeout
-      (importFromClient as any).mockResolvedValue({
+      mockImportFromClient.mockResolvedValue({
         clientName: 'test-client',
         count: 2,
         mcpServers: {
@@ -197,7 +213,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
       });
 
       // Mock client returning the existing MCP plus a new one
-      (importFromClient as any).mockResolvedValue({
+      mockImportFromClient.mockResolvedValue({
         clientName: 'test-client',
         count: 2,
         mcpServers: {
@@ -219,7 +235,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
 
     it('should skip NCP itself during auto-import', async () => {
       // Mock client returning NCP among other MCPs
-      (importFromClient as any).mockResolvedValue({
+      mockImportFromClient.mockResolvedValue({
         clientName: 'test-client',
         count: 3,
         mcpServers: {
@@ -252,7 +268,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
         };
       }
 
-      (importFromClient as any).mockResolvedValue({
+      mockImportFromClient.mockResolvedValue({
         clientName: 'test-client',
         count: 5,
         mcpServers: mockMCPs
@@ -281,7 +297,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
 
   describe('error handling', () => {
     it('should handle importFromClient errors gracefully', async () => {
-      (importFromClient as any).mockRejectedValue(
+      mockImportFromClient.mockRejectedValue(
         new Error('Failed to read client config')
       );
 
@@ -290,17 +306,17 @@ describe('ProfileManager Auto-Import Parallelization', () => {
     });
 
     it('should continue if shouldAttemptClientSync returns false', async () => {
-      (shouldAttemptClientSync as any).mockReturnValue(false);
+      mockShouldAttemptClientSync.mockReturnValue(false);
 
       // Should complete without attempting import
       await expect(profileManager.initialize(false)).resolves.not.toThrow();
 
       // importFromClient should not be called
-      expect(importFromClient).not.toHaveBeenCalled();
+      expect(mockImportFromClient).not.toHaveBeenCalled();
     });
 
     it('should handle empty import results', async () => {
-      (importFromClient as any).mockResolvedValue({
+      mockImportFromClient.mockResolvedValue({
         clientName: 'test-client',
         count: 0,
         mcpServers: {}
@@ -314,7 +330,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
     });
 
     it('should handle null import results', async () => {
-      (importFromClient as any).mockResolvedValue(null);
+      mockImportFromClient.mockResolvedValue(null);
 
       await expect(profileManager.initialize(false)).resolves.not.toThrow();
     });
@@ -322,7 +338,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
 
   describe('skipAutoImport flag', () => {
     it('should skip auto-import when flag is true', async () => {
-      (importFromClient as any).mockResolvedValue({
+      mockImportFromClient.mockResolvedValue({
         clientName: 'test-client',
         count: 1,
         mcpServers: {
@@ -333,7 +349,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
       await profileManager.initialize(true); // Skip auto-import
 
       // importFromClient should not be called
-      expect(importFromClient).not.toHaveBeenCalled();
+      expect(mockImportFromClient).not.toHaveBeenCalled();
 
       const profile = await profileManager.getProfile('all');
       expect(profile).toBeDefined();
@@ -341,7 +357,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
     });
 
     it('should run auto-import when flag is false', async () => {
-      (importFromClient as any).mockResolvedValue({
+      mockImportFromClient.mockResolvedValue({
         clientName: 'test-client',
         count: 1,
         mcpServers: {
@@ -352,7 +368,7 @@ describe('ProfileManager Auto-Import Parallelization', () => {
       await profileManager.initialize(false); // Run auto-import
 
       // importFromClient should be called
-      expect(importFromClient).toHaveBeenCalled();
+      expect(mockImportFromClient).toHaveBeenCalled();
     });
   });
 });

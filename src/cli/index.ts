@@ -3032,7 +3032,7 @@ program
           console.log('\n' + OutputFormatter.error(`No tools found matching "${tool}"`));
           console.log(chalk.yellow('💡 Try \'ncp find\' to explore all available tools'));
           await orchestrator.cleanup();
-          return;
+          process.exit(1);
         }
 
         if (matchingTools.length === 1) {
@@ -3053,12 +3053,12 @@ program
           console.log(chalk.yellow('\n💡 Please specify the exact tool name from the list above'));
           console.log(chalk.yellow(`💡 Example: ncp run ${matchingTools[0].toolName}`));
           await orchestrator.cleanup();
-          return;
+          process.exit(1);
         }
       } catch (error: any) {
         console.log('\n' + OutputFormatter.error(`Error searching for tools: ${error.message}`));
         await orchestrator.cleanup();
-        return;
+        process.exit(1);
       }
     }
 
@@ -3089,7 +3089,7 @@ program
             prompter.close();
             console.log('\n' + OutputFormatter.error('Error during parameter input'));
             await orchestrator.cleanup();
-            return;
+            process.exit(1);
           }
         } else if (requiredParams.length > 0 && options.prompt === false) {
           console.log('\n' + OutputFormatter.error('This tool requires parameters'));
@@ -3097,7 +3097,7 @@ program
           console.log(chalk.yellow(`💡 Or use: ncp find "${tool}" --depth 2 to see required parameters`));
           console.log(chalk.yellow(`💡 Or remove --no-prompt to use interactive prompting`));
           await orchestrator.cleanup();
-          return;
+          process.exit(1);
         }
       }
     }
@@ -3165,6 +3165,8 @@ program
       const context = ErrorHandler.createContext('mcp', 'run', tool, suggestions);
       const errorResult = ErrorHandler.handle(errorMessage, context);
       console.log('\n' + ErrorHandler.formatForConsole(errorResult));
+      await orchestrator.cleanup();
+      process.exit(1);
     }
 
     await orchestrator.cleanup();
