@@ -12,11 +12,12 @@
     }
   },
   "bin": {
-    "ncp": "dist/index.js"
+    "ncp": "dist/index.js",
+    "ncp-mcp": "dist/index-mcp.js"
   },
   "type": "module",
   "scripts": {
-    "build": "tsc && chmod +x dist/index.js",
+    "build": "tsc && chmod +x dist/index.js dist/index-mcp.js",
     "postinstall": "npm run build:if-dev",
     "build:if-dev": "[ -d node_modules/typescript ] && npm run build || echo 'Build skipped (production install)'",
     "start": "node dist/index.js",
