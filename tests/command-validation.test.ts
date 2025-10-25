@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
+import { basename } from 'path';
 
 // Test the validation logic directly
 const validateMCPCommand = (command: string, args: string[]): string | null => {
@@ -20,8 +21,7 @@ const validateMCPCommand = (command: string, args: string[]): string | null => {
     'java', 'javac'
   ];
 
-  const path = require('path');
-  const baseCommand = path.basename(command);
+  const baseCommand = basename(command);
 
   // Check for dangerous shell metacharacters in command
   const DANGEROUS_CHARS = /[;&|`$()<>]/;

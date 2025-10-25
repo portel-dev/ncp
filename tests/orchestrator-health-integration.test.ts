@@ -23,9 +23,7 @@ describe('Orchestrator Health Monitoring Integration', () => {
     mockProfilePath = join(tempDir, 'profiles');
     mkdirSync(mockProfilePath, { recursive: true });
 
-    // Mock the home directory to use our temp directory
-    jest.spyOn(require('os'), 'homedir').mockReturnValue(tempDir);
-
+    // Create orchestrator without mocking (uses real directories)
     orchestrator = new NCPOrchestrator('test-profile');
   });
 

@@ -6,6 +6,8 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { NCPOrchestrator } from '../src/orchestrator/ncp-orchestrator.js';
 import { MCPHealthMonitor } from '../src/utils/health-monitor.js';
+import { join } from 'path';
+import { homedir } from 'os';
 
 describe('Final 80% Coverage Push', () => {
   beforeEach(() => {
@@ -17,7 +19,7 @@ describe('Final 80% Coverage Push', () => {
       const monitor = new MCPHealthMonitor();
 
       // Test the missing directory path (line 59)
-      const healthDir = require('path').join(require('os').homedir(), '.ncp');
+      const healthDir = join(homedir(), '.ncp');
       expect(healthDir).toBeTruthy(); // Just ensure path construction works
     });
 

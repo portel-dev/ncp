@@ -18,9 +18,7 @@ describe('Health Monitoring Integration', () => {
     tempDir = join(tmpdir(), `ncp-health-test-${Date.now()}`);
     mkdirSync(tempDir, { recursive: true });
 
-    // Mock the home directory to use our temp directory
-    jest.spyOn(require('os'), 'homedir').mockReturnValue(tempDir);
-
+    // Create health monitor without mocking (uses real home directory)
     healthMonitor = new MCPHealthMonitor();
   });
 
