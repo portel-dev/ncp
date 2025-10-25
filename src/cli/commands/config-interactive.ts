@@ -72,31 +72,31 @@ export class ConfigurationManager {
 
     // Auto-import Client MCPs
     const autoImportEnabled = !process.env.NCP_SKIP_AUTO_IMPORT;
-    const autoImportStatus = autoImportEnabled ? chalk.green('✓') : chalk.yellow('○');
+    const autoImportStatus = autoImportEnabled ? chalk.green('[✓]') : chalk.gray('[✗]');
     console.log(`${autoImportStatus} ${chalk.bold('Auto-import Client MCPs')}`);
     console.log(`  ${chalk.dim('Automatically import all MCPs from your MCP client on startup')}`);
 
     // Enable Debug Logging
     const debugEnabled = process.env.DEBUG === 'true' || process.env.NCP_DEBUG === 'true';
-    const debugStatus = debugEnabled ? chalk.green('✓') : chalk.yellow('○');
+    const debugStatus = debugEnabled ? chalk.green('[✓]') : chalk.gray('[✗]');
     console.log(`\n${debugStatus} ${chalk.bold('Enable Debug Logging')}`);
     console.log(`  ${chalk.dim('Show detailed logs for troubleshooting')}`);
 
     // Confirm Modifications Before Run
     const confirmEnabled = globalSettings.confirmBeforeRun.enabled;
-    const confirmStatus = confirmEnabled ? chalk.green('✓') : chalk.yellow('○');
+    const confirmStatus = confirmEnabled ? chalk.green('[✓]') : chalk.gray('[✗]');
     console.log(`\n${confirmStatus} ${chalk.bold('Confirm Modifications Before Run')}`);
     console.log(`  ${chalk.dim('Show confirmation dialog before executing modification operations')}`);
 
     // Enable Scheduler
     const schedulerEnabled = schedulerConfig !== null;
-    const schedulerStatus = schedulerEnabled ? chalk.green('✓') : chalk.yellow('○');
+    const schedulerStatus = schedulerEnabled ? chalk.green('[✓]') : chalk.gray('[✗]');
     console.log(`\n${schedulerStatus} ${chalk.bold('Enable Scheduler (Built-in)')}`);
     console.log(`  ${chalk.dim('Schedule tool executions with cron')}`);
 
     // Enable MCP Management
     const managementEnabled = true; // Always available
-    const managementStatus = chalk.green('✓');
+    const managementStatus = chalk.green('[✓]');
     console.log(`\n${managementStatus} ${chalk.bold('Enable MCP Management (Built-in)')}`);
     console.log(`  ${chalk.dim('Add, remove, and manage MCPs in your configuration')}\n`);
   }
