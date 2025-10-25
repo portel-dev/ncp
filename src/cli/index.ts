@@ -1812,7 +1812,15 @@ program
 // Config command group
 const configCmd = program
   .command('config')
-  .description('Manage NCP configuration (import, validate, edit)');
+  .description('Manage NCP configuration (import, validate, edit)')
+  .action(async (options, command) => {
+    // If no subcommand provided, run interactive config
+    if (!command.args || command.args.length === 0) {
+      const { ConfigurationManager } = await import('./commands/config-interactive.js');
+      const configManager = new ConfigurationManager();
+      await configManager.run();
+    }
+  });
 
 configCmd
   .command('import [file]')
