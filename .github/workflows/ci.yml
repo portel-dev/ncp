@@ -128,6 +128,8 @@ jobs:
 
       - name: Test DXT package
         run: npm run test:dxt
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
 
       - name: Upload DXT artifact
         uses: actions/upload-artifact@v4
