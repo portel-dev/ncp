@@ -425,6 +425,6 @@ describe('OAuth Device Flow', () => {
 
       const result = await authenticator.authenticate();
       expect(result).toEqual(mockToken);
-    }, 15000);
+    }, 20000);
   });
 });

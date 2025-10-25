@@ -25,6 +25,7 @@ jest.mock('../src/discovery/engine.js', () => ({
   DiscoveryEngine: jest.fn().mockImplementation(() => ({
     initialize: jest.fn(),
     indexTool: jest.fn(),
+    indexMCPTools: jest.fn(),
     findBestTool: jest.fn(),
     findRelevantTools: jest.fn()
   }))
@@ -33,17 +34,17 @@ jest.mock('../src/discovery/engine.js', () => ({
 // Mock MCP SDK
 jest.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   Client: jest.fn().mockImplementation(() => ({
-    connect: jest.fn().mockResolvedValue(undefined),
-    close: jest.fn().mockResolvedValue(undefined),
-    listTools: jest.fn().mockResolvedValue({ tools: [] }),
-    callTool: jest.fn().mockResolvedValue({ content: [] })
+    connect: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    close: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    listTools: jest.fn<() => Promise<any>>().mockResolvedValue({ tools: [] }),
+    callTool: jest.fn<() => Promise<any>>().mockResolvedValue({ content: [] })
   }))
 }));
 
 jest.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
   StdioClientTransport: jest.fn().mockImplementation(() => ({
-    start: jest.fn().mockResolvedValue(undefined),
-    close: jest.fn().mockResolvedValue(undefined)
+    start: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    close: jest.fn<() => Promise<void>>().mockResolvedValue(undefined)
   }))
 }));
 
@@ -70,12 +71,6 @@ describe('NCP Orchestrator Connection Pool', () => {
   });
 
   afterEach(async () => {
-    try {
-      await orchestrator.shutdown();
-    } catch (e) {
-      // Ignore shutdown errors
-    }
-
     try {
       await fs.rm(testProfilesDir, { recursive: true, force: true });
     } catch (e) {
@@ -203,7 +198,7 @@ describe('NCP Orchestrator Connection Pool', () => {
       // Create a connection
       const conn = {
         client: {
-          callTool: jest.fn().mockResolvedValue({ content: [{ type: 'text', text: 'result' }] })
+          callTool: jest.fn<() => Promise<any>>().mockResolvedValue({ content: [{ type: 'text', text: 'result' }] })
         },
         transport: {},
         tools: [{ name: 'test_tool', description: 'Test tool' }],
@@ -230,10 +225,10 @@ describe('NCP Orchestrator Connection Pool', () => {
       // Create connection with high execution count
       const conn = {
         client: {
-          close: jest.fn().mockResolvedValue(undefined)
+          close: jest.fn<() => Promise<void>>().mockResolvedValue(undefined)
         },
         transport: {
-          close: jest.fn().mockResolvedValue(undefined)
+          close: jest.fn<() => Promise<void>>().mockResolvedValue(undefined)
         },
         tools: [{ name: 'test_tool', description: 'Test tool' }],
         lastUsed: Date.now(),
@@ -380,11 +375,12 @@ describe('NCP Orchestrator Connection Pool', () => {
       const connections = (orchestrator as any).connections as Map<string, any>;
 
       // Create a connection
+      const oldTime = Date.now() - 5000;
       const conn = {
         client: {},
         transport: {},
         tools: [{ name: 'test_tool', description: 'Test' }],
-        lastUsed: Date.now() - 5000,
+        lastUsed: oldTime,
         connectTime: Date.now() - 10000,
         executionCount: 5
       };
@@ -395,12 +391,16 @@ describe('NCP Orchestrator Connection Pool', () => {
       const existing = connections.get('reusable-mcp');
       expect(existing).toBe(conn);
 
+      // Wait a bit to ensure new timestamp is different
+      await new Promise(resolve => setTimeout(resolve, 1));
+
       // Update last used time (simulating reuse)
-      existing.lastUsed = Date.now();
+      const newTime = Date.now();
+      existing.lastUsed = newTime;
       existing.executionCount++;
 
       expect(existing.executionCount).toBe(6);
-      expect(existing.lastUsed).toBeGreaterThan(conn.lastUsed);
+      expect(existing.lastUsed).toBeGreaterThanOrEqual(oldTime + 1);
     });
 
     it('should update lastUsed on each access', async () => {
@@ -428,7 +428,7 @@ describe('NCP Orchestrator Connection Pool', () => {
 
   describe('connection lifecycle', () => {
     it('should properly disconnect evicted connections', async () => {
-      const mockClose = jest.fn().mockResolvedValue(undefined);
+      const mockClose = jest.fn<() => Promise<void>>().mockResolvedValue(undefined);
 
       const conn = {
         client: {
@@ -451,7 +451,7 @@ describe('NCP Orchestrator Connection Pool', () => {
     });
 
     it('should handle disconnection errors gracefully', async () => {
-      const mockClose = jest.fn().mockRejectedValue(new Error('Close failed'));
+      const mockClose = jest.fn<() => Promise<void>>().mockRejectedValue(new Error('Close failed'));
 
       const conn = {
         client: {
