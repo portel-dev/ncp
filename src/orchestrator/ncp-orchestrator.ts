@@ -76,6 +76,7 @@ function levenshteinDistance(str1: string, str2: string): number {
 import { CachePatcher } from '../cache/cache-patcher.js';
 import { CSVCache, CachedTool } from '../cache/csv-cache.js';
 import { spinner } from '../utils/progress-spinner.js';
+import { MCPUpdateChecker } from '../utils/mcp-update-checker.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -172,6 +173,7 @@ export class NCPOrchestrator {
   private healthMonitor: MCPHealthMonitor;
   private cachePatcher: CachePatcher;
   private csvCache: CSVCache;
+  private updateChecker: MCPUpdateChecker;
   private showProgress: boolean;
   private indexingProgress: { current: number; total: number; currentMCP: string; estimatedTimeRemaining?: number } | null = null;
   private indexingStartTime: number = 0;
@@ -198,6 +200,7 @@ export class NCPOrchestrator {
     this.healthMonitor = new MCPHealthMonitor();
     this.cachePatcher = new CachePatcher();
     this.csvCache = new CSVCache(getCacheDirectory(), profileName);
+    this.updateChecker = new MCPUpdateChecker();
     this.showProgress = showProgress;
     this.forceRetry = forceRetry;
     this.internalMCPManager = new InternalMCPManager();
@@ -1066,6 +1069,35 @@ export class NCPOrchestrator {
 
       // Mark MCP as healthy on successful execution
       this.healthMonitor.markHealthy(mcpName);
+
+      // Check for MCP updates asynchronously (non-blocking)
+      // Only show notification if one hasn't been shown in 24 hours
+      setImmediate(async () => {
+        try {
+          if (this.updateChecker.shouldShowNotification(mcpName)) {
+            // Get the MCP definition to find version info
+            const definition = this.definitions.get(mcpName);
+            const mcpVersion = definition?.serverInfo?.version || 'unknown';
+
+            const updateInfo = await this.updateChecker.checkMCPUpdate(
+              mcpName,
+              mcpVersion,
+              undefined // Will use default package name pattern
+            );
+
+            if (updateInfo.hasUpdate) {
+              const notification = this.updateChecker.getUpdateNotification(updateInfo);
+              if (notification) {
+                console.log('\n' + notification);
+                this.updateChecker.markNotificationShown(mcpName);
+              }
+            }
+          }
+        } catch (error) {
+          // Silently ignore version check errors - don't block tool execution
+          logger.debug(`Failed to check MCP updates for ${mcpName}: ${error}`);
+        }
+      });
 
       return {
         success: true,
