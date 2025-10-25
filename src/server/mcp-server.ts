@@ -906,14 +906,21 @@ Then call this tool again with your response in the _userResponse parameter.`;
     const result = await this.orchestrator.run(toolIdentifier, parameters, meta);
 
     if (result.success) {
+      // Transparently pass through all content types (text, images, MCP-UI components, etc.)
+      // If content is already a structured array (from underlying MCP), pass it as-is
+      // If it's a string, wrap it as text type for backward compatibility
+      const content = Array.isArray(result.content)
+        ? result.content
+        : [{
+            type: 'text',
+            text: typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2)
+          }];
+
       return {
         jsonrpc: '2.0',
         id: request.id,
         result: {
-          content: [{
-            type: 'text',
-            text: typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2)
-          }]
+          content
         }
       };
     } else {
