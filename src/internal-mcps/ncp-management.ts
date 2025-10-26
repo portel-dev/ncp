@@ -28,26 +28,26 @@ export class NCPManagementMCP implements InternalMCP {
   tools: InternalTool[] = [
     {
       name: 'add',
-      description: 'Add a new MCP server to NCP configuration. When user asks to "install X" or "add X", extract X as the mcp_name parameter. Supports two modes: 1) Auto-detect: just provide mcp_name (e.g., when user says "install canva", call with mcp_name="canva") and NCP will look up from registry. 2) Manual: provide command+args for stdio or url for HTTP/SSE. User confirmation required (automatic popup).',
+      description: 'Add a new MCP server to NCP configuration via AI-assisted discovery. Workflow: 1) If uncertain about MCP name, use "find" method to discover MCPs (e.g., search "canva" or "design platform"). 2) From search results, extract the MCP name. 3) Call this tool with mcp_name. This allows intelligent MCP selection instead of manual typing. Auto-detects configuration from registry or accepts manual command/url specification.',
       inputSchema: {
         type: 'object',
         properties: {
           mcp_name: {
             type: 'string',
-            description: 'REQUIRED. The MCP provider name to install (extract from user request, e.g., user says "install canva" → use "canva"). Examples: "canva", "github", "notion", "stripe", "openai". For known providers, NCP auto-detects and installs. For custom MCPs, manually provide command or url.'
+            description: 'REQUIRED. The exact MCP provider name to install. Pre-fill if extractable from user intent (e.g., "install canva" → "canva"). If uncertain, first use "find" method to discover MCPs semantically (e.g., find "design tool" or "canva"), then extract the mcp_name from results. Do not ask user to type the name - do the discovery work yourself.'
           },
           command: {
             type: 'string',
-            description: 'Command to execute for stdio servers (e.g., "npx", "node", "python"). Optional - only needed for manual configuration. Omit for auto-detect mode.'
+            description: 'Optional. Command to execute for stdio servers (e.g., "npx", "node", "python"). Only needed for manual configuration. Omit for auto-detect mode.'
           },
           args: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Command arguments for stdio servers (e.g., ["-y", "@modelcontextprotocol/server-github"]). Optional - only needed for manual configuration.'
+            description: 'Optional. Command arguments for stdio servers (e.g., ["-y", "@modelcontextprotocol/server-github"]). Only needed for manual configuration.'
           },
           url: {
             type: 'string',
-            description: 'URL for HTTP/SSE servers (e.g., "https://api.example.com/mcp"). Optional - only needed for manual HTTP/SSE configuration.'
+            description: 'Optional. URL for HTTP/SSE servers (e.g., "https://api.example.com/mcp"). Only needed for manual HTTP/SSE configuration.'
           },
           profile: {
             type: 'string',
@@ -60,13 +60,13 @@ export class NCPManagementMCP implements InternalMCP {
     },
     {
       name: 'remove',
-      description: 'Remove an MCP server from NCP configuration. User confirmation required (automatic popup).',
+      description: 'Remove an MCP server from NCP configuration. First use "find" or "list" to identify the exact mcp_name, then call this tool. User confirmation required (automatic popup).',
       inputSchema: {
         type: 'object',
         properties: {
           mcp_name: {
             type: 'string',
-            description: 'Name of the MCP server to remove'
+            description: 'REQUIRED. Name of the MCP server to remove. Pre-fill if extractable from user intent, otherwise use "find" or "list" method to get the exact name first.'
           },
           profile: {
             type: 'string',
@@ -200,7 +200,7 @@ export class NCPManagementMCP implements InternalMCP {
     if (!params?.mcp_name) {
       return {
         success: false,
-        error: 'Missing required parameter: mcp_name is required'
+        error: 'Missing required parameter: mcp_name. Use "find" method to discover MCPs first, then extract the mcp_name from results.'
       };
     }
 
@@ -553,7 +553,7 @@ Do you want to install this MCP?`;
     if (!params?.mcp_name) {
       return {
         success: false,
-        error: 'Missing required parameter: mcp_name is required'
+        error: 'Missing required parameter: mcp_name. Use "list" or "find" method to identify MCPs first, then extract the exact mcp_name.'
       };
     }
 
