@@ -268,33 +268,39 @@ export async function elicitSelect(
   const defaultMessage = `Select a ${fieldName}:`;
   const description = options.map(opt => `• ${opt.label}`).join('\n');
 
-  const result = await server.elicitInput({
-    message: message || `${defaultMessage}\n\n${description}`,
-    requestedSchema: {
-      type: 'object',
-      properties: {
-        [fieldName]: {
-          type: 'string',
-          enum: options.map(opt => opt.value),
-          description: `Choose from available ${fieldName} options`
-        }
-      },
-      required: [fieldName]
-    }
-  });
+  try {
+    const result = await server.elicitInput({
+      message: message || `${defaultMessage}\n\n${description}`,
+      requestedSchema: {
+        type: 'object',
+        properties: {
+          [fieldName]: {
+            type: 'string',
+            enum: options.map(opt => opt.value),
+            description: `Choose from available ${fieldName} options`
+          }
+        },
+        required: [fieldName]
+      }
+    });
 
-  if (result.action !== 'accept' || !result.content) {
-    logger.info(`User ${result.action} elicit selection for ${fieldName}`);
+    if (result.action !== 'accept' || !result.content) {
+      logger.info(`User ${result.action} elicit selection for ${fieldName}`);
+      return null;
+    }
+
+    const selected = result.content[fieldName];
+    if (selected) {
+      logger.info(`User selected: ${selected}`);
+      return selected;
+    }
+
+    return null;
+  } catch (error: any) {
+    // Elicitation not supported or timed out - return null to allow fallback behavior
+    logger.warn(`Elicitation failed for ${fieldName}: ${error.message}`);
     return null;
   }
-
-  const selected = result.content[fieldName];
-  if (selected) {
-    logger.info(`User selected: ${selected}`);
-    return selected;
-  }
-
-  return null;
 }
 
 /**
@@ -323,36 +329,42 @@ export async function elicitMultiSelect(
   const defaultMessage = `Select ${fieldName}s (one or more):`;
   const description = options.map(opt => `☐ ${opt.label}`).join('\n');
 
-  const result = await server.elicitInput({
-    message: message || `${defaultMessage}\n\n${description}`,
-    requestedSchema: {
-      type: 'object',
-      properties: {
-        [fieldName]: {
-          type: 'array',
-          items: {
-            type: 'string',
-            enum: options.map(opt => opt.value)
-          },
-          description: `Choose one or more ${fieldName} options`
-        }
-      },
-      required: [fieldName]
-    }
-  });
+  try {
+    const result = await server.elicitInput({
+      message: message || `${defaultMessage}\n\n${description}`,
+      requestedSchema: {
+        type: 'object',
+        properties: {
+          [fieldName]: {
+            type: 'array',
+            items: {
+              type: 'string',
+              enum: options.map(opt => opt.value)
+            },
+            description: `Choose one or more ${fieldName} options`
+          }
+        },
+        required: [fieldName]
+      }
+    });
 
-  if (result.action !== 'accept' || !result.content) {
-    logger.info(`User ${result.action} elicit multi-select for ${fieldName}`);
+    if (result.action !== 'accept' || !result.content) {
+      logger.info(`User ${result.action} elicit multi-select for ${fieldName}`);
+      return [];
+    }
+
+    const selected = result.content[fieldName];
+    if (Array.isArray(selected)) {
+      logger.info(`User selected ${selected.length} items: ${selected.join(', ')}`);
+      return selected;
+    }
+
+    return [];
+  } catch (error: any) {
+    // Elicitation not supported or timed out - return empty array to allow fallback behavior
+    logger.warn(`Elicitation failed for ${fieldName}: ${error.message}`);
     return [];
   }
-
-  const selected = result.content[fieldName];
-  if (Array.isArray(selected)) {
-    logger.info(`User selected ${selected.length} items: ${selected.join(', ')}`);
-    return selected;
-  }
-
-  return [];
 }
 
 /**
