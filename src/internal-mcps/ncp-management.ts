@@ -28,13 +28,13 @@ export class NCPManagementMCP implements InternalMCP {
   tools: InternalTool[] = [
     {
       name: 'add',
-      description: 'Add a new MCP server to NCP configuration. Supports two modes: 1) Auto-detect: just provide mcp_name (e.g., "canva", "github") and NCP will look up known providers from registry. 2) Manual: provide command+args for stdio or url for HTTP/SSE. User confirmation required (automatic popup). User can securely provide API keys via clipboard during credential collection.',
+      description: 'Add a new MCP server to NCP configuration. When user asks to "install X" or "add X", extract X as the mcp_name parameter. Supports two modes: 1) Auto-detect: just provide mcp_name (e.g., when user says "install canva", call with mcp_name="canva") and NCP will look up from registry. 2) Manual: provide command+args for stdio or url for HTTP/SSE. User confirmation required (automatic popup).',
       inputSchema: {
         type: 'object',
         properties: {
           mcp_name: {
             type: 'string',
-            description: 'Name for the MCP server. For auto-detect, use provider name like "canva", "github", "notion". For manual config, use any name.'
+            description: 'REQUIRED. The MCP provider name to install (extract from user request, e.g., user says "install canva" → use "canva"). Examples: "canva", "github", "notion", "stripe", "openai". For known providers, NCP auto-detects and installs. For custom MCPs, manually provide command or url.'
           },
           command: {
             type: 'string',
