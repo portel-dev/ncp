@@ -65,16 +65,13 @@ export class ProfileManager {
       // console.error(`[ProfileManager] 'all' profile already exists`);
     }
 
-    // Auto-import from Claude Desktop on startup (restores 1.5.3 behavior)
-    // This ensures profile is populated BEFORE orchestrator initialization
-    // Skip for CLI commands that explicitly add MCPs (add-http, add, etc.)
-    if (!skipAutoImport) {
-      // console.error(`[ProfileManager] running auto-import...`);
-      await this.tryAutoImportFromClient('claude-desktop');
-      // console.error(`[ProfileManager] auto-import complete`);
-    } else {
-      // console.error(`[ProfileManager] skipping auto-import`);
-    }
+    // ⚠️ IMPORTANT: Auto-import is now triggered ONLY when a client announces itself
+    // via the MCP initialize handshake (see ncp-orchestrator.ts line 2084)
+    // This ensures:
+    // 1. Auto-import respects the client-initiated protocol
+    // 2. Local project .ncp folders don't auto-sync with global Claude Desktop
+    // 3. Only known/supported clients trigger auto-import
+    // The skipAutoImport parameter is kept for backward compatibility but has no effect
 
     // console.error(`[ProfileManager] initialize() completed`);
   }
@@ -204,7 +201,7 @@ export class ProfileManager {
         if (extensionsCount > 0) {
           console.error(`   - ${extensionsCount} from extensions`);
         }
-        console.error(`   → Added to ~/.ncp/profiles/all.json\n`);
+        console.error(`   → Added to ${path.join(this.profilesDir, 'all.json')}\n`);
       }
     } catch (error) {
       // Silent failure - don't block startup if auto-import fails

@@ -243,6 +243,119 @@ export function detectHTTPCredentials(mcpName: string, url?: string): Array<{
 }
 
 /**
+ * Elicit a selection from a list of options (enum)
+ *
+ * Shows a dialog with radio buttons/dropdown for structured selection.
+ * Follows GitHub's MCP elicitation best practice: use schema-driven prompts.
+ *
+ * @param server MCP server instance
+ * @param fieldName Name of the field being selected
+ * @param options Array of {value, label} options to choose from
+ * @param message Optional custom message
+ * @returns Selected option value, or null if cancelled
+ */
+export async function elicitSelect(
+  server: ElicitationServer,
+  fieldName: string,
+  options: Array<{ value: string; label: string }>,
+  message?: string
+): Promise<string | null> {
+  if (options.length === 0) {
+    logger.warn(`elicitSelect: No options provided for ${fieldName}`);
+    return null;
+  }
+
+  const defaultMessage = `Select a ${fieldName}:`;
+  const description = options.map(opt => `• ${opt.label}`).join('\n');
+
+  const result = await server.elicitInput({
+    message: message || `${defaultMessage}\n\n${description}`,
+    requestedSchema: {
+      type: 'object',
+      properties: {
+        [fieldName]: {
+          type: 'string',
+          enum: options.map(opt => opt.value),
+          description: `Choose from available ${fieldName} options`
+        }
+      },
+      required: [fieldName]
+    }
+  });
+
+  if (result.action !== 'accept' || !result.content) {
+    logger.info(`User ${result.action} elicit selection for ${fieldName}`);
+    return null;
+  }
+
+  const selected = result.content[fieldName];
+  if (selected) {
+    logger.info(`User selected: ${selected}`);
+    return selected;
+  }
+
+  return null;
+}
+
+/**
+ * Elicit multiple selections from a list of options
+ *
+ * Shows a dialog with checkboxes for multi-select.
+ * User can select multiple options.
+ *
+ * @param server MCP server instance
+ * @param fieldName Name of the field being selected
+ * @param options Array of {value, label} options to choose from
+ * @param message Optional custom message
+ * @returns Array of selected option values, empty array if cancelled
+ */
+export async function elicitMultiSelect(
+  server: ElicitationServer,
+  fieldName: string,
+  options: Array<{ value: string; label: string }>,
+  message?: string
+): Promise<string[]> {
+  if (options.length === 0) {
+    logger.warn(`elicitMultiSelect: No options provided for ${fieldName}`);
+    return [];
+  }
+
+  const defaultMessage = `Select ${fieldName}s (one or more):`;
+  const description = options.map(opt => `☐ ${opt.label}`).join('\n');
+
+  const result = await server.elicitInput({
+    message: message || `${defaultMessage}\n\n${description}`,
+    requestedSchema: {
+      type: 'object',
+      properties: {
+        [fieldName]: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: options.map(opt => opt.value)
+          },
+          description: `Choose one or more ${fieldName} options`
+        }
+      },
+      required: [fieldName]
+    }
+  });
+
+  if (result.action !== 'accept' || !result.content) {
+    logger.info(`User ${result.action} elicit multi-select for ${fieldName}`);
+    return [];
+  }
+
+  const selected = result.content[fieldName];
+  if (Array.isArray(selected)) {
+    logger.info(`User selected ${selected.length} items: ${selected.join(', ')}`);
+    return selected;
+  }
+
+  return [];
+}
+
+/**
  * Detect required environment variables from MCP metadata
  *
  * This can be extended to parse from:

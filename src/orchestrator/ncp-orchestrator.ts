@@ -422,7 +422,7 @@ export class NCPOrchestrator {
     const externalMCPs = this.definitions.size;
     const internalMCPs = this.internalMCPManager.getAllInternalMCPs().length;
     const loadTime = Date.now() - startTime;
-    logger.info(`🚀 NCP-OSS initialized in ${loadTime}ms with ${this.allTools.length} tools from ${externalMCPs} external + ${internalMCPs} internal MCPs`);
+    logger.info(`🚀 NCP initialized in ${loadTime}ms with ${this.allTools.length} tools from ${externalMCPs} external + ${internalMCPs} internal MCPs`);
   }
 
   /**
