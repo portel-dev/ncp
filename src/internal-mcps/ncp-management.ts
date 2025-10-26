@@ -9,6 +9,7 @@
  * - export: Export configuration
  */
 
+import * as path from 'path';
 import { InternalMCP, InternalTool, InternalToolResult, ElicitationCapable } from './types.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
@@ -1385,7 +1386,6 @@ Do you want to remove this MCP?`;
     ];
 
     // Extract base command name (handle paths)
-    const path = require('path');
     const baseCommand = path.basename(command);
 
     // Check if base command is in allowlist

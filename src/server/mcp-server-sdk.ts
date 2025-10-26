@@ -107,7 +107,7 @@ export class MCPServerSDK implements ElicitationServer {
             return {
               content: [{
                 type: 'text',
-                text: `Method not found: '${name}'. NCP OSS supports 'find' and 'run' methods.${suggestionText} Use 'find()' to discover available tools.`
+                text: `Method not found: '${name}'. NCP supports 'find' and 'run' methods.${suggestionText} Use 'find()' to discover available tools.`
               }],
               isError: true,
             };

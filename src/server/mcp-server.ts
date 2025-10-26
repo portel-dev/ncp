@@ -337,7 +337,7 @@ export class MCPServer {
             id: request.id,
             error: {
               code: -32601,
-              message: `Method not found: '${name}'. NCP OSS supports 'find' and 'run' methods.${suggestionText} Use 'find()' to discover available tools.`
+              message: `Method not found: '${name}'. NCP supports 'find' and 'run' methods.${suggestionText} Use 'find()' to discover available tools.`
             }
           };
       }
