@@ -1966,9 +1966,9 @@ profileCmd
     await manager.showConfigLocations();
   });
 
-// Test command group
+// Test command group (internal - hidden from help)
 const testCmd = program
-  .command('test')
+  .command('test', { hidden: true })
   .description('Run diagnostic tests and analysis');
 
 testCmd
@@ -2161,9 +2161,9 @@ testCmd
     console.log(chalk.dim('💡 Adjust threshold in ~/.ncp/settings.json if needed\n'));
   });
 
-// Repair command - fix failed MCPs interactively
+// Repair command - fix failed MCPs interactively (internal - hidden from help)
 program
-  .command('repair')
+  .command('repair', { hidden: true })
   .description('Interactively configure failed MCPs')
   .option('--profile <name>', 'Profile to repair (default: all)')
   .action(async (options) => {
@@ -2995,9 +2995,9 @@ program
     await orchestrator.cleanup();
   });
 
-// Auth command
+// Auth command (internal - hidden from help)
 program
-  .command('auth <mcp>')
+  .command('auth <mcp>', { hidden: true })
   .description('Authenticate an MCP server using OAuth Device Flow')
   .option('--profile <name>', 'Profile to use (default: all)')
   .configureHelp({
@@ -3566,9 +3566,9 @@ program
     }
   });
 
-// Scheduler: Cleanup old execution records (called by automatic cleanup job)
+// Scheduler: Cleanup old execution records (internal - hidden from help)
 program
-  .command('cleanup-runs')
+  .command('cleanup-runs', { hidden: true })
   .description('Clean up old execution records (internal use - called by automatic cleanup)')
   .option('--max-age <days>', 'Maximum age in days for execution records', '14')
   .option('--max-count <count>', 'Maximum number of executions to keep per job', '100')
