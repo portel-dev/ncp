@@ -2064,8 +2064,8 @@ const analyticsCmd = program
   .description('View NCP usage analytics and performance metrics');
 
 analyticsCmd
-  .command('dashboard')
-  .description('Show comprehensive analytics dashboard')
+  .command('overview')
+  .description('Show comprehensive analytics overview')
   .option('--period <days>', 'Show data for last N days (e.g., --period 7)')
   .option('--from <date>', 'Start date (YYYY-MM-DD format)')
   .option('--to <date>', 'End date (YYYY-MM-DD format)')
@@ -2152,6 +2152,7 @@ analyticsCmd
       console.log(performance);
     }
   });
+
 
 analyticsCmd
   .command('visual')

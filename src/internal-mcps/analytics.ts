@@ -21,8 +21,8 @@ export class AnalyticsMCP implements InternalMCP {
 
   tools: InternalTool[] = [
     {
-      name: 'get_dashboard',
-      description: 'Get comprehensive analytics dashboard with usage stats, token savings, and performance metrics',
+      name: 'overview',
+      description: 'Comprehensive analytics overview with usage stats, token savings, and performance metrics',
       inputSchema: {
         type: 'object',
         properties: {
@@ -38,8 +38,8 @@ export class AnalyticsMCP implements InternalMCP {
       }
     },
     {
-      name: 'get_performance',
-      description: 'Get performance-focused metrics: fastest MCPs, most reliable MCPs, response times',
+      name: 'performance',
+      description: 'Performance-focused metrics: fastest MCPs, most reliable MCPs, response times',
       inputSchema: {
         type: 'object',
         properties: {
@@ -55,8 +55,8 @@ export class AnalyticsMCP implements InternalMCP {
       }
     },
     {
-      name: 'get_usage',
-      description: 'Get usage statistics: most used MCPs, tool counts, hourly patterns',
+      name: 'usage',
+      description: 'Usage statistics: most used MCPs, tool counts, hourly patterns',
       inputSchema: {
         type: 'object',
         properties: {
@@ -97,13 +97,13 @@ export class AnalyticsMCP implements InternalMCP {
       }
 
       switch (toolName) {
-        case 'get_dashboard':
+        case 'overview':
           return this.formatDashboard(report);
 
-        case 'get_performance':
+        case 'performance':
           return this.formatPerformance(report);
 
-        case 'get_usage':
+        case 'usage':
           return this.formatUsage(report);
 
         default:
