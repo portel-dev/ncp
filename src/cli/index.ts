@@ -3773,6 +3773,179 @@ program
     }
   });
 
+// Credentials: List stored credentials
+program
+  .command('credentials:list')
+  .description('List all stored credentials (shows which MCPs have credentials)')
+  .option('--mcp <name>', 'Filter by MCP name')
+  .action(async (options) => {
+    try {
+      const { getSecureCredentialStore } = await import('../auth/secure-credential-store.js');
+      const credentialStore = getSecureCredentialStore();
+
+      const credentials = await credentialStore.listCredentials(options.mcp);
+
+      if (credentials.length === 0) {
+        console.log('ℹ️  No stored credentials found');
+        return;
+      }
+
+      console.log(`\n🔐 Stored Credentials (${credentials.length})\n`);
+      console.log(chalk.dim('Storage method: ') + chalk.cyan(credentialStore.getStorageMethod()));
+      console.log('');
+
+      for (const cred of credentials) {
+        console.log(chalk.bold(`${cred.mcpName}`) + chalk.dim(` (${cred.type})`));
+        if (cred.description) {
+          console.log(chalk.dim(`   ${cred.description}`));
+        }
+        console.log(chalk.dim(`   Updated: ${new Date(cred.updatedAt).toLocaleString()}`));
+        console.log('');
+      }
+    } catch (error) {
+      console.error(`❌ Failed to list credentials: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
+// Credentials: Migrate plain-text credentials to secure storage
+program
+  .command('credentials:migrate')
+  .description('Migrate plain-text credentials from profiles to secure storage')
+  .option('--profile <name>', 'Profile to migrate (default: all profiles)')
+  .action(async (options) => {
+    try {
+      const manager = new ProfileManager();
+      await manager.initialize(true);
+
+      console.log('\n🔐 Migrating credentials to secure storage...\n');
+
+      let result;
+      if (options.profile) {
+        result = await manager.migrateProfileCredentials(options.profile);
+        console.log(chalk.dim(`Profile: ${options.profile}`));
+      } else {
+        result = await manager.migrateAllCredentials();
+        console.log(chalk.dim('All profiles'));
+      }
+
+      if (result.migrated > 0) {
+        console.log(`\n✅ Migrated ${result.migrated} credential(s)`);
+      } else {
+        console.log('\nℹ️  No plain-text credentials found to migrate');
+      }
+
+      if (result.errors > 0) {
+        console.log(chalk.yellow(`⚠️  ${result.errors} error(s) occurred during migration`));
+      }
+    } catch (error) {
+      console.error(`❌ Migration failed: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
+// Credentials: Delete stored credential
+program
+  .command('credentials:delete <mcp>')
+  .description('Delete stored credentials for an MCP')
+  .option('--type <type>', 'Credential type (bearer_token, api_key, basic_auth, etc.)')
+  .action(async (mcpName, options) => {
+    try {
+      const { getSecureCredentialStore } = await import('../auth/secure-credential-store.js');
+      const credentialStore = getSecureCredentialStore();
+
+      // If type specified, delete that specific credential
+      if (options.type) {
+        const success = await credentialStore.deleteCredential(mcpName, options.type);
+        if (success) {
+          console.log(`✅ Deleted ${options.type} for ${mcpName}`);
+        } else {
+          console.log(`ℹ️  No ${options.type} found for ${mcpName}`);
+        }
+        return;
+      }
+
+      // Otherwise, list credentials and confirm deletion
+      const credentials = await credentialStore.listCredentials(mcpName);
+      if (credentials.length === 0) {
+        console.log(`ℹ️  No credentials found for ${mcpName}`);
+        return;
+      }
+
+      console.log(`\nFound ${credentials.length} credential(s) for ${chalk.bold(mcpName)}:\n`);
+      for (const cred of credentials) {
+        console.log(chalk.dim(`  - ${cred.type}`));
+      }
+
+      // Delete all credentials for this MCP
+      let deleted = 0;
+      for (const cred of credentials) {
+        const success = await credentialStore.deleteCredential(mcpName, cred.type);
+        if (success) deleted++;
+      }
+
+      console.log(`\n✅ Deleted ${deleted} credential(s) for ${mcpName}`);
+    } catch (error) {
+      console.error(`❌ Failed to delete credentials: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
+// Credentials: Rotate (update) credential
+program
+  .command('credentials:rotate <mcp>')
+  .description('Update/rotate credentials for an MCP')
+  .option('--type <type>', 'Credential type (default: bearer_token)', 'bearer_token')
+  .option('--token <token>', 'New token/API key value')
+  .action(async (mcpName, options) => {
+    try {
+      const { getSecureCredentialStore } = await import('../auth/secure-credential-store.js');
+      const credentialStore = getSecureCredentialStore();
+
+      let newToken = options.token;
+
+      // If token not provided, prompt for it
+      if (!newToken) {
+        const readline = await import('readline');
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+
+        newToken = await new Promise<string>((resolve) => {
+          // Hide input for security
+          process.stdin.on('data', () => {});
+          rl.question(`Enter new ${options.type} for ${chalk.bold(mcpName)}: `, (answer) => {
+            rl.close();
+            resolve(answer);
+          });
+        });
+      }
+
+      if (!newToken || newToken.trim() === '') {
+        console.log('❌ No token provided');
+        process.exit(1);
+      }
+
+      const success = await credentialStore.setCredential(
+        mcpName,
+        options.type,
+        newToken.trim(),
+        `Rotated on ${new Date().toISOString()}`
+      );
+
+      if (success) {
+        console.log(`✅ Updated ${options.type} for ${mcpName}`);
+      } else {
+        console.log(`❌ Failed to update credential`);
+        process.exit(1);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to rotate credentials: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
 // Check for updates on CLI startup (non-intrusive, with 5s total timeout)
 (async () => {
   try {

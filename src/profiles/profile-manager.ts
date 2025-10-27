@@ -9,6 +9,8 @@ import { existsSync } from 'fs';
 import { getProfilesDirectory } from '../utils/ncp-paths.js';
 import { importFromClient, shouldAttemptClientSync } from '../utils/client-importer.js';
 import type { OAuthConfig } from '../auth/oauth-device-flow.js';
+import { getSecureCredentialStore, type CredentialType } from '../auth/secure-credential-store.js';
+import { logger } from '../utils/logger.js';
 
 interface MCPConfig {
   command?: string;  // Optional: for stdio transport
@@ -37,10 +39,87 @@ interface Profile {
 export class ProfileManager {
   private profilesDir: string;
   private profiles: Map<string, Profile> = new Map();
+  private credentialStore = getSecureCredentialStore();
 
   constructor() {
     // Use centralized path utility to determine local vs global .ncp directory
     this.profilesDir = getProfilesDirectory();
+  }
+
+  /**
+   * Store sensitive credentials in secure storage and replace with references
+   */
+  private async storeCredentials(mcpName: string, config: MCPConfig): Promise<MCPConfig> {
+    if (!config.auth) {
+      return config;
+    }
+
+    // Clone config to avoid mutating original
+    const securConfig = JSON.parse(JSON.stringify(config));
+
+    // Store token/API key
+    if (config.auth.token) {
+      const type: CredentialType = config.auth.type === 'bearer' ? 'bearer_token' : 'api_key';
+      await this.credentialStore.setCredential(
+        mcpName,
+        type,
+        config.auth.token,
+        `${config.auth.type} credential for ${mcpName}`
+      );
+      // Replace with secure reference
+      securConfig.auth.token = '_USE_SECURE_STORAGE_';
+    }
+
+    // Store basic auth credentials
+    if (config.auth.username && config.auth.password) {
+      await this.credentialStore.setCredential(
+        mcpName,
+        'basic_auth',
+        { username: config.auth.username, password: config.auth.password },
+        `Basic auth credentials for ${mcpName}`
+      );
+      // Replace with secure references
+      securConfig.auth.username = '_USE_SECURE_STORAGE_';
+      securConfig.auth.password = '_USE_SECURE_STORAGE_';
+    }
+
+    return securConfig;
+  }
+
+  /**
+   * Load actual credentials from secure storage if references are found
+   */
+  private async loadCredentials(mcpName: string, config: MCPConfig): Promise<MCPConfig> {
+    if (!config.auth) {
+      return config;
+    }
+
+    // Clone config to avoid mutating cached version
+    const fullConfig = JSON.parse(JSON.stringify(config));
+
+    // Load token/API key if it's a reference
+    if (config.auth.token === '_USE_SECURE_STORAGE_') {
+      const type: CredentialType = config.auth.type === 'bearer' ? 'bearer_token' : 'api_key';
+      const credential = await this.credentialStore.getCredential(mcpName, type);
+      if (credential && typeof credential === 'string') {
+        fullConfig.auth.token = credential;
+      } else {
+        logger.warn(`Failed to load ${type} for ${mcpName} from secure storage`);
+      }
+    }
+
+    // Load basic auth credentials if they're references
+    if (config.auth.username === '_USE_SECURE_STORAGE_' && config.auth.password === '_USE_SECURE_STORAGE_') {
+      const credential = await this.credentialStore.getCredential(mcpName, 'basic_auth');
+      if (credential && typeof credential === 'object') {
+        fullConfig.auth.username = credential.username;
+        fullConfig.auth.password = credential.password;
+      } else {
+        logger.warn(`Failed to load basic auth for ${mcpName} from secure storage`);
+      }
+    }
+
+    return fullConfig;
   }
 
   async initialize(skipAutoImport: boolean = false): Promise<void> {
@@ -321,8 +400,11 @@ export class ProfileManager {
       this.profiles.set(profileName, profile);
     }
 
+    // Store credentials securely and get config with references
+    const secureConfig = await this.storeCredentials(mcpName, config);
+
     // Add or update MCP config
-    profile.mcpServers[mcpName] = config;
+    profile.mcpServers[mcpName] = secureConfig;
     profile.metadata.modified = new Date().toISOString();
 
     await this.saveProfile(profile);
@@ -348,7 +430,7 @@ export class ProfileManager {
     const profile = await this.getProfile(profileName);
     if (!profile?.mcpServers) return undefined;
 
-    // Filter out invalid configurations (ensure they have either command or url property)
+    // Filter out invalid configurations and load credentials from secure storage
     const validMCPs: Record<string, MCPConfig> = {};
     for (const [name, config] of Object.entries(profile.mcpServers)) {
       if (typeof config === 'object' && config !== null) {
@@ -357,7 +439,9 @@ export class ProfileManager {
         const hasHttp = 'url' in config && typeof config.url === 'string';
 
         if (hasStdio || hasHttp) {
-          validMCPs[name] = config as MCPConfig;
+          // Load actual credentials from secure storage if needed
+          const fullConfig = await this.loadCredentials(name, config as MCPConfig);
+          validMCPs[name] = fullConfig;
         }
       }
     }
@@ -371,6 +455,71 @@ export class ProfileManager {
 
   getProfilePath(profileName: string): string {
     return path.join(this.profilesDir, `${profileName}.json`);
+  }
+
+  /**
+   * Migrate all plain-text credentials in a profile to secure storage
+   */
+  async migrateProfileCredentials(profileName: string): Promise<{ migrated: number; errors: number }> {
+    const profile = this.profiles.get(profileName);
+    if (!profile) {
+      throw new Error(`Profile ${profileName} not found`);
+    }
+
+    let migrated = 0;
+    let errors = 0;
+
+    for (const [mcpName, config] of Object.entries(profile.mcpServers)) {
+      if (!config.auth) continue;
+
+      // Check if credentials are plain-text (not already secure references)
+      const hasPlainTextToken = config.auth.token && config.auth.token !== '_USE_SECURE_STORAGE_';
+      const hasPlainTextBasicAuth =
+        config.auth.username &&
+        config.auth.password &&
+        config.auth.username !== '_USE_SECURE_STORAGE_';
+
+      if (hasPlainTextToken || hasPlainTextBasicAuth) {
+        try {
+          const success = await this.credentialStore.migrateFromPlainText(mcpName, config.auth);
+          if (success) {
+            // Update profile with secure references
+            const secureConfig = await this.storeCredentials(mcpName, config);
+            profile.mcpServers[mcpName] = secureConfig;
+            migrated++;
+            logger.info(`Migrated credentials for ${mcpName}`);
+          } else {
+            errors++;
+          }
+        } catch (error) {
+          logger.error(`Failed to migrate credentials for ${mcpName}: ${error}`);
+          errors++;
+        }
+      }
+    }
+
+    if (migrated > 0) {
+      profile.metadata.modified = new Date().toISOString();
+      await this.saveProfile(profile);
+    }
+
+    return { migrated, errors };
+  }
+
+  /**
+   * Migrate all plain-text credentials across all profiles
+   */
+  async migrateAllCredentials(): Promise<{ migrated: number; errors: number }> {
+    let totalMigrated = 0;
+    let totalErrors = 0;
+
+    for (const profileName of this.listProfiles()) {
+      const result = await this.migrateProfileCredentials(profileName);
+      totalMigrated += result.migrated;
+      totalErrors += result.errors;
+    }
+
+    return { migrated: totalMigrated, errors: totalErrors };
   }
 }
 
