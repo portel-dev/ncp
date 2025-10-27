@@ -144,6 +144,20 @@ export class ProfileManager {
       // console.error(`[ProfileManager] 'all' profile already exists`);
     }
 
+    // Auto-migrate credentials on first run (silent unless credentials found)
+    try {
+      const migrationResult = await this.migrateAllCredentials();
+      if (migrationResult.migrated > 0) {
+        logger.info(`🔐 Auto-migrated ${migrationResult.migrated} credential(s) to secure storage`);
+      }
+      if (migrationResult.errors > 0) {
+        logger.warn(`⚠️  ${migrationResult.errors} credential(s) failed to migrate`);
+      }
+    } catch (error) {
+      // Silent failure - don't block initialization
+      logger.debug(`Credential auto-migration failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
     // ⚠️ IMPORTANT: Auto-import is now triggered ONLY when a client announces itself
     // via the MCP initialize handshake (see ncp-orchestrator.ts line 2084)
     // This ensures:
