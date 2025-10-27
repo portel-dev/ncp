@@ -98,7 +98,7 @@
   "tools": [
     {
       "name": "find",
-      "description": "Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task as user story for best results. (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools."
+      "description": "Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task or capability: \"save file\", \"analyze logs\", \"send email\". For multi-step workflows, search for each action separately. (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools."
     },
     {
       "name": "run",
