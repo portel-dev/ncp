@@ -825,12 +825,62 @@ async function handleManualAdd(name: string, command: string, args: string[], op
 // Simplified add command (checks registry first)
 program
   .command('add <provider> [command] [args...]')
-  .description('Add an MCP server to a profile (auto-detects known providers)')
+  .description('Add MCP server(s) to a profile. Supports single (github), bulk (github|slack), file import (~/config.json), or clipboard')
   .option('--profile <names...>', 'Profile(s) to add to (can specify multiple, default: all)')
   .option('--transport <type>', 'Force transport type: stdio or http')
   .option('--env <vars...>', 'Environment variables (KEY=value)')
   .action(async (providerName, command, args, options) => {
-    // Import provider registry
+    // Smart detection: Check if this is pipe-delimited bulk add
+    if (providerName.includes('|') && !command) {
+      // Bulk add mode: split by pipe and add each MCP
+      const mcpNames = providerName.split('|').map((name: string) => name.trim()).filter((name: string) => name.length > 0);
+      console.log(chalk.blue(`\n📦 Bulk add mode: Installing ${mcpNames.length} MCPs`));
+      console.log(chalk.dim(`   ${mcpNames.join(', ')}\n`));
+
+      const { fetchProvider } = await import('../registry/provider-registry.js');
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const mcpName of mcpNames) {
+        try {
+          console.log(chalk.cyan(`\n→ Adding ${mcpName}...`));
+          const provider = await fetchProvider(mcpName);
+
+          if (provider) {
+            await handleKnownProvider(provider, options);
+            successCount++;
+          } else {
+            console.log(chalk.yellow(`⚠️  MCP "${mcpName}" not found in registry`));
+            failCount++;
+          }
+        } catch (error: any) {
+          console.log(chalk.red(`✗ Failed to add ${mcpName}: ${error.message}`));
+          failCount++;
+        }
+      }
+
+      console.log(chalk.bold(`\n📊 Bulk add complete:`));
+      console.log(chalk.green(`   ✓ ${successCount} successful`));
+      if (failCount > 0) {
+        console.log(chalk.red(`   ✗ ${failCount} failed`));
+      }
+      return;
+    }
+
+    // Smart detection: Check if this is a file import
+    if ((providerName.endsWith('.json') || providerName.includes('/') || providerName.startsWith('~') || providerName.startsWith('./')) && !command) {
+      console.log(chalk.blue(`\n📥 Importing from file: ${providerName}`));
+      try {
+        const manager = new ConfigManager();
+        await manager.importConfig(providerName, options.profile?.[0] || 'all', false);
+        return;
+      } catch (error: any) {
+        console.log(chalk.red(`\n✗ Import failed: ${error.message}`));
+        process.exit(1);
+      }
+    }
+
+    // Standard single MCP add flow
     const { fetchProvider } = await import('../registry/provider-registry.js');
 
     // Check if this is a known provider (fetch from mcps.portel.dev)
@@ -1868,10 +1918,15 @@ const configCmd = program
 
 configCmd
   .command('import [file]')
-  .description('Import MCP configurations from file or clipboard')
+  .description('[DEPRECATED] Import MCP configurations from file or clipboard. Use "ncp add <file>" instead')
   .option('--profile <name>', 'Target profile (default: all)')
   .option('--dry-run', 'Show what would be imported without actually importing')
   .action(async (file, options) => {
+    console.log(chalk.yellow('⚠️  The "import" command is deprecated. Use "ncp add" instead:'));
+    console.log(chalk.dim('   • File import: ncp add ~/config.json'));
+    console.log(chalk.dim('   • Bulk add: ncp add "github|slack|stripe"'));
+    console.log(chalk.dim('   • Single add: ncp add github\n'));
+
     try {
       const manager = new ConfigManager();
       await manager.importConfig(file, options.profile, options.dryRun);
