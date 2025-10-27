@@ -11,7 +11,7 @@ import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import { ToolFinder } from '../services/tool-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { TextUtils } from '../utils/text-utils.js';
-import { RegistryClient } from '../services/registry-client.js';
+import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
 import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation, parseOperationConfirmationResponse } from './mcp-prompts.js';
 import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist } from '../utils/global-settings.js';
 import { version } from '../utils/version.js';
@@ -433,11 +433,11 @@ export class MCPServer {
       // Intelligent fallback: Search MCP registry for matching tools
       try {
         logger.debug(`Searching registry for: ${description}`);
-        const registryClient = new RegistryClient();
+        const registryClient = new UnifiedRegistryClient();
         const registryCandidates = await registryClient.searchForSelection(description);
 
         if (registryCandidates.length > 0) {
-          output += `💡 **I don't have this capability yet, but found ${registryCandidates.length} MCP${registryCandidates.length > 1 ? 's' : ''} in the registry that can help:**\n\n`;
+          output += `💡 **I don't have this capability yet, but found ${registryCandidates.length} MCP${registryCandidates.length > 1 ? 's' : ''} in the registry:**\n\n`;
 
           // Show top 3 results with installation info
           const topCandidates = registryCandidates.slice(0, 3);
@@ -454,8 +454,20 @@ export class MCPServer {
           }
 
           output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-          output += `📌 **Next step:** Call the \`add\` tool to install an MCP\n`;
-          output += `   Example: \`add\` with \`mcp_name="${topCandidates[0].name}"\`\n`;
+
+          // Check if query is a simple MCP name (single word)
+          const isSimpleMCPName = description.trim().split(/\s+/).length === 1;
+
+          if (isSimpleMCPName) {
+            output += `💡 **If the above results don't match, try direct add:**\n`;
+            output += `   Call \`add\` tool with \`mcp_name="${description}"\`\n\n`;
+            output += `📌 **Or install from registry:**\n`;
+            output += `   Example: \`add\` with \`mcp_name="${topCandidates[0].name}"\`\n`;
+          } else {
+            output += `📌 **Next step:** Call the \`add\` tool to install an MCP\n`;
+            output += `   Example: \`add\` with \`mcp_name="${topCandidates[0].name}"\`\n`;
+          }
+
           output += `   Then retry your search to access the new tools.\n`;
           output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
@@ -472,15 +484,24 @@ export class MCPServer {
         // Continue to show available MCPs below
       }
 
-      // Fallback: Show sample of available MCPs (if registry search failed or returned no results)
+      // Fallback: No registry results, suggest direct add or show samples
+      const isSimpleMCPName = description.trim().split(/\s+/).length === 1;
+
+      if (isSimpleMCPName) {
+        // For simple queries, suggest trying direct add first
+        output += `💡 **Try adding directly:**\n`;
+        output += `   Call \`add\` tool with \`mcp_name="${description}"\`\n\n`;
+        output += `This will search for an MCP named "${description}" and guide you through installation.\n\n`;
+      }
+
       const samples = await finder.getSampleTools(8);
 
       if (samples.length > 0) {
-        output += `📝 Available MCPs to explore:\n`;
+        output += `📝 **Or explore these available MCPs:**\n`;
         samples.forEach(sample => {
           output += `📁 **${sample.mcpName}** - ${sample.description}\n`;
         });
-        output += `\n💡 *Try broader search terms or specify an MCP name in your query.*`;
+        output += `\n💡 *Try broader search terms or browse registry at https://smithery.ai*`;
       }
 
       return {

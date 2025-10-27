@@ -232,7 +232,9 @@ export class CustomRegistryClient {
     score: number;
     installCommand: string;
   }>> {
-    const results = await this.search({ q: query, limit, sort: 'downloads' });
+    // Use default relevance sorting (no sort parameter) to get best matches first
+    // Sorting by downloads can put less relevant results first when downloads are tied
+    const results = await this.search({ q: query, limit });
 
     return results.map((mcp, index) => ({
       number: index + 1,

@@ -18,7 +18,7 @@ import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
 import { logger } from '../utils/logger.js';
 import { ToolFinder } from '../services/tool-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
-import { RegistryClient } from '../services/registry-client.js';
+import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist } from '../utils/global-settings.js';
 import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation } from './mcp-prompts.js';
@@ -342,11 +342,11 @@ export class MCPServerSDK implements ElicitationServer {
       // Intelligent fallback: Search MCP registry
       try {
         logger.debug(`Searching registry for: ${description}`);
-        const registryClient = new RegistryClient();
+        const registryClient = new UnifiedRegistryClient();
         const registryCandidates = await registryClient.searchForSelection(description);
 
         if (registryCandidates.length > 0) {
-          output += `💡 **I don't have this capability yet, but found ${registryCandidates.length} MCP${registryCandidates.length > 1 ? 's' : ''} in the registry that can help:**\n\n`;
+          output += `💡 **I don't have this capability yet, but found ${registryCandidates.length} MCP${registryCandidates.length > 1 ? 's' : ''} in the registry:**\n\n`;
 
           const topCandidates = registryCandidates.slice(0, 5);
           topCandidates.forEach(candidate => {
@@ -357,13 +357,38 @@ export class MCPServerSDK implements ElicitationServer {
             output += `   Version: ${candidate.version}\n\n`;
           });
 
-          output += `\n🚀 **To install one of these MCPs:**\n\n`;
-          output += `**Option 1: Use discovery import (recommended):**\n`;
-          output += `\`\`\`\nrun("ncp:import", {\n`;
-          output += `  from: "discovery",\n`;
-          output += `  source: "${description}",\n`;
-          output += `  selection: "1"  // or "1,3,5" for multiple, or "*" for all\n`;
-          output += `})\n\`\`\`\n\n`;
+          output += `\n🚀 **To install:**\n\n`;
+
+          // Check if query is a simple MCP name (single word, likely a direct MCP name)
+          const isSimpleMCPName = description.trim().split(/\s+/).length === 1;
+
+          if (isSimpleMCPName) {
+            // For simple queries like "canva", prioritize direct add
+            output += `**Option 1: Try direct add (recommended for exact names):**\n`;
+            output += `\`\`\`\nrun("ncp:add", {\n`;
+            output += `  mcp_name: "${description}"\n`;
+            output += `})\n\`\`\`\n\n`;
+
+            output += `**Option 2: Install from registry results:**\n`;
+            output += `\`\`\`\nrun("ncp:import", {\n`;
+            output += `  from: "discovery",\n`;
+            output += `  source: "${description}",\n`;
+            output += `  selection: "1"  // or "1,3,5" for multiple\n`;
+            output += `})\n\`\`\`\n\n`;
+          } else {
+            // For descriptive queries, prioritize registry search
+            output += `**Option 1: Install from registry (recommended):**\n`;
+            output += `\`\`\`\nrun("ncp:import", {\n`;
+            output += `  from: "discovery",\n`;
+            output += `  source: "${description}",\n`;
+            output += `  selection: "1"  // or "1,3,5" for multiple, or "*" for all\n`;
+            output += `})\n\`\`\`\n\n`;
+
+            output += `**Option 2: If you know the exact MCP name:**\n`;
+            output += `\`\`\`\nrun("ncp:add", {\n`;
+            output += `  mcp_name: "<exact-mcp-name>"\n`;
+            output += `})\n\`\`\`\n\n`;
+          }
 
           output += `💡 *MCPs will be available after NCP restarts.*`;
 
@@ -375,15 +400,26 @@ export class MCPServerSDK implements ElicitationServer {
         logger.warn(`Registry search failed: ${error.message}`);
       }
 
-      // Fallback: Show sample of available MCPs
+      // Fallback: No registry results, suggest direct add or show samples
+      const isSimpleMCPName = description.trim().split(/\s+/).length === 1;
+
+      if (isSimpleMCPName) {
+        // For simple queries, suggest trying direct add first
+        output += `💡 **Try adding directly:**\n\n`;
+        output += `\`\`\`\nrun("ncp:add", {\n`;
+        output += `  mcp_name: "${description}"\n`;
+        output += `})\n\`\`\`\n\n`;
+        output += `This will search for an MCP named "${description}" and guide you through installation.\n\n`;
+      }
+
       const samples = await finder.getSampleTools(8);
 
       if (samples.length > 0) {
-        output += `📝 Available MCPs to explore:\n`;
+        output += `📝 **Or explore these available MCPs:**\n`;
         samples.forEach(sample => {
           output += `📁 **${sample.mcpName}** - ${sample.description}\n`;
         });
-        output += `\n💡 *Try broader search terms or specify an MCP name in your query.*`;
+        output += `\n💡 *Try broader search terms or browse registry at https://smithery.ai*`;
       }
 
       return {

@@ -15,52 +15,106 @@ export class UnifiedRegistryClient {
 
   /**
    * Search for MCPs with selection format
-   * Tries custom registry first, falls back to official
+   * Tries custom registry first, falls back to official on API failure only
    */
   async searchForSelection(query: string, options: RegistrySearchOptions = {}): Promise<RegistryMCPCandidate[]> {
+    // Simplify verbose AI-generated queries to core keywords
+    // Example: "canva integration, import canva, canva API" -> "canva"
+    const simplifiedQuery = this.simplifyQuery(query);
+    logger.debug(`Original query: "${query}", Simplified: "${simplifiedQuery}"`);
+
     try {
       logger.debug('Searching custom registry...');
-      const customResults = await this.customClient.searchForSelection(query, options.limit || 20);
+      const customResults = await this.customClient.searchForSelection(simplifiedQuery, options.limit || 20);
 
-      if (customResults.length > 0) {
-        logger.debug(`Found ${customResults.length} results from custom registry`);
+      logger.debug(`Found ${customResults.length} results from custom registry`);
 
-        // Convert custom registry format to RegistryMCPCandidate format
-        return customResults.map((result, index) => ({
-          number: index + 1,
-          name: result.name,
-          displayName: result.displayName,
-          description: result.description,
-          version: result.version,
-          transport: this.guessTransport(result.installCommand),
-          command: this.extractCommand(result.installCommand),
-          args: this.extractArgs(result.installCommand),
-          downloadCount: result.downloads,
-          status: result.verified ? 'verified' : 'active',
-          repository: {
-            url: '', // Not available in custom registry format
-            source: ''
-          },
-          isTrusted: result.verified,
-          qualityScore: result.score
-        }));
+      // Convert custom registry format to RegistryMCPCandidate format
+      return customResults.map((result, index) => ({
+        number: index + 1,
+        name: result.name,
+        displayName: result.displayName,
+        description: result.description,
+        version: result.version,
+        transport: this.guessTransport(result.installCommand),
+        command: this.extractCommand(result.installCommand),
+        args: this.extractArgs(result.installCommand),
+        downloadCount: result.downloads,
+        status: result.verified ? 'verified' : 'active',
+        repository: {
+          url: '', // Not available in custom registry format
+          source: ''
+        },
+        isTrusted: result.verified,
+        qualityScore: result.score
+      }));
+    } catch (error: any) {
+      // Only fallback to official on API errors (not on empty results)
+      // Custom registry aggregates from official, so if custom has 0 results,
+      // official will also have 0 results (they have the same data)
+      logger.warn(`Custom registry API failed: ${error.message}, falling back to official`);
+
+      try {
+        logger.debug('Searching official registry as fallback...');
+        const officialResults = await this.officialClient.searchForSelection(simplifiedQuery, options);
+        logger.debug(`Found ${officialResults.length} results from official registry`);
+        return officialResults;
+      } catch (officialError: any) {
+        logger.error(`Both registries failed: ${officialError.message}`);
+        throw new Error(`Failed to search registries: ${error.message}`);
       }
+    }
+  }
 
-      logger.debug('No results from custom registry, falling back to official...');
-    } catch (error: any) {
-      logger.warn(`Custom registry search failed: ${error.message}, falling back to official`);
+  /**
+   * Simplify verbose AI queries to core keywords
+   * Handles comma-separated terms, extracts most common/relevant keyword
+   */
+  private simplifyQuery(query: string): string {
+    // If query is simple (no commas, short), return as-is
+    if (!query.includes(',') && query.trim().split(/\s+/).length <= 2) {
+      return query.trim();
     }
 
-    // Fallback to official registry
-    try {
-      logger.debug('Searching official registry...');
-      const officialResults = await this.officialClient.searchForSelection(query, options);
-      logger.debug(`Found ${officialResults.length} results from official registry`);
-      return officialResults;
-    } catch (error: any) {
-      logger.error(`Both registries failed: ${error.message}`);
-      throw new Error(`Failed to search registries: ${error.message}`);
+    // Split by commas and extract individual terms
+    const terms = query.split(',').map(t => t.trim()).filter(t => t.length > 0);
+
+    if (terms.length === 0) {
+      return query.trim();
     }
+
+    // Extract keywords from each term (remove common words)
+    const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'import', 'integration', 'api', 'sdk', 'tool', 'tools', 'server', 'service']);
+    const keywords = new Map<string, number>();
+
+    terms.forEach(term => {
+      const words = term.toLowerCase().split(/\s+/);
+      words.forEach(word => {
+        // Clean word (remove punctuation)
+        word = word.replace(/[^a-z0-9-]/g, '');
+        if (word.length > 2 && !stopWords.has(word)) {
+          keywords.set(word, (keywords.get(word) || 0) + 1);
+        }
+      });
+    });
+
+    if (keywords.size === 0) {
+      // No keywords found, use first term
+      return terms[0];
+    }
+
+    // Find most common keyword (likely the core concept)
+    let maxCount = 0;
+    let coreKeyword = '';
+    keywords.forEach((count, word) => {
+      if (count > maxCount) {
+        maxCount = count;
+        coreKeyword = word;
+      }
+    });
+
+    logger.debug(`Extracted core keyword: "${coreKeyword}" from ${keywords.size} keywords`);
+    return coreKeyword;
   }
 
   /**
