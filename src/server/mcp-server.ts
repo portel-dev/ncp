@@ -1333,12 +1333,12 @@ run("filesystem:write_file", {path: "/tmp/test.txt", content: "..."}, dry_run=tr
 ### Install New MCPs
 When find() shows no results, NCP suggests MCPs from the registry:
 \`\`\`
-run("ncp:import", {from: "discovery", source: "your query", selection: "1"})
+run("mcp:import", {from: "discovery", source: "your query", selection: "1"})
 \`\`\`
 
 ### List Configured MCPs
 \`\`\`
-run("ncp:list", {profile: "all"})
+run("mcp:list", {profile: "all"})
 \`\`\`
 
 ### Check Health
@@ -1378,12 +1378,12 @@ Use the health dashboard resource (you're reading resources now!)
 
 To add MCPs, use:
 \`\`\`
-run("ncp:import", {from: "discovery", source: "your search"})
+run("mcp:import", {from: "discovery", source: "your search"})
 \`\`\`
 
 Or manually:
 \`\`\`
-run("ncp:add", {mcp_name: "...", command: "...", args: [...]})
+run("mcp:add", {mcp_name: "...", command: "...", args: [...]})
 \`\`\`
 `;
       return content;
@@ -1407,7 +1407,7 @@ run("ncp:add", {mcp_name: "...", command: "...", args: [...]})
 
       content += `**To troubleshoot:**\n`;
       content += `1. Check logs: \`~/.ncp/logs/ncp-debug-*.log\` (if debug enabled)\n`;
-      content += `2. Verify configuration: \`run("ncp:list")\`\n`;
+      content += `2. Verify configuration: \`run("mcp:list")\`\n`;
       content += `3. Try restarting NCP\n`;
     }
 
@@ -1449,8 +1449,8 @@ This means:
 If auto-import didn't run or you want to import from a file:
 
 \`\`\`
-run("ncp:import", {from: "clipboard"})  // Copy config first
-run("ncp:import", {from: "file", source: "~/path/to/config.json"})
+run("mcp:import", {from: "clipboard"})  // Copy config first
+run("mcp:import", {from: "file", source: "~/path/to/config.json"})
 \`\`\`
 `;
     }

@@ -62,7 +62,7 @@ export class InternalMCPManager {
 
   /**
    * Execute a tool from an internal MCP
-   * @param mcpName The internal MCP name (e.g., "ncp")
+   * @param mcpName The internal MCP name (e.g., "mcp")
    * @param toolName The tool name (e.g., "add")
    * @param parameters Tool parameters
    */
