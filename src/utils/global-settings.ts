@@ -15,9 +15,15 @@ export interface ConfirmBeforeRunSettings {
   approvedTools: string[];
 }
 
+export interface LogRotationSettings {
+  enabled: boolean;
+  maxDebugFiles: number;
+  maxProtocolLines: number;
+}
+
 export interface GlobalSettings {
   confirmBeforeRun: ConfirmBeforeRunSettings;
-  // Future settings can be added here
+  logRotation: LogRotationSettings;
 }
 
 /**
@@ -45,6 +51,18 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
     // Tools user approved via "Approve Always" button
     // Managed automatically - can be cleared via CLI
     approvedTools: []
+  },
+  logRotation: {
+    // Auto-rotate log files to prevent disk space issues
+    enabled: true, // ON by default
+
+    // Maximum number of debug log files to keep
+    // Older files are deleted automatically
+    maxDebugFiles: 10,
+
+    // Maximum number of protocol log lines to keep (request+response pairs)
+    // 2000 lines = 1000 request/response pairs
+    maxProtocolLines: 2000
   }
 };
 
@@ -77,8 +95,11 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
         confirmBeforeRun: {
           ...DEFAULT_SETTINGS.confirmBeforeRun,
           ...(fileSettings.confirmBeforeRun || {})
+        },
+        logRotation: {
+          ...DEFAULT_SETTINGS.logRotation,
+          ...(fileSettings.logRotation || {})
         }
-        // Add other settings here in the future
       };
     } catch (error) {
       console.warn('Failed to load settings, using defaults:', error);
@@ -89,6 +110,12 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
   if (process.env.NCP_CONFIRM_BEFORE_RUN !== undefined) {
     const envValue = process.env.NCP_CONFIRM_BEFORE_RUN;
     settings.confirmBeforeRun.enabled = envValue === 'true';
+  }
+
+  // Override log rotation with environment variable from extension UI toggle
+  if (process.env.NCP_ENABLE_LOG_ROTATION !== undefined) {
+    const envValue = process.env.NCP_ENABLE_LOG_ROTATION;
+    settings.logRotation.enabled = envValue === 'true';
   }
 
   return settings;

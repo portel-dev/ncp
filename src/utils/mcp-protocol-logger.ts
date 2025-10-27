@@ -3,22 +3,23 @@
  *
  * Logs MCP requests and responses to JSONL format for debugging
  * - Only active when NCP_DEBUG=true
- * - Keeps last 1000 request/response pairs (2000 lines)
- * - Auto-rotates by trimming top lines
+ * - Rotation settings configurable via ~/.ncp/settings.json
+ * - Auto-rotates by trimming top lines (default: 2000 lines = 1000 request/response pairs)
  */
 
 import { promises as fs, mkdirSync } from 'fs';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { getNcpBaseDirectory } from './ncp-paths.js';
-
-const MAX_LINES = 2000; // 1000 request/response pairs
-const TRIM_LINES = 2;   // Trim 2 lines (1 request+response) when max exceeded
+import { loadGlobalSettings } from './global-settings.js';
 
 export class MCPProtocolLogger {
   private logFilePath: string;
   private enabled: boolean;
   private writeQueue: Promise<void> = Promise.resolve();
+  private rotationEnabled: boolean = true;
+  private maxLines: number = 2000;
+  private settingsLoaded: Promise<void>;
 
   constructor() {
     this.enabled = process.env.NCP_DEBUG === 'true';
@@ -37,8 +38,26 @@ export class MCPProtocolLogger {
         // Silent fail - don't break initialization
         console.error(`[MCP Protocol Logger] Failed to create logs directory: ${error}`);
       }
+
+      // Load settings asynchronously
+      this.settingsLoaded = this.loadSettings();
     } else {
       this.logFilePath = '';
+      this.settingsLoaded = Promise.resolve();
+    }
+  }
+
+  /**
+   * Load rotation settings from global config
+   */
+  private async loadSettings(): Promise<void> {
+    try {
+      const settings = await loadGlobalSettings();
+      this.rotationEnabled = settings.logRotation.enabled;
+      this.maxLines = settings.logRotation.maxProtocolLines;
+    } catch (error) {
+      // Use defaults if loading fails
+      console.error(`[MCP Protocol Logger] Failed to load settings, using defaults: ${error}`);
     }
   }
 
@@ -78,6 +97,9 @@ export class MCPProtocolLogger {
    * Append a line to the log file with rotation
    */
   private async appendLine(line: string): Promise<void> {
+    // Ensure settings are loaded first
+    await this.settingsLoaded;
+
     // Queue writes to avoid race conditions
     this.writeQueue = this.writeQueue.then(async () => {
       try {
@@ -91,9 +113,9 @@ export class MCPProtocolLogger {
         // Add new line
         lines.push(line);
 
-        // Rotate if needed (keep last MAX_LINES)
-        if (lines.length > MAX_LINES) {
-          lines = lines.slice(-MAX_LINES);
+        // Rotate if enabled and needed (keep last maxLines)
+        if (this.rotationEnabled && lines.length > this.maxLines) {
+          lines = lines.slice(-this.maxLines);
         }
 
         // Write back

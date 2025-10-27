@@ -52,6 +52,12 @@
       "description": "Show confirmation dialog before executing modification operations (adding/removing MCPs, file changes, deletions, etc.). Protects against unintended changes by requiring explicit user approval.",
       "default": true
     },
+    "enable_log_rotation": {
+      "type": "boolean",
+      "title": "Enable Log Rotation",
+      "description": "Auto-rotate debug and protocol logs to prevent disk space issues. Advanced settings (maxDebugFiles, maxProtocolLines) can be edited in settings.json.",
+      "default": true
+    },
     "enable_schedule_mcp": {
       "type": "boolean",
       "title": "Enable Scheduler (Built-in)",
@@ -82,6 +88,7 @@
         "NCP_AUTO_IMPORT": "${user_config.auto_import_client_mcps}",
         "NCP_DEBUG": "${user_config.enable_debug_logging}",
         "NCP_CONFIRM_BEFORE_RUN": "${user_config.confirm_before_run}",
+        "NCP_ENABLE_LOG_ROTATION": "${user_config.enable_log_rotation}",
         "NCP_ENABLE_SCHEDULE_MCP": "${user_config.enable_schedule_mcp}",
         "NCP_ENABLE_MCP_MANAGEMENT": "${user_config.enable_mcp_management}",
         "NCP_MODE": "extension"

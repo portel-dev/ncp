@@ -14,6 +14,7 @@ interface ConfigOptions {
   confirmModifications: boolean;
   enableScheduler: boolean;
   enableMCPManagement: boolean;
+  logRotation: boolean;
 }
 
 /**
@@ -24,7 +25,8 @@ const KNOWN_KEYS: Record<string, 'boolean' | 'number' | 'string'> = {
   'debugLogging': 'boolean',
   'confirmModifications': 'boolean',
   'enableScheduler': 'boolean',
-  'enableMCPManagement': 'boolean'
+  'enableMCPManagement': 'boolean',
+  'logRotation': 'boolean'
 };
 
 /**
@@ -98,7 +100,14 @@ export class ConfigurationManager {
     const managementEnabled = true; // Always available
     const managementStatus = chalk.green('[✓]');
     console.log(`\n${managementStatus} ${chalk.bold('Enable MCP Management (Built-in)')}`);
-    console.log(`  ${chalk.dim('Add, remove, and manage MCPs in your configuration')}\n`);
+    console.log(`  ${chalk.dim('Add, remove, and manage MCPs in your configuration')}`);
+
+    // Log Rotation
+    const logRotationEnabled = globalSettings.logRotation.enabled;
+    const logRotationStatus = logRotationEnabled ? chalk.green('[✓]') : chalk.gray('[✗]');
+    console.log(`\n${logRotationStatus} ${chalk.bold('Enable Log Rotation')}`);
+    console.log(`  ${chalk.dim('Auto-rotate debug and protocol logs to prevent disk space issues')}`);
+    console.log(`  ${chalk.dim(`Advanced: Edit maxDebugFiles (${globalSettings.logRotation.maxDebugFiles}) and maxProtocolLines (${globalSettings.logRotation.maxProtocolLines}) in settings.json`)}\n`);
   }
 
   /**
@@ -155,6 +164,9 @@ export class ConfigurationManager {
     // Enable MCP Management
     const enableMCPManagement = await this.askYesNo('Enable MCP Management (Built-in)', true);
 
+    // Enable Log Rotation
+    const logRotation = await this.askYesNo('Enable Log Rotation', globalSettings.logRotation.enabled);
+
     // Save configuration
     if (autoImport) {
       delete process.env.NCP_SKIP_AUTO_IMPORT;
@@ -169,6 +181,7 @@ export class ConfigurationManager {
     }
 
     globalSettings.confirmBeforeRun.enabled = confirmModifications;
+    globalSettings.logRotation.enabled = logRotation;
 
     // Save global settings
     await saveGlobalSettings(globalSettings);
@@ -238,6 +251,11 @@ export class ConfigurationManager {
           if (!parsedValue) {
             console.warn(chalk.yellow('⚠️  MCP Management is always available. Setting ignored.\n'));
           }
+          break;
+
+        case 'logRotation':
+          globalSettings.logRotation.enabled = parsedValue;
+          await saveGlobalSettings(globalSettings);
           break;
       }
 

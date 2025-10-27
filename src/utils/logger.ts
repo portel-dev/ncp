@@ -10,6 +10,7 @@
 import { homedir } from 'os';
 import { join } from 'path';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs';
+import { loadGlobalSettings } from './global-settings.js';
 
 export class Logger {
   private static instance: Logger;
@@ -34,15 +35,18 @@ export class Logger {
 
     // Set up file-based logging for extensions with debug enabled
     if (this.debugMode && (process.env.NCP_MODE === 'extension' || process.env.NCP_MODE === 'mcp')) {
-      this.setupFileLogging();
+      // Fire and forget - don't block constructor
+      this.setupFileLogging().catch(error => {
+        console.error(`[NCP] Failed to set up file logging: ${error.message}`);
+      });
     }
   }
 
   /**
    * Set up file-based logging to avoid console spam in Claude Desktop
-   * Keeps last 10 log files, deletes older ones
+   * Keeps last N log files (configurable via settings), deletes older ones
    */
-  private setupFileLogging(): void {
+  private async setupFileLogging(): Promise<void> {
     try {
       const configPath = process.env.NCP_CONFIG_PATH || join(homedir(), '.ncp');
       const logsDir = join(configPath, 'logs');
@@ -52,8 +56,15 @@ export class Logger {
         mkdirSync(logsDir, { recursive: true });
       }
 
-      // Rotate old log files (keep last 10)
-      this.rotateLogFiles(logsDir, 10);
+      // Load rotation settings
+      const settings = await loadGlobalSettings();
+      const rotationEnabled = settings.logRotation.enabled;
+      const maxFiles = settings.logRotation.maxDebugFiles;
+
+      // Rotate old log files if enabled
+      if (rotationEnabled) {
+        this.rotateLogFiles(logsDir, maxFiles);
+      }
 
       // Create log file with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -64,6 +75,7 @@ export class Logger {
       this.writeToFile(`NCP Debug Log - ${new Date().toISOString()}\n`);
       this.writeToFile(`Profile: ${process.env.NCP_PROFILE || 'all'}\n`);
       this.writeToFile(`Config Path: ${configPath}\n`);
+      this.writeToFile(`Log Rotation: ${rotationEnabled ? `enabled (max ${maxFiles} files)` : 'disabled'}\n`);
       this.writeToFile(`${'='.repeat(80)}\n\n`);
     } catch (error: any) {
       // Fallback to console if file logging fails
