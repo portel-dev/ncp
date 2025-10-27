@@ -476,6 +476,7 @@ ${chalk.dim('Enables smart tool discovery across all configured servers with vec
   .option('--profile <name>', 'Profile to use (default: all)')
   .option('--working-dir <path>', 'Working directory for profile resolution (overrides current directory)')
   .option('--force-retry', 'Force retry all failed MCPs immediately (ignores scheduled retry times)')
+  .option('--debug', 'Enable verbose debug logging (shows full requests/responses, timing info)')
   .option('--no-color', 'Disable colored output');
 
 
