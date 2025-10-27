@@ -580,37 +580,39 @@ program
 // Add Quick Start and Examples after all commands are defined
 program.addHelpText('after', `
 ${chalk.bold.white('Quick Start:')}
-  ${chalk.cyan('1a')} Import existing MCPs: ${chalk.green('ncp config import')} ${chalk.dim('(copy JSON first)')}
-  ${chalk.cyan('1b')} Or add manually: ${chalk.green('ncp add <name> <command>')}
+  ${chalk.cyan('1')} Add MCPs: ${chalk.green('ncp add <name>')} ${chalk.dim('(from registry)')} or ${chalk.green('ncp add <file>')} ${chalk.dim('(import from file)')}
   ${chalk.cyan('2')} Configure NCP in AI client settings
 
 ${chalk.bold.white('Examples:')}
-  $ ${chalk.yellow('ncp config import config.json')} ${chalk.dim('              # Import from file')}
+  $ ${chalk.yellow('ncp add github')} ${chalk.dim('                           # Add from registry')}
+  $ ${chalk.yellow('ncp add "github|slack|stripe"')} ${chalk.dim('            # Bulk add')}
+  $ ${chalk.yellow('ncp add ~/config.json')} ${chalk.dim('                    # Import from file')}
   $ ${chalk.yellow('ncp add filesystem npx @modelcontextprotocol/server-filesystem /tmp')}
   $ ${chalk.yellow('ncp find "file operations"')}
   $ ${chalk.yellow('ncp run filesystem:read_file --params \'{"path": "/tmp/example.txt"}\'')}
   $ ${chalk.yellow('ncp list --depth 1')}`);
+
 
 // Check if we should run as MCP server
 // MCP server mode: default when no CLI commands are provided, or when --profile is specified
 const profileIndex = process.argv.indexOf('--profile');
 const hasCommands = process.argv.includes('find') ||
   process.argv.includes('add') ||
-  process.argv.includes('add-http') ||
   process.argv.includes('list') ||
   process.argv.includes('remove') ||
   process.argv.includes('run') ||
   process.argv.includes('config') ||
+  process.argv.includes('profile') ||
   process.argv.includes('help') ||
   process.argv.includes('--help') ||
   process.argv.includes('-h') ||
   process.argv.includes('--version') ||
   process.argv.includes('-v') ||
-  process.argv.includes('import') ||
   process.argv.includes('analytics') ||
-  process.argv.includes('visual') ||
-  process.argv.includes('update') ||
-  process.argv.includes('repair');
+  process.argv.includes('schedule') ||
+  process.argv.includes('doctor') ||
+  process.argv.includes('credentials:list') ||
+  process.argv.includes('update');
 
 // Default to MCP server mode when no CLI commands are provided
 // This ensures compatibility with Claude Desktop and other MCP clients that expect server mode by default
