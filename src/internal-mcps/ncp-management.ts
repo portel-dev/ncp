@@ -93,23 +93,18 @@ export class NCPManagementMCP implements InternalMCP {
     },
     {
       name: 'import',
-      description: 'Import MCPs from clipboard, file, or discovery. For discovery: first call shows numbered list, second call with selection imports chosen MCPs.',
+      description: 'Import MCPs with smart auto-detection. Omit source to import from clipboard. Provide file path to import from file. Provide search queries (pipe-separated for multiple) to discover and install from registry: "gmail | slack | github".',
       inputSchema: {
         type: 'object',
         properties: {
+          source: {
+            type: 'string',
+            description: 'Auto-detected based on pattern: MCP names/queries for discovery ("gmail | slack"), file path for file import ("~/config.json"), or omit for clipboard import. Discovery supports pipe-separated queries for bulk installation.'
+          },
           from: {
             type: 'string',
             enum: ['clipboard', 'file', 'discovery'],
-            default: 'clipboard',
-            description: 'Import source: clipboard (default), file path, or discovery (search registry)'
-          },
-          source: {
-            type: 'string',
-            description: 'File path (when from=file) or search query (when from=discovery). Not needed for clipboard.'
-          },
-          selection: {
-            type: 'string',
-            description: 'Selection from discovery results (only for from=discovery). Format: "1,3,5" or "1-5" or "*" for all'
+            description: 'Optional override: force specific import source. Usually auto-detected from source parameter.'
           }
         }
       }
@@ -730,12 +725,36 @@ Do you want to remove this MCP?`;
     };
   }
 
+  /**
+   * Smart auto-detection of import source based on source parameter pattern
+   */
+  private detectImportSource(source?: string): 'clipboard' | 'file' | 'discovery' {
+    // No source = clipboard
+    if (!source) {
+      return 'clipboard';
+    }
+
+    // Looks like file path = file
+    // Contains: .json, /, ~/, ./
+    if (source.includes('.json') ||
+        source.startsWith('/') ||
+        source.startsWith('~/') ||
+        source.startsWith('./')) {
+      return 'file';
+    }
+
+    // Otherwise = discovery query
+    return 'discovery';
+  }
+
   private async handleImport(params: any): Promise<InternalToolResult> {
-    let from = params?.from;
     const source = params?.source;
-    const selection = params?.selection;
+
+    // Smart auto-detection if 'from' not explicitly provided
+    let from = params?.from || this.detectImportSource(source);
 
     // If 'from' not specified and we have elicitation, let user choose source
+    // (This only happens if both from and source are missing)
     if (!from && this.elicitationServer) {
       const sources = [
         { value: 'clipboard', label: 'Clipboard - Paste saved config' },
@@ -808,7 +827,7 @@ Do you want to remove this MCP?`;
             error: 'source parameter required when from=discovery (search query). Example: source="github" to search for GitHub MCPs'
           };
         }
-        return await this.importFromDiscovery(source, selection);
+        return await this.importFromDiscovery(source);
 
       default:
         return {
@@ -901,136 +920,89 @@ Do you want to remove this MCP?`;
     }
   }
 
-  private async importFromDiscovery(query: string, selection?: string): Promise<InternalToolResult> {
+  private async importFromDiscovery(queryString: string): Promise<InternalToolResult> {
     try {
       const registryClient = new UnifiedRegistryClient();
-      const candidates = await registryClient.searchForSelection(query);
 
-      if (candidates.length === 0) {
+      // Check for pipe-delimited multi-query
+      const queries = queryString.includes('|')
+        ? queryString.split('|').map((q: string) => q.trim()).filter((q: string) => q.length > 0)
+        : [queryString];
+
+      // Search for all queries in parallel
+      const searchResults = await Promise.all(
+        queries.map(query => registryClient.searchForSelection(query))
+      );
+
+      // Flatten and deduplicate candidates
+      const allCandidates = searchResults.flat();
+      const uniqueCandidates = Array.from(
+        new Map(allCandidates.map(c => [c.name, c])).values()
+      );
+
+      if (uniqueCandidates.length === 0) {
         return {
           success: false,
-          error: `No MCPs found for query: "${query}". Try a different search term.`
+          error: queries.length > 1
+            ? `No MCPs found for queries: "${queries.join('", "')}". Try different search terms.`
+            : `No MCPs found for query: "${queryString}". Try a different search term.`
         };
       }
 
-      // If no selection, use elicitation to let user choose (if available)
-      if (!selection) {
-        // If elicitation server available, show interactive multi-select dialog
-        if (this.elicitationServer) {
-          const options = candidates.map(c => {
-            // Build label with security indicators
-            const trustBadge = c.isTrusted ? '✓ ' : '';
-            const transportBadge = c.transport === 'stdio' ? '💻' : '🌐';
-            const envInfo = c.envVars?.length ? ` (${c.envVars.length} env vars)` : '';
-            const transportInfo = c.transport !== 'stdio' ? ` [${c.transport.toUpperCase()}]` : '';
+      // If elicitation server available, show interactive multi-select dialog
+      let selectedCandidates = uniqueCandidates;
 
-            return {
-              value: c.name,
-              label: `${trustBadge}${transportBadge} ${c.displayName}${transportInfo}${envInfo}`
-            };
-          });
-
-          const unverifiedCount = candidates.filter(c => !c.repository?.url).length;
-          let message = `Select MCPs to import from "${query}":\n\n`;
-
-          if (unverifiedCount > 0) {
-            message += `⚠️  WARNING: ${unverifiedCount} server${unverifiedCount !== 1 ? 's have' : ' has'} no repository.\n` +
-                       `Only select MCPs from sources you trust.\n\n`;
-          }
-
-          message += `Badges: ✓=Trusted 💻=stdio 🌐=HTTP/SSE`;
-
-          const selected = await elicitMultiSelect(
-            this.elicitationServer,
-            'mcps',
-            options,
-            message
-          );
-
-          if (selected.length === 0) {
-            return {
-              success: false,
-              error: 'No MCPs selected for import'
-            };
-          }
-
-          // Convert selected names to indices for processing
-          selection = selected.map(name => {
-            const idx = candidates.findIndex(c => c.name === name);
-            return (idx + 1).toString();
-          }).join(',');
-        } else {
-          // Fallback: show numbered list for non-elicitation clients
-          const listItems = candidates.map(c => {
-            const trustBadge = c.isTrusted ? '✓' : '';
-            const transportBadge = c.transport === 'stdio' ? '💻' : '🌐';
-            const envInfo = c.envVars?.length ? ` (${c.envVars.length} env vars required)` : '';
-            const transportInfo = c.transport !== 'stdio' ? ` [${c.transport.toUpperCase()}]` : '';
-            let mainLine = `${c.number}. ${trustBadge}${transportBadge} ${c.displayName}${transportInfo}${envInfo}`;
-
-            let details = `   ${c.description}`;
-            details += `\n   Version: ${c.version}`;
-
-            if (c.repository?.url) {
-              details += `\n   ✓ Repository: ${c.repository.url}`;
-            } else {
-              details += `\n   ⚠️  NO REPOSITORY - Unverified source`;
-            }
-
-            if (c.publishedAt) {
-              const ageMs = Date.now() - new Date(c.publishedAt).getTime();
-              const ageDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
-              if (ageDays < 7) {
-                details += `\n   ⚠️  Published ${ageDays} day${ageDays !== 1 ? 's' : ''} ago - Very new`;
-              }
-            }
-
-            return mainLine + '\n' + details;
-          }).join('\n\n');
-
-          const trustedCount = candidates.filter(c => c.isTrusted).length;
-          const unverifiedCount = candidates.filter(c => !c.repository?.url).length;
-
-          let message = `📋 Found ${candidates.length} MCPs matching "${query}"`;
-          if (trustedCount > 0) {
-            message += ` (${trustedCount} from trusted sources)`;
-          }
-          message += `:\n\n${listItems}\n\n`;
-
-          if (unverifiedCount > 0) {
-            message += `⚠️  WARNING: ${unverifiedCount} server${unverifiedCount !== 1 ? 's have' : ' has'} no repository.\n` +
-                       `   Only install MCPs from sources you trust.\n\n`;
-          }
-
-          message += `⚙️  To import, call ncp:import again with selection:\n` +
-            `   Example: { from: "discovery", source: "${query}", selection: "1,3,5" }\n\n` +
-            `   - Select individual: "1,3,5"\n` +
-            `   - Select range: "1-5"\n` +
-            `   - Select all: "*"\n\n` +
-            `💡 Badges: ✓=Trusted 💻=stdio 🌐=HTTP/SSE`;
+      if (this.elicitationServer) {
+        const options = uniqueCandidates.map(c => {
+          // Build label with security indicators
+          const trustBadge = c.isTrusted ? '✓ ' : '';
+          const transportBadge = c.transport === 'stdio' ? '💻' : '🌐';
+          const envInfo = c.envVars?.length ? ` (${c.envVars.length} env vars)` : '';
+          const transportInfo = c.transport !== 'stdio' ? ` [${c.transport.toUpperCase()}]` : '';
 
           return {
-            success: true,
-            content: message
+            value: c.name,
+            label: `${trustBadge}${transportBadge} ${c.displayName}${transportInfo}${envInfo}`
+          };
+        });
+
+        const unverifiedCount = uniqueCandidates.filter(c => !c.repository?.url).length;
+        const queryDesc = queries.length > 1
+          ? `"${queries.join('", "')}"`
+          : `"${queryString}"`;
+
+        let message = `Select MCPs to import from ${queryDesc}:\n\n`;
+
+        if (unverifiedCount > 0) {
+          message += `⚠️  WARNING: ${unverifiedCount} server${unverifiedCount !== 1 ? 's have' : ' has'} no repository.\n` +
+                     `Only select MCPs from sources you trust.\n\n`;
+        }
+
+        message += `Badges: ✓=Trusted 💻=stdio 🌐=HTTP/SSE`;
+
+        const selected = await elicitMultiSelect(
+          this.elicitationServer,
+          'mcps',
+          options,
+          message
+        );
+
+        if (selected.length === 0) {
+          return {
+            success: false,
+            error: 'No MCPs selected for import'
           };
         }
-      }
 
-      // Parse selection
-      const selectedIndices = this.parseSelection(selection, candidates.length);
-      if (selectedIndices.length === 0) {
-        return {
-          success: false,
-          error: `Invalid selection: "${selection}". Use format like "1,3,5" or "1-5" or "*"`
-        };
+        // Filter to only selected candidates
+        selectedCandidates = uniqueCandidates.filter(c => selected.includes(c.name));
       }
-
-      const selectedCandidates = selectedIndices.map(i => candidates[i - 1]).filter(Boolean);
+      // If no elicitation server, install all candidates directly (bulk import use case)
 
       if (selectedCandidates.length === 0) {
         return {
           success: false,
-          error: `No valid MCPs selected. Check your selection numbers.`
+          error: `No valid MCPs selected for import.`
         };
       }
 
@@ -1045,7 +1017,6 @@ Do you want to remove this MCP?`;
           const details = await registryClient.getDetailedInfo(candidate.name);
 
           // Build config based on transport type
-          // TODO: Add elicitation support for bulk import credentials
           let config: any;
 
           if (details.transport === 'stdio') {
@@ -1076,7 +1047,11 @@ Do you want to remove this MCP?`;
         }
       }
 
-      let message = `✅ Imported ${imported}/${selectedCandidates.length} MCPs from registry:\n\n`;
+      const queryDesc = queries.length > 1
+        ? `${queries.length} queries ("${queries.join('", "')}")`
+        : `"${queryString}"`;
+
+      let message = `✅ Imported ${imported}/${selectedCandidates.length} MCPs from ${queryDesc}:\n\n`;
       message += importedNames.map(name => `  ✓ ${name}`).join('\n');
 
       if (errors.length > 0) {
@@ -1096,47 +1071,6 @@ Do you want to remove this MCP?`;
         error: `Failed to import from registry: ${error.message}`
       };
     }
-  }
-
-  /**
-   * Parse selection string into array of indices
-   * Supports: "1,3,5" (individual), "1-5" (range), "*" (all)
-   */
-  private parseSelection(selection: string, maxCount: number): number[] {
-    const indices: number[] = [];
-
-    // Handle "*" (all)
-    if (selection.trim() === '*') {
-      for (let i = 1; i <= maxCount; i++) {
-        indices.push(i);
-      }
-      return indices;
-    }
-
-    // Split by comma
-    const parts = selection.split(',').map(s => s.trim());
-
-    for (const part of parts) {
-      // Check for range (e.g., "1-5")
-      if (part.includes('-')) {
-        const [start, end] = part.split('-').map(s => parseInt(s.trim(), 10));
-        if (!isNaN(start) && !isNaN(end) && start <= end && start >= 1 && end <= maxCount) {
-          for (let i = start; i <= end; i++) {
-            if (!indices.includes(i)) {
-              indices.push(i);
-            }
-          }
-        }
-      } else {
-        // Individual number
-        const num = parseInt(part, 10);
-        if (!isNaN(num) && num >= 1 && num <= maxCount && !indices.includes(num)) {
-          indices.push(num);
-        }
-      }
-    }
-
-    return indices.sort((a, b) => a - b);
   }
 
   private async handleExport(params: any): Promise<InternalToolResult> {
