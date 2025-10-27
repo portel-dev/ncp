@@ -412,8 +412,8 @@ async function discoverSingleMCP(name: string, command: string, args: string[] =
     const serverInfo = client!.getServerVersion();
 
     // Capture configuration schema if available
-    // TODO: Once MCP SDK is updated to support top-level configurationSchema,
-    // also check for it directly. For now, check experimental capabilities.
+    // Note: MCP SDK 1.18.0 provides configurationSchema via experimental capabilities.
+    // If future SDK versions expose this at the top level, update to check both locations.
     const serverCapabilities = client!.getServerCapabilities();
     const configurationSchema = (serverCapabilities as any)?.experimental?.configurationSchema;
 
@@ -3773,17 +3773,22 @@ program
     }
   });
 
-// Check for updates on CLI startup (non-intrusive)
-// Temporarily disabled - causing hangs in some environments
-// TODO: Re-enable with proper timeout handling
-// (async () => {
-//   try {
-//     const updateChecker = new UpdateChecker();
-//     await updateChecker.showUpdateNotification();
-//   } catch {
-//     // Silently fail - don't interrupt normal CLI usage
-//   }
-// })();
+// Check for updates on CLI startup (non-intrusive, with 5s total timeout)
+(async () => {
+  try {
+    const updateChecker = new UpdateChecker();
+
+    // Race between update check and 5-second timeout
+    await Promise.race([
+      updateChecker.showUpdateNotification(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Update check timeout')), 5000)
+      )
+    ]);
+  } catch {
+    // Silently fail - don't interrupt normal CLI usage
+  }
+})();
 
 program.parse();
 }

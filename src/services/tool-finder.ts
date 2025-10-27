@@ -172,12 +172,15 @@ export class ToolFinder {
     const mcpSet = new Set<string>();
     const samples: { mcpName: string; description: string }[] = [];
 
+    // Get MCP descriptions from server info
+    const serverDescriptions = this.orchestrator.getServerDescriptions();
+
     for (const tool of sampleTools) {
       if (!mcpSet.has(tool.mcpName)) {
         mcpSet.add(tool.mcpName);
         samples.push({
           mcpName: tool.mcpName,
-          description: tool.mcpName // TODO: Get from MCP server info
+          description: serverDescriptions[tool.mcpName] || tool.mcpName
         });
       }
     }

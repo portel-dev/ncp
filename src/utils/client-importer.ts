@@ -120,10 +120,11 @@ async function importFromConfig(
     if (definition.configFormat === 'json') {
       config = JSON.parse(content);
     } else if (definition.configFormat === 'toml') {
-      // TODO: Implement TOML parsing when needed
-      // const toml = await import('toml');
+      // TOML support ready for future clients (none currently use TOML)
+      // Uncomment when needed:
+      // const { default: toml } = await import('@iarna/toml');
       // config = toml.parse(content);
-      console.warn(`TOML parsing not yet implemented for ${clientName}`);
+      console.warn(`TOML parsing not yet needed. No clients in registry currently use TOML format.`);
       return null;
     } else {
       console.warn(`Unsupported config format: ${definition.configFormat}`);
