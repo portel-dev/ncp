@@ -9,7 +9,7 @@
 
 import { homedir } from 'os';
 import { join } from 'path';
-import { appendFileSync, existsSync, mkdirSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs';
 
 export class Logger {
   private static instance: Logger;
@@ -40,6 +40,7 @@ export class Logger {
 
   /**
    * Set up file-based logging to avoid console spam in Claude Desktop
+   * Keeps last 10 log files, deletes older ones
    */
   private setupFileLogging(): void {
     try {
@@ -50,6 +51,9 @@ export class Logger {
       if (!existsSync(logsDir)) {
         mkdirSync(logsDir, { recursive: true });
       }
+
+      // Rotate old log files (keep last 10)
+      this.rotateLogFiles(logsDir, 10);
 
       // Create log file with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -65,6 +69,37 @@ export class Logger {
       // Fallback to console if file logging fails
       console.error(`[NCP] Failed to set up file logging: ${error.message}`);
       this.logFilePath = null;
+    }
+  }
+
+  /**
+   * Rotate log files - keep last N files, delete older ones
+   */
+  private rotateLogFiles(logsDir: string, keepCount: number): void {
+    try {
+      // Get all debug log files
+      const files = readdirSync(logsDir)
+        .filter(f => f.startsWith('ncp-debug-') && f.endsWith('.log'))
+        .map(f => ({
+          name: f,
+          path: join(logsDir, f),
+          mtime: statSync(join(logsDir, f)).mtime.getTime()
+        }))
+        .sort((a, b) => b.mtime - a.mtime); // Sort by modification time (newest first)
+
+      // Delete oldest files if we have more than keepCount
+      if (files.length >= keepCount) {
+        const filesToDelete = files.slice(keepCount - 1); // Keep room for new file
+        filesToDelete.forEach(file => {
+          try {
+            unlinkSync(file.path);
+          } catch (error) {
+            // Silent fail - don't break logging setup
+          }
+        });
+      }
+    } catch (error) {
+      // Silent fail - don't break logging setup if rotation fails
     }
   }
 
