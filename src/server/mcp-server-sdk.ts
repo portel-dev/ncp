@@ -251,10 +251,10 @@ export class MCPServerSDK implements ElicitationServer {
     ];
 
     // Add internal MCP tools if orchestrator is initialized
-    // Internal MCPs (mcp:add, mcp:import, mcp:list, mcp:remove, mcp:export) are always available
+    // Internal MCPs (ncp:add, ncp:import, ncp:list, ncp:remove, ncp:export) are always available
     // They don't depend on orchestrator initialization status
     // Note: We'll expose them later when we implement elicitation for credentials
-    // For now, they're accessible via run("mcp:add", ...) but not listed separately
+    // For now, they're accessible via run("ncp:add", ...) but not listed separately
 
     return coreTools;
   }
@@ -267,7 +267,7 @@ export class MCPServerSDK implements ElicitationServer {
       this.isInitialized = true;
 
       // Wire up elicitation server to internal MCPs after initialization
-      // This enables clipboard-based credential collection for mcp:add and other management tools
+      // This enables clipboard-based credential collection for ncp:add and other management tools
       const internalMCPManager = this.orchestrator.getInternalMCPManager();
       if (internalMCPManager) {
         internalMCPManager.setElicitationServer(this);
@@ -395,12 +395,12 @@ export class MCPServerSDK implements ElicitationServer {
           if (isSimpleMCPName) {
             // For simple queries like "canva", prioritize direct add
             output += `**Option 1: Try direct add (recommended for exact names):**\n`;
-            output += `\`\`\`\nrun("mcp:add", {\n`;
+            output += `\`\`\`\nrun("ncp:add", {\n`;
             output += `  mcp_name: "${description}"\n`;
             output += `})\n\`\`\`\n\n`;
 
             output += `**Option 2: Install from registry results:**\n`;
-            output += `\`\`\`\nrun("mcp:import", {\n`;
+            output += `\`\`\`\nrun("ncp:import", {\n`;
             output += `  from: "discovery",\n`;
             output += `  source: "${description}",\n`;
             output += `  selection: "1"  // or "1,3,5" for multiple\n`;
@@ -408,14 +408,14 @@ export class MCPServerSDK implements ElicitationServer {
           } else {
             // For descriptive queries, prioritize registry search
             output += `**Option 1: Install from registry (recommended):**\n`;
-            output += `\`\`\`\nrun("mcp:import", {\n`;
+            output += `\`\`\`\nrun("ncp:import", {\n`;
             output += `  from: "discovery",\n`;
             output += `  source: "${description}",\n`;
             output += `  selection: "1"  // or "1,3,5" for multiple, or "*" for all\n`;
             output += `})\n\`\`\`\n\n`;
 
             output += `**Option 2: If you know the exact MCP name:**\n`;
-            output += `\`\`\`\nrun("mcp:add", {\n`;
+            output += `\`\`\`\nrun("ncp:add", {\n`;
             output += `  mcp_name: "<exact-mcp-name>"\n`;
             output += `})\n\`\`\`\n\n`;
           }
@@ -436,7 +436,7 @@ export class MCPServerSDK implements ElicitationServer {
       if (isSimpleMCPName) {
         // For simple queries, suggest trying direct add first
         output += `💡 **Try adding directly:**\n\n`;
-        output += `\`\`\`\nrun("mcp:add", {\n`;
+        output += `\`\`\`\nrun("ncp:add", {\n`;
         output += `  mcp_name: "${description}"\n`;
         output += `})\n\`\`\`\n\n`;
         output += `This will search for an MCP named "${description}" and guide you through installation.\n\n`;
@@ -1070,12 +1070,12 @@ run("filesystem:write_file", {path: "/tmp/test.txt", content: "..."}, dry_run=tr
 ### Install New MCPs
 When find() shows no results, NCP suggests MCPs from the registry:
 \`\`\`
-run("mcp:import", {from: "discovery", source: "your query", selection: "1"})
+run("ncp:import", {from: "discovery", source: "your query", selection: "1"})
 \`\`\`
 
 ### List Configured MCPs
 \`\`\`
-run("mcp:list", {profile: "all"})
+run("ncp:list", {profile: "all"})
 \`\`\`
 
 ### Check Health
@@ -1118,12 +1118,12 @@ Use the health dashboard resource (you're reading resources now!)
 
 To add MCPs, use:
 \`\`\`
-run("mcp:import", {from: "discovery", source: "your search"})
+run("ncp:import", {from: "discovery", source: "your search"})
 \`\`\`
 
 Or manually:
 \`\`\`
-run("mcp:add", {mcp_name: "...", command: "...", args: [...]})
+run("ncp:add", {mcp_name: "...", command: "...", args: [...]})
 \`\`\`
 `;
       return content;
@@ -1147,7 +1147,7 @@ run("mcp:add", {mcp_name: "...", command: "...", args: [...]})
 
       content += `**To troubleshoot:**\n`;
       content += `1. Check logs: \`~/.ncp/logs/ncp-debug-*.log\` (if debug enabled)\n`;
-      content += `2. Verify configuration: \`run("mcp:list")\`\n`;
+      content += `2. Verify configuration: \`run("ncp:list")\`\n`;
       content += `3. Try restarting NCP\n`;
     }
 
@@ -1191,8 +1191,8 @@ This means:
 If auto-import didn't run or you want to import from a file:
 
 \`\`\`
-run("mcp:import", {from: "clipboard"})  // Copy config first
-run("mcp:import", {from: "file", source: "~/path/to/config.json"})
+run("ncp:import", {from: "clipboard"})  // Copy config first
+run("ncp:import", {from: "file", source: "~/path/to/config.json"})
 \`\`\`
 `;
     }

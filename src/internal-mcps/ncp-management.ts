@@ -19,8 +19,8 @@ import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials, elic
 import { showConfirmDialog } from '../utils/native-dialog.js';
 
 export class NCPManagementMCP implements InternalMCP {
-  name = 'mcp';
-  description = 'MCP configuration management tools (built-in)';
+  name = 'ncp';
+  description = 'NCP configuration management tools (built-in)';
 
   private profileManager: ProfileManager | null = null;
   private elicitationServer: ElicitationCapable | null = null;

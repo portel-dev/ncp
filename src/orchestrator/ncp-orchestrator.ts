@@ -2160,14 +2160,14 @@ export class NCPOrchestrator {
 
         // Add to allTools with prefixed name (consistent with external MCPs)
         this.allTools.push({
-          name: toolId,  // Prefixed: "mcp:add", "mcp:remove", etc.
+          name: toolId,  // Prefixed: "ncp:add", "ncp:remove", etc.
           description: prefixedDescription,
           mcpName: mcp.name
         });
 
         // Add to toolToMCP mapping (both prefixed and unprefixed for consistency)
-        this.toolToMCP.set(tool.name, mcp.name);       // Unprefixed: "add" -> "mcp"
-        this.toolToMCP.set(toolId, mcp.name);          // Prefixed: "mcp:add" -> "mcp"
+        this.toolToMCP.set(tool.name, mcp.name);       // Unprefixed: "add" -> "ncp"
+        this.toolToMCP.set(toolId, mcp.name);          // Prefixed: "ncp:add" -> "ncp"
       }
 
       // Index in discovery engine with prefixed descriptions
