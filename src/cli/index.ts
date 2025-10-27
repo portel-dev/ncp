@@ -2,7 +2,8 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
+import * as fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { ProfileManager } from '../profiles/profile-manager.js';
@@ -3942,6 +3943,201 @@ program
       }
     } catch (error) {
       console.error(`❌ Failed to rotate credentials: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
+// Doctor: Comprehensive diagnostics
+program
+  .command('doctor [mcp]')
+  .description('Run comprehensive diagnostics on NCP and MCP servers')
+  .option('--fix', 'Attempt to fix common issues automatically')
+  .action(async (mcpName, options) => {
+    try {
+      console.log(chalk.bold.white('\n🩺 NCP Doctor - Running Diagnostics\n'));
+
+      let issuesFound = 0;
+      let issuesFixed = 0;
+
+      // 1. Check Node.js version
+      console.log(chalk.cyan('1. Checking Node.js version...'));
+      const nodeVersion = process.version;
+      const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0]);
+      if (majorVersion < 18) {
+        console.log(chalk.red(`   ❌ Node.js ${nodeVersion} is too old (minimum: v18)`));
+        console.log(chalk.dim('   💡 Update Node.js: https://nodejs.org/'));
+        issuesFound++;
+      } else {
+        console.log(chalk.green(`   ✅ Node.js ${nodeVersion}`));
+      }
+
+      // 2. Check config directory and profiles
+      console.log(chalk.cyan('\n2. Checking configuration...'));
+      const manager = new ProfileManager();
+      await manager.initialize(true);
+
+      const configDir = manager.getConfigPath();
+      if (!existsSync(configDir)) {
+        console.log(chalk.yellow('   ⚠️  No config directory found'));
+        if (options.fix) {
+          console.log(chalk.dim('   🔧 Creating config directory...'));
+          await fs.mkdir(configDir, { recursive: true });
+          issuesFixed++;
+        } else {
+          console.log(chalk.dim('   💡 Run: ncp add <provider> to create config'));
+        }
+        issuesFound++;
+      } else {
+        const profiles = manager.listProfiles();
+        if (profiles.length === 0) {
+          console.log(chalk.yellow('   ⚠️  No profiles found'));
+          console.log(chalk.dim('   💡 Run: ncp add <provider> to add MCPs'));
+          issuesFound++;
+        } else {
+          console.log(chalk.green(`   ✅ Found ${profiles.length} profile(s)`));
+
+          // Validate profile JSON structure
+          const { ConfigManager } = await import('../utils/config-manager.js');
+          const configManager = new ConfigManager();
+          const { readFileSync } = await import('fs');
+
+          for (const profileName of profiles) {
+            try {
+              const profilePath = manager.getProfilePath(profileName);
+              const content = readFileSync(profilePath, 'utf-8');
+              JSON.parse(content); // Validate JSON
+            } catch (error) {
+              console.log(chalk.red(`   ❌ Invalid JSON in profile "${profileName}"`));
+              issuesFound++;
+            }
+          }
+        }
+      }
+
+      // 3. Check credentials storage
+      console.log(chalk.cyan('\n3. Checking credential storage...'));
+      const { getSecureCredentialStore } = await import('../auth/secure-credential-store.js');
+      const credentialStore = getSecureCredentialStore();
+
+      const storageMethod = credentialStore.getStorageMethod();
+      if (storageMethod === 'keychain') {
+        console.log(chalk.green(`   ✅ Using OS keychain (${process.platform})`));
+      } else {
+        console.log(chalk.yellow(`   ⚠️  Using encrypted file storage (keychain unavailable)`));
+        console.log(chalk.dim('   ℹ️  This is still secure, but OS keychain is preferred'));
+      }
+
+      const credentials = await credentialStore.listCredentials();
+      if (credentials.length === 0) {
+        console.log(chalk.dim('   ℹ️  No stored credentials'));
+      } else {
+        console.log(chalk.green(`   ✅ ${credentials.length} credential(s) stored securely`));
+      }
+
+      // 4. Check MCP health
+      console.log(chalk.cyan('\n4. Checking MCP server health...\n'));
+
+      const profiles = manager.listProfiles();
+      if (profiles.length === 0) {
+        console.log(chalk.dim('   ℹ️  No MCPs configured yet'));
+      } else {
+        const { healthMonitor } = await import('../utils/health-monitor.js');
+
+        // Collect all MCPs to check
+        const mcpsToCheck: Array<{name: string; command: string; args?: string[]; env?: Record<string, string>}> = [];
+
+        for (const profileName of profiles) {
+          const profileMCPs = await manager.getProfileMCPs(profileName);
+          if (profileMCPs) {
+            for (const [name, config] of Object.entries(profileMCPs)) {
+              // If specific MCP requested, only check that one
+              if (mcpName && name !== mcpName) continue;
+
+              // Skip HTTP MCPs for now (they need different health check)
+              if (config.url) continue;
+
+              if (config.command) {
+                mcpsToCheck.push({
+                  name,
+                  command: config.command,
+                  args: config.args,
+                  env: config.env
+                });
+              }
+            }
+          }
+        }
+
+        if (mcpsToCheck.length === 0) {
+          console.log(chalk.dim('   ℹ️  No stdio MCPs to check'));
+        } else {
+          // Show progress
+          let checked = 0;
+          for (const mcp of mcpsToCheck) {
+            process.stdout.write(chalk.dim(`   Checking ${mcp.name}... `));
+
+            const health = await healthMonitor.checkMCPHealth(
+              mcp.name,
+              mcp.command,
+              mcp.args,
+              mcp.env
+            );
+
+            checked++;
+
+            if (health.status === 'healthy') {
+              console.log(chalk.green('✅'));
+            } else if (health.status === 'unhealthy') {
+              console.log(chalk.red('❌'));
+              console.log(chalk.dim(`      Error: ${health.lastError}`));
+              issuesFound++;
+
+              // Provide fix suggestions
+              if (health.lastError?.includes('ENOENT') || health.lastError?.includes('not found')) {
+                console.log(chalk.dim('      💡 Install package: npm install -g ' + mcp.command));
+              } else if (health.lastError?.includes('permission')) {
+                console.log(chalk.dim('      💡 Check file permissions'));
+              } else if (health.lastError?.includes('EACCES')) {
+                console.log(chalk.dim('      💡 Run: chmod +x ' + mcp.command));
+              }
+            } else if (health.status === 'disabled') {
+              console.log(chalk.yellow('⚠️  Disabled'));
+              console.log(chalk.dim(`      Reason: ${health.disabledReason}`));
+
+              if (options.fix) {
+                console.log(chalk.dim('      🔧 Re-enabling...'));
+                // Reset error count to re-enable
+                health.errorCount = 0;
+                health.status = 'unknown';
+                delete health.disabledReason;
+                issuesFixed++;
+              } else {
+                console.log(chalk.dim('      💡 Run with --fix to re-enable'));
+              }
+            }
+          }
+        }
+      }
+
+      // 5. Summary
+      console.log(chalk.cyan('\n5. Summary'));
+      if (issuesFound === 0) {
+        console.log(chalk.green('   ✅ No issues detected - NCP is healthy!'));
+      } else {
+        console.log(chalk.yellow(`   ⚠️  Found ${issuesFound} issue(s)`));
+        if (issuesFixed > 0) {
+          console.log(chalk.green(`   🔧 Fixed ${issuesFixed} issue(s)`));
+        }
+        if (!options.fix) {
+          console.log(chalk.dim('   💡 Run with --fix to attempt automatic repairs'));
+        }
+      }
+
+      console.log();
+
+      process.exit(issuesFound > 0 ? 1 : 0);
+    } catch (error) {
+      console.error(`❌ Diagnostics failed: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }
   });
