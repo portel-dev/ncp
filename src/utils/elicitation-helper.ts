@@ -130,6 +130,87 @@ export async function collectCredentials(
 }
 
 /**
+ * Collect ALL credentials for multiple MCPs in ONE form
+ *
+ * Shows a single consolidated elicitation dialog with all credential fields.
+ * Much better UX than separate dialogs for each credential.
+ *
+ * @param server MCP server instance
+ * @param bulkCredentials Map of MCP names to their required credentials
+ * @returns Map of credential keys (mcpName:envVar) to values, or null if cancelled
+ */
+export async function collectBulkCredentials(
+  server: ElicitationServer,
+  bulkCredentials: Record<string, Array<{
+    envVarName: string;
+    displayName: string;
+    example?: string;
+    required?: boolean;
+    transport?: 'stdio' | 'http';
+  }>>
+): Promise<Record<string, string> | null> {
+  // Build consolidated schema with all credential fields
+  const properties: Record<string, any> = {};
+  const fieldKeys: string[] = [];
+  let message = '📋 Credential Collection for Bulk Import\n\n';
+  message += 'Please provide credentials for the following MCPs:\n\n';
+
+  for (const [mcpName, credentials] of Object.entries(bulkCredentials)) {
+    if (credentials.length === 0) continue;
+
+    message += `**${mcpName}**:\n`;
+
+    for (const cred of credentials) {
+      // Create unique field key: mcpName:envVarName
+      const fieldKey = `${mcpName}:${cred.envVarName}`;
+      fieldKeys.push(fieldKey);
+
+      // Add to schema
+      properties[fieldKey] = {
+        type: 'string',
+        description: `${cred.displayName}${cred.example ? ` (e.g., ${cred.example})` : ''}`
+      };
+
+      message += `  • ${cred.displayName}${cred.required === false ? ' (optional)' : ''}\n`;
+    }
+
+    message += '\n';
+  }
+
+  message += '💡 Leave fields empty to skip optional credentials.\n';
+  message += '⚠️  Credentials are stored locally in your NCP config.';
+
+  // Show consolidated form
+  const result = await server.elicitInput({
+    message,
+    requestedSchema: {
+      type: 'object',
+      properties,
+      required: [] // All fields optional to allow skipping
+    }
+  });
+
+  if (result.action !== 'accept') {
+    logger.info(`User ${result.action} bulk credential collection`);
+    return null;
+  }
+
+  // Extract collected values
+  const collected: Record<string, string> = {};
+  const content = result.content || {};
+
+  for (const fieldKey of fieldKeys) {
+    const value = content[fieldKey];
+    if (value && typeof value === 'string' && value.trim().length > 0) {
+      collected[fieldKey] = value.trim();
+    }
+  }
+
+  logger.info(`Collected ${Object.keys(collected).length} credentials from bulk form`);
+  return collected;
+}
+
+/**
  * Collect HTTP/SSE authentication credentials from user
  *
  * Currently supports bearer tokens. Returns auth config for HTTP/SSE servers.

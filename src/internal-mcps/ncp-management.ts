@@ -15,7 +15,7 @@ import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { RegistryMCPCandidate } from '../services/registry-client.js';
 import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
-import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials, elicitSelect, elicitMultiSelect } from '../utils/elicitation-helper.js';
+import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials, collectBulkCredentials, elicitSelect, elicitMultiSelect, detectHTTPCredentials } from '../utils/elicitation-helper.js';
 import { showConfirmDialog } from '../utils/native-dialog.js';
 
 export class NCPManagementMCP implements InternalMCP {
@@ -1006,17 +1006,23 @@ Do you want to remove this MCP?`;
         };
       }
 
-      // Import each selected MCP
+      // Import each selected MCP (without credentials first)
       let imported = 0;
       const importedNames: string[] = [];
       const errors: string[] = [];
+      const importedMCPs: Array<{
+        name: string;
+        displayName: string;
+        transport: 'stdio' | 'http' | 'sse';
+        details: any;
+      }> = [];
 
       for (const candidate of selectedCandidates) {
         try {
           // Get detailed info including env vars
           const details = await registryClient.getDetailedInfo(candidate.name);
 
-          // Build config based on transport type
+          // Build config based on transport type (without credentials)
           let config: any;
 
           if (details.transport === 'stdio') {
@@ -1039,11 +1045,124 @@ Do you want to remove this MCP?`;
           await this.profileManager!.addMCPToProfile('all', candidate.displayName, config);
           imported++;
           importedNames.push(candidate.displayName);
+          importedMCPs.push({
+            name: candidate.name,
+            displayName: candidate.displayName,
+            transport: details.transport,
+            details
+          });
 
           logger.info(`Imported ${candidate.displayName} from registry (${details.transport})`);
         } catch (error: any) {
           errors.push(`${candidate.displayName}: ${error.message}`);
           logger.error(`Failed to import ${candidate.displayName}: ${error.message}`);
+        }
+      }
+
+      // After importing, collect credentials in bulk if elicitation available
+      let credentialsConfigured = 0;
+      if (imported > 0 && this.elicitationServer) {
+        try {
+          // Build credential requirements for all imported MCPs
+          const bulkCredentials: Record<string, Array<{
+            envVarName: string;
+            displayName: string;
+            example?: string;
+            required?: boolean;
+            transport?: 'stdio' | 'http';
+          }>> = {};
+
+          for (const mcp of importedMCPs) {
+            const credentials = [];
+
+            if (mcp.transport === 'stdio') {
+              // Detect environment variables for stdio servers
+              const envVars = detectRequiredEnvVars(mcp.name);
+              for (const envVar of envVars) {
+                credentials.push({
+                  envVarName: envVar.envVarName,
+                  displayName: envVar.displayName,
+                  example: envVar.example,
+                  required: true, // All detected env vars are required
+                  transport: 'stdio' as const
+                });
+              }
+            } else {
+              // Detect auth requirements for HTTP servers
+              const httpCreds = detectHTTPCredentials(mcp.name, mcp.details.url);
+              for (const httpCred of httpCreds) {
+                credentials.push({
+                  envVarName: 'AUTH_TOKEN',
+                  displayName: httpCred.displayName,
+                  example: httpCred.example,
+                  required: true,
+                  transport: 'http' as const
+                });
+              }
+            }
+
+            if (credentials.length > 0) {
+              bulkCredentials[mcp.displayName] = credentials;
+            }
+          }
+
+          // If any MCPs need credentials, show consolidated form
+          if (Object.keys(bulkCredentials).length > 0) {
+            const collected = await collectBulkCredentials(this.elicitationServer, bulkCredentials);
+
+            if (collected && Object.keys(collected).length > 0) {
+              // Update each MCP config with collected credentials
+              for (const mcp of importedMCPs) {
+                try {
+                  const mcpCreds: Record<string, string> = {};
+                  let hasCredentials = false;
+
+                  // Extract credentials for this MCP from collected data
+                  for (const [key, value] of Object.entries(collected)) {
+                    if (key.startsWith(`${mcp.displayName}:`)) {
+                      const envVarName = key.split(':')[1];
+                      mcpCreds[envVarName] = value;
+                      hasCredentials = true;
+                    }
+                  }
+
+                  if (hasCredentials) {
+                    // Get current config
+                    const currentConfig = await this.profileManager!.getProfileMCPs('all');
+                    if (!currentConfig) {
+                      logger.warn(`Could not retrieve profile config for ${mcp.displayName}`);
+                      continue;
+                    }
+
+                    const mcpConfig = currentConfig[mcp.displayName];
+                    if (mcpConfig) {
+                      if (mcp.transport === 'stdio') {
+                        // Update env vars for stdio
+                        mcpConfig.env = { ...mcpConfig.env, ...mcpCreds };
+                      } else {
+                        // Update auth token for HTTP
+                        if (mcpCreds.AUTH_TOKEN) {
+                          mcpConfig.auth = {
+                            type: 'bearer',
+                            token: mcpCreds.AUTH_TOKEN
+                          };
+                        }
+                      }
+
+                      // Save updated config
+                      await this.profileManager!.addMCPToProfile('all', mcp.displayName, mcpConfig);
+                      credentialsConfigured++;
+                      logger.info(`Updated credentials for ${mcp.displayName}`);
+                    }
+                  }
+                } catch (error: any) {
+                  logger.warn(`Failed to update credentials for ${mcp.displayName}: ${error.message}`);
+                }
+              }
+            }
+          }
+        } catch (error: any) {
+          logger.warn(`Failed to collect bulk credentials: ${error.message}`);
         }
       }
 
@@ -1059,7 +1178,17 @@ Do you want to remove this MCP?`;
         message += errors.map(e => `  ✗ ${e}`).join('\n');
       }
 
-      message += `\n\n💡 Note: MCPs imported without environment variables. Use ncp:list to see configs, or use clipboard pattern with ncp:add to add secrets.`;
+      // Add credential status to message
+      if (credentialsConfigured > 0) {
+        message += `\n\n🔑 Configured credentials for ${credentialsConfigured}/${imported} MCPs`;
+        if (credentialsConfigured < imported) {
+          message += `\n💡 ${imported - credentialsConfigured} MCP(s) still need credentials. Use ncp:list to see configs.`;
+        }
+      } else if (imported > 0 && this.elicitationServer) {
+        message += `\n\n💡 Note: Credentials not configured. MCPs may require API keys/tokens to function.`;
+      } else if (imported > 0) {
+        message += `\n\n💡 Note: MCPs imported without credentials. Use ncp:list to see configs, or manually add credentials.`;
+      }
 
       return {
         success: imported > 0,
