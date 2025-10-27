@@ -16,6 +16,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
 import { logger } from '../utils/logger.js';
+import { mcpProtocolLogger } from '../utils/mcp-protocol-logger.js';
 import { ToolFinder } from '../services/tool-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
@@ -82,29 +83,38 @@ export class MCPServerSDK implements ElicitationServer {
   private setupHandlers(): void {
     // Handle tools/list
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
+      await mcpProtocolLogger.logRequest('tools/list', {});
+      const result = {
         tools: this.getToolDefinitions(),
       };
+      await mcpProtocolLogger.logResponse('tools/list', result);
+      return result;
     });
 
     // Handle tools/call
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
+      // Log request
+      await mcpProtocolLogger.logRequest('tools/call', { name, arguments: args });
+
       try {
+        let result;
         switch (name) {
           case 'find':
-            return await this.handleFind(args);
+            result = await this.handleFind(args);
+            break;
 
           case 'run':
-            return await this.handleRun(args);
+            result = await this.handleRun(args);
+            break;
 
           default:
             // Suggest similar methods
             const suggestions = this.getSuggestions(name, ['find', 'run']);
             const suggestionText = suggestions.length > 0 ? ` Did you mean: ${suggestions.join(', ')}?` : '';
 
-            return {
+            result = {
               content: [{
                 type: 'text',
                 text: `Method not found: '${name}'. NCP supports 'find' and 'run' methods.${suggestionText} Use 'find()' to discover available tools.`
@@ -112,15 +122,27 @@ export class MCPServerSDK implements ElicitationServer {
               isError: true,
             };
         }
+
+        // Log successful response
+        await mcpProtocolLogger.logResponse('tools/call', result);
+        return result;
       } catch (error: any) {
         logger.error(`Tool execution failed: ${name} - ${error.message}`);
-        return {
+        const errorResult = {
           content: [{
             type: 'text',
             text: error.message || 'Tool execution failed'
           }],
           isError: true,
         };
+
+        // Log error response
+        await mcpProtocolLogger.logResponse('tools/call', null, {
+          code: 'TOOL_EXECUTION_FAILED',
+          message: error.message
+        });
+
+        return errorResult;
       }
     });
 
@@ -154,10 +176,18 @@ export class MCPServerSDK implements ElicitationServer {
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const { uri } = request.params;
 
+      await mcpProtocolLogger.logRequest('resources/read', { uri });
+
       try {
-        return await this.handleReadResource(uri);
+        const result = await this.handleReadResource(uri);
+        await mcpProtocolLogger.logResponse('resources/read', result);
+        return result;
       } catch (error: any) {
         logger.error(`Resource read failed: ${uri} - ${error.message}`);
+        await mcpProtocolLogger.logResponse('resources/read', null, {
+          code: 'RESOURCE_READ_FAILED',
+          message: error.message
+        });
         throw error;
       }
     });
