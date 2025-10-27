@@ -243,13 +243,13 @@ export class MCPServer {
     const tools: MCPTool[] = [
       {
         name: 'find',
-        description: 'Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task or capability: "save file", "analyze logs", "send email". For multi-step workflows, search for each action separately. (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools with depth control (0=tool names only, 1=tool names + descriptions, 2=full details with parameters).',
+        description: 'Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task or capability: "save file", "analyze logs", "send email". For multiple capabilities at once, use pipe separator: "read gmail | send slack | create issue". (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools with depth control (0=tool names only, 1=tool names + descriptions, 2=full details with parameters).',
         inputSchema: {
           type: 'object',
           properties: {
             description: {
               type: 'string',
-              description: 'SEARCH MODE: Search query describing what you want to do ("save file", "read database", "send message") or MCP name to filter results. LISTING MODE: Omit this parameter entirely to browse all available MCPs and tools with pagination.'
+              description: 'SEARCH MODE: Search query describing what you want to do ("save file", "read database", "send message") or MCP name to filter results. For multiple queries, use pipe separator: "read gmail | send slack". LISTING MODE: Omit this parameter entirely to browse all available MCPs and tools with pagination.'
             },
             limit: {
               type: 'number',

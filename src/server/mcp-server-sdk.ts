@@ -198,13 +198,13 @@ export class MCPServerSDK implements ElicitationServer {
     const coreTools: Tool[] = [
       {
         name: 'find',
-        description: 'Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task or capability: "save file", "analyze logs", "send email". For multi-step workflows, search for each action separately. (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools with depth control (0=tool names only, 1=tool names + descriptions, 2=full details with parameters).',
+        description: 'Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task or capability: "save file", "analyze logs", "send email". For multiple capabilities at once, use pipe separator: "read gmail | send slack | create issue". (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools with depth control (0=tool names only, 1=tool names + descriptions, 2=full details with parameters).',
         inputSchema: {
           type: 'object',
           properties: {
             description: {
               type: 'string',
-              description: 'SEARCH MODE: Search query describing what you want to do ("save file", "read database", "send message") or MCP name to filter results. LISTING MODE: Omit this parameter entirely to browse all available MCPs and tools with pagination.'
+              description: 'SEARCH MODE: Search query describing what you want to do ("save file", "read database", "send message") or MCP name to filter results. For multiple queries, use pipe separator: "read gmail | send slack". LISTING MODE: Omit this parameter entirely to browse all available MCPs and tools with pagination.'
             },
             limit: {
               type: 'number',
@@ -294,6 +294,88 @@ export class MCPServerSDK implements ElicitationServer {
     }
   }
 
+  private async handleMultiQuery(queries: string[], options: any): Promise<any> {
+    const { limit, depth, confidenceThreshold, isStillIndexing } = options;
+    const finder = new ToolFinder(this.orchestrator);
+
+    // Execute parallel searches for all queries
+    const searchResults = await Promise.all(
+      queries.map(query =>
+        finder.find({
+          query,
+          page: 1,
+          limit,
+          depth,
+          confidenceThreshold
+        })
+      )
+    );
+
+    // Get indexing progress if still indexing
+    const progress = isStillIndexing ? this.orchestrator.getIndexingProgress() : null;
+
+    // Get health status
+    const healthStatus = this.orchestrator.getMCPHealthStatus();
+
+    // Format multi-query results
+    let output = `\n🔍 Found tools for ${queries.length} queries:\n\n`;
+
+    // Add MCP health status summary
+    if (healthStatus.total > 0) {
+      const healthIcon = healthStatus.unhealthy > 0 ? '⚠️' : '✅';
+      output += `${healthIcon} **MCPs**: ${healthStatus.healthy}/${healthStatus.total} healthy`;
+
+      if (healthStatus.unhealthy > 0) {
+        const unhealthyNames = healthStatus.mcps
+          .filter(mcp => !mcp.healthy)
+          .map(mcp => mcp.name)
+          .join(', ');
+        output += ` (${unhealthyNames} unavailable)`;
+      }
+      output += '\n\n';
+    }
+
+    // Add indexing progress if still indexing
+    if (progress && progress.total > 0) {
+      const percentComplete = Math.round((progress.current / progress.total) * 100);
+      const remainingTime = progress.estimatedTimeRemaining ?
+        ` (~${Math.ceil(progress.estimatedTimeRemaining / 1000)}s remaining)` : '';
+
+      output += `⏳ **Indexing in progress**: ${progress.current}/${progress.total} MCPs (${percentComplete}%)${remainingTime}\n`;
+      output += `   Currently indexing: ${progress.currentMCP || 'initializing...'}\n\n`;
+    }
+
+    // Display results for each query
+    searchResults.forEach((result, index) => {
+      const query = queries[index];
+      const { tools: results } = result;
+
+      output += `**Query ${index + 1}:** ${chalk.inverse(` ${query} `)}\n`;
+
+      if (results.length === 0) {
+        output += `   ❌ No tools found\n\n`;
+      } else {
+        output += `   Found ${results.length} tool${results.length > 1 ? 's' : ''}:\n`;
+        results.forEach((tool: any) => {
+          const healthIcon = tool.healthy !== false ? '✅' : '❌';
+          const description = depth >= 1 ? tool.description : '';
+          output += `   ${healthIcon} ${chalk.bold(tool.name)}`;
+          if (description && depth >= 1) {
+            output += ` - ${description}`;
+          }
+          output += '\n';
+        });
+        output += '\n';
+      }
+    });
+
+    // Add total tools found summary
+    const totalTools = searchResults.reduce((sum, r) => sum + r.tools.length, 0);
+    output += `\n📊 **Total**: ${totalTools} tool${totalTools !== 1 ? 's' : ''} found across ${queries.length} queries\n`;
+
+    return { content: [{ type: 'text', text: output }] };
+  }
+
   private async handleFind(args: any): Promise<any> {
     const isStillIndexing = !this.isInitialized && this.initializationPromise;
 
@@ -303,7 +385,17 @@ export class MCPServerSDK implements ElicitationServer {
     const depth = args?.depth !== undefined ? Math.max(0, Math.min(2, args.depth)) : 2;
     const confidenceThreshold = args?.confidence_threshold !== undefined ? args.confidence_threshold : 0.35;
 
-    // Use ToolFinder service for search logic
+    // Check for pipe-delimited multi-query
+    const queries = description.includes('|')
+      ? description.split('|').map((q: string) => q.trim()).filter((q: string) => q.length > 0)
+      : null;
+
+    // Handle multi-query case
+    if (queries && queries.length > 1) {
+      return this.handleMultiQuery(queries, { page, limit, depth, confidenceThreshold, isStillIndexing });
+    }
+
+    // Use ToolFinder service for single-query search logic
     const finder = new ToolFinder(this.orchestrator);
     const findResult = await finder.find({
       query: description,
