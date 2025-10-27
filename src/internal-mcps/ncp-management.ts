@@ -93,18 +93,18 @@ export class NCPManagementMCP implements InternalMCP {
     },
     {
       name: 'import',
-      description: 'Import MCPs with smart auto-detection. Omit source to import from clipboard. Provide file path to import from file. Provide search queries (pipe-separated for multiple) to discover and install from registry: "gmail | slack | github".',
+      description: 'Import MCPs from clipboard, file, or discovery with smart auto-detection. Three modes: (1) CLIPBOARD: Omit source parameter to import from clipboard. (2) FILE: Provide file path as source ("~/backup.json", "./config.json") to import from file. (3) DISCOVERY: Provide MCP names/queries as source to search registry and install. Discovery supports pipe-separated queries for bulk installation: "gmail | slack | github" searches and installs all three at once. The "from" parameter is optional - source type is auto-detected by default, but you can explicitly specify "from" to override auto-detection if needed.',
       inputSchema: {
         type: 'object',
         properties: {
           source: {
             type: 'string',
-            description: 'Auto-detected based on pattern: MCP names/queries for discovery ("gmail | slack"), file path for file import ("~/config.json"), or omit for clipboard import. Discovery supports pipe-separated queries for bulk installation.'
+            description: 'OPTIONAL. Import source that is auto-detected by pattern: (1) Omit or empty → clipboard import. (2) Contains .json or path separators (/,~/,./) → file import from specified path. (3) Otherwise → discovery query to search registry. For discovery, use pipe separator "|" for bulk installation: "gmail | slack" searches both and installs all matches. Examples: source="gmail | slack | github" (discovery), source="~/backup.json" (file), omit entirely (clipboard).'
           },
           from: {
             type: 'string',
             enum: ['clipboard', 'file', 'discovery'],
-            description: 'Optional override: force specific import source. Usually auto-detected from source parameter.'
+            description: 'OPTIONAL. Explicit override to force specific import mode, bypassing auto-detection. Use when auto-detection is ambiguous or you want explicit control. Usually not needed since source parameter is auto-detected. Examples: from="clipboard" forces clipboard even if source looks like path, from="discovery" treats source as query even if it contains slashes.'
           }
         }
       }
