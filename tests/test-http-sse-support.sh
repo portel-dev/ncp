@@ -2,7 +2,7 @@
 set -e
 
 echo "=========================================="
-echo "Testing HTTP/SSE MCP Support"
+echo "Testing HTTP/SSE MCP Support (New Syntax)"
 echo "=========================================="
 echo ""
 
@@ -14,59 +14,53 @@ echo "✓ Created test directory: $TEST_DIR"
 echo ""
 
 # Test 1: Add HTTP server without auth (uses google.com which responds fast)
-echo "Test 1: Adding HTTP server without auth..."
-cd "$TEST_DIR" && node "$OLDPWD/dist/index.js" add-http test-public https://www.google.com --profile all
+echo "Test 1: Adding HTTP server without auth (manual URL)..."
+cd "$TEST_DIR" && node "$OLDPWD/dist/index.js" add https://www.google.com --profile all
 cd "$OLDPWD"
 
 if [ $? -eq 0 ]; then
-  echo "✓ Test 1 passed: add-http without auth succeeded"
+  echo "✓ Test 1 passed: manual HTTP URL without auth succeeded"
 else
-  echo "✗ Test 1 failed: add-http without auth failed"
+  echo "✗ Test 1 failed: manual HTTP URL without auth failed"
   exit 1
 fi
 echo ""
 
 # Test 2: Add HTTP server with bearer token
 echo "Test 2: Adding HTTP server with bearer token..."
-cd "$TEST_DIR" && node "$OLDPWD/dist/index.js" add-http test-bearer https://www.google.com --profile all --auth-type bearer --token "test-token-12345"
+cd "$TEST_DIR" && node "$OLDPWD/dist/index.js" add https://api.example.com --token "test-token-12345" --profile all
 cd "$OLDPWD"
 
 if [ $? -eq 0 ]; then
-  echo "✓ Test 2 passed: add-http with bearer token succeeded"
+  echo "✓ Test 2 passed: HTTP URL with --token flag succeeded"
 else
-  echo "✗ Test 2 failed: add-http with bearer token failed"
+  echo "✗ Test 2 failed: HTTP URL with --token flag failed"
   exit 1
 fi
 echo ""
 
-# Test 3: Add HTTP server with OAuth (most complex auth)
-echo "Test 3: Adding HTTP server with OAuth..."
-cd "$TEST_DIR" && node "$OLDPWD/dist/index.js" add-http test-oauth https://www.google.com --profile all \
-  --auth-type oauth \
-  --client-id "test-client-id" \
-  --client-secret "test-secret" \
-  --device-auth-url "https://example.com/device" \
-  --token-url "https://example.com/token" \
-  --scopes "read" "write"
+# Test 3: Add stdio server for comparison
+echo "Test 3: Adding stdio server for comparison..."
+cd "$TEST_DIR" && node "$OLDPWD/dist/index.js" add test-stdio npx @modelcontextprotocol/server-filesystem /tmp --profile all
 cd "$OLDPWD"
 
 if [ $? -eq 0 ]; then
-  echo "✓ Test 3 passed: add-http with OAuth succeeded"
+  echo "✓ Test 3 passed: stdio server succeeded"
 else
-  echo "✗ Test 3 failed: add-http with OAuth failed"
+  echo "✗ Test 3 failed: stdio server failed"
   exit 1
 fi
 echo ""
 
-# Test 4: Add stdio server for comparison
-echo "Test 4: Adding stdio server for comparison..."
-cd "$TEST_DIR" && node "$OLDPWD/dist/index.js" add test-stdio npx --profile all -- -y @modelcontextprotocol/server-filesystem /tmp
+# Test 4: Add stdio server with env vars
+echo "Test 4: Adding stdio server with environment variables..."
+cd "$TEST_DIR" && node "$OLDPWD/dist/index.js" add test-github npx @modelcontextprotocol/server-github --env GITHUB_TOKEN=test_token_123 --profile all
 cd "$OLDPWD"
 
 if [ $? -eq 0 ]; then
-  echo "✓ Test 4 passed: add stdio server succeeded"
+  echo "✓ Test 4 passed: stdio server with --env flag succeeded"
 else
-  echo "✗ Test 4 failed: add stdio server failed"
+  echo "✗ Test 4 failed: stdio server with --env flag failed"
   exit 1
 fi
 echo ""
@@ -98,9 +92,9 @@ echo "Config file contents:"
 cat "$CONFIG_FILE" | jq '.' 2>/dev/null || cat "$CONFIG_FILE"
 echo ""
 
-# Check for expected structure
+# Check for expected structure (both HTTP and stdio)
 if grep -q '"url"' "$CONFIG_FILE" && grep -q '"command"' "$CONFIG_FILE"; then
-  echo "✓ Test 6 passed: Config contains both HTTP/SSE and stdio servers"
+  echo "✓ Test 6 passed: Config contains both HTTP and stdio servers"
 else
   echo "✗ Test 6 failed: Config missing expected entries"
   exit 1
@@ -114,11 +108,11 @@ else
   exit 1
 fi
 
-# Verify OAuth config is present
-if grep -q '"clientId": "test-client-id"' "$CONFIG_FILE"; then
-  echo "✓ OAuth configuration correctly saved"
+# Verify environment variable is present
+if grep -q '"GITHUB_TOKEN": "test_token_123"' "$CONFIG_FILE"; then
+  echo "✓ Environment variable correctly saved"
 else
-  echo "✗ OAuth configuration not found in config"
+  echo "✗ Environment variable not found in config"
   exit 1
 fi
 

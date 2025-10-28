@@ -1,176 +1,263 @@
 # Authentication Guide
 
-NCP automatically detects when MCP servers require authentication and will prompt you for the necessary credentials.
+NCP supports authentication for MCPs that require API keys, tokens, or credentials. This guide shows you how to provide credentials non-interactively.
 
-## Authentication Methods
-
-### Bearer Tokens (Most Common)
-
-When adding an HTTP/SSE MCP server that requires authentication:
+## Quick Reference
 
 ```bash
-$ ncp add-http canva https://mcp.canva.com/mcp
+# HTTP MCP with bearer token
+ncp add https://mcp.example.com --token "your-token-here"
 
-🌐 Adding HTTP/SSE MCP server: canva
-   Detecting authentication requirements...
-   ✓ Detected: bearer authentication required
+# Registry-based HTTP MCP with token
+ncp add notion --token "secret_xxx"
 
-   Token not provided, prompting for input...
-   📖 Refer to canva's documentation for how to generate an access token
+# stdio MCP with environment variables
+ncp add github --env GITHUB_TOKEN=ghp_xxx
 
-🔐 Bearer Token
-   Required for canva authentication
-   Enter value (hidden): ████████████████
-```
-
-**How to get your token:**
-
-1. Visit the MCP provider's website (e.g., canva.com)
-2. Sign in to your account
-3. Look for "Developer Settings", "API Keys", or "Access Tokens"
-4. Generate a new token/key
-5. Copy the token and paste it when NCP prompts
-
-**Security:** Tokens are stored locally in `~/.ncp/profiles/` and never sent to Portel servers.
-
----
-
-### OAuth (For Advanced Users)
-
-Some providers support OAuth authentication:
-
-```bash
-$ ncp add-http provider https://example.com/mcp
-
-# NCP detects OAuth support
-   Client ID not provided, prompting for input...
-   📖 Register an OAuth app with provider to get a Client ID
-
-# Browser opens for authentication
-✅ OAuth authentication successful!
-```
-
-**When to use OAuth:**
-- Provider requires OAuth (no manual tokens available)
-- You want automatic token refresh
-- Provider's documentation specifies OAuth
-
-**Note:** OAuth requires registering an OAuth application with the provider. See their developer documentation for instructions.
-
----
-
-### Stdio Servers (Recommended When Available)
-
-Many MCP providers offer stdio versions that handle authentication themselves:
-
-**Example: Canva**
-```bash
-# Step 1: Authenticate with provider's CLI
-npx @canva/cli@latest login
-# Opens browser → Authorize → Done!
-
-# Step 2: Add to NCP
-ncp add canva \
-  --command "npx" \
-  --args "-y @canva/cli@latest mcp"
-
-# Authentication handled automatically by Canva CLI
-```
-
-**Benefits:**
-- Simpler setup (one-time login)
-- Provider handles token management
-- No manual token copy/paste
-
-**Check if stdio version is available:**
-- Look for CLI tools from the provider (e.g., `@provider/cli`)
-- Check provider's MCP documentation for transport options
-- Stdio versions usually mentioned alongside HTTP versions
-
----
-
-## Passing Credentials via CLI
-
-### Via Command-Line Flag
-
-```bash
-# Pass token directly
-ncp add-http provider https://example.com/mcp \
-  --token "your-token-here"
-```
-
-### Via Environment Variable
-
-```bash
-# Set in environment
-export PROVIDER_TOKEN="your-token-here"
-
-# Use in command
-ncp add-http provider https://example.com/mcp \
-  --token "$PROVIDER_TOKEN"
-```
-
-### From File (For Automation/CI)
-
-```bash
-# Store token in file
-echo "your-token-here" > ~/.secrets/provider_token
-
-# Read and use
-ncp add-http provider https://example.com/mcp \
-  --token "$(cat ~/.secrets/provider_token)"
+# stdio MCP with auto-setup (interactive)
+ncp add github -y
 ```
 
 ---
 
-## Common Questions
+## HTTP MCPs (Bearer Tokens)
 
-### Where are tokens stored?
+Most HTTP/SSE MCPs use bearer token authentication.
 
-Tokens are stored in your profile configuration files:
-- Location: `~/.ncp/profiles/*.json`
-- Format: Plain text (secure your home directory)
+### From Registry
+
+```bash
+# Add with token in one command
+ncp add canva --token "your-canva-token"
+
+# Registry auto-detects that Canva uses HTTP transport
+# Token is saved to your profile configuration
+```
+
+### Manual HTTP URLs
+
+```bash
+# Direct URL with token
+ncp add https://mcp.example.com --token "bearer_xxx"
+
+# NCP auto-detects this is an HTTP endpoint
+# Generates name from domain: "mcp-example-com"
+```
+
+### Without Token (Manual Config Required)
+
+```bash
+# Add without token - will warn
+ncp add notion
+
+# Output:
+# ⚠️  Bearer token required but not provided
+# Add token later: ncp add notion --token "your-token"
+```
+
+**To add token later:**
+```bash
+ncp add notion --token "your-token-here"
+# This overwrites the existing configuration
+```
+
+---
+
+## stdio MCPs (Environment Variables)
+
+stdio MCPs often need API keys or credentials as environment variables.
+
+### Using `--env` Flag
+
+```bash
+# Single environment variable
+ncp add github --env GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+
+# Multiple environment variables
+ncp add slack \
+  --env SLACK_BOT_TOKEN=xoxb-xxx \
+  --env SLACK_TEAM_ID=T123456
+
+# Complex values (use quotes)
+ncp add postgres \
+  --env POSTGRES_CONNECTION_STRING="postgresql://user:pass@host:5432/db"
+```
+
+### Using Setup Commands (Interactive)
+
+Some MCPs have setup commands that handle authentication for you.
+
+```bash
+# Auto-run setup with -y flag
+ncp add github -y
+
+# This runs: gh auth login
+# Opens browser for OAuth authentication
+```
+
+**Without `-y` flag:**
+```bash
+ncp add github
+
+# Prompts:
+# Run authentication now? (y/n):
+```
+
+---
+
+## Common Patterns
+
+### GitHub
+
+**Option 1: Personal Access Token**
+```bash
+# Non-interactive
+ncp add github --env GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+```
+
+**Option 2: OAuth via GitHub CLI**
+```bash
+# Interactive
+ncp add github -y
+# Opens browser for authentication
+```
+
+### Slack
+
+```bash
+ncp add slack \
+  --env SLACK_BOT_TOKEN=xoxb-xxxxxxxxxxxx \
+  --env SLACK_TEAM_ID=T01234567
+```
+
+### Notion
+
+```bash
+ncp add notion --token "secret_xxxxxxxxxxxx"
+```
+
+### OpenAI
+
+```bash
+ncp add openai --env OPENAI_API_KEY=sk-xxxxxxxxxxxx
+```
+
+### PostgreSQL
+
+```bash
+ncp add postgres \
+  --env POSTGRES_CONNECTION_STRING="postgresql://user:pass@localhost:5432/mydb"
+```
+
+---
+
+## Security Best Practices
+
+### 1. Never Commit Tokens to Git
+
+```bash
+# Add to .gitignore
+echo "*.token" >> .gitignore
+echo ".env" >> .gitignore
+```
+
+### 2. Use Environment Variables in CI/CD
+
+```bash
+# GitHub Actions example
+ncp add github --env GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+
+# Shell script
+ncp add notion --token "$NOTION_TOKEN"
+```
+
+### 3. Store Tokens Securely
+
+```bash
+# Use a secrets file with restrictive permissions
+echo "your-token" > ~/.secrets/notion_token
+chmod 600 ~/.secrets/notion_token
+
+# Read from file
+ncp add notion --token "$(cat ~/.secrets/notion_token)"
+```
+
+### 4. Rotate Tokens Regularly
+
+```bash
+# Generate new token on provider's website
+# Update in NCP
+ncp add notion --token "new-token-here"  # Overwrites old token
+```
+
+### 5. Secure NCP Profiles
+
+```bash
+# Restrict permissions on profile directory
+chmod 700 ~/.ncp
+chmod 600 ~/.ncp/profiles/*.json
+```
+
+---
+
+## Where Credentials Are Stored
+
+**Location:** `~/.ncp/profiles/<profile>.json`
+
+**Format:**
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "ghp_xxxxxxxxxxxx"
+      }
+    },
+    "notion": {
+      "url": "https://mcp.notion.so",
+      "auth": {
+        "type": "bearer",
+        "token": "secret_xxxxxxxxxxxx"
+      }
+    }
+  }
+}
+```
+
+**Security Notes:**
+- Stored in plain text (secure your home directory)
 - Never sent to Portel servers
+- Only read by NCP when connecting to MCPs
 
-### How do I update a token?
+---
 
-Re-add the server with the new token:
+## Updating Credentials
+
+### Update Token
+
 ```bash
-ncp add-http provider https://example.com/mcp --token "new-token"
+# Re-run add command with new token
+ncp add notion --token "new-token-here"
 ```
 
-Or manually edit: `~/.ncp/profiles/all.json`
+### Update Environment Variables
 
-### How do I revoke access?
+```bash
+# Re-run add command with new values
+ncp add github --env GITHUB_TOKEN=ghp_new_token_here
+```
 
-1. Delete the token from your profile:
-   ```bash
-   # Edit profile and remove the server
-   code ~/.ncp/profiles/all.json
-   ```
+### Manual Edit
 
-2. Revoke the token on the provider's website:
-   - Go to provider's settings/developer page
-   - Find active tokens/API keys
-   - Revoke the token
+```bash
+# Find config location
+ncp config location
 
-### What if I can't find how to get a token?
-
-1. **Check provider's documentation:**
-   - Look for "API", "Developer", "Integrations" sections
-   - Search for "API key", "access token", "authentication"
-
-2. **Check MCP documentation:**
-   - Most MCP servers have README with setup instructions
-   - GitHub repos often have authentication guides
-
-3. **Try stdio version:**
-   - Check if provider has CLI tool
-   - Stdio versions often handle auth automatically
-
-4. **Ask for help:**
-   - GitHub Issues: https://github.com/portel/ncp/issues
-   - Discord: https://discord.gg/portel
+# Edit manually
+code ~/.ncp/profiles/all.json
+```
 
 ---
 
@@ -178,66 +265,145 @@ Or manually edit: `~/.ncp/profiles/all.json`
 
 ### "Authentication failed" Error
 
-- **Check token is valid:** Tokens may expire
-- **Check token permissions:** Ensure token has required scopes
-- **Regenerate token:** Create a new token from provider's site
+**Check token validity:**
+1. Generate new token on provider's website
+2. Verify token has correct scopes/permissions
+3. Re-add with new token: `ncp add <name> --token "new-token"`
 
-### "Invalid token format" Error
+### "Permission denied" Error
 
-- **Copy full token:** Make sure you copied the entire token
-- **No extra whitespace:** Trim spaces before/after token
-- **Check for line breaks:** Token should be on one line
+**Check environment variables:**
+```bash
+# Verify environment variable format
+ncp add github --env GITHUB_TOKEN=ghp_xxx
+
+# Check token has required permissions
+# (e.g., GitHub tokens need 'repo' scope for private repos)
+```
 
 ### Token Keeps Expiring
 
-- **Use OAuth if available:** OAuth tokens can auto-refresh
-- **Check token type:** Some tokens are short-lived by design
-- **Consider stdio version:** Provider CLI may handle renewals
+**Solutions:**
+1. **Use stdio with OAuth:** Provider CLI handles token refresh
+   ```bash
+   ncp add github -y  # Uses gh CLI, handles refresh automatically
+   ```
+
+2. **Generate longer-lived tokens:** Check provider settings for token expiration
+
+3. **Use manual refresh:** Re-run add command when token expires
+
+### Can't Find How to Generate Token
+
+**Steps:**
+1. Visit provider's website (e.g., github.com, notion.so)
+2. Go to Settings → Developer Settings → Personal Access Tokens
+3. Generate new token with required scopes
+4. Copy token immediately (won't be shown again)
+5. Use with NCP: `ncp add <provider> --token "token-here"`
+
+**Common locations:**
+- GitHub: Settings → Developer settings → Personal access tokens
+- GitLab: Preferences → Access Tokens
+- Slack: api.slack.com → Your Apps → OAuth & Permissions
+- Notion: notion.so/my-integrations
 
 ---
 
-## Security Best Practices
+## stdio vs HTTP: Which to Use?
 
-1. **Never commit tokens to git:**
-   ```bash
-   # Add to .gitignore
-   echo "*.token" >> .gitignore
-   ```
+### Prefer stdio When Available
 
-2. **Use environment variables in CI/CD:**
-   ```yaml
-   # GitHub Actions example
-   - name: Add MCP
-     run: ncp add-http provider ${{ secrets.PROVIDER_TOKEN }}
-   ```
+**Advantages:**
+- Provider handles authentication
+- Automatic token refresh
+- One-time setup (via `-y` flag or `--env`)
 
-3. **Rotate tokens regularly:**
-   - Generate new tokens periodically
-   - Revoke old tokens after updating
+**Example:**
+```bash
+# GitHub offers both stdio and HTTP
+# stdio version is easier:
+ncp add github -y  # OAuth via gh CLI
 
-4. **Use minimal permissions:**
-   - Only grant scopes/permissions needed
-   - Avoid "admin" or "full access" tokens when possible
+# vs HTTP version:
+ncp add github --transport http --token "ghp_xxx"  # Manual token
+```
 
-5. **Keep NCP profiles secure:**
-   ```bash
-   # Set restrictive permissions
-   chmod 700 ~/.ncp
-   chmod 600 ~/.ncp/profiles/*.json
-   ```
+### Use HTTP When
+
+- Provider only offers HTTP endpoint
+- You prefer manual token control
+- stdio version has issues
+
+**Example:**
+```bash
+# Notion only offers HTTP
+ncp add notion --token "secret_xxx"
+```
 
 ---
 
-## Future: OAuth Proxy (Coming Soon)
+## Advanced: OAuth (Coming Soon)
 
-We're building `oauth.portel.dev` - an open-source OAuth proxy that will make authentication seamless:
+We're building OAuth proxy support to simplify authentication:
 
-- No need to register OAuth apps yourself
+- No manual token generation needed
 - Browser-based authentication flow
 - Tokens stay local (never stored by Portel)
 - Support for 50+ providers
 
 **Status:** In development
-**Updates:** https://github.com/portel/oauth-proxy
+**Updates:** https://github.com/portel-dev/oauth-proxy
 
-For now, use the methods above. They work great and will continue to be supported!
+For now, use bearer tokens or stdio versions with built-in OAuth.
+
+---
+
+## CI/CD Examples
+
+### GitHub Actions
+
+```yaml
+name: Add MCP
+on: push
+
+jobs:
+  add-mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install NCP
+        run: npm install -g @portel/ncp
+
+      - name: Add GitHub MCP
+        run: ncp add github --env GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add Notion MCP
+        run: ncp add notion --token ${{ secrets.NOTION_TOKEN }}
+```
+
+### Shell Script
+
+```bash
+#!/bin/bash
+# setup-mcps.sh
+
+# Load secrets from environment
+set -a
+source .env
+set +a
+
+# Add MCPs non-interactively
+ncp add github --env GITHUB_TOKEN="$GITHUB_TOKEN"
+ncp add slack --env SLACK_BOT_TOKEN="$SLACK_BOT_TOKEN"
+ncp add notion --token "$NOTION_TOKEN"
+
+echo "✅ All MCPs configured"
+```
+
+---
+
+## Need Help?
+
+- **Documentation:** https://github.com/portel-dev/ncp/tree/main/docs
+- **Issues:** https://github.com/portel-dev/ncp/issues
+- **Discord:** https://discord.gg/portel
