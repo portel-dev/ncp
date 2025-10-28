@@ -680,21 +680,31 @@ async function handleKnownProvider(provider: any, options: any) {
       console.log(chalk.dim(`\n   ${stdioConfig.setup.description}`));
       console.log(chalk.dim(`   Command: ${chalk.cyan(stdioConfig.setup.command)}\n`));
 
-      // Ask for confirmation
-      const readline = await import('readline');
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
+      let runSetup = false;
 
-      const answer = await new Promise<string>(resolve => {
-        rl.question(chalk.yellow('   Run authentication now? (y/n): '), answer => {
-          rl.close();
-          resolve(answer.toLowerCase());
+      // Check if -y flag is provided (auto-run setup)
+      if (options.yes) {
+        runSetup = true;
+        console.log(chalk.dim('   (-y flag detected, auto-running setup)'));
+      } else {
+        // Ask for confirmation
+        const readline = await import('readline');
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
         });
-      });
 
-      if (answer === 'y' || answer === 'yes') {
+        const answer = await new Promise<string>(resolve => {
+          rl.question(chalk.yellow('   Run authentication now? (y/n): '), answer => {
+            rl.close();
+            resolve(answer.toLowerCase());
+          });
+        });
+
+        runSetup = (answer === 'y' || answer === 'yes');
+      }
+
+      if (runSetup) {
         console.log(chalk.dim('\n   🔐 Running authentication...'));
         try {
           const { stdout, stderr } = await execAsync(stdioConfig.setup.command);
@@ -753,9 +763,24 @@ async function handleKnownProvider(provider: any, options: any) {
       url: provider.http.url
     };
 
-    // Add auth if specified
-    if (provider.http.auth && provider.http.auth !== 'bearer') {
-      httpConfig.auth = { type: provider.http.auth };
+    // Add bearer token if provided via --token flag
+    if (options.token) {
+      httpConfig.auth = {
+        type: 'bearer',
+        token: options.token
+      };
+      console.log(chalk.dim(`   ✓ Bearer token configured`));
+    } else if (provider.http.auth) {
+      // Add auth type from registry if no token provided
+      if (provider.http.auth === 'bearer') {
+        // Bearer auth required but no token provided - will need manual config
+        httpConfig.auth = { type: 'bearer' };
+        console.log(chalk.yellow(`   ⚠️  Bearer token required but not provided`));
+        console.log(chalk.dim(`   Add token later: ncp add ${provider.id} --token "your-token"`));
+      } else {
+        // Other auth types (oauth, etc.)
+        httpConfig.auth = { type: provider.http.auth };
+      }
     }
 
     // Show documentation if available
@@ -791,26 +816,54 @@ async function handleManualAdd(name: string, command: string, args: string[], op
   const manager = new ProfileManager();
   await manager.initialize(true);
 
-  // Parse environment variables
-  const env: Record<string, string> = {};
-  if (options.env) {
-    console.log(chalk.dim('🔧 Processing environment variables...'));
-    for (const envVar of options.env) {
-      const [key, value] = envVar.split('=');
-      if (key && value) {
-        env[key] = value;
-        console.log(chalk.dim(`   ${key}=${formatCommandDisplay(value)}`));
+  // Detect if "command" is actually a URL (HTTP/HTTPS)
+  const isUrl = command && (command.startsWith('http://') || command.startsWith('https://'));
+
+  let mcpConfig: any;
+
+  if (isUrl) {
+    // HTTP/SSE MCP configuration
+    console.log(chalk.dim('🌐 Detected HTTP/SSE server'));
+
+    mcpConfig = {
+      url: command
+    };
+
+    // Add bearer token if provided
+    if (options.token) {
+      mcpConfig.auth = {
+        type: 'bearer',
+        token: options.token
+      };
+      console.log(chalk.dim('   ✓ Bearer token configured'));
+    } else {
+      console.log(chalk.yellow('   ⚠️  No token provided (use --token if authentication required)'));
+    }
+  } else {
+    // stdio MCP configuration
+    console.log(chalk.dim('💻 Detected stdio server'));
+
+    // Parse environment variables
+    const env: Record<string, string> = {};
+    if (options.env) {
+      console.log(chalk.dim('🔧 Processing environment variables...'));
+      for (const envVar of options.env) {
+        const [key, value] = envVar.split('=');
+        if (key && value) {
+          env[key] = value;
+          console.log(chalk.dim(`   ${key}=${formatCommandDisplay(value)}`));
+        }
       }
     }
-  }
 
-  const mcpConfig: any = {
-    command,
-    args: args || []
-  };
+    mcpConfig = {
+      command,
+      args: args || []
+    };
 
-  if (Object.keys(env).length > 0) {
-    mcpConfig.env = env;
+    if (Object.keys(env).length > 0) {
+      mcpConfig.env = env;
+    }
   }
 
   const profiles = options.profile || ['all'];
@@ -831,6 +884,8 @@ program
   .option('--profile <names...>', 'Profile(s) to add to (can specify multiple, default: all)')
   .option('--transport <type>', 'Force transport type: stdio or http')
   .option('--env <vars...>', 'Environment variables (KEY=value)')
+  .option('--token <value>', 'Bearer token for HTTP MCPs (skips interactive prompt)')
+  .option('-y, --yes', 'Auto-run setup commands without prompting')
   .action(async (providerName, command, args, options) => {
     // Smart detection: Check if this is pipe-delimited bulk add
     if (providerName.includes('|') && !command) {
@@ -880,6 +935,17 @@ program
         console.log(chalk.red(`\n✗ Import failed: ${error.message}`));
         process.exit(1);
       }
+    }
+
+    // Smart detection: Check if this is a manual HTTP URL
+    if ((providerName.startsWith('http://') || providerName.startsWith('https://')) && !command) {
+      // Extract name from URL (use domain or "custom-http")
+      const urlObj = new URL(providerName);
+      const name = urlObj.hostname.replace(/\./g, '-') || 'custom-http';
+
+      // Call handleManualAdd with URL as command parameter
+      await handleManualAdd(name, providerName, [], options);
+      return;
     }
 
     // Standard single MCP add flow
