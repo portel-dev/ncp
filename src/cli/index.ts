@@ -2153,45 +2153,6 @@ analyticsCmd
     }
   });
 
-
-analyticsCmd
-  .command('visual')
-  .description('Show enhanced visual analytics with charts and graphs')
-  .option('--period <days>', 'Show data for last N days (e.g., --period 7)')
-  .option('--from <date>', 'Start date (YYYY-MM-DD format)')
-  .option('--to <date>', 'End date (YYYY-MM-DD format)')
-  .option('--today', 'Show only today\'s data')
-  .action(async (options) => {
-    const { NCPLogParser } = await import('../analytics/log-parser.js');
-    const { VisualAnalyticsFormatter } = await import('../analytics/visual-formatter.js');
-
-    console.log(chalk.dim('🎨 Generating visual analytics...'));
-
-    const parser = new NCPLogParser();
-
-    // Parse time range options
-    const parseOptions: any = {};
-    if (options.today) {
-      parseOptions.today = true;
-    } else if (options.period) {
-      parseOptions.period = parseInt(options.period);
-    } else if (options.from || options.to) {
-      if (options.from) parseOptions.from = new Date(options.from);
-      if (options.to) parseOptions.to = new Date(options.to);
-    }
-
-    const report = await parser.parseAllLogs(parseOptions);
-
-    if (report.totalSessions === 0) {
-      console.log(chalk.yellow('📊 No analytics data available for the specified time range'));
-      console.log(chalk.dim('💡 Try a different time range or check if MCPs have been used through NCP'));
-      return;
-    }
-
-    const dashboard = await VisualAnalyticsFormatter.formatVisualDashboard(report);
-    console.log(dashboard);
-  });
-
 analyticsCmd
   .command('export')
   .description('Export analytics data to CSV')

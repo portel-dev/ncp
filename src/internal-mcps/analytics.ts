@@ -1,12 +1,13 @@
 /**
  * Analytics Internal MCP
  *
- * Provides usage analytics and metrics for AI consumption.
- * Returns data in markdown tables for AI parsing.
+ * Provides visual analytics with ASCII charts for AI consumption.
+ * Returns data wrapped in markdown code blocks for rendering.
  */
 
 import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
 import { NCPLogParser, AnalyticsReport } from '../analytics/log-parser.js';
+import { VisualAnalyticsFormatter } from '../analytics/visual-formatter.js';
 import { logger } from '../utils/logger.js';
 
 export class AnalyticsMCP implements InternalMCP {
@@ -22,7 +23,7 @@ export class AnalyticsMCP implements InternalMCP {
   tools: InternalTool[] = [
     {
       name: 'overview',
-      description: 'Comprehensive analytics overview with usage stats, token savings, and performance metrics',
+      description: 'Visual analytics dashboard with ASCII charts showing usage stats, token savings, performance metrics, and trends. Returns formatted in markdown code blocks for rendering.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -39,7 +40,7 @@ export class AnalyticsMCP implements InternalMCP {
     },
     {
       name: 'performance',
-      description: 'Performance-focused metrics: fastest MCPs, most reliable MCPs, response times',
+      description: 'Visual performance report with gauges and charts showing fastest MCPs, reliability metrics, and response times. Returns formatted in markdown code blocks.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -56,7 +57,7 @@ export class AnalyticsMCP implements InternalMCP {
     },
     {
       name: 'usage',
-      description: 'Usage statistics: most used MCPs, tool counts, hourly patterns',
+      description: 'Detailed usage statistics with properly spaced markdown tables: most used MCPs, tool counts, hourly patterns, peak usage times. Tables are readable in plain text without rendering.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -98,10 +99,10 @@ export class AnalyticsMCP implements InternalMCP {
 
       switch (toolName) {
         case 'overview':
-          return this.formatDashboard(report);
+          return await this.formatDashboard(report);
 
         case 'performance':
-          return this.formatPerformance(report);
+          return await this.formatPerformance(report);
 
         case 'usage':
           return this.formatUsage(report);
@@ -119,59 +120,12 @@ export class AnalyticsMCP implements InternalMCP {
   }
 
   /**
-   * Format dashboard as markdown
+   * Format dashboard with visual charts in markdown code blocks
    */
-  private formatDashboard(report: AnalyticsReport): InternalToolResult {
-    const days = Math.ceil((report.timeRange.end.getTime() - report.timeRange.start.getTime()) / (1000 * 60 * 60 * 24));
-    const period = days <= 1 ? 'today' : `${days} days`;
+  private async formatDashboard(report: AnalyticsReport): Promise<InternalToolResult> {
+    const visualOutput = await VisualAnalyticsFormatter.formatVisualDashboard(report);
 
-    // Calculate token savings
-    const estimatedTokensWithoutNCP = report.totalSessions * report.uniqueMCPs * 100;
-    const estimatedTokensWithNCP = report.totalSessions * 50;
-    const tokenSavings = estimatedTokensWithoutNCP - estimatedTokensWithNCP;
-    const costSavings = (tokenSavings / 1000) * 0.002;
-
-    const markdown = `# 🚀 NCP Analytics Dashboard
-
-## 📊 Overview (${period})
-
-| Metric | Value |
-|--------|-------|
-| Total Sessions | ${report.totalSessions.toLocaleString()} |
-| Unique MCPs | ${report.uniqueMCPs} |
-| Success Rate | ${report.successRate.toFixed(1)}% |
-| Total Response Data | ${this.formatBytes(report.totalResponseSize)} |
-| Avg Session Duration | ${report.avgSessionDuration.toFixed(0)}ms |
-
-## 💰 Value Delivered
-
-| Metric | Value |
-|--------|-------|
-| Tokens Saved (est.) | ~${(tokenSavings / 1000000).toFixed(1)}M |
-| Cost Savings (est.) | ~$${costSavings.toFixed(2)} |
-| Interface Reduction | 1 unified vs ${report.uniqueMCPs} separate |
-| Cognitive Load Reduction | ${(((report.uniqueMCPs - 1) / report.uniqueMCPs) * 100).toFixed(1)}% |
-
-## 🔥 Most Used MCPs
-
-| MCP | Sessions | Share |
-|-----|----------|-------|
-${report.topMCPsByUsage.slice(0, 5).map(mcp =>
-  `| ${mcp.name} | ${mcp.sessions} | ${((mcp.sessions / report.totalSessions) * 100).toFixed(1)}% |`
-).join('\n')}
-
-## ⚡ Performance Leaders
-
-### Fastest MCPs
-${report.performanceMetrics.fastestMCPs.slice(0, 5).map((mcp, i) =>
-  `${i + 1}. **${mcp.name}**: ${mcp.avgDuration.toFixed(0)}ms`
-).join('\n')}
-
-### Most Reliable MCPs
-${report.performanceMetrics.mostReliable.slice(0, 5).map((mcp, i) =>
-  `${i + 1}. **${mcp.name}**: ${mcp.successRate.toFixed(1)}% success rate`
-).join('\n')}
-`;
+    const markdown = `\`\`\`txt\n${visualOutput}\n\`\`\``;
 
     return {
       success: true,
@@ -183,38 +137,12 @@ ${report.performanceMetrics.mostReliable.slice(0, 5).map((mcp, i) =>
   }
 
   /**
-   * Format performance metrics as markdown
+   * Format performance metrics with visual charts in markdown code blocks
    */
-  private formatPerformance(report: AnalyticsReport): InternalToolResult {
-    const days = Math.ceil((report.timeRange.end.getTime() - report.timeRange.start.getTime()) / (1000 * 60 * 60 * 24));
+  private async formatPerformance(report: AnalyticsReport): Promise<InternalToolResult> {
+    const visualOutput = await VisualAnalyticsFormatter.formatVisualPerformance(report);
 
-    const markdown = `# ⚡ NCP Performance Metrics (${days} days)
-
-## 🏆 Fastest MCPs
-
-| Rank | MCP | Avg Duration |
-|------|-----|--------------|
-${report.performanceMetrics.fastestMCPs.slice(0, 10).map((mcp, i) =>
-  `| ${i + 1} | ${mcp.name} | ${mcp.avgDuration.toFixed(0)}ms |`
-).join('\n')}
-
-## 🛡️ Most Reliable MCPs
-
-| Rank | MCP | Success Rate |
-|------|-----|--------------|
-${report.performanceMetrics.mostReliable.slice(0, 10).map((mcp, i) =>
-  `| ${i + 1} | ${mcp.name} | ${mcp.successRate.toFixed(1)}% |`
-).join('\n')}
-
-## 📊 Overall Performance
-
-| Metric | Value |
-|--------|-------|
-| Avg Response Time | ${report.avgSessionDuration.toFixed(0)}ms |
-| Success Rate | ${report.successRate.toFixed(1)}% |
-| Total Sessions | ${report.totalSessions.toLocaleString()} |
-| Total Data Transferred | ${this.formatBytes(report.totalResponseSize)} |
-`;
+    const markdown = `\`\`\`txt\n${visualOutput}\n\`\`\``;
 
     return {
       success: true,
@@ -226,66 +154,92 @@ ${report.performanceMetrics.mostReliable.slice(0, 10).map((mcp, i) =>
   }
 
   /**
-   * Format usage statistics as markdown
+   * Format usage statistics with properly spaced markdown tables
    */
   private formatUsage(report: AnalyticsReport): InternalToolResult {
     const days = Math.ceil((report.timeRange.end.getTime() - report.timeRange.start.getTime()) / (1000 * 60 * 60 * 24));
+    const output: string[] = [];
 
-    const markdown = `# 📈 NCP Usage Statistics (${days} days)
+    output.push('# 📈 NCP Usage Statistics');
+    output.push('');
+    output.push(`**Period**: ${days === 1 ? 'Today' : `Last ${days} days`}`);
+    output.push('');
 
-## 🔥 Most Used MCPs
+    // Most Used MCPs - properly spaced markdown table
+    output.push('## 🔥 Most Used MCPs');
+    output.push('');
+    const topMCPs = report.topMCPsByUsage.slice(0, 10);
+    const maxNameLen = Math.max(...topMCPs.map(m => m.name.length), 15);
 
-| Rank | MCP | Sessions | % of Total |
-|------|-----|----------|------------|
-${report.topMCPsByUsage.slice(0, 10).map((mcp, i) =>
-  `| ${i + 1} | ${mcp.name} | ${mcp.sessions} | ${((mcp.sessions / report.totalSessions) * 100).toFixed(1)}% |`
-).join('\n')}
+    // Header
+    output.push(`| ${'#'.padEnd(3)} | ${'MCP'.padEnd(maxNameLen)} | ${'Sessions'.padStart(8)} | ${'% Total'.padStart(9)} |`);
+    output.push(`|${'-'.repeat(5)}|${'-'.repeat(maxNameLen + 2)}|${'-'.repeat(10)}|${'-'.repeat(11)}|`);
 
-## 🛠️ Tool-Rich MCPs
+    // Rows
+    topMCPs.forEach((mcp, i) => {
+      const rank = `${i + 1}`.padEnd(3);
+      const name = mcp.name.padEnd(maxNameLen);
+      const sessions = mcp.sessions.toString().padStart(8);
+      const pct = `${((mcp.sessions / report.totalSessions) * 100).toFixed(1)}%`.padStart(9);
+      output.push(`| ${rank} | ${name} | ${sessions} | ${pct} |`);
+    });
+    output.push('');
 
-| Rank | MCP | Tool Count |
-|------|-----|------------|
-${report.topMCPsByTools.slice(0, 10).map((mcp, i) =>
-  `| ${i + 1} | ${mcp.name} | ${mcp.toolCount} |`
-).join('\n')}
+    // Tool-Rich MCPs
+    output.push('## 🛠️ Tool-Rich MCPs');
+    output.push('');
+    const toolRich = report.topMCPsByTools.slice(0, 10);
+    const maxToolNameLen = Math.max(...toolRich.map(m => m.name.length), 15);
 
-## ⏰ Hourly Usage Pattern
+    // Header
+    output.push(`| ${'#'.padEnd(3)} | ${'MCP'.padEnd(maxToolNameLen)} | ${'Tools'.padStart(6)} |`);
+    output.push(`|${'-'.repeat(5)}|${'-'.repeat(maxToolNameLen + 2)}|${'-'.repeat(8)}|`);
 
-| Hour | Sessions |
-|------|----------|
-${Object.entries(report.hourlyUsage)
-  .sort(([a], [b]) => parseInt(a) - parseInt(b))
-  .map(([hour, count]) => `| ${hour}:00 | ${count} |`)
-  .join('\n')}
+    // Rows
+    toolRich.forEach((mcp, i) => {
+      const rank = `${i + 1}`.padEnd(3);
+      const name = mcp.name.padEnd(maxToolNameLen);
+      const tools = mcp.toolCount.toString().padStart(6);
+      output.push(`| ${rank} | ${name} | ${tools} |`);
+    });
+    output.push('');
 
-## 📊 Summary
+    // Hourly Usage Pattern
+    output.push('## ⏰ Hourly Usage Pattern');
+    output.push('');
 
-| Metric | Value |
-|--------|-------|
-| Total Sessions | ${report.totalSessions.toLocaleString()} |
-| Unique MCPs | ${report.uniqueMCPs} |
-| Peak Hour | ${this.getPeakHour(report.hourlyUsage)} |
-| Avg Sessions/Day | ${(report.totalSessions / days).toFixed(0)} |
-`;
+    const hourlyEntries = Object.entries(report.hourlyUsage)
+      .sort(([a], [b]) => parseInt(a) - parseInt(b));
+
+    // Header
+    output.push(`| ${'Hour'.padEnd(6)} | ${'Sessions'.padStart(8)} |`);
+    output.push(`|${'-'.repeat(8)}|${'-'.repeat(10)}|`);
+
+    // Rows
+    hourlyEntries.forEach(([hour, count]) => {
+      const hourStr = `${hour}:00`.padEnd(6);
+      const countStr = count.toString().padStart(8);
+      output.push(`| ${hourStr} | ${countStr} |`);
+    });
+    output.push('');
+
+    // Summary
+    output.push('## 📊 Summary');
+    output.push('');
+    output.push(`| ${'Metric'.padEnd(20)} | ${'Value'.padEnd(15)} |`);
+    output.push(`|${'-'.repeat(22)}|${'-'.repeat(17)}|`);
+    output.push(`| ${'Total Sessions'.padEnd(20)} | ${report.totalSessions.toLocaleString().padEnd(15)} |`);
+    output.push(`| ${'Unique MCPs'.padEnd(20)} | ${report.uniqueMCPs.toString().padEnd(15)} |`);
+    output.push(`| ${'Peak Hour'.padEnd(20)} | ${this.getPeakHour(report.hourlyUsage).padEnd(15)} |`);
+    output.push(`| ${'Avg Sessions/Day'.padEnd(20)} | ${(report.totalSessions / days).toFixed(0).padEnd(15)} |`);
 
     return {
       success: true,
       content: [{
         type: 'text',
-        text: markdown
+        text: output.join('\n')
       }]
     };
-  }
-
-  /**
-   * Format bytes to human-readable
-   */
-  private formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
   }
 
   /**

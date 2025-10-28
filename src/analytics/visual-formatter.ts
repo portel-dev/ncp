@@ -149,7 +149,7 @@ export class VisualAnalyticsFormatter {
     output.push('');
     output.push(chalk.dim('  📊 ') + chalk.cyan('ncp analytics performance') + chalk.dim(' - Detailed performance metrics'));
     output.push(chalk.dim('  📁 ') + chalk.cyan('ncp analytics export') + chalk.dim(' - Export data to CSV'));
-    output.push(chalk.dim('  🔄 ') + chalk.cyan('ncp analytics dashboard') + chalk.dim(' - Refresh this dashboard'));
+    output.push(chalk.dim('  🔄 ') + chalk.cyan('ncp analytics overview --visual') + chalk.dim(' - Refresh this view'));
     output.push('');
 
     return output.join('\\n');
