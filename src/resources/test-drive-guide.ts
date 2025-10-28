@@ -211,11 +211,14 @@ ncp add github
 **Add an MCP (manual):**
 
 \`\`\`bash
-# If it's a Node.js package
-ncp add-stdio my-mcp npx @my-org/my-mcp
+# From registry (auto-detects transport)
+ncp add my-mcp
 
-# If it's an HTTP/SSE server
-ncp add-http my-mcp https://api.example.com/mcp
+# Manual stdio server
+ncp add my-mcp npx @my-org/my-mcp
+
+# HTTP/SSE servers: Use registry or manual config edit
+# (Manual HTTP URLs not supported via CLI)
 \`\`\`
 
 **Manage MCPs:**

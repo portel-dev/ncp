@@ -82,9 +82,11 @@ ncp add notion --transport stdio
 
 ### Manual Add (Advanced)
 ```bash
-# For custom/unknown providers
+# For custom/unknown stdio providers
 ncp add my-server npx @my/cli mcp
-ncp add-http my-server https://example.com/mcp
+
+# For HTTP/SSE: use manual config edit
+# (Manual HTTP URLs not supported via CLI)
 ```
 
 ## How It Works
@@ -257,19 +259,20 @@ searchProviders(query) // Search providers
 
 ### Existing Users
 
-Old commands still work:
+Manual stdio commands still work:
 ```bash
-# These continue to work:
+# Manual stdio still supported:
 ncp add canva npx -y @canva/cli@latest mcp
-ncp add-http notion https://mcp.notion.so
 ```
 
-New simplified commands recommended:
+Simplified registry-based commands recommended:
 ```bash
-# But these are easier:
+# Registry-based (auto-detects transport):
 ncp add canva
 ncp add notion
 ```
+
+**Note:** The old `add-http` and `add-stdio` subcommands have been unified into a single `add` command that auto-detects the transport type from the registry.
 
 ### Updating Profiles
 

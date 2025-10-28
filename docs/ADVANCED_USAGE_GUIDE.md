@@ -270,7 +270,7 @@ Add your custom MCP to NCP:
 
 ```bash
 # Option 1: Direct command
-ncp add-stdio my-custom-mcp "node /path/to/my-custom-mcp.js"
+ncp add my-custom-mcp node /path/to/my-custom-mcp.js
 
 # Option 2: Via profile configuration
 ncp config location  # Find config file

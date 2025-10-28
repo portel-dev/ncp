@@ -367,7 +367,7 @@ Do you want to install this MCP?`;
               configToAdd = {
                 url
               };
-              cliCommand = `ncp add-http ${mcpName} ${url}`;
+              cliCommand = `Manual config edit required (HTTP URLs not supported via CLI)`;
             } else {
               const argsStr = commandArgs.length > 0 ? commandArgs.join(' ') : '';
               configToAdd = {
