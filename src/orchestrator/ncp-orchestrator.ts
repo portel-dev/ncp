@@ -453,10 +453,18 @@ export class NCPOrchestrator {
       const mcpTools = toolsByMCP.get(config.name) || [];
       if (mcpTools.length === 0) continue;
 
-      loadedMCPCount++;
-
       // Get MCP metadata for schemas
       const mcpMetadata = metadataCache.mcps[config.name];
+
+      // CRITICAL: If metadata cache doesn't have this MCP's schemas, skip loading from cache
+      // This forces re-indexing to populate the metadata cache with schemas
+      if (!mcpMetadata || !mcpMetadata.tools || mcpMetadata.tools.length === 0) {
+        logger.info(`Metadata cache missing for ${config.name}, will re-index to populate schemas`);
+        this.csvCache.removeMCPFromIndex(config.name);  // Remove from CSV index to trigger re-indexing
+        continue;
+      }
+
+      loadedMCPCount++;
 
       // Create definition with schemas from metadata cache
       this.definitions.set(config.name, {

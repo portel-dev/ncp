@@ -196,6 +196,15 @@ export class CSVCache {
   }
 
   /**
+   * Remove MCP from index (forces re-indexing)
+   */
+  removeMCPFromIndex(mcpName: string): void {
+    if (this.metadata?.indexedMCPs) {
+      this.metadata.indexedMCPs.delete(mcpName);
+    }
+  }
+
+  /**
    * Load all cached tools from CSV
    */
   loadCachedTools(): CachedTool[] {
