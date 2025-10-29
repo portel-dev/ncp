@@ -1537,7 +1537,7 @@ testCmd
     console.log(chalk.dim('Loading cached MCP tools...'));
     const cache = new CSVCache(getCacheDirectory(), profileName);
     await cache.initialize();
-    const allTools = cache.loadCachedTools();
+    const allTools = await cache.loadCachedTools();
 
     if (allTools.length === 0) {
       console.log(chalk.yellow('⚠️  No tools found in cache.'));

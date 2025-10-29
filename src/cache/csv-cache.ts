@@ -3,8 +3,8 @@
  * Enables resumable indexing by appending each MCP as it's indexed
  */
 
-import { createWriteStream, existsSync, readFileSync, writeFileSync, WriteStream, fsync, openSync, fsyncSync, closeSync } from 'fs';
-import { mkdir } from 'fs/promises';
+import { createWriteStream, WriteStream, fsync, openSync, fsyncSync, closeSync } from 'fs';
+import { mkdir, readFile, writeFile, access, constants } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
@@ -74,33 +74,36 @@ export class CSVCache {
     await mkdir(dirname(this.csvPath), { recursive: true });
 
     // Get current NCP version
-    const currentVersion = this.getNcpVersion();
+    const currentVersion = await this.getNcpVersion();
 
     // Load or create metadata
-    if (existsSync(this.metaPath)) {
-      try {
-        const content = readFileSync(this.metaPath, 'utf-8');
-        const parsed = JSON.parse(content);
-        // Convert objects back to Maps
-        const loadedMetadata = {
-          ...parsed,
-          indexedMCPs: new Map(Object.entries(parsed.indexedMCPs || {})),
-          failedMCPs: new Map(Object.entries(parsed.failedMCPs || {}))
-        };
+    try {
+      await access(this.metaPath, constants.F_OK);
+      // File exists, read it
+      const content = await readFile(this.metaPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      // Convert objects back to Maps
+      const loadedMetadata = {
+        ...parsed,
+        indexedMCPs: new Map(Object.entries(parsed.indexedMCPs || {})),
+        failedMCPs: new Map(Object.entries(parsed.failedMCPs || {}))
+      };
 
-        // Check if NCP version changed (code updated)
-        if (loadedMetadata.ncpVersion !== currentVersion) {
-          logger.info(`NCP version changed (${loadedMetadata.ncpVersion || 'unknown'} → ${currentVersion}), clearing failed MCPs`);
-          loadedMetadata.ncpVersion = currentVersion;
-          loadedMetadata.failedMCPs.clear(); // Clear failures when code changes
-        }
-
-        this.metadata = loadedMetadata;
-        this.saveMetadata();
-      } catch (error) {
-        logger.warn(`Failed to load cache metadata: ${error}`);
-        this.metadata = null;
+      // Check if NCP version changed (code updated)
+      if (loadedMetadata.ncpVersion !== currentVersion) {
+        logger.info(`NCP version changed (${loadedMetadata.ncpVersion || 'unknown'} → ${currentVersion}), clearing failed MCPs`);
+        loadedMetadata.ncpVersion = currentVersion;
+        loadedMetadata.failedMCPs.clear(); // Clear failures when code changes
       }
+
+      this.metadata = loadedMetadata;
+      await this.saveMetadata();
+    } catch (error) {
+      // File doesn't exist or parse error - will create new metadata below
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger.warn(`Failed to load cache metadata: ${error}`);
+      }
+      this.metadata = null;
     }
 
     if (!this.metadata) {
@@ -120,9 +123,9 @@ export class CSVCache {
   }
 
   /**
-   * Get NCP version from package.json
+   * Get NCP version from package.json (async)
    */
-  private getNcpVersion(): string {
+  private async getNcpVersion(): Promise<string> {
     try {
       // Get __dirname equivalent in ES modules
       const __filename = fileURLToPath(import.meta.url);
@@ -136,11 +139,16 @@ export class CSVCache {
       ];
 
       for (const pkgPath of possiblePaths) {
-        if (existsSync(pkgPath)) {
-          const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+        try {
+          await access(pkgPath, constants.F_OK);
+          const content = await readFile(pkgPath, 'utf-8');
+          const pkg = JSON.parse(content);
           if (pkg.version) {
             return pkg.version;
           }
+        } catch {
+          // Try next path
+          continue;
         }
       }
 
@@ -152,9 +160,9 @@ export class CSVCache {
   }
 
   /**
-   * Validate cache against current profile configuration
+   * Validate cache against current profile configuration (async)
    */
-  validateCache(currentProfileHash: string): boolean {
+  async validateCache(currentProfileHash: string): Promise<boolean> {
     if (!this.metadata) return false;
 
     // Check if profile configuration changed
@@ -164,7 +172,9 @@ export class CSVCache {
     }
 
     // Check if CSV file exists
-    if (!existsSync(this.csvPath)) {
+    try {
+      await access(this.csvPath, constants.F_OK);
+    } catch {
       logger.info('CSV cache file missing');
       return false;
     }
@@ -205,15 +215,17 @@ export class CSVCache {
   }
 
   /**
-   * Load all cached tools from CSV
+   * Load all cached tools from CSV (async)
    */
-  loadCachedTools(): CachedTool[] {
-    if (!existsSync(this.csvPath)) {
+  async loadCachedTools(): Promise<CachedTool[]> {
+    try {
+      await access(this.csvPath, constants.F_OK);
+    } catch {
       return [];
     }
 
     try {
-      const content = readFileSync(this.csvPath, 'utf-8');
+      const content = await readFile(this.csvPath, 'utf-8');
       const lines = content.trim().split('\n');
 
       // Skip header
@@ -242,10 +254,10 @@ export class CSVCache {
   }
 
   /**
-   * Load cached tools for a specific MCP
+   * Load cached tools for a specific MCP (async)
    */
-  loadMCPTools(mcpName: string): CachedTool[] {
-    const allTools = this.loadCachedTools();
+  async loadMCPTools(mcpName: string): Promise<CachedTool[]> {
+    const allTools = await this.loadCachedTools();
     return allTools.filter(t => t.mcpName === mcpName);
   }
 
@@ -253,7 +265,13 @@ export class CSVCache {
    * Start incremental writing (append mode)
    */
   async startIncrementalWrite(profileHash: string): Promise<void> {
-    const isNewCache = !existsSync(this.csvPath);
+    let isNewCache = true;
+    try {
+      await access(this.csvPath, constants.F_OK);
+      isNewCache = false;
+    } catch {
+      // File doesn't exist, it's a new cache
+    }
 
     // Always update profile hash (critical for cache validation)
     if (this.metadata) {
@@ -329,7 +347,7 @@ export class CSVCache {
       this.writeStream = null;
     }
 
-    this.saveMetadata();
+    await this.saveMetadata();
     logger.debug(`Cache finalized: ${this.metadata?.totalTools} tools from ${this.metadata?.totalMCPs} MCPs`);
   }
 
@@ -338,14 +356,24 @@ export class CSVCache {
    */
   async clear(): Promise<void> {
     try {
-      if (existsSync(this.csvPath)) {
+      // Try to delete CSV file
+      try {
+        await access(this.csvPath, constants.F_OK);
         const fs = await import('fs/promises');
         await fs.unlink(this.csvPath);
+      } catch {
+        // File doesn't exist, skip
       }
-      if (existsSync(this.metaPath)) {
+
+      // Try to delete metadata file
+      try {
+        await access(this.metaPath, constants.F_OK);
         const fs = await import('fs/promises');
         await fs.unlink(this.metaPath);
+      } catch {
+        // File doesn't exist, skip
       }
+
       this.metadata = null;
       logger.info('Cache cleared');
     } catch (error) {
@@ -354,9 +382,9 @@ export class CSVCache {
   }
 
   /**
-   * Save metadata to disk with fsync for crash safety
+   * Save metadata to disk with fsync for crash safety (async)
    */
-  private saveMetadata(): void {
+  private async saveMetadata(): Promise<void> {
     if (!this.metadata) return;
 
     try {
@@ -367,16 +395,18 @@ export class CSVCache {
         failedMCPs: Object.fromEntries(this.metadata.failedMCPs)
       };
 
-      // Write metadata file
-      writeFileSync(this.metaPath, JSON.stringify(metaToSave, null, 2));
+      // Write metadata file asynchronously
+      await writeFile(this.metaPath, JSON.stringify(metaToSave, null, 2), 'utf-8');
 
       // Force sync to disk (open file, fsync, close)
       const fd = openSync(this.metaPath, 'r+');
-      try {
-        fsyncSync(fd);
-      } finally {
-        closeSync(fd);
-      }
+      await new Promise<void>((resolve, reject) => {
+        fsync(fd, (err) => {
+          closeSync(fd);
+          if (err) reject(err);
+          else resolve();
+        });
+      });
     } catch (error) {
       logger.error(`Failed to save metadata: ${error}`);
     }

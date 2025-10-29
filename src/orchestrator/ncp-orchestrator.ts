@@ -330,7 +330,7 @@ export class NCPOrchestrator {
     const profileHash = CSVCache.hashProfile(profile.mcpServers);
 
     // Check if cache is valid
-    const cacheValid = this.csvCache.validateCache(profileHash);
+    const cacheValid = await this.csvCache.validateCache(profileHash);
 
     const mcpConfigs: MCPConfig[] = Object.entries(profile.mcpServers).map(([name, config]) => ({
       name,
@@ -436,7 +436,7 @@ export class NCPOrchestrator {
    * Load cached tools from CSV
    */
   private async loadFromCSVCache(mcpConfigs: MCPConfig[]): Promise<number> {
-    const cachedTools = this.csvCache.loadCachedTools();
+    const cachedTools = await this.csvCache.loadCachedTools();
 
     // Load tool metadata (including schemas) from cache
     const metadataCache = await this.cachePatcher.loadToolMetadataCache();
