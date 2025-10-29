@@ -6,6 +6,7 @@
 import { JobManager } from './job-manager.js';
 import { ExecutionRecorder } from './execution-recorder.js';
 import { CronManager } from './cron-manager.js';
+import { LaunchdManager } from './launchd-manager.js';
 import { JobExecutor } from './job-executor.js';
 import { NaturalLanguageParser } from './natural-language-parser.js';
 import { ToolValidator } from './tool-validator.js';
@@ -33,7 +34,7 @@ export interface CreateJobOptions {
 export class Scheduler {
   private jobManager: JobManager;
   public executionRecorder: ExecutionRecorder; // Public for access from SchedulerMCP
-  private cronManager?: CronManager;
+  private scheduleManager?: CronManager | LaunchdManager;
   private jobExecutor: JobExecutor;
   private toolValidator: ToolValidator;
   private settingsManager: SettingsManager;
@@ -46,17 +47,26 @@ export class Scheduler {
     this.toolValidator = new ToolValidator(orchestrator);
     this.settingsManager = new SettingsManager();
 
-    // Only initialize cron manager on supported platforms
-    if (platform() !== 'win32') {
+    // Initialize platform-specific scheduler
+    const currentPlatform = platform();
+    if (currentPlatform === 'darwin') {
+      // macOS - use launchd (doesn't require Full Disk Access)
       try {
-        this.cronManager = new CronManager();
-        // Note: Automatic cleanup setup is deferred until first job creation
-        // to avoid running shell commands during normal NCP operations
+        this.scheduleManager = new LaunchdManager();
+        logger.info('[Scheduler] Using launchd for macOS scheduling');
+      } catch (error) {
+        logger.warn(`[Scheduler] Launchd manager initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } else if (currentPlatform !== 'win32') {
+      // Linux/Unix - use cron
+      try {
+        this.scheduleManager = new CronManager();
+        logger.info('[Scheduler] Using cron for Linux/Unix scheduling');
       } catch (error) {
         logger.warn(`[Scheduler] Cron manager initialization failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     } else {
-      logger.warn('[Scheduler] Windows platform detected - cron scheduling not available');
+      logger.warn('[Scheduler] Windows platform detected - scheduling not available');
     }
   }
 
@@ -64,7 +74,7 @@ export class Scheduler {
    * Check if scheduler is available on this platform
    */
   isAvailable(): boolean {
-    return this.cronManager !== undefined;
+    return this.scheduleManager !== undefined;
   }
 
   /**
@@ -75,7 +85,7 @@ export class Scheduler {
    * on every CLI invocation (which triggers macOS admin permission dialogs)
    */
   private setupAutomaticCleanup(): void {
-    if (!this.cronManager) {
+    if (!this.scheduleManager) {
       return; // No cron manager available
     }
 
@@ -97,7 +107,7 @@ export class Scheduler {
 
     try {
       // Check if cleanup job already exists in crontab
-      const existingJobs = this.cronManager.getJobs();
+      const existingJobs = this.scheduleManager.getJobs();
       const cleanupJobId = '__ncp_automatic_cleanup__';
       const cleanupExists = existingJobs.some(j => j.id === cleanupJobId);
 
@@ -116,7 +126,7 @@ export class Scheduler {
       // Create cron job that calls the cleanup-runs CLI command
       const command = `${ncpPath} cleanup-runs --max-age ${config.maxExecutionAgeDays || 14} --max-count ${config.maxExecutionsPerJob || 100}`;
 
-      this.cronManager.addJob(this.cleanupJobId, cleanupSchedule, command);
+      this.scheduleManager.addJob(this.cleanupJobId, cleanupSchedule, command);
 
       logger.info(`[Scheduler] Automatic cleanup enabled: ${cleanupSchedule}`);
       logger.info(`[Scheduler] Cleanup policy: ${config.maxExecutionAgeDays || 14} days, ${config.maxExecutionsPerJob || 100} runs per job`);
@@ -143,7 +153,7 @@ export class Scheduler {
    * Create a new scheduled job
    */
   async createJob(options: CreateJobOptions): Promise<ScheduledJob> {
-    if (!this.cronManager) {
+    if (!this.scheduleManager) {
       throw new Error('Scheduler not available on this platform');
     }
 
@@ -247,7 +257,8 @@ export class Scheduler {
       endDate: options.endDate,
       createdAt: new Date().toISOString(),
       status: 'active',
-      executionCount: 0
+      executionCount: 0,
+      workingDirectory: process.cwd() // Save current working directory for execution
     };
 
     // Save job to storage
@@ -256,7 +267,7 @@ export class Scheduler {
     // Add to crontab
     const ncpPath = this.getNCPExecutablePath();
     const command = `${ncpPath} _job-run ${jobId}`;
-    this.cronManager.addJob(jobId, cronExpression, command);
+    this.scheduleManager.addJob(jobId, cronExpression, command);
 
     // Set up automatic cleanup (only runs once, is idempotent)
     this.setupAutomaticCleanup();
@@ -315,7 +326,7 @@ export class Scheduler {
    * Update a job
    */
   async updateJob(jobId: string, updates: Partial<CreateJobOptions>): Promise<ScheduledJob> {
-    if (!this.cronManager) {
+    if (!this.scheduleManager) {
       throw new Error('Scheduler not available on this platform');
     }
 
@@ -372,7 +383,7 @@ export class Scheduler {
       // Update crontab
       const ncpPath = this.getNCPExecutablePath();
       const command = `${ncpPath} _job-run ${jobId}`;
-      this.cronManager.addJob(jobId, cronExpression, command);
+      this.scheduleManager.addJob(jobId, cronExpression, command);
     }
 
     // Update job in storage
@@ -388,7 +399,7 @@ export class Scheduler {
    * Pause a job
    */
   pauseJob(jobId: string): void {
-    if (!this.cronManager) {
+    if (!this.scheduleManager) {
       throw new Error('Scheduler not available on this platform');
     }
 
@@ -398,7 +409,7 @@ export class Scheduler {
     }
 
     // Remove from crontab
-    this.cronManager.removeJob(jobId);
+    this.scheduleManager.removeJob(jobId);
 
     // Update status
     this.jobManager.updateJob(jobId, { status: 'paused' });
@@ -410,7 +421,7 @@ export class Scheduler {
    * Resume a paused job
    */
   resumeJob(jobId: string): void {
-    if (!this.cronManager) {
+    if (!this.scheduleManager) {
       throw new Error('Scheduler not available on this platform');
     }
 
@@ -426,7 +437,7 @@ export class Scheduler {
     // Add back to crontab
     const ncpPath = this.getNCPExecutablePath();
     const command = `${ncpPath} _job-run ${jobId}`;
-    this.cronManager.addJob(jobId, job.cronExpression, command);
+    this.scheduleManager.addJob(jobId, job.cronExpression, command);
 
     // Update status
     this.jobManager.updateJob(jobId, { status: 'active' });
@@ -438,7 +449,7 @@ export class Scheduler {
    * Delete a job
    */
   deleteJob(jobId: string): void {
-    if (!this.cronManager) {
+    if (!this.scheduleManager) {
       throw new Error('Scheduler not available on this platform');
     }
 
@@ -448,7 +459,7 @@ export class Scheduler {
     }
 
     // Remove from crontab
-    this.cronManager.removeJob(jobId);
+    this.scheduleManager.removeJob(jobId);
 
     // Delete from storage
     this.jobManager.deleteJob(jobId);
@@ -500,7 +511,7 @@ export class Scheduler {
    * Sync jobs with crontab (repair/reconcile)
    */
   syncWithCrontab(): { added: number; removed: number; errors: string[] } {
-    if (!this.cronManager) {
+    if (!this.scheduleManager) {
       throw new Error('Scheduler not available on this platform');
     }
 
@@ -512,7 +523,7 @@ export class Scheduler {
     const activeJobs = this.jobManager.getJobsByStatus('active');
 
     // Get all jobs from crontab
-    const cronJobs = this.cronManager.getJobs();
+    const cronJobs = this.scheduleManager.getJobs();
     const cronJobIds = new Set(cronJobs.map(j => j.id));
 
     // Add missing jobs to crontab
@@ -521,7 +532,7 @@ export class Scheduler {
         try {
           const ncpPath = this.getNCPExecutablePath();
           const command = `${ncpPath} _job-run ${job.id}`;
-          this.cronManager.addJob(job.id, job.cronExpression, command);
+          this.scheduleManager.addJob(job.id, job.cronExpression, command);
           added++;
           logger.info(`[Scheduler] Added missing job to crontab: ${job.name}`);
         } catch (error) {
@@ -535,7 +546,7 @@ export class Scheduler {
     for (const cronJob of cronJobs) {
       if (!activeJobIds.has(cronJob.id)) {
         try {
-          this.cronManager.removeJob(cronJob.id);
+          this.scheduleManager.removeJob(cronJob.id);
           removed++;
           logger.info(`[Scheduler] Removed orphaned job from crontab: ${cronJob.id}`);
         } catch (error) {

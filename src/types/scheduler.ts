@@ -25,6 +25,7 @@ export interface ScheduledJob {
   createdAt: string; // ISO date string
   status: 'active' | 'paused' | 'completed' | 'error';
   errorMessage?: string;
+  workingDirectory?: string; // Working directory when job was created
 
   // Statistics
   executionCount: number;
