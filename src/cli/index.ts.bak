@@ -26,7 +26,6 @@ import { ConfigSchemaReader } from '../services/config-schema-reader.js';
 import { ConfigPrompter } from '../services/config-prompter.js';
 import { SchemaCache } from '../cache/schema-cache.js';
 import { getCacheDirectory } from '../utils/ncp-paths.js';
-import { setNCPTitle, updateNCPProgress } from '../utils/terminal-title.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -470,11 +469,10 @@ program.version(version, '-v, --version', 'output the current version');
 program
   .name('ncp')
   .description(`
-${chalk.bold.white('Natural Context Provider (NCP)')} ${chalk.dim('v' + version)} - ${chalk.cyan('1 MCP to rule them all')}
-
-${chalk.dim('Your MCPs, supercharged.')}
-${chalk.dim('Find any tool instantly, load on demand, run on schedule, ready for any client.')}
-${chalk.dim('Smart loading saves tokens and energy.')}`)
+${chalk.bold.white('Natural Context Provider')} ${chalk.dim('v' + version)} - ${chalk.cyan('1 MCP to rule them all')}
+${chalk.dim('Orchestrates multiple MCP servers through a unified interface for AI assistants.')}
+${chalk.dim('Reduces cognitive load and clutter, saving tokens and speeding up AI interactions.')}
+${chalk.dim('Enables smart tool discovery across all configured servers with vector similarity search.')}`)
   .option('--profile <name>', 'Profile to use (default: all)')
   .option('--working-dir <path>', 'Working directory for profile resolution (overrides current directory)')
   .option('--debug', 'Enable verbose debug logging (shows full requests/responses, timing info)')
@@ -888,9 +886,6 @@ program
   .option('--token <value>', 'Bearer token for HTTP MCPs (skips interactive prompt)')
   .option('-y, --yes', 'Auto-run setup commands without prompting')
   .action(async (providerName, command, args, options) => {
-    // Set branded terminal title with MCP being added
-    setNCPTitle('Add', providerName.includes('|') ? 'multiple MCPs' : providerName);
-
     // Smart detection: Check if this is pipe-delimited bulk add
     if (providerName.includes('|') && !command) {
       // Bulk add mode: split by pipe and add each MCP
@@ -1049,9 +1044,6 @@ program
   .option('--sort <field>', 'Sort by: name, tools, profiles (default: name)', 'name')
   .option('--non-empty', 'Show only profiles with configured MCPs')
   .action(async (filter, options) => {
-    // Set branded terminal title
-    setNCPTitle('List', options.profile || 'all profiles');
-
     const limit = parseInt(options.limit || '20');
     const page = parseInt(options.page || '1');
     const depth = parseInt(options.depth || '2');
@@ -1336,9 +1328,6 @@ program
   .description('Remove an MCP server from profiles')
   .option('--profile <names...>', 'Profile(s) to remove from (can specify multiple, default: all)')
   .action(async (name, options) => {
-    // Set branded terminal title
-    setNCPTitle('Remove', name);
-
     console.log(chalk.blue(`🗑️  Removing MCP server: ${chalk.bold(name)}`));
 
     const manager = new ProfileManager();
@@ -1452,8 +1441,6 @@ const configCmd = program
     }
   })
   .action(async (key, value, options) => {
-    setNCPTitle('Config', key || 'interactive');
-
     const { ConfigurationManager } = await import('./commands/config-interactive.js');
     const configManager = new ConfigurationManager();
 
@@ -1480,7 +1467,6 @@ profileCmd
   .command('edit')
   .description('Open config directory in default editor')
   .action(async () => {
-    setNCPTitle('Profile', 'edit');
     const manager = new ConfigManager();
     await manager.editConfig();
   });
@@ -1489,7 +1475,6 @@ profileCmd
   .command('validate')
   .description('Validate current configuration')
   .action(async () => {
-    setNCPTitle('Profile', 'validate');
     const manager = new ConfigManager();
     await manager.validateConfig();
   });
@@ -1498,7 +1483,6 @@ profileCmd
   .command('location')
   .description('Show configuration file locations')
   .action(async () => {
-    setNCPTitle('Profile', 'location');
     const manager = new ConfigManager();
     await manager.showConfigLocations();
   });
@@ -1711,9 +1695,6 @@ program
   .option('--depth <number>', 'Display depth: 0=overview, 1=tools, 2=details (default: 2)')
   .option('--confidence_threshold <number>', 'Minimum confidence level (0.0-1.0, default: 0.3). Examples: 0.1=show all, 0.5=strict, 0.7=very precise')
   .action(async (query, options) => {
-    // Set branded terminal title with search context
-    setNCPTitle('Find', query || 'all tools');
-
     // Add newline after command before any output
     console.log();
 
@@ -1811,9 +1792,6 @@ analyticsCmd
   .option('--today', 'Show only today\'s data')
   .option('--visual', 'Enhanced visual dashboard with charts and graphs')
   .action(async (options) => {
-    // Set branded terminal title
-    setNCPTitle('Analytics', 'overview');
-
     const { NCPLogParser } = await import('../analytics/log-parser.js');
 
     console.log(chalk.dim('📊 Analyzing NCP usage data...'));
@@ -1996,9 +1974,6 @@ program
     }
   })
   .action(async (tool, options) => {
-    // Set branded terminal title with tool name
-    setNCPTitle('Run', tool);
-
     // ⚠️ CRITICAL: Default MUST be 'all' - DO NOT CHANGE!
     const profileName = program.getOptionValue('profile') || 'all';
 
@@ -2275,9 +2250,6 @@ program
     }
   })
   .action(async (mcpName, options) => {
-    // Set branded terminal title
-    setNCPTitle('Update', mcpName || 'NCP');
-
     try {
       // If no MCP name provided, update NCP itself
       if (!mcpName) {
@@ -2823,10 +2795,6 @@ program
   .option('--profile <name>', 'Profile to check (default: all)')
   .action(async (mcpName, options) => {
     try {
-      // Set branded terminal title
-      const targetProfile = options.profile || 'all';
-      setNCPTitle('Doctor', targetProfile);
-
       const { spinner } = await import('../utils/progress-spinner.js');
       console.log(chalk.bold.white('\n🩺 NCP Doctor - System Diagnostics & Repair\n'));
 
@@ -2888,34 +2856,36 @@ program
       }
 
       // 4. Check MCP health
-      // Default to 'all' profile (universal profile containing all MCPs)
-      // This is the source of truth - fix once here, copy to other profiles as needed
-      spinner.updateMessage(`Checking MCP servers in "${targetProfile}" profile...`);
+      spinner.updateMessage('Checking MCP servers...');
 
-      const profileMCPs = await manager.getProfileMCPs(targetProfile);
-      if (!profileMCPs || Object.keys(profileMCPs).length === 0) {
-        spinner.stop();
-        console.log(chalk.dim(`   ℹ️  No MCPs configured in "${targetProfile}" profile`));
+      const profiles = manager.listProfiles();
+      if (profiles.length === 0) {
+        console.log(chalk.dim('   ℹ️  No MCPs configured yet'));
       } else {
         const { healthMonitor } = await import('../utils/health-monitor.js');
 
-        // Collect MCPs to check from the target profile
+        // Collect all MCPs to check
         const mcpsToCheck: Array<{name: string; command: string; args?: string[]; env?: Record<string, string>}> = [];
 
-        for (const [name, config] of Object.entries(profileMCPs)) {
-          // If specific MCP requested, only check that one
-          if (mcpName && name !== mcpName) continue;
+        for (const profileName of profiles) {
+          const profileMCPs = await manager.getProfileMCPs(profileName);
+          if (profileMCPs) {
+            for (const [name, config] of Object.entries(profileMCPs)) {
+              // If specific MCP requested, only check that one
+              if (mcpName && name !== mcpName) continue;
 
-          // Skip HTTP MCPs for now (they need different health check)
-          if (config.url) continue;
+              // Skip HTTP MCPs for now (they need different health check)
+              if (config.url) continue;
 
-          if (config.command) {
-            mcpsToCheck.push({
-              name,
-              command: config.command,
-              args: config.args,
-              env: config.env
-            });
+              if (config.command) {
+                mcpsToCheck.push({
+                  name,
+                  command: config.command,
+                  args: config.args,
+                  env: config.env
+                });
+              }
+            }
           }
         }
 
@@ -2959,11 +2929,10 @@ program
 
         // Show summary
         spinner.stop();
-        console.log(chalk.green(`✅ System check complete\n`));
+        console.log(chalk.green(`\n✅ System check complete\n`));
 
         // Show statistics
         console.log(chalk.cyan('📊 Summary:'));
-        console.log(chalk.dim(`   • Profile: ${targetProfile}`));
         console.log(chalk.dim(`   • ${healthyCount} healthy MCPs`));
         if (mcpFailures.length > 0) {
           console.log(chalk.red(`   • ${mcpFailures.length} failed MCPs`));
@@ -3003,13 +2972,9 @@ program
             console.log(chalk.dim(`   • ${issue}`));
           }
         }
-
-        // Show helpful tip about the "all" profile
-        if (targetProfile === 'all' && (mcpFailures.length > 0 || mcpDisabled.length > 0)) {
-          console.log(chalk.cyan('\n💡 Tip:'));
-          console.log(chalk.dim('   The "all" profile is your source of truth - fix MCPs here once,'));
-          console.log(chalk.dim('   then copy working configurations to other profiles as needed.'));
-        }
+      } else {
+        spinner.stop();
+        console.log(chalk.dim('\nℹ️  No MCPs configured yet'));
       }
 
       // Exit with error code if there are issues
@@ -3020,5 +2985,367 @@ program
       process.exit(1);
     }
   });
+      let mcpSkippedCount = 0;
+      let mcpStillFailingCount = 0;
+      const { getCacheDirectory } = await import('../utils/ncp-paths.js');
+      const { CSVCache } = await import('../cache/csv-cache.js');
+      const { MCPErrorParser } = await import('../utils/mcp-error-parser.js');
+      const { MCPWrapper } = await import('../utils/mcp-wrapper.js');
+      const { healthMonitor } = await import('../utils/health-monitor.js');
+      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+      const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+      const prompts = (await import('prompts')).default;
+
+      const cache = new CSVCache(getCacheDirectory(), profileName);
+      await cache.initialize();
+
+      const profile = await manager.getProfile(profileName);
+
+      if (!profile) {
+        console.log(chalk.yellow(`   ⚠️  Profile '${profileName}' not found, skipping repair`));
+      } else {
+        // Merge failed MCPs from both sources
+        const failedMCPs = new Map<string, {
+          errorMessage: string;
+          attemptCount: number;
+          source: 'cache' | 'health' | 'both';
+          lastAttempt: string;
+        }>();
+
+        // Add from CSV cache
+        const cacheMetadata = (cache as any).metadata;
+        if (cacheMetadata?.failedMCPs) {
+          for (const [mcpName2, failedInfo] of cacheMetadata.failedMCPs) {
+            // If specific MCP requested, only include that one
+            if (mcpName && mcpName2 !== mcpName) continue;
+
+            failedMCPs.set(mcpName2, {
+              errorMessage: failedInfo.errorMessage,
+              attemptCount: failedInfo.attemptCount,
+              source: 'cache',
+              lastAttempt: failedInfo.lastAttempt
+            });
+          }
+        }
+
+        // Add from health monitor (unhealthy or disabled)
+        const healthReport = healthMonitor.generateHealthReport();
+        for (const health of healthReport.details) {
+          if (health.status === 'unhealthy' || health.status === 'disabled') {
+            // If specific MCP requested, only include that one
+            if (mcpName && health.name !== mcpName) continue;
+
+            // Only include if it's in the current profile
+            if (profile.mcpServers[health.name]) {
+              const existing = failedMCPs.get(health.name);
+              if (existing) {
+                // Already in cache, mark as both
+                existing.source = 'both';
+              } else {
+                // Only in health monitor
+                failedMCPs.set(health.name, {
+                  errorMessage: health.lastError || 'Unknown error',
+                  attemptCount: health.errorCount,
+                  source: 'health',
+                  lastAttempt: health.lastCheck
+                });
+              }
+            }
+          }
+        }
+
+        if (failedMCPs.size === 0) {
+          console.log(chalk.green('   ✅ No failed MCPs detected'));
+        } else {
+          console.log(chalk.yellow(`   Found ${failedMCPs.size} failed MCP(s)\n`));
+
+          const errorParser = new MCPErrorParser();
+          const mcpWrapper = new MCPWrapper();
+
+          // Iterate through failed MCPs
+          for (const [mcpName2, failedInfo] of failedMCPs) {
+            console.log(chalk.cyan(`\n   📦 ${mcpName2}`));
+            console.log(chalk.dim(`      Last error: ${failedInfo.errorMessage}`));
+            console.log(chalk.dim(`      Failed ${failedInfo.attemptCount} time(s)`));
+
+            // Show source of failure detection
+            const sourceLabel = failedInfo.source === 'both'
+              ? 'indexing & runtime'
+              : failedInfo.source === 'cache'
+                ? 'indexing'
+                : 'runtime';
+            console.log(chalk.dim(`      Detected during: ${sourceLabel}`));
+
+            // Ask if user wants to fix this MCP (unless --fix flag)
+            let shouldFix = options.fix;
+            if (!options.fix) {
+              const response = await prompts({
+                type: 'confirm',
+                name: 'shouldFix',
+                message: `   Try to fix ${mcpName2}?`,
+                initial: true
+              });
+              shouldFix = response.shouldFix;
+            }
+
+            if (!shouldFix) {
+              mcpSkippedCount++;
+              continue;
+            }
+
+            // Get current MCP config first (needed for all tiers)
+            const currentConfig = profile.mcpServers[mcpName2];
+            if (!currentConfig) {
+              console.log(chalk.red(`      ❌ MCP not found in profile`));
+              mcpSkippedCount++;
+              continue;
+            }
+
+            // Skip HTTP/SSE MCPs (they don't have command/args to repair)
+            if (currentConfig.url && !currentConfig.command) {
+              console.log(chalk.yellow(`      ⚠️  Skipping HTTP/SSE MCP (remote connector)`));
+              mcpSkippedCount++;
+              continue;
+            }
+
+            // Get log file for error parsing
+            const logPath = mcpWrapper.getLogFile(mcpName2);
+            let stderr = '';
+
+            if (existsSync(logPath)) {
+              const logContent = readFileSync(logPath, 'utf-8');
+              // Extract stderr lines
+              const stderrLines = logContent.split('\n').filter(line => line.includes('[STDERR]'));
+              stderr = stderrLines.map(line => line.replace(/\[STDERR\]\s*/, '')).join('\n');
+            } else {
+              stderr = failedInfo.errorMessage;
+            }
+
+            // Parse errors to detect configuration needs
+            const configNeeds = errorParser.parseError(mcpName2, stderr, 1);
+
+            if (configNeeds.length === 0) {
+              console.log(chalk.yellow(`      ⚠️  Could not detect specific configuration needs`));
+              console.log(chalk.dim(`      Check logs manually: ${logPath}`));
+              mcpSkippedCount++;
+              continue;
+            }
+
+            // Check if it's a missing package
+            const packageMissing = configNeeds.find(n => n.type === 'package_missing');
+            if (packageMissing) {
+              console.log(chalk.red(`      ❌ Package not found on npm - cannot fix`));
+              console.log(chalk.dim(`         ${packageMissing.extractedFrom}`));
+              mcpSkippedCount++;
+              continue;
+            }
+
+            console.log(chalk.yellow(`\n      Found ${configNeeds.length} configuration need(s):`));
+            for (const need of configNeeds) {
+              console.log(chalk.dim(`      • ${need.description}`));
+            }
+
+            // Check if we can auto-fix with --fix flag
+            if (options.fix) {
+              console.log(chalk.yellow(`      ⚠️  Cannot auto-fix: requires user input for credentials`));
+              mcpSkippedCount++;
+              continue;
+            }
+
+            // Collect new configuration from user (interactive mode)
+            const newEnv = { ...(currentConfig.env || {}) };
+            const newArgs = [...(currentConfig.args || [])];
+            let userCancelled = false;
+
+            for (const need of configNeeds) {
+              if (need.type === 'api_key' || need.type === 'env_var') {
+                const response = await prompts({
+                  type: need.sensitive ? 'password' : 'text',
+                  name: 'value',
+                  message: `      ${need.prompt}`,
+                  validate: (val: string) => val.length > 0 ? true : 'Value required'
+                });
+
+                if (!response.value) {
+                  console.log(chalk.yellow(`      Skipped ${mcpName2}`));
+                  userCancelled = true;
+                  break;
+                }
+
+                newEnv[need.variable] = response.value;
+              } else if (need.type === 'command_arg') {
+                const response = await prompts({
+                  type: 'text',
+                  name: 'value',
+                  message: `      ${need.prompt}`,
+                  validate: (val: string) => val.length > 0 ? true : 'Value required'
+                });
+
+                if (!response.value) {
+                  console.log(chalk.yellow(`      Skipped ${mcpName2}`));
+                  userCancelled = true;
+                  break;
+                }
+
+                newArgs.push(response.value);
+              }
+            }
+
+            // If user cancelled, skip this MCP
+            if (userCancelled) {
+              mcpSkippedCount++;
+              continue;
+            }
+
+            // Test MCP with new configuration
+            console.log(chalk.dim(`\n      Testing ${mcpName2} with new configuration...`));
+
+            const testConfig = {
+              name: mcpName2,
+              command: currentConfig.command,
+              args: newArgs,
+              env: newEnv
+            };
+
+            try {
+              // Create wrapper command
+              const wrappedCommand = mcpWrapper.createWrapper(
+                testConfig.name,
+                testConfig.command || '',
+                testConfig.args || []
+              );
+
+              // Test connection with 30 second timeout
+              const transport = new StdioClientTransport({
+                command: wrappedCommand.command,
+                args: wrappedCommand.args,
+                env: {
+                  ...process.env,
+                  ...(testConfig.env || {}),
+                  MCP_SILENT: 'true',
+                  QUIET: 'true'
+                }
+              });
+
+              const client = new Client({
+                name: 'ncp-doctor-test',
+                version: version
+              }, {
+                capabilities: {}
+              });
+
+              await client.connect(transport);
+
+              // Try to list tools
+              const result = await Promise.race([
+                client.listTools(),
+                new Promise<never>((_, reject) =>
+                  setTimeout(() => reject(new Error('Test timeout')), 30000)
+                )
+              ]);
+
+              await client.close();
+
+              console.log(chalk.green(`      ✅ Success! Found ${result.tools.length} tools`));
+
+              // Update profile with new configuration
+              profile.mcpServers[mcpName2] = {
+                command: testConfig.command,
+                args: newArgs,
+                env: newEnv
+              };
+              profile.metadata.modified = new Date().toISOString();
+
+              await manager.saveProfile(profile);
+
+              // Remove from both failure tracking systems
+              if (cacheMetadata?.failedMCPs) {
+                cacheMetadata.failedMCPs.delete(mcpName2);
+                (cache as any).saveMetadata();
+              }
+
+              // Clear from health monitor and mark as healthy
+              await healthMonitor.enableMCP(mcpName2);
+              healthMonitor.markHealthy(mcpName2);
+              await healthMonitor.saveHealth();
+
+              mcpFixedCount++;
+            } catch (error: any) {
+              console.log(chalk.red(`      ❌ Still failing: ${error.message}`));
+              mcpStillFailingCount++;
+            }
+          }
+        }
+      }
+
+      // ========================================
+      // PART 3: Combined Summary
+      // ========================================
+      console.log(chalk.cyan('\n6. Summary\n'));
+
+      // System diagnostics summary
+      if (systemIssuesFound === 0) {
+        console.log(chalk.green('   System: ✅ No issues detected'));
+      } else {
+        console.log(chalk.yellow(`   System: ⚠️  Found ${systemIssuesFound} issue(s)`));
+        if (systemIssuesFixed > 0) {
+          console.log(chalk.green(`          🔧 Fixed ${systemIssuesFixed} issue(s)`));
+        }
+      }
+
+      // MCP repair summary
+      if (profile) {
+        const totalMCPIssues = mcpFixedCount + mcpSkippedCount + mcpStillFailingCount;
+        if (totalMCPIssues > 0) {
+          console.log(chalk.yellow(`\n   MCPs:    Found ${totalMCPIssues} failed MCP(s)`));
+          if (mcpFixedCount > 0) {
+            console.log(chalk.green(`          ✅ Fixed: ${mcpFixedCount}`));
+          }
+          if (mcpSkippedCount > 0) {
+            console.log(chalk.yellow(`          ⏭️  Skipped: ${mcpSkippedCount}`));
+          }
+          if (mcpStillFailingCount > 0) {
+            console.log(chalk.red(`          ❌ Still failing: ${mcpStillFailingCount}`));
+          }
+
+          if (mcpFixedCount > 0) {
+            console.log(chalk.dim('\n   💡 Tip: Restart your AI client to use the fixed MCPs'));
+          }
+        } else {
+          console.log(chalk.green('   MCPs:  ✅ All working correctly'));
+        }
+      }
+
+      if (!options.fix && (systemIssuesFound > 0 || (profile && (mcpSkippedCount > 0 || mcpStillFailingCount > 0)))) {
+        console.log(chalk.dim('\n   💡 Run with --fix to attempt automatic repairs'));
+      }
+
+      console.log();
+
+      const totalIssues = systemIssuesFound + (profile ? (mcpStillFailingCount) : 0);
+      process.exit(totalIssues > 0 ? 1 : 0);
+    } catch (error) {
+      console.error(`❌ Diagnostics failed: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+
+// Check for updates on CLI startup (non-intrusive, with 5s total timeout)
+(async () => {
+  try {
+    const updateChecker = new UpdateChecker();
+
+    // Race between update check and 5-second timeout
+    await Promise.race([
+      updateChecker.showUpdateNotification(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Update check timeout')), 5000)
+      )
+    ]);
+  } catch {
+    // Silently fail - don't interrupt normal CLI usage
+  }
+})();
+
 program.parse();
 }

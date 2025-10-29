@@ -431,6 +431,9 @@ export class NCPOrchestrator {
   private async loadFromCSVCache(mcpConfigs: MCPConfig[]): Promise<number> {
     const cachedTools = this.csvCache.loadCachedTools();
 
+    // Load tool metadata (including schemas) from cache
+    const metadataCache = await this.cachePatcher.loadToolMetadataCache();
+
     // Group tools by MCP
     const toolsByMCP = new Map<string, CachedTool[]>();
     for (const tool of cachedTools) {
@@ -449,16 +452,23 @@ export class NCPOrchestrator {
 
       loadedMCPCount++;
 
-      // Create definition
+      // Get MCP metadata for schemas
+      const mcpMetadata = metadataCache.mcps[config.name];
+
+      // Create definition with schemas from metadata cache
       this.definitions.set(config.name, {
         name: config.name,
         config,
-        tools: mcpTools.map(t => ({
-          name: t.toolName,
-          description: t.description,
-          inputSchema: {}
-        })),
-        serverInfo: undefined
+        tools: mcpTools.map(t => {
+          // Find schema in metadata cache
+          const toolMetadata = mcpMetadata?.tools?.find(mt => mt.name === t.toolName);
+          return {
+            name: t.toolName,
+            description: t.description,
+            inputSchema: toolMetadata?.inputSchema  // Use schema from metadata cache
+          };
+        }),
+        serverInfo: mcpMetadata?.serverInfo
       });
 
       // Add to all tools and create mappings
@@ -523,13 +533,13 @@ export class NCPOrchestrator {
           }
         }
 
-        // Store definition with schema fallback applied
+        // Store definition - preserve actual schemas
         this.definitions.set(config.name, {
           name: config.name,
           config,
           tools: result.tools.map(tool => ({
             ...tool,
-            inputSchema: tool.inputSchema || {}
+            inputSchema: tool.inputSchema  // Preserve as-is, don't default to {}
           })),
           serverInfo: result.serverInfo
         });
@@ -864,10 +874,11 @@ export class NCPOrchestrator {
       const response = await withFilteredOutput(async () => {
         return await client!.listTools();
       });
+
       const tools = response.tools.map(t => ({
         name: t.name,
         description: t.description || '',
-        inputSchema: t.inputSchema || {}
+        inputSchema: t.inputSchema  // Preserve schema as-is
       }));
 
       // Disconnect immediately
@@ -1456,20 +1467,25 @@ export class NCPOrchestrator {
   }
 
   private getToolSchema(mcpName: string, toolName: string): any {
-    const connection = this.connections.get(mcpName);
-    if (!connection) {
-      // No persistent connection, try to get schema from definitions
-      const definition = this.definitions.get(mcpName);
-      if (!definition) return undefined;
-
+    // First, try to get schema from definitions (most reliable source)
+    const definition = this.definitions.get(mcpName);
+    if (definition) {
       const tool = definition.tools.find(t => t.name === toolName);
-      return tool ? (tool as any).inputSchema : undefined;
+      if (tool && (tool as any).inputSchema) {
+        return (tool as any).inputSchema;
+      }
     }
 
-    const tool = connection.tools.find(t => t.name === toolName);
-    if (!tool) return undefined;
+    // Fallback to connection if available
+    const connection = this.connections.get(mcpName);
+    if (connection?.tools) {
+      const tool = connection.tools.find(t => t.name === toolName);
+      if (tool && (tool as any).inputSchema) {
+        return (tool as any).inputSchema;
+      }
+    }
 
-    return (tool as any).inputSchema;
+    return undefined;
   }
 
   /**

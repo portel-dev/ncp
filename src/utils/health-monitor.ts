@@ -48,6 +48,58 @@ export class MCPHealthMonitor {
   }
 
   /**
+   * Extract meaningful error message from stderr output
+   * Finds the actual error message line, ignoring stack traces and Node.js internals
+   */
+  private extractErrorMessage(stderr: string): string {
+    if (!stderr || stderr.trim() === '') return 'Process failed with no error output';
+
+    const lines = stderr.split('\n');
+    let errorMessage = '';
+
+    // Look for lines that contain actual error messages
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Skip noise lines
+      if (trimmed.match(/^at /) ||                           // Stack trace
+          trimmed.match(/^at async /) ||
+          trimmed.includes('node:internal/') ||
+          trimmed.includes('node_modules/') ||
+          trimmed.match(/^node:[a-z_]+:\d+$/) ||              // node:events:486
+          trimmed.match(/^throw er;/) ||                      // throw er; // Unhandled...
+          trimmed.match(/^Emitted ['"]error['"] event/) ||    // Emitted 'error' event...
+          trimmed.match(/^(code|errno|syscall|address|port|requireStack):\s*/) ||  // Error object properties
+          trimmed === '}' ||
+          trimmed === '{' ||
+          trimmed.match(/^Node\.js v[\d.]+$/)) {
+        continue;
+      }
+
+      // Found a meaningful line - could be the error message
+      // Extract from "Error: message" format
+      if (trimmed.startsWith('Error: ')) {
+        errorMessage = trimmed.substring(7);
+        break;
+      }
+
+      // Or plain message (like "DATADOG_API_KEY must be set")
+      if (!trimmed.match(/^throw new Error\(/) && trimmed.length > 0) {
+        errorMessage = trimmed;
+        // Keep looking in case there's a better Error: line later
+      }
+    }
+
+    // Limit length
+    if (errorMessage.length > 300) {
+      errorMessage = errorMessage.substring(0, 300) + '...';
+    }
+
+    return errorMessage || 'Process failed to start';
+  }
+
+  /**
    * Ensure the health directory exists
    */
   private async ensureHealthDirectory(): Promise<void> {
@@ -158,7 +210,8 @@ export class MCPHealthMonitor {
           clearTimeout(timeout);
           if (healthyTimeout) clearTimeout(healthyTimeout);
           if (code !== 0 && code !== null) {
-            reject(new Error(`Process exited with code ${code}: ${stderr}`));
+            const errorMessage = this.extractErrorMessage(stderr);
+            reject(new Error(`Process exited with code ${code}: ${errorMessage}`));
           } else if (code === 0) {
             // Process exited cleanly, consider it healthy
             resolve();
@@ -175,6 +228,7 @@ export class MCPHealthMonitor {
       // MCP failed to start
       health.status = 'unhealthy';
       health.errorCount++;
+      // Error message is already clean from extractErrorMessage()
       health.lastError = error.message;
       
       // Auto-disable after too many failures

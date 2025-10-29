@@ -386,7 +386,7 @@ crontab -l | grep NCP
 
 # You should see entries like:
 # NCP_JOB: job-id-123
-# 0 9 * * * ncp execute-scheduled job-id-123
+# 0 9 * * * ncp _job-run job-id-123
 ```
 
 **Check execution history:**
@@ -402,7 +402,7 @@ ncp schedule executions --job-id "Job Name"
 ncp schedule get "Job Name"
 
 # Execute manually
-ncp execute-scheduled <job-id>
+ncp _job-run <job-id>
 
 # Check for errors
 ```
@@ -497,7 +497,7 @@ crontab -l
 # Shows:
 # === NCP SCHEDULED JOBS - DO NOT EDIT MANUALLY ===
 # NCP_JOB: job-id-123
-# 0 9 * * * ncp execute-scheduled job-id-123
+# 0 9 * * * ncp _job-run job-id-123
 # === END NCP SCHEDULED JOBS ===
 ```
 

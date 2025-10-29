@@ -1,18 +1,19 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-16/server.schema.json",
   "name": "io.github.portel-dev/ncp",
-  "description": "Your MCP Concierge - Complete platform for discovering, managing, and accessing MCPs. Auto-imports, intelligent discovery, and 2-tool simplification with 97% token reduction.",
+  "description": "Natural Context Provider (NCP) - 1 MCP to rule them all. Your MCPs, supercharged. Find any tool instantly, load on demand, run on schedule, ready for any client. Smart loading saves tokens and energy.",
+  "icon": "icon.svg",
   "repository": {
     "url": "https://github.com/portel-dev/ncp",
     "source": "github"
   },
-  "version": "1.6.0",
+  "version": "1.7.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@portel/ncp",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

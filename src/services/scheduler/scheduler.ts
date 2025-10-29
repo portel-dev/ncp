@@ -255,7 +255,7 @@ export class Scheduler {
 
     // Add to crontab
     const ncpPath = this.getNCPExecutablePath();
-    const command = `${ncpPath} execute-scheduled ${jobId}`;
+    const command = `${ncpPath} _job-run ${jobId}`;
     this.cronManager.addJob(jobId, cronExpression, command);
 
     // Set up automatic cleanup (only runs once, is idempotent)
@@ -371,7 +371,7 @@ export class Scheduler {
 
       // Update crontab
       const ncpPath = this.getNCPExecutablePath();
-      const command = `${ncpPath} execute-scheduled ${jobId}`;
+      const command = `${ncpPath} _job-run ${jobId}`;
       this.cronManager.addJob(jobId, cronExpression, command);
     }
 
@@ -425,7 +425,7 @@ export class Scheduler {
 
     // Add back to crontab
     const ncpPath = this.getNCPExecutablePath();
-    const command = `${ncpPath} execute-scheduled ${jobId}`;
+    const command = `${ncpPath} _job-run ${jobId}`;
     this.cronManager.addJob(jobId, job.cronExpression, command);
 
     // Update status
@@ -520,7 +520,7 @@ export class Scheduler {
       if (!cronJobIds.has(job.id)) {
         try {
           const ncpPath = this.getNCPExecutablePath();
-          const command = `${ncpPath} execute-scheduled ${job.id}`;
+          const command = `${ncpPath} _job-run ${job.id}`;
           this.cronManager.addJob(job.id, job.cronExpression, command);
           added++;
           logger.info(`[Scheduler] Added missing job to crontab: ${job.name}`);

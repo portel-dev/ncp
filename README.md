@@ -9,6 +9,10 @@
 
 # NCP - Natural Context Provider
 
+> **1 MCP to rule them all**
+
+Your MCPs, supercharged. Find any tool instantly, load on demand, run on schedule, ready for any client. Smart loading saves tokens and energy.
+
 ## 💍 **What is NCP?**
 
 Instead of your AI juggling 50+ tools scattered across different MCPs, NCP gives it a single, unified interface.

@@ -217,7 +217,7 @@ crontab -l | grep NCP
 ```
 # === NCP SCHEDULED JOBS - DO NOT EDIT MANUALLY ===
 # NCP_JOB: <job-id>
-42 14 20 1 * ncp execute-scheduled <job-id>
+42 14 20 1 * ncp _job-run <job-id>
 # === END NCP SCHEDULED JOBS ===
 ```
 
@@ -347,7 +347,7 @@ done
 # Generate some executions (run jobs manually)
 for i in {1..5}; do
   JOB_ID=$(ncp schedule list | grep "Test Job $i" | awk '{print $4}')
-  ncp execute-scheduled $JOB_ID
+  ncp _job-run $JOB_ID
 done
 
 # Run cleanup

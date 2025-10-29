@@ -1,0 +1,14 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="256" height="256" rx="32" fill="#2563eb"/>
+
+  <!-- NCP Text -->
+  <text
+    x="128"
+    y="160"
+    font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    font-size="84"
+    font-weight="700"
+    fill="#ffffff"
+    text-anchor="middle">NCP</text>
+</svg>

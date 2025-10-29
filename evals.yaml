@@ -1,0 +1,25 @@
+# NCP MCP Server Evaluations
+model:
+  provider: anthropic
+  name: claude-3-5-sonnet-20241022  # Using Claude with Max account
+
+evals:
+  - name: find_tool_basic
+    description: Test basic tool discovery functionality
+    prompt: "Find tools related to file operations"
+    expected_result: "Should return relevant tools for file operations from configured MCPs"
+
+  - name: list_mcps
+    description: Test listing configured MCPs
+    prompt: "List all configured MCP servers"
+    expected_result: "Should return a list of all configured MCP servers with their details"
+
+  - name: analytics_overview
+    description: Test analytics functionality
+    prompt: "Show me NCP usage analytics overview"
+    expected_result: "Should return analytics data including session counts and MCP usage statistics"
+
+  - name: run_tool_query
+    description: Test running a tool with parameters
+    prompt: "Use the find tool to search for 'browser' related tools"
+    expected_result: "Should successfully execute the find tool and return browser-related tools"

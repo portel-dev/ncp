@@ -1,8 +1,8 @@
 {
   "name": "@portel/ncp",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "mcpName": "io.github.portel-dev/ncp",
-  "description": "Natural Context Provider. 1 MCP to rule them all - Your MCP Concierge. Complete platform for discovering, managing, and accessing MCPs. Simplifies 50+ tools into 2, auto-syncs with Claude Desktop, saves 97% tokens.",
+  "description": "Natural Context Provider (NCP) - 1 MCP to rule them all. Your MCPs, supercharged. Find any tool instantly, load on demand, run on schedule, ready for any client. Smart loading saves tokens and energy.",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "exports": {
@@ -76,6 +76,7 @@
     "LICENSE",
     "README.md",
     "server.json",
+    "assets",
     "package.json"
   ],
   "files:comments": "Explicit list of files to include in the package",
@@ -124,6 +125,7 @@
     "@upstash/context7-mcp": "^1.0.17",
     "@winor30/mcp-server-datadog": "^1.6.0",
     "jest": "^30.1.3",
+    "mcp-evals": "^2.0.1",
     "mcp-hello-world": "^1.1.2",
     "mcp-server": "^0.0.9",
     "mcp-server-kubernetes": "^2.9.6",
