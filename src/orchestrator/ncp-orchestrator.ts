@@ -180,6 +180,7 @@ export class NCPOrchestrator {
   private profileManager: ProfileManager | null = null;
   private internalMCPManager: InternalMCPManager;
   private backgroundInitPromise: Promise<void> | null = null;
+  private newlyIndexedMCPs: Set<string> = new Set();  // Track MCPs indexed in current run
 
   private forceRetry: boolean = false;
 
@@ -242,6 +243,9 @@ export class NCPOrchestrator {
   async initialize(): Promise<void> {
     const startTime = Date.now();
     this.indexingStartTime = startTime;
+
+    // Clear newly indexed MCPs set for this initialization run
+    this.newlyIndexedMCPs.clear();
 
     // Debug logging
     if (process.env.NCP_DEBUG === 'true') {
@@ -554,6 +558,9 @@ export class NCPOrchestrator {
           })),
           serverInfo: result.serverInfo
         });
+
+        // Track that this MCP was newly indexed in this run
+        this.newlyIndexedMCPs.add(config.name);
 
         // Add to all tools and create mappings
         const discoveryTools = [];
@@ -1450,12 +1457,19 @@ export class NCPOrchestrator {
    */
   private async saveToOptimizedCache(profile: Profile): Promise<void> {
     try {
-      logger.info('💾 Saving tools to optimized cache...');
+      // Only save MCPs that were newly indexed in this run
+      if (this.newlyIndexedMCPs.size === 0) {
+        logger.info('No new MCPs to save to cache');
+        return;
+      }
 
-      // Save all MCP definitions to tool metadata cache
-      for (const [mcpName, definition] of this.definitions.entries()) {
+      logger.info(`💾 Saving ${this.newlyIndexedMCPs.size} newly indexed MCP(s) to optimized cache...`);
+
+      // Save only newly indexed MCP definitions to tool metadata cache
+      for (const mcpName of this.newlyIndexedMCPs) {
+        const definition = this.definitions.get(mcpName);
         const mcpConfig = profile.mcpServers[mcpName];
-        if (mcpConfig) {
+        if (definition && mcpConfig) {
           await this.cachePatcher.patchAddMCP(
             mcpName,
             mcpConfig,
