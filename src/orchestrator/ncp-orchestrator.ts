@@ -397,6 +397,9 @@ export class NCPOrchestrator {
       // Finalize cache
       await this.csvCache.finalize();
 
+      // Save tool metadata (including schemas) to optimized cache
+      await this.saveToCache(profile);
+
       if (this.showProgress) {
         const successfulMCPs = this.definitions.size;
         const failedMCPs = this.csvCache.getFailedMCPsCount();
