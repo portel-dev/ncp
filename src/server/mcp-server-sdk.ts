@@ -65,6 +65,13 @@ export class MCPServerSDK implements ElicitationServer {
         };
         this.orchestrator.setClientInfo(clientInfo);
         logger.debug(`Client info captured: ${clientInfo.name} v${clientInfo.version}`);
+
+        // Trigger auto-import asynchronously (don't block initialize response)
+        if (clientInfo.name && clientInfo.name !== 'unknown') {
+          this.orchestrator.triggerAutoImport(clientInfo.name).catch(error => {
+            logger.error(`Auto-import failed for ${clientInfo.name}: ${error.message}`);
+          });
+        }
       }
     };
 
