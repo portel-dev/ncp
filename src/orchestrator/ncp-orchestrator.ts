@@ -494,7 +494,9 @@ export class NCPOrchestrator {
           mcpName: config.name
         };
         this.allTools.push(tool);
-        this.toolToMCP.set(cachedTool.toolId, config.name);
+        // Map both formats for backward compatibility
+        this.toolToMCP.set(cachedTool.toolName, config.name);  // Unprefixed: "mail" -> "apple-mcp"
+        this.toolToMCP.set(cachedTool.toolId, config.name);     // Prefixed: "apple-mcp:mail" -> "apple-mcp"
       }
 
       // Index tools in discovery engine
