@@ -1,3 +1,74 @@
+## PRE-COMMIT CHECKLIST - MANDATORY FOR ALL CHANGES
+
+Before committing ANY changes to server code, verify ALL of these:
+
+- [ ] If I changed `src/server/mcp-server.ts`, did I make the same change to `src/server/mcp-server-sdk.ts`?
+- [ ] If I changed `src/server/mcp-server-sdk.ts`, did I make the same change to `src/server/mcp-server.ts`?
+- [ ] Did I run BOTH test suites? (`npm run test:integration` AND `npm run test:integration:dxt`)
+- [ ] Did both integration tests pass?
+- [ ] Did I run the comprehensive DXT test? (`npm run build && node tests/integration/comprehensive-dxt-test.cjs`)
+- [ ] Did all 5 comprehensive tests pass?
+- [ ] If I added a feature, did I add tests for it in BOTH test files?
+- [ ] If I'm touching `src/index-mcp.ts`, did I verify `await server.run()` is present?
+- [ ] If I'm adding MCP protocol handlers, did I test with `notifications/initialized`?
+- [ ] Did I search for the feature name in BOTH server files to check for divergence?
+
+**If ANY checkbox is unchecked, DO NOT COMMIT. Fix the issue first.**
+
+## CRITICAL: Dual Server Architecture - MUST MAINTAIN PARITY
+
+**We have TWO server implementations that MUST stay in sync:**
+
+### Server Implementations
+- `src/server/mcp-server.ts` (MCPServer) - Used by CLI entry point (dist/index.js)
+- `src/server/mcp-server-sdk.ts` (MCPServerSDK) - Used by DXT entry point (dist/index-mcp.js)
+
+### MANDATORY Rules for ANY Server Changes
+
+1. **ALWAYS update BOTH server implementations** when adding features:
+   - If you add auto-import to MCPServer, add it to MCPServerSDK
+   - If you add a tool to MCPServer, add it to MCPServerSDK
+   - If you fix a bug in MCPServer, check if MCPServerSDK has the same bug
+   - **NO EXCEPTIONS** - feature parity is mandatory
+
+2. **ALWAYS run BOTH test suites** after changes:
+   ```bash
+   npm run test:integration       # Tests CLI entry (mcp-server.ts)
+   npm run test:integration:dxt   # Tests DXT entry (mcp-server-sdk.ts)
+   npm run build && node tests/integration/comprehensive-dxt-test.cjs
+   ```
+
+3. **Check git diff spans BOTH files** before committing:
+   ```bash
+   git diff src/server/mcp-server.ts src/server/mcp-server-sdk.ts
+   ```
+   - If only one file changed, you probably forgot to update the other
+
+4. **Search for feature in BOTH files** before implementing:
+   ```bash
+   grep -n "auto-import" src/server/mcp-server.ts src/server/mcp-server-sdk.ts
+   ```
+   - If feature exists in one but not the other, it's a bug
+
+### Why This Matters
+
+**Historical Bug Pattern**: Features get added to MCPServer but not MCPServerSDK, causing DXT to break in production:
+- Auto-import was in MCPServer (line 205) but missing from MCPServerSDK → DXT couldn't import extensions
+- Tests only ran CLI entry point → False positives, bugs shipped to production
+- User manually discovered bugs after each release → Recurring cycle
+
+### Confusing Import Pattern - BE CAREFUL
+
+```typescript
+// src/index-mcp.ts imports MCPServerSDK but RENAMES it!
+import { MCPServerSDK as MCPServer } from './server/mcp-server-sdk.js';
+```
+
+**DANGER**: This makes it LOOK like MCPServer (CLI) but it's actually MCPServerSDK (DXT)!
+- Don't assume behavior from variable name
+- Always check which file is imported
+- MCPServer and MCPServerSDK have DIFFERENT async behavior
+
 ## MCP Protocol Requirements
 
 - **NEVER block the event loop**: MCP clients (Claude Desktop, Cursor) will timeout and reject connections if protocol responses are delayed
@@ -5,6 +76,18 @@
 - **NO synchronous file operations**: Always use async file APIs (`readFile`, `writeFile`, `access`) instead of sync versions (`readFileSync`, `writeFileSync`, `existsSync`)
 - **Cache operations must be async**: Any disk I/O during initialization must not block - use `await` consistently
 - **Test with production scenarios**: If building for MCP server mode, test as MCP server, not just CLI
+- **ALWAYS await async initialization**: src/index-mcp.ts MUST await server.run() - wrap in async IIFE if needed:
+  ```typescript
+  (async () => {
+    const server = new MCPServer(profileName);
+    await server.run();  // REQUIRED - process exits without await
+  })();
+  ```
+- **Send notifications/initialized**: After initialize response, send notification to trigger oninitialized callback:
+  ```javascript
+  // After receiving initialize response
+  test.sendNotification('notifications/initialized', {});
+  ```
 
 ## Performance & Optimization
 
@@ -23,11 +106,52 @@
 
 ## Testing & Debugging
 
+### Test Coverage Requirements
+
+**CRITICAL**: Tests MUST match production environment
+
+1. **Test BOTH entry points separately**:
+   ```bash
+   npm run test:integration       # CLI entry (dist/index.js → MCPServer)
+   npm run test:integration:dxt   # DXT entry (dist/index-mcp.js → MCPServerSDK)
+   ```
+
+2. **Comprehensive DXT test** (tests/integration/comprehensive-dxt-test.cjs):
+   - ✅ Server initialization with clientInfo
+   - ✅ Auto-import detects and imports extensions
+   - ✅ Tool discovery (find) works
+   - ✅ Tool execution (run) works
+   - ✅ Multiple sequential requests without crashes
+
+3. **Use correct profile paths in tests**:
+   - DXT uses local `.ncp/` directory (process.cwd())
+   - CLI uses global `~/.ncp/` directory
+   - Tests must match the environment they're testing
+
+4. **Follow MCP protocol completely**:
+   ```javascript
+   // 1. Send initialize request
+   const id = test.sendRequest('initialize', {
+     protocolVersion: '2024-11-05',
+     clientInfo: { name: 'claude-desktop', version: '0.14.0' }
+   });
+
+   // 2. Wait for response
+   await test.waitForResponse(id);
+
+   // 3. Send initialized notification (REQUIRED to trigger oninitialized)
+   test.sendNotification('notifications/initialized', {});
+   ```
+
+### General Testing Rules
+
 - **Test all CLI commands**: When asked to test, actually run every command listed (find, run, list, etc.)
 - **Test with actual installations**: Use `npm link` and test from different directories
 - **No hardcoded fallbacks**: Fallback values hide real errors - fail fast to surface issues
 - **Verify schema display**: Tool discovery showing `[no parameters]` means schemas weren't saved
 - **Check logs**: When debugging, grep for specific operations like "Patching tool metadata" or "Saving.*MCP"
+- **Test with JSON-RPC directly**: Don't involve AI in tests - use direct JSON-RPC communication
+- **Verify auto-import**: Check that profile file is updated with new MCPs after initialization
 
 ## Code Quality
 
