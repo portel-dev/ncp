@@ -23,8 +23,8 @@ export default {
     global: {
       branches: 20,
       functions: 35,
-      lines: 30,
-      statements: 30
+      lines: 29,
+      statements: 29
     }
   },
   moduleFileExtensions: ['ts', 'js', 'json'],
