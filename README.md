@@ -64,32 +64,18 @@ You gave your AI assistant 50 tools to be more capable. Instead, you got despera
 
 ---
 
-## 🧸 **Why Too Many Toys Break the Fun**
+## 🧸 **Why Too Many Tools Break the System**
 
-Think about it:
+Think about it like this:
 
 **A child with one toy** → Treasures it, masters it, creates endless games with it
-
-**A child with 50 toys** → Can't hold them all, loses pieces, gets overwhelmed, stops playing entirely
+**A child with 50 toys** → Can't hold them all, gets overwhelmed, stops playing entirely
 
 **Your AI is that child.** MCPs are the toys. More isn't always better.
 
-Or picture this: You're **craving pizza**. Someone hands you a pizza → Pure joy! 🍕
+The most creative people thrive with **constraints**, not infinite options. A poet given "write about anything" faces writer's block. Given "write a haiku about rain"? Instant inspiration.
 
-But take you to a **buffet with 200 dishes** → Analysis paralysis. You spend 20 minutes deciding, lose your appetite, leave unsatisfied.
-
-**Same with your AI:** Give it one perfect tool → Instant action. Give it 50 tools → Cognitive overload.
-
-The most creative people thrive with **constraints**, not infinite options. Your AI is no different.
-
-**Think about it:**
-- A poet with "write about anything" → Writer's block
-- A poet with "write a haiku about rain" → Instant inspiration
-
-- A developer with access to "all programming languages" → Analysis paralysis
-- A developer with "Python for this task" → Focused solution
-
-**Your AI needs the same focus.** NCP gives it constraints that spark creativity, not chaos that kills it.
+**Your AI is the same.** Give it one perfect tool → Instant action. Give it 50 tools → Cognitive overload. NCP provides just-in-time tool discovery so your AI gets exactly what it needs, when it needs it.
 
 ---
 
@@ -163,10 +149,10 @@ Choose your MCP client for detailed installation instructions:
 |--------|-------------------|----------|
 | **Claude Desktop** | **[→ Full Guide](docs/clients/claude-desktop.md)** | One-click .dxt install with auto-sync |
 | **Claude Code** | Works out of the box! | Terminal-first AI workflows |
-| **Cursor** | Coming soon | Code editor with AI |
-| **VS Code** | Coming soon | GitHub Copilot + MCPs |
-| **Cline** | Coming soon | VS Code AI extension |
-| **Continue** | Coming soon | VS Code AI assistant |
+| **Cursor** | **[→ Full Guide](docs/clients/cursor.md)** | Code editor with AI + Composer |
+| **VS Code** | **[→ Full Guide](docs/clients/vscode.md)** | GitHub Copilot + Agent Mode |
+| **Cline** | **[→ Full Guide](docs/clients/cline.md)** | VS Code AI extension with MCP |
+| **Continue** | **[→ Full Guide](docs/clients/continue.md)** | VS Code AI assistant with Agent Mode |
 | **Other Clients** | [Quick Start ↓](#quick-start-npm) | Any MCP-compatible client |
 
 ---

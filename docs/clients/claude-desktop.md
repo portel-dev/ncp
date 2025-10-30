@@ -120,7 +120,7 @@ npm install -g @portel/ncp
 **Verify installation:**
 ```bash
 ncp --version
-# Should show: 1.6.0
+# Should show: 1.x.x (current installed version)
 ```
 
 #### Step 2: Import Existing MCPs
@@ -438,10 +438,10 @@ Only enable MCPs you actively use. Fewer MCPs = faster performance.
 
 ## 🔗 Related Documentation
 
-- [Configuration Options](../guides/configuration.md)
-- [Environment Variables](../guides/environment-variables.md)
+- [Configuration Options](../../README.md#%EF%B8%8F-configuration-for-different-ai-clients)
+- [Advanced Usage & Environment Variables](../ADVANCED_USAGE_GUIDE.md)
 - [Scheduler User Guide](../SCHEDULER_USER_GUIDE.md)
-- [Troubleshooting Guide](../guides/troubleshooting.md)
+- [Troubleshooting Guide](../../README.md#-troubleshooting)
 - [Back to Main README](../../README.md)
 
 ---
