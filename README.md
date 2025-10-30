@@ -11,7 +11,7 @@
 
 > **1 MCP to rule them all**
 
-Your MCPs, supercharged. Find any tool instantly, load on demand, run on schedule, ready for any client. Smart loading saves tokens and energy.
+Your MCPs, [supercharged](#supercharged-features). [Find any tool instantly](#instant-tool-discovery), [load on demand](#on-demand-loading), [run on schedule](#automated-scheduling), [ready for any client](#universal-compatibility). [Smart loading](#smart-caching) saves tokens and energy.
 
 ## 💍 **What is NCP?**
 
@@ -41,14 +41,15 @@ Behind the scenes, NCP manages all 50+ tools: routing requests, discovering the 
 
 - [The Problem](#the-mcp-paradox-from-assistant-to-desperate) - Why too many tools break your AI
 - [The Solution](#the-before--after-reality) - How NCP transforms your experience
-- [Getting Started](#-prerequisites) - Installation & quick start
-- [Try It Out](#-test-drive-see-the-difference-yourself) - See the CLI in action
-- [Setup by Client](#-configuration-for-different-ai-clients) - Claude Desktop, Cursor, VS Code, etc.
-- [Popular MCPs](#-popular-mcps-that-work-great-with-ncp) - Community favorites to add
-- [Advanced Features](#-advanced-features) - Project config, scheduling, remote MCPs
-- [Troubleshooting](#-troubleshooting) - Common issues & solutions
-- [How It Works](#-deep-dive-how-it-works) - Technical deep dive
-- [Contributing](#-contributing) - Help us improve NCP
+- [Getting Started](#prerequisites) - Installation & quick start
+- [Try It Out](#test-drive-see-the-difference-yourself) - See the CLI in action
+- [Supercharged Features](#supercharged-features) - How NCP empowers your MCPs
+- [Setup by Client](#configuration-for-different-ai-clients) - Claude Desktop, Cursor, VS Code, etc.
+- [Popular MCPs](#popular-mcps-that-work-great-with-ncp) - Community favorites to add
+- [Advanced Features](#advanced-features) - Project config, scheduling, remote MCPs
+- [Troubleshooting](#troubleshooting) - Common issues & solutions
+- [How It Works](#deep-dive-how-it-works) - Technical deep dive
+- [Contributing](#contributing) - Help us improve NCP
 
 ---
 
@@ -282,6 +283,22 @@ ncp run filesystem:read_file --params '{"path": "/tmp/test.txt"}' --dry-run
 - **After:** Instant decisions, immediate execution, zero doubt
 
 **Bottom line:** Your AI goes from desperate assistant to **executive assistant**.
+
+---
+
+## ⚡ **Supercharged Features**
+
+Here's exactly how NCP empowers your MCPs:
+
+| Feature | What It Does | Why It Matters |
+|---------|-------------|----------------|
+| <a id="instant-tool-discovery">**🔍 Instant Tool Discovery**</a> | Semantic search understands intent ("read a file") not just keywords | Your AI finds the RIGHT tool in <1s instead of analyzing 50 schemas |
+| <a id="on-demand-loading">**📦 On-Demand Loading**</a> | MCPs and tools load only when needed, not at startup | Saves 97% of context tokens - AI starts working immediately |
+| <a id="automated-scheduling">**⏰ Automated Scheduling**</a> | Run any tool on cron schedules or natural language times | Background automation without keeping AI sessions open |
+| <a id="universal-compatibility">**🔌 Universal Compatibility**</a> | Works with Claude Desktop, Claude Code, Cursor, VS Code, and any MCP client | One configuration for all your AI tools - no vendor lock-in |
+| <a id="smart-caching">**💾 Smart Caching**</a> | Intelligent caching of tool schemas and responses | Eliminates redundant indexing - energy efficient and fast |
+
+**The result:** Your MCPs go from scattered tools to a **unified, intelligent system** that your AI can actually use effectively.
 
 ---
 
