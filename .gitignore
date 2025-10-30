@@ -73,6 +73,7 @@ scripts/
 !scripts/test-*.js
 !scripts/test-*.sh
 !scripts/patch-dxt-zip.sh
+!scripts/build-dxt-clean.sh
 
 # Ignore image files in project root (temporary screenshots)
 /*.png
