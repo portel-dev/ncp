@@ -7,8 +7,8 @@
  * and cannot substitute for testing the DXT entry point.
  *
  * Key differences:
- * - index.js uses MCPServer (has synchronous listener registration)
- * - index-mcp.js uses MCPServerSDK (fully async initialization)
+ * - index.js is CLI entry with commander parsing
+ * - index-mcp.js uses MCPServer with fully async initialization for DXT
  *
  * This test caught the "Could not attach" bug where index-mcp.js wasn't
  * awaiting server.run(), causing the process to exit immediately.

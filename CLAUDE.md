@@ -2,72 +2,40 @@
 
 Before committing ANY changes to server code, verify ALL of these:
 
-- [ ] If I changed `src/server/mcp-server.ts`, did I make the same change to `src/server/mcp-server-sdk.ts`?
-- [ ] If I changed `src/server/mcp-server-sdk.ts`, did I make the same change to `src/server/mcp-server.ts`?
-- [ ] Did I run BOTH test suites? (`npm run test:integration` AND `npm run test:integration:dxt`)
-- [ ] Did both integration tests pass?
+- [ ] Did I run the test suite? (`npm run test`)
+- [ ] Did I test both CLI and DXT entry points? (`npm run test:integration` AND `npm run test:integration:dxt`)
+- [ ] Did all integration tests pass?
 - [ ] Did I run the comprehensive DXT test? (`npm run build && node tests/integration/comprehensive-dxt-test.cjs`)
 - [ ] Did all 5 comprehensive tests pass?
-- [ ] If I added a feature, did I add tests for it in BOTH test files?
+- [ ] If I added a feature, did I add tests for it?
 - [ ] If I'm touching `src/index-mcp.ts`, did I verify `await server.run()` is present?
 - [ ] If I'm adding MCP protocol handlers, did I test with `notifications/initialized`?
-- [ ] Did I search for the feature name in BOTH server files to check for divergence?
 
 **If ANY checkbox is unchecked, DO NOT COMMIT. Fix the issue first.**
 
-## CRITICAL: Dual Server Architecture - MUST MAINTAIN PARITY
+## Server Architecture - Single SDK-Based Implementation
 
-**We have TWO server implementations that MUST stay in sync:**
+**We use ONE official SDK-based server implementation:**
 
-### Server Implementations
-- `src/server/mcp-server.ts` (MCPServer) - Used by CLI entry point (dist/index.js)
-- `src/server/mcp-server-sdk.ts` (MCPServerSDK) - Used by DXT entry point (dist/index-mcp.js)
+### Server Implementation
+- `src/server/mcp-server.ts` (MCPServer) - Uses official @modelcontextprotocol/sdk
+  - Used by CLI entry point (dist/index.js)
+  - Used by DXT entry point (dist/index-mcp.js)
+  - Fully async initialization with background indexing
+  - Immediate protocol responses (no blocking)
 
-### MANDATORY Rules for ANY Server Changes
+### Why We Use the Official SDK
 
-1. **ALWAYS update BOTH server implementations** when adding features:
-   - If you add auto-import to MCPServer, add it to MCPServerSDK
-   - If you add a tool to MCPServer, add it to MCPServerSDK
-   - If you fix a bug in MCPServer, check if MCPServerSDK has the same bug
-   - **NO EXCEPTIONS** - feature parity is mandatory
+**Historical Context**: We previously had TWO implementations (custom MCPServer and SDK-based MCPServerSDK) which caused recurring bugs:
+- Features added to one but forgotten in the other
+- Tests only covered CLI entry point, missing DXT bugs
+- Every release had bugs discovered by users in production
 
-2. **ALWAYS run BOTH test suites** after changes:
-   ```bash
-   npm run test:integration       # Tests CLI entry (mcp-server.ts)
-   npm run test:integration:dxt   # Tests DXT entry (mcp-server-sdk.ts)
-   npm run build && node tests/integration/comprehensive-dxt-test.cjs
-   ```
-
-3. **Check git diff spans BOTH files** before committing:
-   ```bash
-   git diff src/server/mcp-server.ts src/server/mcp-server-sdk.ts
-   ```
-   - If only one file changed, you probably forgot to update the other
-
-4. **Search for feature in BOTH files** before implementing:
-   ```bash
-   grep -n "auto-import" src/server/mcp-server.ts src/server/mcp-server-sdk.ts
-   ```
-   - If feature exists in one but not the other, it's a bug
-
-### Why This Matters
-
-**Historical Bug Pattern**: Features get added to MCPServer but not MCPServerSDK, causing DXT to break in production:
-- Auto-import was in MCPServer (line 205) but missing from MCPServerSDK → DXT couldn't import extensions
-- Tests only ran CLI entry point → False positives, bugs shipped to production
-- User manually discovered bugs after each release → Recurring cycle
-
-### Confusing Import Pattern - BE CAREFUL
-
-```typescript
-// src/index-mcp.ts imports MCPServerSDK but RENAMES it!
-import { MCPServerSDK as MCPServer } from './server/mcp-server-sdk.js';
-```
-
-**DANGER**: This makes it LOOK like MCPServer (CLI) but it's actually MCPServerSDK (DXT)!
-- Don't assume behavior from variable name
-- Always check which file is imported
-- MCPServer and MCPServerSDK have DIFFERENT async behavior
+**Solution**: Eliminated duplication by using ONLY the official @modelcontextprotocol/sdk:
+- Single source of truth for all MCP protocol handling
+- Official SDK ensures protocol compliance
+- No feature divergence possible
+- All tests cover the same implementation
 
 ## MCP Protocol Requirements
 
@@ -110,10 +78,10 @@ import { MCPServerSDK as MCPServer } from './server/mcp-server-sdk.js';
 
 **CRITICAL**: Tests MUST match production environment
 
-1. **Test BOTH entry points separately**:
+1. **Test BOTH entry points**:
    ```bash
-   npm run test:integration       # CLI entry (dist/index.js → MCPServer)
-   npm run test:integration:dxt   # DXT entry (dist/index-mcp.js → MCPServerSDK)
+   npm run test:integration       # CLI entry (dist/index.js)
+   npm run test:integration:dxt   # DXT entry (dist/index-mcp.js)
    ```
 
 2. **Comprehensive DXT test** (tests/integration/comprehensive-dxt-test.cjs):

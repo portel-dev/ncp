@@ -110,10 +110,13 @@ export function isLocalNcpInstallation(): boolean {
 }
 
 /**
- * Get the scheduler directory (local or global)
+ * Get the scheduler directory (always global ~/.ncp/scheduler)
+ * Scheduler jobs are stored globally regardless of working directory
+ * The workingDirectory field in jobs controls which .ncp is used during execution
  */
 export function getSchedulerDirectory(): string {
-  return path.join(getNcpBaseDirectory(), 'scheduler');
+  const homeDir = os.homedir();
+  return path.join(homeDir, '.ncp', 'scheduler');
 }
 
 /**

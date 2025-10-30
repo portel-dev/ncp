@@ -8,29 +8,11 @@ This ensures that MCP servers see the real client making the request, not "ncp" 
 
 ## Implementation
 
-### CLI Mode (Manual Server)
+### Unified SDK-Based Server
 
 File: `src/server/mcp-server.ts`
 
-```typescript
-// Extract full clientInfo from initialize request
-private handleInitialize(request: MCPRequest): MCPResponse {
-  const clientInfo = request.params?.clientInfo;
-  this.clientInfo = clientInfo ? {
-    name: clientInfo.name || 'unknown',
-    version: clientInfo.version || '1.0.0'
-  } : null;
-
-  // Pass client info to orchestrator for transparent passthrough
-  if (this.clientInfo) {
-    this.orchestrator.setClientInfo(this.clientInfo);
-  }
-}
-```
-
-### .dxt Bundle Mode (SDK Server)
-
-File: `src/server/mcp-server-sdk.ts`
+NCP uses a single server implementation based on the official @modelcontextprotocol/sdk that handles both CLI and DXT modes:
 
 ```typescript
 // Set up callback to capture clientInfo from actual client
@@ -115,13 +97,15 @@ When Claude Desktop connects to NCP, and NCP connects to a downstream MCP:
 
 ### Automated Testing
 
-Protocol transparency is verified in both modes:
-- ✅ CLI mode: Tested via `src/server/mcp-server.ts` (commit 9561a18)
-- ✅ SDK mode: Tested via `src/server/mcp-server-sdk.ts` (this commit)
+Protocol transparency is verified through comprehensive test suites:
+- ✅ Unit tests: Test protocol message passthrough
+- ✅ Integration tests: Test both CLI and DXT entry points
+- ✅ E2E tests: Test with actual MCP server connections
 
 End-to-end testing requires a mock MCP server that logs received clientInfo.
 
-## Related Commits
+## Architecture History
 
-- `9561a18` - fix: pass through actual client info to downstream MCPs (CLI mode)
-- Current - feat: add clientInfo passthrough to SDK Server (.dxt bundle mode)
+**Previous**: NCP had two separate server implementations (custom MCPServer and SDK-based MCPServerSDK) which caused feature divergence and recurring bugs.
+
+**Current**: Single SDK-based implementation using official @modelcontextprotocol/sdk ensures consistent behavior across all modes (CLI and DXT).

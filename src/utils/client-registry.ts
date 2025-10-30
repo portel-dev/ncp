@@ -87,6 +87,29 @@ export const CLIENT_REGISTRY: Record<string, ClientDefinition> = {
   },
 
   /**
+   * Claude Desktop alias (Anthropic)
+   * Claude Desktop sometimes sends "claude-ai" as clientInfo.name instead of "claude-desktop"
+   * This alias ensures auto-import works regardless of which name is sent
+   */
+  'claude-ai': {
+    displayName: 'Claude Desktop',
+    configPaths: {
+      darwin: '~/Library/Application Support/Claude/claude_desktop_config.json',
+      win32: '%APPDATA%/Claude/claude_desktop_config.json',
+      linux: '~/.config/Claude/claude_desktop_config.json'
+    },
+    configFormat: 'json',
+    extensionsDir: {
+      darwin: '~/Library/Application Support/Claude/Claude Extensions',
+      win32: '%APPDATA%/Claude/Claude Extensions',
+      linux: '~/.config/Claude/Claude Extensions'
+    },
+    mcpServersPath: 'mcpServers',
+    bundledRuntimes: undefined,
+    runtimeSettingsPath: 'extensionSettings.useBuiltInNodeForMCP'
+  },
+
+  /**
    * Cursor (IDE)
    * Uses JSON config in VS Code-like structure
    */

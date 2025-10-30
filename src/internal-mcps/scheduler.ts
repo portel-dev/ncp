@@ -60,6 +60,10 @@ export class SchedulerMCP implements InternalMCP {
           parameters: {
             type: 'object',
             description: 'Tool parameters to validate'
+          },
+          schedule: {
+            type: 'string',
+            description: 'Schedule to validate (optional). Supports: "in 5 minutes", "in 2 hours", "every day at 2pm", cron expressions, or RFC 3339 datetimes'
           }
         },
         required: ['tool', 'parameters']
@@ -89,9 +93,10 @@ export class SchedulerMCP implements InternalMCP {
           schedule: {
             type: 'string',
             description: 'Schedule in one of these formats:\n' +
-              '1. One-time: RFC 3339 datetime with timezone (e.g., "2025-12-25T15:00:00-05:00" or "2025-12-25T20:00:00Z")\n' +
-              '2. Recurring: Cron expression (e.g., "0 14 * * *") - uses timezone parameter\n' +
-              '3. Natural language (e.g., "every day at 2pm") - uses timezone parameter\n' +
+              '1. Relative time: "in 5 minutes", "in 2 hours", "in 3 days" (one-time execution)\n' +
+              '2. One-time: RFC 3339 datetime with timezone (e.g., "2025-12-25T15:00:00-05:00" or "2025-12-25T20:00:00Z")\n' +
+              '3. Recurring: Cron expression (e.g., "0 14 * * *") - uses timezone parameter\n' +
+              '4. Natural language: "every day at 2pm", "every monday at 9am", "every 5 minutes" - uses timezone parameter\n' +
               `System timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}\n` +
               `Current server time: ${new Date().toISOString()}`
           },
@@ -256,6 +261,7 @@ export class SchedulerMCP implements InternalMCP {
       if (!this.scheduler.isAvailable()) {
         return {
           success: false,
+          error: 'Scheduler not available on this platform',
           content: [{
             type: 'text',
             text: '❌ Scheduler not available on this platform (Windows not supported). Scheduling requires Unix/Linux/macOS with cron.'
@@ -277,6 +283,7 @@ export class SchedulerMCP implements InternalMCP {
         default:
           return {
             success: false,
+            error: `Unknown scheduler tool: ${toolName}`,
             content: [{
               type: 'text',
               text: `❌ Unknown scheduler tool: ${toolName}`
@@ -285,11 +292,13 @@ export class SchedulerMCP implements InternalMCP {
       }
     } catch (error) {
       logger.error(`[SchedulerMCP] Tool execution error: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
+        error: errorMessage,
         content: [{
           type: 'text',
-          text: `❌ Error: ${error instanceof Error ? error.message : String(error)}`
+          text: `❌ Error: ${errorMessage}`
         }]
       };
     }
@@ -302,7 +311,7 @@ export class SchedulerMCP implements InternalMCP {
    * Validates the TOOL being scheduled (e.g., filesystem:read_file), not the schedule itself.
    */
   private async handleValidate(args: any): Promise<InternalToolResult> {
-    const { tool, parameters } = args;
+    const { tool, parameters, schedule } = args;
 
     if (!tool || !parameters) {
       return {
@@ -316,6 +325,19 @@ export class SchedulerMCP implements InternalMCP {
     }
 
     try {
+      const errors: string[] = [];
+      const warnings: string[] = [];
+
+      // Validate schedule if provided
+      if (schedule) {
+        const { NaturalLanguageParser } = await import('../services/scheduler/natural-language-parser.js');
+        const scheduleResult = NaturalLanguageParser.parseSchedule(schedule);
+
+        if (!scheduleResult.success) {
+          errors.push(`Invalid schedule: ${scheduleResult.error}`);
+        }
+      }
+
       // Use ToolValidator to validate the tool being scheduled
       const { ToolValidator } = await import('../services/scheduler/tool-validator.js');
       const validator = new ToolValidator(this.orchestrator);
@@ -325,9 +347,9 @@ export class SchedulerMCP implements InternalMCP {
       return {
         success: true,
         content: JSON.stringify({
-          valid: result.valid,
-          errors: result.errors,
-          warnings: result.warnings,
+          valid: result.valid && errors.length === 0,
+          errors: [...errors, ...result.errors],
+          warnings: [...warnings, ...result.warnings],
           validationMethod: result.validationMethod,
           schema: result.schema
         })
@@ -412,6 +434,7 @@ export class SchedulerMCP implements InternalMCP {
 
       return {
         success: false,
+        error: errorMessage,
         content: [{
           type: 'text',
           text: `❌ Failed to create scheduled job\n\n` +
@@ -472,11 +495,13 @@ export class SchedulerMCP implements InternalMCP {
         }]
       };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
+        error: errorMessage,
         content: [{
           type: 'text',
-          text: `❌ Retrieve failed: ${error instanceof Error ? error.message : String(error)}`
+          text: `❌ Retrieve failed: ${errorMessage}`
         }]
       };
     }
@@ -500,6 +525,7 @@ export class SchedulerMCP implements InternalMCP {
     if (!job) {
       return {
         success: false,
+        error: `Job not found: ${args.job_id}`,
         content: [{
           type: 'text',
           text: `❌ Job not found: ${args.job_id}`
@@ -557,11 +583,13 @@ export class SchedulerMCP implements InternalMCP {
         };
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
+        error: errorMessage,
         content: [{
           type: 'text',
-          text: `❌ Update failed: ${error instanceof Error ? error.message : String(error)}`
+          text: `❌ Update failed: ${errorMessage}`
         }]
       };
     }
@@ -581,6 +609,7 @@ export class SchedulerMCP implements InternalMCP {
     if (!job) {
       return {
         success: false,
+        error: `Job not found: ${args.job_id}`,
         content: [{
           type: 'text',
           text: `❌ Job not found: ${args.job_id}`
@@ -599,11 +628,13 @@ export class SchedulerMCP implements InternalMCP {
         }]
       };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
+        error: errorMessage,
         content: [{
           type: 'text',
-          text: `❌ Delete failed: ${error instanceof Error ? error.message : String(error)}`
+          text: `❌ Delete failed: ${errorMessage}`
         }]
       };
     }
@@ -718,6 +749,7 @@ export class SchedulerMCP implements InternalMCP {
     if (!job) {
       return {
         success: false,
+        error: `Job not found: ${jobId}`,
         content: [{
           type: 'text',
           text: `❌ Job not found: ${jobId}`
@@ -758,6 +790,7 @@ export class SchedulerMCP implements InternalMCP {
     if (!execution) {
       return {
         success: false,
+        error: `Execution not found: ${executionId}`,
         content: [{
           type: 'text',
           text: `❌ Execution not found: ${executionId}`

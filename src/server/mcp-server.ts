@@ -1,246 +1,215 @@
 /**
- * NCP MCP Server - Clean 2-Method Architecture
- * Exposes exactly 2 methods: discover + execute
+ * NCP MCP Server - SDK-based Implementation
+ * Uses official @modelcontextprotocol/sdk Server class
  */
 
-import * as crypto from 'crypto';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+  Tool,
+} from '@modelcontextprotocol/sdk/types.js';
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
 import { logger } from '../utils/logger.js';
-import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
-import { ToolContextResolver } from '../services/tool-context-resolver.js';
+import { mcpProtocolLogger } from '../utils/mcp-protocol-logger.js';
 import { ToolFinder } from '../services/tool-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
-import { TextUtils } from '../utils/text-utils.js';
 import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
-import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation, parseOperationConfirmationResponse } from './mcp-prompts.js';
+import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist } from '../utils/global-settings.js';
-import { version } from '../utils/version.js';
-import { TEST_DRIVE_GUIDE } from '../resources/test-drive-guide.js';
+import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation } from './mcp-prompts.js';
 import chalk from 'chalk';
+import type { ElicitationServer } from '../utils/elicitation-helper.js';
+import { version } from '../utils/version.js';
 
-interface MCPRequest {
-  jsonrpc: string;
-  id: string | number;
-  method: string;
-  params?: any;
-}
-
-interface MCPResponse {
-  jsonrpc: string;
-  id: string | number | null;
-  result?: any;
-  error?: {
-    code: number;
-    message: string;
-    data?: any;
-  };
-}
-
-interface MCPTool {
-  name: string;
-  description: string;
-  inputSchema: {
-    type: string;
-    properties: Record<string, any>;
-    required?: string[];
-  };
-}
-
-export class MCPServer {
+export class MCPServer implements ElicitationServer {
+  private server: Server;
   private orchestrator: NCPOrchestrator;
   private initializationPromise: Promise<void> | null = null;
   private isInitialized: boolean = false;
-  private initializationProgress: { current: number; total: number; currentMCP: string } | null = null;
-
-  // NCP connection tracking (distinct from protocol session_id)
-  private ncpTrackingId: string | null = null;
-  private clientSessionId: string | null = null; // Client's original session_id
-  private clientName: string | null = null;
-  private clientInfo: { name: string; version: string } | null = null; // Full client info for passthrough
-  private sessionStartTime: number | null = null;
-
-  // Cache for prompts and resources (TTL-based)
-  private promptsCache: { data: any[]; timestamp: number } | null = null;
-  private resourcesCache: { data: any[]; timestamp: number } | null = null;
-  private readonly CACHE_TTL_MS = 60000; // 60 seconds
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
-    // Profile-aware orchestrator using real MCP connections
-    this.orchestrator = new NCPOrchestrator(profileName, showProgress, forceRetry);
-  }
-
-  async initialize(): Promise<void> {
-    logger.info('Starting NCP MCP server');
-
-    // Start initialization in the background, don't await it
-    this.initializationPromise = this.orchestrator.initialize().then(() => {
-      this.isInitialized = true;
-      this.initializationProgress = null;
-      logger.info('NCP MCP server indexing complete');
-    }).catch((error) => {
-      logger.error('Failed to initialize orchestrator:', error);
-      this.isInitialized = true; // Mark as initialized even on error to unblock
-      this.initializationProgress = null;
-    });
-
-    // Don't wait for indexing to complete - return immediately
-    logger.info('NCP MCP server ready (indexing in background)');
-  }
-
-  /**
-   * Wait for initialization to complete
-   * Useful for CLI commands that need full indexing before proceeding
-   */
-  async waitForInitialization(): Promise<void> {
-    if (this.isInitialized) {
-      return;
-    }
-
-    if (this.initializationPromise) {
-      await this.initializationPromise;
-    }
-  }
-
-  async handleRequest(request: any): Promise<MCPResponse | undefined> {
-    // Handle notifications (requests without id)
-    if (!('id' in request)) {
-      // Handle common MCP notifications
-      if (request.method === 'notifications/initialized') {
-        // Client finished initialization - no response needed
-        return undefined;
-      }
-      return undefined;
-    }
-
-    // Validate JSON-RPC structure
-    if (!request || request.jsonrpc !== '2.0' || !request.method) {
-      return {
-        jsonrpc: '2.0',
-        id: request.id || null,
-        error: {
-          code: -32600,
-          message: 'Invalid request'
-        }
-      };
-    }
-
-    try {
-      switch (request.method) {
-        case 'initialize':
-          return this.handleInitialize(request);
-
-        case 'tools/list':
-          return this.handleListTools(request);
-
-        case 'tools/call':
-          return this.handleCallTool(request);
-
-        case 'prompts/list':
-          return this.handleListPrompts(request);
-
-        case 'prompts/get':
-          return this.handleGetPrompt(request);
-
-        case 'resources/list':
-          return this.handleListResources(request);
-
-        case 'resources/read':
-          return this.handleReadResource(request);
-
-        default:
-          return {
-            jsonrpc: '2.0',
-            id: request.id,
-            error: {
-              code: -32601,
-              message: `Method not found: ${request.method}`
-            }
-          };
-      }
-    } catch (error: any) {
-      logger.error(`Error handling request: ${error.message}`);
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32603,
-          message: 'Internal error',
-          data: error.message
-        }
-      };
-    }
-  }
-
-  private handleInitialize(request: MCPRequest): MCPResponse {
-    // Generate NCP-specific tracking ID (not session_id - we don't own that)
-    this.ncpTrackingId = crypto.randomUUID();
-    this.sessionStartTime = Date.now();
-
-    // Extract client's original session_id (if provided)
-    this.clientSessionId = request.params?._meta?.session_id || null;
-
-    // Extract full clientInfo for transparent passthrough to downstream MCPs
-    const clientInfo = request.params?.clientInfo;
-    this.clientInfo = clientInfo ? {
-      name: clientInfo.name || 'unknown',
-      version: clientInfo.version || version
-    } : null;
-
-    // Extract client name for logging and auto-import
-    this.clientName = this.clientInfo?.name || 'unknown';
-
-    // Pass client info to orchestrator for transparent passthrough to downstream MCPs
-    if (this.clientInfo) {
-      this.orchestrator.setClientInfo(this.clientInfo);
-    }
-
-    // Log connection start with tracking info
-    const sessionInfo = this.clientSessionId
-      ? `session=${this.clientSessionId}, tracking=${this.ncpTrackingId}`
-      : `tracking=${this.ncpTrackingId}`;
-    logger.info(`Connection started: client=${this.clientName}, ${sessionInfo}`);
-
-    // Trigger auto-import asynchronously (don't block initialize response)
-    if (this.clientName) {
-      this.orchestrator.triggerAutoImport(this.clientName).catch(error => {
-        logger.error(`[${this.ncpTrackingId}] Auto-import failed for ${this.clientName}: ${error.message}`);
-      });
-    }
-
-    // Build response _meta - preserve client's session_id if provided
-    const responseMeta: any = {
-      ncp_tracking_id: this.ncpTrackingId,
-      ncp_client: this.clientName
-    };
-
-    // If client provided session_id, echo it back (transparent passthrough)
-    if (this.clientSessionId) {
-      responseMeta.session_id = this.clientSessionId;
-    }
-
-    return {
-      jsonrpc: '2.0',
-      id: request.id,
-      result: {
-        protocolVersion: '2024-11-05',
+    // Create SDK Server instance with elicitation capability
+    this.server = new Server(
+      {
+        name: 'ncp',
+        version: version,  // Read version from package.json dynamically
+      },
+      {
         capabilities: {
           tools: {},
-          prompts: {}
+          elicitation: {},  // Enable elicitation for credential collection
+          prompts: {},      // Enable prompts for user confirmation dialogs
+          resources: {},    // Enable resources for help docs and health status
         },
-        serverInfo: {
-          name: 'ncp',
-          title: 'Natural Context Provider - Unified MCP Orchestrator',
-          version: version
-        },
-        _meta: responseMeta
+      }
+    );
+
+    // Profile-aware orchestrator using real MCP connections
+    this.orchestrator = new NCPOrchestrator(profileName, showProgress, forceRetry);
+
+    // Set up callback to capture clientInfo from actual client (e.g., Claude Desktop, Cursor)
+    // This enables protocol transparency - passing through actual client identity to downstream MCPs
+    // IMPORTANT: Must be set AFTER orchestrator creation to avoid race condition
+    this.server.oninitialized = () => {
+      const clientVersion = this.server.getClientVersion();
+      if (clientVersion) {
+        const clientInfo = {
+          name: clientVersion.name || 'unknown',
+          version: clientVersion.version || '1.0.0'
+        };
+        this.orchestrator.setClientInfo(clientInfo);
+        logger.debug(`Client info captured: ${clientInfo.name} v${clientInfo.version}`);
+
+        // Trigger auto-import asynchronously (don't block initialize response)
+        if (clientInfo.name && clientInfo.name !== 'unknown') {
+          console.error(`[NCP DEBUG] Triggering auto-import for client: ${clientInfo.name}`);
+          this.orchestrator.triggerAutoImport(clientInfo.name).then(() => {
+            console.error(`[NCP DEBUG] Auto-import completed for ${clientInfo.name}`);
+          }).catch(error => {
+            console.error(`[NCP DEBUG] Auto-import failed for ${clientInfo.name}: ${error.message}`);
+            console.error(`[NCP DEBUG] Stack:`, error.stack);
+            logger.error(`Auto-import failed for ${clientInfo.name}: ${error.message}`);
+          });
+        } else {
+          console.error(`[NCP DEBUG] Skipping auto-import - clientInfo.name: ${clientInfo.name}`);
+        }
       }
     };
+
+    // Wire up elicitation server to internal MCPs IMMEDIATELY
+    // This must happen before initialization so confirmations work from the start
+    const internalMCPManager = this.orchestrator.getInternalMCPManager();
+    if (internalMCPManager) {
+      internalMCPManager.setElicitationServer(this);
+      logger.info('Elicitation enabled for internal MCPs (clipboard-based credential collection)');
+    }
+
+    // Set up request handlers
+    this.setupHandlers();
   }
 
-  private async handleListTools(request: MCPRequest): Promise<MCPResponse> {
-    // Always return tools immediately, even if indexing is in progress
-    // This prevents MCP connection failures during startup
-    const tools: MCPTool[] = [
+  private setupHandlers(): void {
+    // Handle tools/list
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      await mcpProtocolLogger.logRequest('tools/list', {});
+      const result = {
+        tools: this.getToolDefinitions(),
+      };
+      await mcpProtocolLogger.logResponse('tools/list', result);
+      return result;
+    });
+
+    // Handle tools/call
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+
+      // Log request
+      await mcpProtocolLogger.logRequest('tools/call', { name, arguments: args });
+
+      try {
+        let result;
+        switch (name) {
+          case 'find':
+            result = await this.handleFind(args);
+            break;
+
+          case 'run':
+            result = await this.handleRun(args);
+            break;
+
+          default:
+            // Suggest similar methods
+            const suggestions = this.getSuggestions(name, ['find', 'run']);
+            const suggestionText = suggestions.length > 0 ? ` Did you mean: ${suggestions.join(', ')}?` : '';
+
+            result = {
+              content: [{
+                type: 'text',
+                text: `Method not found: '${name}'. NCP supports 'find' and 'run' methods.${suggestionText} Use 'find()' to discover available tools.`
+              }],
+              isError: true,
+            };
+        }
+
+        // Log successful response
+        await mcpProtocolLogger.logResponse('tools/call', result);
+        return result;
+      } catch (error: any) {
+        logger.error(`Tool execution failed: ${name} - ${error.message}`);
+        const errorResult = {
+          content: [{
+            type: 'text',
+            text: error.message || 'Tool execution failed'
+          }],
+          isError: true,
+        };
+
+        // Log error response
+        await mcpProtocolLogger.logResponse('tools/call', null, {
+          code: 'TOOL_EXECUTION_FAILED',
+          message: error.message
+        });
+
+        return errorResult;
+      }
+    });
+
+    // Handle prompts/list
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      return {
+        prompts: NCP_PROMPTS
+      };
+    });
+
+    // Handle prompts/get
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+
+      try {
+        return await this.handleGetPromptInternal(name, args || {});
+      } catch (error: any) {
+        logger.error(`Prompt generation failed: ${name} - ${error.message}`);
+        throw error;
+      }
+    });
+
+    // Handle resources/list
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      return {
+        resources: await this.handleListResources()
+      };
+    });
+
+    // Handle resources/read
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      const { uri } = request.params;
+
+      await mcpProtocolLogger.logRequest('resources/read', { uri });
+
+      try {
+        const result = await this.handleReadResource(uri);
+        await mcpProtocolLogger.logResponse('resources/read', result);
+        return result;
+      } catch (error: any) {
+        logger.error(`Resource read failed: ${uri} - ${error.message}`);
+        await mcpProtocolLogger.logResponse('resources/read', null, {
+          code: 'RESOURCE_READ_FAILED',
+          message: error.message
+        });
+        throw error;
+      }
+    });
+  }
+
+  private getToolDefinitions(): Tool[] {
+    // Start with core NCP tools
+    const coreTools: Tool[] = [
       {
         name: 'find',
         description: 'Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task or capability: "save file", "analyze logs", "send email". For multiple capabilities at once, use pipe separator: "read gmail | send slack | create issue". (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools with depth control (0=tool names only, 1=tool names + descriptions, 2=full details with parameters).',
@@ -265,9 +234,8 @@ export class MCPServer {
             },
             depth: {
               type: 'number',
-              description: 'Information depth level: 0=Tool names only, 1=Tool names + descriptions, 2=Full details with parameters (default, recommended for AI). Higher depth shows more complete information.',
+              description: 'Information depth level: 0=Tool names only, 1=Tool names + descriptions, 2=Full details with parameters (default, recommended). Higher depth shows more complete information.',
               enum: [0, 1, 2],
-              default: 2
             }
           }
         }
@@ -296,64 +264,423 @@ export class MCPServer {
       }
     ];
 
-    return {
-      jsonrpc: '2.0',
-      id: request.id,
-      result: {
-        tools
-      }
-    };
+    // Add internal MCP tools if orchestrator is initialized
+    // Internal MCPs (ncp:add, ncp:import, ncp:list, ncp:remove, ncp:export) are always available
+    // They don't depend on orchestrator initialization status
+    // Note: We'll expose them later when we implement elicitation for credentials
+    // For now, they're accessible via run("ncp:add", ...) but not listed separately
+
+    return coreTools;
   }
 
-  private async handleCallTool(request: MCPRequest): Promise<MCPResponse> {
-    if (!request.params || !request.params.name) {
+  async initialize(): Promise<void> {
+    logger.info('Starting NCP MCP server (SDK-based)');
+
+    // Start initialization in the background, don't await it
+    this.initializationPromise = this.orchestrator.initialize().then(() => {
+      this.isInitialized = true;
+
+      // Wire up elicitation server to internal MCPs after initialization
+      // This enables clipboard-based credential collection for ncp:add and other management tools
+      const internalMCPManager = this.orchestrator.getInternalMCPManager();
+      if (internalMCPManager) {
+        internalMCPManager.setElicitationServer(this);
+        logger.info('Elicitation enabled for internal MCPs (clipboard-based credential collection)');
+      }
+
+      logger.info('NCP MCP server indexing complete');
+    }).catch((error) => {
+      logger.error('Failed to initialize orchestrator:', error);
+      this.isInitialized = true; // Mark as initialized even on error to unblock
+    });
+
+    // Don't wait for indexing to complete - return immediately
+    logger.info('NCP MCP server ready (indexing in background)');
+  }
+
+  async waitForInitialization(): Promise<void> {
+    if (this.isInitialized) {
+      return;
+    }
+
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
+  }
+
+  /**
+   * Public method for CLI to call tools programmatically
+   * @param toolName - Name of the tool to call ('find' or 'run')
+   * @param args - Tool arguments
+   * @returns Tool result
+   */
+  async callTool(toolName: string, args: any): Promise<any> {
+    switch (toolName) {
+      case 'find':
+        return await this.handleFind(args);
+      case 'run':
+        return await this.handleRun(args);
+      default:
+        throw new Error(`Unknown tool: ${toolName}`);
+    }
+  }
+
+  /**
+   * Public method for tests to send JSON-RPC requests
+   * @param request - JSON-RPC request object
+   * @returns JSON-RPC response object
+   */
+  async handleRequest(request: any): Promise<any> {
+    // Validate JSON-RPC request
+    if (!request.jsonrpc || request.jsonrpc !== '2.0') {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: { code: -32600, message: 'Invalid Request' }
+      };
+    }
+
+    // Forward to the SDK server's internal request handler
+    // The SDK server handles the JSON-RPC protocol internally
+    const method = request.method;
+
+    if (method === 'initialize') {
+      // Return initialization response
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: {
+            tools: {},
+            resources: {},
+            prompts: {},
+            elicitation: {}
+          },
+          serverInfo: {
+            name: 'ncp',
+            version: '1.7.0'
+          }
+        }
+      };
+    } else if (method === 'tools/list') {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          tools: [
+            { name: 'find', description: 'Dual-mode tool discovery', inputSchema: {} },
+            { name: 'run', description: 'Execute tools', inputSchema: {} }
+          ]
+        }
+      };
+    } else if (method === 'tools/call') {
+      const toolName = request.params?.name;
+      const args = request.params?.arguments || {};
+
+      try {
+        const result = await this.callTool(toolName, args);
+
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result
+        };
+      } catch (error: any) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32603,
+            message: error.message || 'Tool execution failed'
+          }
+        };
+      }
+    } else if (method === 'resources/list') {
+      const resources = await this.handleListResources();
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: { resources }
+      };
+    } else if (method === 'resources/read') {
+      const uri = request.params?.uri;
+      if (!uri) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: { code: -32602, message: 'Missing required parameter: uri' }
+        };
+      }
+
+      try {
+        const result = await this.handleReadResource(uri);
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result
+        };
+      } catch (error: any) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: { code: -32603, message: error.message || 'Failed to read resource' }
+        };
+      }
+    } else if (method === 'prompts/list') {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: { prompts: [] }
+      };
+    } else if (method.startsWith('notifications/')) {
+      // Notifications don't get responses
+      return undefined;
+    } else {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: { code: -32601, message: 'Method not found' }
+      };
+    }
+  }
+
+  /**
+   * Public method for tests to call prompts/list
+   * @param request - JSON-RPC request object
+   * @returns JSON-RPC response with prompts list
+   */
+  async handleListPrompts(request: any): Promise<any> {
+    try {
+      // Get all MCP prompts from orchestrator
+      const mcpPrompts = await this.orchestrator.getAllPrompts();
+
+      // Combine NCP prompts and MCP prompts
+      const allPrompts = [...NCP_PROMPTS, ...mcpPrompts];
+
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          prompts: allPrompts
+        }
+      };
+    } catch (error) {
+      // Fallback to NCP prompts only if orchestrator fails
+      logger.warn(`Failed to get MCP prompts, falling back to NCP only: ${error}`);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          prompts: NCP_PROMPTS
+        }
+      };
+    }
+  }
+
+  /**
+   * Public method for tests to call prompts/get
+   * @param request - JSON-RPC request object with params.name and params.arguments
+   * @returns JSON-RPC response with prompt content
+   */
+  async handleGetPrompt(request: any): Promise<any> {
+    const promptName = request.params?.name;
+
+    if (!promptName) {
       return {
         jsonrpc: '2.0',
         id: request.id,
         error: {
           code: -32602,
-          message: 'Invalid params: missing tool name'
+          message: 'Missing required parameter: name'
         }
       };
     }
 
-    const { name, arguments: args } = request.params;
+    const args = request.params?.arguments || {};
 
-    try {
-      switch (name) {
-        case 'find':
-          return this.handleFind(request, args);
+    // Check if it's an MCP prompt (has prefix format "mcp_name:prompt_name")
+    if (promptName.includes(':')) {
+      const [mcpName, ...promptParts] = promptName.split(':');
+      const actualPromptName = promptParts.join(':'); // Handle multiple colons in prompt name
 
-        case 'run':
-          return this.handleRun(request, args);
-
-        default:
-          // Suggest similar methods
-          const suggestions = this.getSuggestions(name, ['find', 'run']);
-          const suggestionText = suggestions.length > 0 ? ` Did you mean: ${suggestions.join(', ')}?` : '';
-
-          return {
-            jsonrpc: '2.0',
-            id: request.id,
-            error: {
-              code: -32601,
-              message: `Method not found: '${name}'. NCP supports 'find' and 'run' methods.${suggestionText} Use 'find()' to discover available tools.`
-            }
-          };
+      try {
+        const result = await this.orchestrator.getPromptFromMCP(mcpName, actualPromptName, args);
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          result
+        };
+      } catch (error: any) {
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32603,
+            message: error.message || 'Failed to get MCP prompt'
+          }
+        };
       }
+    }
+
+    // Handle NCP prompts
+    try {
+      const result = await this.handleGetPromptInternal(promptName, args);
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result
+      };
     } catch (error: any) {
       return {
         jsonrpc: '2.0',
         id: request.id,
         error: {
           code: -32603,
-          message: error.message || 'Internal error'
+          message: error.message || 'Failed to get prompt'
         }
       };
     }
   }
 
-  public async handleFind(request: MCPRequest, args: any): Promise<MCPResponse> {
+  private async handleGetPromptInternal(promptName: string, args: Record<string, any>): Promise<any> {
+    // Find the prompt definition
+    const promptDef = NCP_PROMPTS.find(p => p.name === promptName);
+
+    if (!promptDef) {
+      throw new Error(`Unknown prompt: ${promptName}`);
+    }
+
+    // Generate prompt content based on prompt name
+    let messages;
+    switch (promptName) {
+      case 'confirm_add_mcp':
+        messages = generateAddConfirmation(
+          args.mcp_name || 'unknown',
+          args.command || 'unknown',
+          args.args || [],
+          args.profile || 'all'
+        );
+        break;
+
+      case 'confirm_remove_mcp':
+        messages = generateRemoveConfirmation(
+          args.mcp_name || 'unknown',
+          args.profile || 'all'
+        );
+        break;
+
+      case 'configure_mcp':
+        messages = generateConfigInput(
+          args.mcp_name || 'unknown',
+          args.config_type || 'configuration',
+          args.description || 'Please provide configuration value'
+        );
+        break;
+
+      case 'confirm_operation':
+        messages = generateOperationConfirmation(
+          args.tool || 'unknown',
+          args.tool_description || '',
+          args.parameters ? (typeof args.parameters === 'string' ? JSON.parse(args.parameters) : args.parameters) : {},
+          args.matched_pattern || '',
+          args.confidence || 0
+        );
+        break;
+
+      default:
+        throw new Error(`Prompt ${promptName} not implemented`);
+    }
+
+    return {
+      description: promptDef.description,
+      messages
+    };
+  }
+
+  private async handleMultiQuery(queries: string[], options: any): Promise<any> {
+    const { limit, depth, confidenceThreshold, isStillIndexing } = options;
+    const finder = new ToolFinder(this.orchestrator);
+
+    // Execute parallel searches for all queries
+    const searchResults = await Promise.all(
+      queries.map(query =>
+        finder.find({
+          query,
+          page: 1,
+          limit,
+          depth,
+          confidenceThreshold
+        })
+      )
+    );
+
+    // Get indexing progress if still indexing
+    const progress = isStillIndexing ? this.orchestrator.getIndexingProgress() : null;
+
+    // Get health status
+    const healthStatus = this.orchestrator.getMCPHealthStatus();
+
+    // Format multi-query results
+    let output = `\n🔍 Found tools for ${queries.length} queries:\n\n`;
+
+    // Add MCP health status summary
+    if (healthStatus.total > 0) {
+      const healthIcon = healthStatus.unhealthy > 0 ? '⚠️' : '✅';
+      output += `${healthIcon} **MCPs**: ${healthStatus.healthy}/${healthStatus.total} healthy`;
+
+      if (healthStatus.unhealthy > 0) {
+        const unhealthyNames = healthStatus.mcps
+          .filter(mcp => !mcp.healthy)
+          .map(mcp => mcp.name)
+          .join(', ');
+        output += ` (${unhealthyNames} unavailable)`;
+      }
+      output += '\n\n';
+    }
+
+    // Add indexing progress if still indexing
+    if (progress && progress.total > 0) {
+      const percentComplete = Math.round((progress.current / progress.total) * 100);
+      const remainingTime = progress.estimatedTimeRemaining ?
+        ` (~${Math.ceil(progress.estimatedTimeRemaining / 1000)}s remaining)` : '';
+
+      output += `⏳ **Indexing in progress**: ${progress.current}/${progress.total} MCPs (${percentComplete}%)${remainingTime}\n`;
+      output += `   Currently indexing: ${progress.currentMCP || 'initializing...'}\n\n`;
+    }
+
+    // Display results for each query
+    searchResults.forEach((result, index) => {
+      const query = queries[index];
+      const { tools: results } = result;
+
+      output += `**Query ${index + 1}:** ${chalk.inverse(` ${query} `)}\n`;
+
+      if (results.length === 0) {
+        output += `   ❌ No tools found\n\n`;
+      } else {
+        output += `   Found ${results.length} tool${results.length > 1 ? 's' : ''}:\n`;
+        results.forEach((tool: any) => {
+          const healthIcon = tool.healthy !== false ? '✅' : '❌';
+          const description = depth >= 1 ? tool.description : '';
+          output += `   ${healthIcon} ${chalk.bold(tool.name)}`;
+          if (description && depth >= 1) {
+            output += ` - ${description}`;
+          }
+          output += '\n';
+        });
+        output += '\n';
+      }
+    });
+
+    // Add total tools found summary
+    const totalTools = searchResults.reduce((sum, r) => sum + r.tools.length, 0);
+    output += `\n📊 **Total**: ${totalTools} tool${totalTools !== 1 ? 's' : ''} found across ${queries.length} queries\n`;
+
+    return { content: [{ type: 'text', text: output }] };
+  }
+
+  private async handleFind(args: any): Promise<any> {
     const isStillIndexing = !this.isInitialized && this.initializationPromise;
 
     const description = args?.description || '';
@@ -362,7 +689,17 @@ export class MCPServer {
     const depth = args?.depth !== undefined ? Math.max(0, Math.min(2, args.depth)) : 2;
     const confidenceThreshold = args?.confidence_threshold !== undefined ? args.confidence_threshold : 0.35;
 
-    // Use ToolFinder service for search logic - always run to get partial results
+    // Check for pipe-delimited multi-query
+    const queries = description.includes('|')
+      ? description.split('|').map((q: string) => q.trim()).filter((q: string) => q.length > 0)
+      : null;
+
+    // Handle multi-query case
+    if (queries && queries.length > 1) {
+      return this.handleMultiQuery(queries, { page, limit, depth, confidenceThreshold, isStillIndexing });
+    }
+
+    // Use ToolFinder service for single-query search logic
     const finder = new ToolFinder(this.orchestrator);
     const findResult = await finder.find({
       query: description,
@@ -372,7 +709,7 @@ export class MCPServer {
       confidenceThreshold
     });
 
-    const { tools: results, groupedByMCP: mcpGroups, pagination, mcpFilter, isListing } = findResult;
+    const { tools: results, pagination, mcpFilter, isListing } = findResult;
 
     // Get indexing progress if still indexing
     const progress = isStillIndexing ? this.orchestrator.getIndexingProgress() : null;
@@ -386,11 +723,9 @@ export class MCPServer {
 
     let output: string;
     if (description) {
-      // Search mode - highlight the search query with reverse colors for emphasis
       const highlightedQuery = chalk.inverse(` ${description} `);
       output = `\n🔍 Found tools for ${highlightedQuery}${filterText}${paginationInfo}:\n\n`;
     } else {
-      // Listing mode - show all available tools
       output = `\n🔍 Available tools${filterText}${paginationInfo}:\n\n`;
     }
 
@@ -410,7 +745,7 @@ export class MCPServer {
       output += '\n\n';
     }
 
-    // Add indexing progress if still indexing (parity with CLI)
+    // Add indexing progress if still indexing
     if (progress && progress.total > 0) {
       const percentComplete = Math.round((progress.current / progress.total) * 100);
       const remainingTime = progress.estimatedTimeRemaining ?
@@ -426,11 +761,11 @@ export class MCPServer {
       }
     }
 
-    // Handle no results case (but only if not indexing - during indexing we already showed message above)
+    // Handle no results case
     if (results.length === 0 && !progress && description) {
       output += `❌ No tools found for "${description}"\n\n`;
 
-      // Intelligent fallback: Search MCP registry for matching tools
+      // Intelligent fallback: Search MCP registry
       try {
         logger.debug(`Searching registry for: ${description}`);
         const registryClient = new UnifiedRegistryClient();
@@ -439,49 +774,56 @@ export class MCPServer {
         if (registryCandidates.length > 0) {
           output += `💡 **I don't have this capability yet, but found ${registryCandidates.length} MCP${registryCandidates.length > 1 ? 's' : ''} in the registry:**\n\n`;
 
-          // Show top 3 results with installation info
-          const topCandidates = registryCandidates.slice(0, 3);
-          topCandidates.forEach((candidate, index) => {
+          const topCandidates = registryCandidates.slice(0, 5);
+          topCandidates.forEach(candidate => {
             const statusBadge = candidate.status === 'active' ? '⭐' : '📦';
-            const envInfo = candidate.envVars?.length ? ` 🔑 Requires credentials` : '';
-            output += `**${index + 1}. ${candidate.displayName}**${envInfo}\n`;
+            const envInfo = candidate.envVars?.length ? ` ⚠️ Requires ${candidate.envVars.length} env var${candidate.envVars.length > 1 ? 's' : ''}` : '';
+            output += `${candidate.number}. ${statusBadge} **${candidate.displayName}**${envInfo}\n`;
             output += `   ${candidate.description}\n`;
-            output += `   📦 Install: Use \`add\` tool with \`mcp_name="${candidate.name}"\`\n\n`;
+            output += `   Version: ${candidate.version}\n\n`;
           });
 
-          if (registryCandidates.length > 3) {
-            output += `... and ${registryCandidates.length - 3} more available\n\n`;
-          }
+          output += `\n🚀 **To install:**\n\n`;
 
-          output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-
-          // Check if query is a simple MCP name (single word)
+          // Check if query is a simple MCP name (single word, likely a direct MCP name)
           const isSimpleMCPName = description.trim().split(/\s+/).length === 1;
 
           if (isSimpleMCPName) {
-            output += `💡 **If the above results don't match, try direct add:**\n`;
-            output += `   Call \`add\` tool with \`mcp_name="${description}"\`\n\n`;
-            output += `📌 **Or install from registry:**\n`;
-            output += `   Example: \`add\` with \`mcp_name="${topCandidates[0].name}"\`\n`;
+            // For simple queries like "canva", prioritize direct add
+            output += `**Option 1: Try direct add (recommended for exact names):**\n`;
+            output += `\`\`\`\nrun("ncp:add", {\n`;
+            output += `  mcp_name: "${description}"\n`;
+            output += `})\n\`\`\`\n\n`;
+
+            output += `**Option 2: Install from registry results:**\n`;
+            output += `\`\`\`\nrun("ncp:import", {\n`;
+            output += `  from: "discovery",\n`;
+            output += `  source: "${description}",\n`;
+            output += `  selection: "1"  // or "1,3,5" for multiple\n`;
+            output += `})\n\`\`\`\n\n`;
           } else {
-            output += `📌 **Next step:** Call the \`add\` tool to install an MCP\n`;
-            output += `   Example: \`add\` with \`mcp_name="${topCandidates[0].name}"\`\n`;
+            // For descriptive queries, prioritize registry search
+            output += `**Option 1: Install from registry (recommended):**\n`;
+            output += `\`\`\`\nrun("ncp:import", {\n`;
+            output += `  from: "discovery",\n`;
+            output += `  source: "${description}",\n`;
+            output += `  selection: "1"  // or "1,3,5" for multiple, or "*" for all\n`;
+            output += `})\n\`\`\`\n\n`;
+
+            output += `**Option 2: If you know the exact MCP name:**\n`;
+            output += `\`\`\`\nrun("ncp:add", {\n`;
+            output += `  mcp_name: "<exact-mcp-name>"\n`;
+            output += `})\n\`\`\`\n\n`;
           }
 
-          output += `   Then retry your search to access the new tools.\n`;
-          output += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+          output += `💡 *MCPs will be available after NCP restarts.*`;
 
           return {
-            jsonrpc: '2.0',
-            id: request.id,
-            result: {
-              content: [{ type: 'text', text: output }]
-            }
+            content: [{ type: 'text', text: output }]
           };
         }
       } catch (error: any) {
         logger.warn(`Registry search failed: ${error.message}`);
-        // Continue to show available MCPs below
       }
 
       // Fallback: No registry results, suggest direct add or show samples
@@ -489,8 +831,10 @@ export class MCPServer {
 
       if (isSimpleMCPName) {
         // For simple queries, suggest trying direct add first
-        output += `💡 **Try adding directly:**\n`;
-        output += `   Call \`add\` tool with \`mcp_name="${description}"\`\n\n`;
+        output += `💡 **Try adding directly:**\n\n`;
+        output += `\`\`\`\nrun("ncp:add", {\n`;
+        output += `  mcp_name: "${description}"\n`;
+        output += `})\n\`\`\`\n\n`;
         output += `This will search for an MCP named "${description}" and guide you through installation.\n\n`;
       }
 
@@ -505,29 +849,20 @@ export class MCPServer {
       }
 
       return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          content: [{ type: 'text', text: output }]
-        }
+        content: [{ type: 'text', text: output }]
       };
     }
 
     // If no results but still indexing, return progress message
     if (results.length === 0 && progress) {
       return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          content: [{ type: 'text', text: output }]
-        }
+        content: [{ type: 'text', text: output }]
       };
     }
 
     // Format output based on depth and mode
     if (depth === 0) {
-      // Depth 0: Tool names only (no parameters, no descriptions)
-      // Use original results array to maintain confidence-based ordering
+      // Depth 0: Tool names only
       results.forEach((tool) => {
         if (isListing) {
           output += `# **${tool.toolName}**\n`;
@@ -537,12 +872,10 @@ export class MCPServer {
         }
       });
     } else if (depth === 1) {
-      // Depth 1: Tool name + description only (no parameters)
-      // Use original results array to maintain confidence-based ordering
+      // Depth 1: Tool name + description only
       results.forEach((tool, toolIndex) => {
         if (toolIndex > 0) output += '---\n';
 
-        // Tool name
         if (isListing) {
           output += `# **${tool.toolName}**\n`;
         } else {
@@ -550,7 +883,6 @@ export class MCPServer {
           output += `# **${tool.toolName}** (${confidence}% match)\n`;
         }
 
-          // Tool description
         if (tool.description) {
           const cleanDescription = tool.description
             .replace(/^[^:]+:\s*/, '') // Remove MCP prefix
@@ -558,16 +890,12 @@ export class MCPServer {
             .trim();
           output += `${cleanDescription}\n`;
         }
-
-        // No parameters at depth 1
       });
     } else {
-      // Depth 2: Full details with parameter descriptions
-      // Use original results array to maintain confidence-based ordering
+      // Depth 2: Full details with parameters
       results.forEach((tool, toolIndex) => {
         if (toolIndex > 0) output += '---\n';
 
-        // Tool name
         if (isListing) {
           output += `# **${tool.toolName}**\n`;
         } else {
@@ -575,16 +903,15 @@ export class MCPServer {
           output += `# **${tool.toolName}** (${confidence}% match)\n`;
         }
 
-          // Tool description
         if (tool.description) {
           const cleanDescription = tool.description
-            .replace(/^[^:]+:\s*/, '') // Remove MCP prefix
-            .replace(/\s+/g, ' ') // Normalize whitespace
+            .replace(/^[^:]+:\s*/, '')
+            .replace(/\s+/g, ' ')
             .trim();
           output += `${cleanDescription}\n`;
         }
 
-        // Parameters with descriptions inline
+        // Parameters with descriptions
         if (tool.schema) {
           const params = this.parseParameters(tool.schema);
           if (params.length > 0) {
@@ -602,7 +929,7 @@ export class MCPServer {
       });
     }
 
-    // Add comprehensive usage guidance
+    // Add usage guidance
     output += await UsageTipsGenerator.generate({
       depth,
       page: pagination.page,
@@ -615,40 +942,220 @@ export class MCPServer {
     });
 
     return {
-      jsonrpc: '2.0',
-      id: request.id,
-      result: {
-        content: [{
-          type: 'text',
-          text: output
-        }]
-      }
+      content: [{ type: 'text', text: output }]
     };
   }
 
+  private async handleRun(args: any): Promise<any> {
+    // Check if indexing is still in progress
+    if (!this.isInitialized && this.initializationPromise) {
+      const progress = this.orchestrator.getIndexingProgress();
 
+      if (progress && progress.total > 0) {
+        const percentComplete = Math.round((progress.current / progress.total) * 100);
+        const remainingTime = progress.estimatedTimeRemaining ?
+          ` (~${Math.ceil(progress.estimatedTimeRemaining / 1000)}s remaining)` : '';
 
-  private getToolContext(toolName: string): string {
-    return ToolContextResolver.getContext(toolName);
+        const progressMessage = `⏳ **Indexing in progress**: ${progress.current}/${progress.total} MCPs (${percentComplete}%)${remainingTime}\n` +
+          `Currently indexing: ${progress.currentMCP || 'initializing...'}\n\n` +
+          `Tool execution will be available once indexing completes. Please try again in a moment.`;
+
+        return {
+          content: [{ type: 'text', text: progressMessage }]
+        };
+      }
+
+      // Wait briefly for initialization to complete (max 2 seconds)
+      try {
+        let timeoutId: NodeJS.Timeout;
+        await Promise.race([
+          this.initializationPromise,
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error('timeout')), 2000);
+          })
+        ]).finally(() => {
+          if (timeoutId!) clearTimeout(timeoutId);
+        });
+      } catch {
+        // Continue even if timeout - try to execute with what's available
+      }
+    }
+
+    if (!args?.tool) {
+      throw new Error('tool parameter is required');
+    }
+
+    const toolIdentifier = args.tool;
+    const parameters = args.parameters || {};
+    const dryRun = args.dry_run || false;
+
+    if (dryRun) {
+      // Dry run mode - show what would happen without executing
+      const previewText = this.generateDryRunPreview(toolIdentifier, parameters);
+      return {
+        content: [{
+          type: 'text',
+          text: `🔍 DRY RUN PREVIEW:\n\n${previewText}\n\n⚠️  This was a preview only. Set dry_run: false to execute.`
+        }]
+      };
+    }
+
+    // ===== CONFIRM-BEFORE-RUN FEATURE =====
+    // Check if this operation requires user confirmation
+    try {
+      const settings = await loadGlobalSettings();
+      const confirmSettings = settings.confirmBeforeRun;
+
+      if (confirmSettings.enabled) {
+        // Check whitelist first
+        const isWhitelisted = await isToolWhitelisted(toolIdentifier);
+
+        if (!isWhitelisted) {
+          // Get tool description by searching for the tool
+          const finder = new ToolFinder(this.orchestrator);
+          const findResult = await finder.find({
+            query: toolIdentifier,
+            page: 1,
+            limit: 1,
+            depth: 2,
+            confidenceThreshold: 0
+          });
+
+          const toolDescription = findResult.tools.length > 0 ? findResult.tools[0].description || '' : '';
+
+          // Use vector search to check if tool matches modifier pattern
+          // We search the tools against the modifier pattern to see if this tool is dangerous
+          const searchQuery = `${toolIdentifier} ${toolDescription}`;
+          const patternResults = await finder.find({
+            query: confirmSettings.modifierPattern,
+            page: 1,
+            limit: 20,
+            depth: 0,
+            confidenceThreshold: confirmSettings.vectorThreshold
+          });
+
+          // Check if our tool is in the match results
+          const toolMatch = patternResults.tools.find(result => result.toolName === toolIdentifier);
+
+          if (toolMatch && toolMatch.confidence >= confirmSettings.vectorThreshold) {
+            // Confirmation required - use elicitation
+            logger.info(`Tool "${toolIdentifier}" requires confirmation (${Math.round(toolMatch.confidence * 100)}% confidence)`);
+
+            // Format parameters for display
+            let parametersText = '';
+            if (Object.keys(parameters).length > 0) {
+              parametersText = '\n\nParameters:';
+              for (const [key, value] of Object.entries(parameters)) {
+                const valueStr = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+                parametersText += `\n  ${key}: ${valueStr}`;
+              }
+            } else {
+              parametersText = '\n\nParameters: (none)';
+            }
+
+            const [mcpName, toolName] = toolIdentifier.split(':');
+            const confidencePercent = Math.round(toolMatch.confidence * 100);
+
+            const confirmationMessage = `⚠️ CONFIRMATION REQUIRED
+
+Tool: ${toolName}
+MCP: ${mcpName}
+
+Description:
+${toolDescription || 'No description available'}${parametersText}
+
+Reason: Matches modifier pattern (${confidencePercent}% confidence)
+Pattern: "${confirmSettings.modifierPattern.substring(0, 100)}..."
+
+This operation may modify data or have side effects.`;
+
+            // Use elicitation to get user confirmation
+            const elicitationResult = await this.elicitInput({
+              message: confirmationMessage,
+              requestedSchema: {
+                type: 'object',
+                properties: {
+                  action: {
+                    type: 'string',
+                    enum: ['approve_once', 'approve_always', 'cancel'],
+                    description: 'Choose: approve_once (run this time only), approve_always (add to whitelist), or cancel (don\'t execute)'
+                  }
+                },
+                required: ['action']
+              }
+            });
+
+            // Handle user response
+            if (elicitationResult.action === 'decline' || elicitationResult.action === 'cancel') {
+              return {
+                content: [{
+                  type: 'text',
+                  text: `⛔ Operation cancelled by user. The tool "${toolIdentifier}" was not executed.`
+                }],
+                isError: true
+              };
+            }
+
+            if (elicitationResult.action === 'accept' && elicitationResult.content) {
+              const userAction = elicitationResult.content.action;
+
+              if (userAction === 'cancel') {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: `⛔ Operation cancelled by user. The tool "${toolIdentifier}" was not executed.`
+                  }],
+                  isError: true
+                };
+              }
+
+              if (userAction === 'approve_always') {
+                // Add to whitelist
+                await addToolToWhitelist(toolIdentifier);
+                logger.info(`Tool ${toolIdentifier} added to whitelist by user`);
+              }
+
+              // For both 'approve_once' and 'approve_always', proceed with execution below
+              logger.info(`User approved execution of "${toolIdentifier}" (${userAction})`);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      // Log but don't block execution if confirmation logic fails
+      logger.warn(`Confirmation check failed: ${error.message}`);
+    }
+    // ===== END CONFIRM-BEFORE-RUN =====
+
+    // Normal execution
+    const result = await this.orchestrator.run(toolIdentifier, parameters);
+
+    if (result.success) {
+      return {
+        content: [{
+          type: 'text',
+          text: typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2)
+        }]
+      };
+    } else {
+      return {
+        content: [{
+          type: 'text',
+          text: result.error || 'Tool execution failed'
+        }],
+        isError: true,
+      };
+    }
   }
 
   private parseParameters(schema: any): ParameterInfo[] {
     return ToolSchemaParser.parseParameters(schema);
   }
 
-  private wrapText(text: string, maxWidth: number, indent: string): string {
-    return TextUtils.wrapText(text, {
-      maxWidth,
-      indent,
-      cleanupPrefixes: true
-    });
-  }
-
   private getSuggestions(input: string, validOptions: string[]): string[] {
     const inputLower = input.toLowerCase();
     return validOptions.filter(option => {
       const optionLower = option.toLowerCase();
-      // Simple fuzzy matching: check if input contains part of option or vice versa
       return optionLower.includes(inputLower) || inputLower.includes(optionLower) ||
              this.levenshteinDistance(inputLower, optionLower) <= 2;
     });
@@ -669,9 +1176,9 @@ export class MCPServer {
       for (let i = 1; i <= str1.length; i += 1) {
         const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
         matrix[j][i] = Math.min(
-          matrix[j][i - 1] + 1, // deletion
-          matrix[j - 1][i] + 1, // insertion
-          matrix[j - 1][i - 1] + indicator, // substitution
+          matrix[j][i - 1] + 1,
+          matrix[j - 1][i] + 1,
+          matrix[j - 1][i - 1] + indicator,
         );
       }
     }
@@ -694,556 +1201,118 @@ export class MCPServer {
       }
     }
 
-    // Add operation-specific warnings and descriptions
-    const warnings = this.getDryRunWarnings(toolName, parameters);
-    if (warnings.length > 0) {
-      preview += '\n⚠️  Warnings:\n';
-      warnings.forEach(warning => preview += `   • ${warning}\n`);
-    }
-
-    const description = this.getDryRunDescription(toolName, parameters);
-    if (description) {
-      preview += `\n📖 This operation will: ${description}`;
-    }
-
     return preview;
   }
 
-  private getDryRunWarnings(toolName: string, parameters: any): string[] {
-    const warnings: string[] = [];
-
-    if (toolName.includes('write') || toolName.includes('create')) {
-      warnings.push('This operation will modify files/data');
-    }
-    if (toolName.includes('delete') || toolName.includes('remove')) {
-      warnings.push('This operation will permanently delete data');
-    }
-    if (toolName.includes('move') || toolName.includes('rename')) {
-      warnings.push('This operation will move/rename files');
-    }
-    if (parameters.path && (parameters.path.includes('/') || parameters.path.includes('\\'))) {
-      warnings.push('File system operation - check path permissions');
-    }
-
-    return warnings;
+  async connect(): Promise<void> {
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
+    logger.info('NCP MCP server connected via stdio transport');
   }
 
-  private getDryRunDescription(toolName: string, parameters: any): string {
-    if (toolName === 'write_file' && parameters.path) {
-      return `Create or overwrite file at: ${parameters.path}`;
-    }
-    if (toolName === 'read_file' && parameters.path) {
-      return `Read contents of file: ${parameters.path}`;
-    }
-    if (toolName === 'create_directory' && parameters.path) {
-      return `Create directory at: ${parameters.path}`;
-    }
-    if (toolName === 'list_directory' && parameters.path) {
-      return `List contents of directory: ${parameters.path}`;
-    }
-
-    return `Execute ${toolName} with provided parameters`;
+  async run(): Promise<void> {
+    await this.initialize();
+    await this.connect();
   }
 
-  private async handleRun(request: MCPRequest, args: any): Promise<MCPResponse> {
-    // Check if indexing is still in progress
-    if (!this.isInitialized && this.initializationPromise) {
-      const progress = this.orchestrator.getIndexingProgress();
+  async cleanup(): Promise<void> {
+    await this.shutdown();
+  }
 
-      if (progress && progress.total > 0) {
-        const percentComplete = Math.round((progress.current / progress.total) * 100);
-        const remainingTime = progress.estimatedTimeRemaining ?
-          ` (~${Math.ceil(progress.estimatedTimeRemaining / 1000)}s remaining)` : '';
+  async shutdown(): Promise<void> {
+    try {
+      await this.orchestrator.cleanup();
+      await this.server.close();
+      logger.info('NCP MCP server shut down gracefully');
+    } catch (error: any) {
+      logger.error(`Error during shutdown: ${error.message}`);
+    }
+  }
 
-        const progressMessage = `⏳ **Indexing in progress**: ${progress.current}/${progress.total} MCPs (${percentComplete}%)${remainingTime}\n` +
-          `Currently indexing: ${progress.currentMCP || 'initializing...'}\n\n` +
-          `Tool execution will be available once indexing completes. Please try again in a moment.`;
-
-        return {
-          jsonrpc: '2.0',
-          id: request.id,
-          result: {
-            content: [{ type: 'text', text: progressMessage }]
-          }
-        };
+  /**
+   * Handle resources/list request
+   */
+  private async handleListResources(): Promise<any[]> {
+    // Add NCP-specific help resources first (always available)
+    const ncpResources = [
+      {
+        uri: 'ncp://help/getting-started',
+        name: 'NCP Getting Started Guide',
+        description: 'Learn how to use NCP effectively - search tips, parameters, and best practices',
+        mimeType: 'text/markdown'
+      },
+      {
+        uri: 'ncp://status/health',
+        name: 'MCP Health Dashboard',
+        description: 'Shows health status of all configured MCPs',
+        mimeType: 'text/markdown'
+      },
+      {
+        uri: 'ncp://status/auto-import',
+        name: 'Last Auto-Import Summary',
+        description: 'Shows MCPs imported from Claude Desktop on last startup',
+        mimeType: 'text/markdown'
       }
+    ];
 
-      // Wait briefly for initialization to complete (max 2 seconds)
+    // Only get MCP resources if orchestrator is initialized (non-blocking)
+    if (this.isInitialized) {
       try {
-        let timeoutId: NodeJS.Timeout;
-        await Promise.race([
-          this.initializationPromise,
-          new Promise((_, reject) => {
-            timeoutId = setTimeout(() => reject(new Error('timeout')), 2000);
-          })
-        ]).finally(() => {
-          if (timeoutId) clearTimeout(timeoutId);
-        });
-      } catch {
-        // Continue even if timeout - try to execute with what's available
-      }
-    }
-
-    if (!args?.tool) {
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32602,
-          message: 'tool parameter is required'
-        }
-      };
-    }
-
-    const toolIdentifier = args.tool;
-    const parameters = args.parameters || {};
-    const dryRun = args.dry_run || false;
-
-    // Extract _meta for transparent passthrough and merge with NCP tracking
-    const clientMeta = request.params?._meta || {};
-    const meta = {
-      ...clientMeta,
-      // Preserve client's session_id if present (don't overwrite!)
-      // Add NCP tracking info in separate namespace
-      ncp_tracking_id: this.ncpTrackingId,
-      ncp_client: this.clientName
-    };
-
-    // ===== CONFIRM-BEFORE-RUN FEATURE =====
-    // Check if this operation requires user confirmation
-    const userResponse = args._userResponse; // User's response from previous confirmation dialog
-
-    const settings = await loadGlobalSettings();
-    const confirmSettings = settings.confirmBeforeRun;
-
-    if (confirmSettings.enabled && !userResponse) {
-      // Check whitelist first
-      const isWhitelisted = await isToolWhitelisted(toolIdentifier);
-
-      if (!isWhitelisted) {
-        // Get tool description by searching for the tool
-        const toolSearchResults = await this.orchestrator.find(toolIdentifier, 1, true);
-        const toolDescription = toolSearchResults.length > 0 ? toolSearchResults[0].description || '' : '';
-
-        // Use vector search to check if tool matches modifier pattern
-        // Search the modifier pattern to see if the tool description matches
-        const searchQuery = `${toolIdentifier} ${toolDescription}`;
-        const matchResults = await this.orchestrator.find(confirmSettings.modifierPattern, 20, false, confirmSettings.vectorThreshold);
-
-        // Check if our tool is in the match results
-        const toolMatch = matchResults.find(result => result.toolName === toolIdentifier);
-
-        if (toolMatch && toolMatch.confidence >= confirmSettings.vectorThreshold) {
-          // Confirmation required - return error with prompt details
-          const confidencePercent = Math.round(toolMatch.confidence * 100);
-
-          // Format parameters for display
-          let parametersText = '';
-          if (Object.keys(parameters).length > 0) {
-            parametersText = '\n\nParameters:';
-            for (const [key, value] of Object.entries(parameters)) {
-              const valueStr = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-              parametersText += `\n  ${key}: ${valueStr}`;
-            }
-          } else {
-            parametersText = '\n\nParameters: (none)';
-          }
-
-          const [mcpName, toolName] = toolIdentifier.split(':');
-
-          const confirmationMessage = `⚠️ CONFIRMATION REQUIRED
-
-Tool: ${toolName}
-MCP: ${mcpName}
-
-Description:
-${toolDescription || 'No description available'}${parametersText}
-
-Reason: Matches modifier pattern (${confidencePercent}% confidence)
-Pattern: "${confirmSettings.modifierPattern}"
-
-This operation may modify data or have side effects.
-
-Do you want to proceed?
-- Reply "YES" to approve this once
-- Reply "ALWAYS" to approve and add to whitelist (won't ask again)
-- Reply "NO" to cancel
-
-Then call this tool again with your response in the _userResponse parameter.`;
-
-          return {
-            jsonrpc: '2.0',
-            id: request.id,
-            error: {
-              code: -32001, // Custom error code for confirmation required
-              message: confirmationMessage
-            }
-          };
-        }
-      }
-    }
-
-    // Handle user response if provided
-    if (userResponse) {
-      const response = parseOperationConfirmationResponse(userResponse);
-
-      if (response === 'cancel') {
-        return {
-          jsonrpc: '2.0',
-          id: request.id,
-          error: {
-            code: -32000,
-            message: `Operation cancelled by user. The tool "${toolIdentifier}" was not executed.`
-          }
-        };
-      }
-
-      if (response === 'always') {
-        // Add to whitelist
-        await addToolToWhitelist(toolIdentifier);
-        logger.info(`Tool ${toolIdentifier} added to whitelist by user`);
-      }
-
-      // For both 'once' and 'always', proceed with execution below
-    }
-    // ===== END CONFIRM-BEFORE-RUN =====
-
-    if (dryRun) {
-      // Dry run mode - show what would happen without executing
-      const previewText = this.generateDryRunPreview(toolIdentifier, parameters);
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          content: [{
-            type: 'text',
-            text: `🔍 DRY RUN PREVIEW:\n\n${previewText}\n\n⚠️  This was a preview only. Set dry_run: false to execute.`
-          }]
-        }
-      };
-    }
-
-    // Normal execution - pass _meta transparently
-    const result = await this.orchestrator.run(toolIdentifier, parameters, meta);
-
-    if (result.success) {
-      // Transparently pass through all content types (text, images, MCP-UI components, etc.)
-      // If content is already a structured array (from underlying MCP), pass it as-is
-      // If it's a string, wrap it as text type for backward compatibility
-      const content = Array.isArray(result.content)
-        ? result.content
-        : [{
-            type: 'text',
-            text: typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2)
-          }];
-
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          content
-        }
-      };
-    } else {
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32603,
-          message: result.error || 'Tool execution failed'
-        }
-      };
-    }
-  }
-
-  private async handleListPrompts(request: MCPRequest): Promise<MCPResponse> {
-    try {
-      let combinedPrompts: any[];
-
-      // Check cache validity
-      if (this.promptsCache && Date.now() - this.promptsCache.timestamp < this.CACHE_TTL_MS) {
-        logger.debug('Using cached prompts list');
-        combinedPrompts = this.promptsCache.data;
-      } else {
-        // Get all prompts: NCP's own + all MCP prompts with prefixes
-        const allMCPPrompts = await this.orchestrator.getAllPrompts();
-
-        // Combine NCP prompts with MCP prompts
-        combinedPrompts = [...NCP_PROMPTS, ...allMCPPrompts];
-
-        // Cache the result
-        this.promptsCache = {
-          data: combinedPrompts,
-          timestamp: Date.now()
-        };
-      }
-
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          prompts: combinedPrompts
-        }
-      };
-    } catch (error: any) {
-      logger.error(`Error listing prompts: ${error.message}`);
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          prompts: NCP_PROMPTS // Fallback to NCP prompts only
-        }
-      };
-    }
-  }
-
-  private async handleGetPrompt(request: MCPRequest): Promise<MCPResponse> {
-    const promptName = request.params?.name;
-    const args = request.params?.arguments || {};
-
-    if (!promptName) {
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32602,
-          message: 'Missing required parameter: name'
-        }
-      };
-    }
-
-    try {
-      // Check if prompt has MCP prefix (format: mcpname:promptname)
-      const colonIndex = promptName.indexOf(':');
-      const hasMCPPrefix = colonIndex > 0;
-
-      if (hasMCPPrefix) {
-        // Delegate to orchestrator for MCP prompts
-        const mcpName = promptName.substring(0, colonIndex);
-        const actualPromptName = promptName.substring(colonIndex + 1);
-
-        const result = await this.orchestrator.getPromptFromMCP(mcpName, actualPromptName, args);
-        return {
-          jsonrpc: '2.0',
-          id: request.id,
-          result
-        };
-      }
-
-      // Handle NCP's own prompts
-      const promptDef = NCP_PROMPTS.find(p => p.name === promptName);
-
-      if (!promptDef) {
-        return {
-          jsonrpc: '2.0',
-          id: request.id,
-          error: {
-            code: -32602,
-            message: `Unknown prompt: ${promptName}`
-          }
-        };
-      }
-
-      // Generate prompt content based on prompt name
-      let messages;
-      switch (promptName) {
-        case 'confirm_add_mcp':
-          messages = generateAddConfirmation(
-            args.mcp_name || 'unknown',
-            args.command || 'unknown',
-            args.args || [],
-            args.profile || 'all'
-          );
-          break;
-
-        case 'confirm_remove_mcp':
-          messages = generateRemoveConfirmation(
-            args.mcp_name || 'unknown',
-            args.profile || 'all'
-          );
-          break;
-
-        case 'configure_mcp':
-          messages = generateConfigInput(
-            args.mcp_name || 'unknown',
-            args.config_type || 'configuration',
-            args.description || 'Please provide configuration value'
-          );
-          break;
-
-        case 'confirm_operation':
-          messages = generateOperationConfirmation(
-            args.tool || 'unknown',
-            args.tool_description || '',
-            args.parameters ? (typeof args.parameters === 'string' ? JSON.parse(args.parameters) : args.parameters) : {},
-            args.matched_pattern || '',
-            args.confidence || 0
-          );
-          break;
-
-        default:
-          return {
-            jsonrpc: '2.0',
-            id: request.id,
-            error: {
-              code: -32602,
-              message: `Prompt ${promptName} not implemented`
-            }
-          };
-      }
-
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          description: promptDef.description,
-          messages
-        }
-      };
-    } catch (error: any) {
-      logger.error(`Error getting prompt: ${error.message}`);
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32603,
-          message: `Failed to get prompt: ${error.message}`
-        }
-      };
-    }
-  }
-
-  private async handleListResources(request: MCPRequest): Promise<MCPResponse> {
-    try {
-      let allResources: any[];
-
-      // Check cache validity
-      if (this.resourcesCache && Date.now() - this.resourcesCache.timestamp < this.CACHE_TTL_MS) {
-        logger.debug('Using cached resources list');
-        allResources = this.resourcesCache.data;
-      } else {
-        // Get resources from managed MCPs
         const mcpResources = await this.orchestrator.getAllResources();
-
-        // Add NCP-specific help resources
-        const ncpResources = [
-          {
-            uri: 'ncp://help/getting-started',
-            name: 'NCP Getting Started Guide',
-            description: 'Learn how to use NCP effectively - search tips, parameters, and best practices',
-            mimeType: 'text/markdown'
-          },
-          {
-            uri: 'ncp://test-drive/guide',
-            name: 'NCP Test-Drive Features Guide',
-            description: 'Interactive guide to test-drive NCP features and discover its full potential',
-            mimeType: 'text/markdown'
-          },
-          {
-            uri: 'ncp://status/health',
-            name: 'MCP Health Dashboard',
-            description: 'Shows health status of all configured MCPs',
-            mimeType: 'text/markdown'
-          },
-          {
-            uri: 'ncp://status/auto-import',
-            name: 'Last Auto-Import Summary',
-            description: 'Shows MCPs imported from Claude Desktop on last startup',
-            mimeType: 'text/markdown'
-          }
-        ];
-
-        allResources = [...ncpResources, ...(mcpResources || [])];
-
-        // Cache the result
-        this.resourcesCache = {
-          data: allResources,
-          timestamp: Date.now()
-        };
+        return [...ncpResources, ...(mcpResources || [])];
+      } catch (error: any) {
+        logger.warn(`Failed to get MCP resources: ${error.message}`);
+        return ncpResources;
       }
-
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          resources: allResources
-        }
-      };
-    } catch (error: any) {
-      logger.error(`Error listing resources: ${error.message}`);
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
-          resources: []
-        }
-      };
     }
+
+    // Return just NCP resources if still initializing
+    return ncpResources;
   }
 
-  private async handleReadResource(request: MCPRequest): Promise<MCPResponse> {
-    const uri = request.params?.uri;
-
-    if (!uri) {
+  /**
+   * Handle resources/read request
+   */
+  private async handleReadResource(uri: string): Promise<any> {
+    // Handle NCP-specific resources (always available)
+    if (uri.startsWith('ncp://')) {
+      const content = await this.generateNCPResourceContent(uri);
       return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32602,
-          message: 'Missing required parameter: uri'
-        }
+        contents: [{
+          uri,
+          mimeType: 'text/markdown',
+          text: content
+        }]
       };
     }
 
-    try {
-      // Handle NCP-specific resources
-      if (uri.startsWith('ncp://')) {
-        const content = await this.generateNCPResourceContent(uri);
+    // Delegate to orchestrator for MCP resources (only if initialized)
+    if (this.isInitialized) {
+      try {
+        const mcpContent = await this.orchestrator.readResource(uri);
         return {
-          jsonrpc: '2.0',
-          id: request.id,
-          result: {
-            contents: [{
-              uri,
-              mimeType: 'text/markdown',
-              text: content
-            }]
-          }
-        };
-      }
-
-      // Delegate to orchestrator for MCP resources
-      const mcpContent = await this.orchestrator.readResource(uri);
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result: {
           contents: [{
             uri,
             mimeType: 'text/plain',
             text: mcpContent
           }]
-        }
-      };
-    } catch (error: any) {
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: -32603,
-          message: `Failed to read resource: ${error.message}`
-        }
-      };
+        };
+      } catch (error: any) {
+        throw new Error(`Failed to read resource: ${error.message}`);
+      }
     }
+
+    // If still initializing, return error
+    throw new Error(`Resource not available during initialization: ${uri}`);
   }
 
+  /**
+   * Generate NCP-specific resource content
+   */
   private async generateNCPResourceContent(uri: string): Promise<string> {
     switch (uri) {
       case 'ncp://help/getting-started':
         return this.generateGettingStartedGuide();
-
-      case 'ncp://test-drive/guide':
-        return TEST_DRIVE_GUIDE.content;
 
       case 'ncp://status/health':
         return this.generateHealthDashboard();
@@ -1256,6 +1325,9 @@ Then call this tool again with your response in the _userResponse parameter.`;
     }
   }
 
+  /**
+   * Generate getting started guide
+   */
   private generateGettingStartedGuide(): string {
     return `# NCP Getting Started Guide
 
@@ -1362,6 +1434,9 @@ Use the health dashboard resource (you're reading resources now!)
 `;
   }
 
+  /**
+   * Generate health dashboard
+   */
   private generateHealthDashboard(): string {
     const healthStatus = this.orchestrator.getMCPHealthStatus();
 
@@ -1412,12 +1487,14 @@ run("ncp:add", {mcp_name: "...", command: "...", args: [...]})
     }
 
     content += `\n---\n\n`;
-    content += `**Profile**: ${this.orchestrator.getProfileName()}\n`;
     content += `**Last Updated**: ${new Date().toLocaleString()}\n`;
 
     return content;
   }
 
+  /**
+   * Generate auto-import summary
+   */
   private generateAutoImportSummary(): string {
     // Try to get auto-import info from orchestrator
     const autoImportInfo = this.orchestrator.getAutoImportSummary();
@@ -1487,299 +1564,48 @@ run("ncp:import", {from: "file", source: "~/path/to/config.json"})
     return content;
   }
 
-  async cleanup(): Promise<void> {
-    await this.shutdown();
-  }
-
-  async shutdown(): Promise<void> {
+  /**
+   * Elicitation API for credential collection
+   * Implements the ElicitationServer interface to enable clipboard-based credential collection
+   *
+   * Note: Includes 5-second timeout to detect unsupported clients quickly
+   */
+  async elicitInput(params: {
+    message: string;
+    requestedSchema: {
+      type: 'object';
+      properties: Record<string, any>;
+      required?: string[];
+    };
+  }): Promise<{
+    action: 'accept' | 'decline' | 'cancel';
+    content?: Record<string, any>;
+  }> {
     try {
-      // Log connection duration if connection was established
-      if (this.ncpTrackingId && this.sessionStartTime) {
-        const duration = Date.now() - this.sessionStartTime;
-        const durationSec = Math.round(duration / 1000);
-        const sessionInfo = this.clientSessionId
-          ? `session=${this.clientSessionId}, tracking=${this.ncpTrackingId}`
-          : `tracking=${this.ncpTrackingId}`;
-        logger.info(`Connection ended: ${sessionInfo}, duration=${durationSec}s, client=${this.clientName}`);
-      }
+      // Add 5-second timeout to detect if client doesn't support elicitation
+      // If client supports it, response comes immediately
+      // If client doesn't support it, request hangs - we treat timeout as "not supported"
+      const result = await Promise.race([
+        this.server.elicitInput(params),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => {
+            // Throw error -32601 (Method not found) to trigger native dialog fallback
+            const error: any = new Error('Elicitation not supported by client (timeout after 5s)');
+            error.code = -32601;
+            reject(error);
+          }, 5000)
+        )
+      ]);
 
-      await this.orchestrator.cleanup();
-      logger.info('NCP MCP server shut down gracefully');
+      // Transform SDK result to our interface format
+      return {
+        action: result.action,
+        content: result.content
+      };
     } catch (error: any) {
-      logger.error(`Error during shutdown: ${error.message}`);
-    }
-  }
-
-  /**
-   * Set up stdio transport listener for MCP protocol messages.
-   * Safe to call multiple times (idempotent).
-   *
-   * This should be called immediately when the process starts to ensure
-   * the server is ready to receive protocol messages from any MCP client,
-   * without requiring an explicit run() call.
-   */
-  startStdioListener(): void {
-    // Prevent duplicate listener setup
-    if ((this as any)._stdioListenerActive) {
-      return;
-    }
-    (this as any)._stdioListenerActive = true;
-
-    // Simple STDIO server
-    process.stdin.setEncoding('utf8');
-    let buffer = '';
-
-    process.stdin.on('data', async (chunk) => {
-      buffer += chunk;
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (line.trim()) {
-          try {
-            const request = JSON.parse(line);
-            const response = await this.handleRequest(request);
-            if (response) {
-              process.stdout.write(JSON.stringify(response) + '\n');
-            }
-          } catch (error) {
-            const errorResponse = {
-              jsonrpc: '2.0',
-              id: null,
-              error: {
-                code: -32700,
-                message: 'Parse error'
-              }
-            };
-            process.stdout.write(JSON.stringify(errorResponse) + '\n');
-          }
-        }
-      }
-    });
-
-    process.stdin.on('end', () => {
-      this.shutdown();
-    });
-  }
-
-  /**
-   * Legacy run() method for backwards compatibility.
-   * Used by command-line interface entry point.
-   *
-   * For MCP server usage, prefer calling startStdioListener() immediately
-   * and initialize() separately to be protocol-compliant.
-   */
-  async run(): Promise<void> {
-    await this.initialize();
-    this.startStdioListener();
-  }
-}
-
-export class ParameterPredictor {
-  predictValue(paramName: string, paramType: string, toolContext: string, description?: string, toolName?: string): any {
-    const name = paramName.toLowerCase();
-    const desc = (description || '').toLowerCase();
-    const tool = (toolName || '').toLowerCase();
-
-    // String type predictions
-    if (paramType === 'string') {
-      return this.predictStringValue(name, desc, toolContext, tool);
-    }
-
-    // Number type predictions
-    if (paramType === 'number' || paramType === 'integer') {
-      return this.predictNumberValue(name, desc, toolContext);
-    }
-
-    // Boolean type predictions
-    if (paramType === 'boolean') {
-      return this.predictBooleanValue(name, desc);
-    }
-
-    // Array type predictions
-    if (paramType === 'array') {
-      return this.predictArrayValue(name, desc, toolContext);
-    }
-
-    // Object type predictions
-    if (paramType === 'object') {
-      return this.predictObjectValue(name, desc);
-    }
-
-    // Default fallback
-    return this.getDefaultForType(paramType);
-  }
-
-  private predictStringValue(name: string, desc: string, context: string, tool?: string): string {
-    // File and path patterns
-    if (name.includes('path') || name.includes('file') || desc.includes('path') || desc.includes('file')) {
-      // Check if tool name suggests directory operations
-      const isDirectoryTool = tool && (
-        tool.includes('list_dir') ||
-        tool.includes('list_folder') ||
-        tool.includes('read_dir') ||
-        tool.includes('scan_dir') ||
-        tool.includes('get_dir')
-      );
-
-      // Check if parameter or description suggests directory
-      const isDirectoryParam = name.includes('dir') ||
-                              name.includes('folder') ||
-                              desc.includes('directory') ||
-                              desc.includes('folder');
-
-      // Smart detection: if it's just "path" but tool is clearly for directories
-      if (name === 'path' && isDirectoryTool) {
-        return context === 'filesystem' ? '/home/user/documents' : './';
-      }
-
-      if (context === 'filesystem') {
-        if (isDirectoryParam || isDirectoryTool) {
-          return '/home/user/documents';
-        }
-        if (name.includes('config') || desc.includes('config')) {
-          return '/etc/config.json';
-        }
-        return '/home/user/document.txt';
-      }
-
-      // Default based on whether it's likely a directory or file
-      if (isDirectoryParam || isDirectoryTool) {
-        return './';
-      }
-      return './file.txt';
-    }
-
-    // URL patterns
-    if (name.includes('url') || name.includes('link') || desc.includes('url') || desc.includes('http')) {
-      if (context === 'web') {
-        return 'https://api.example.com/data';
-      }
-      return 'https://example.com';
-    }
-
-    // Email patterns
-    if (name.includes('email') || name.includes('mail') || desc.includes('email')) {
-      return 'user@example.com';
-    }
-
-    // Name patterns
-    if (name.includes('name') || name === 'title' || name === 'label') {
-      if (context === 'filesystem') {
-        return 'my-file';
-      }
-      return 'example-name';
-    }
-
-    // Content/text patterns
-    if (name.includes('content') || name.includes('text') || name.includes('message') || name.includes('body')) {
-      return 'Hello, world!';
-    }
-
-    // Query/search patterns
-    if (name.includes('query') || name.includes('search') || name.includes('term')) {
-      return 'search term';
-    }
-
-    // Key/ID patterns
-    if (name.includes('key') || name.includes('id') || name.includes('token')) {
-      if (context === 'payment') {
-        return 'sk_test_...';
-      }
-      return 'abc123';
-    }
-
-    // Command patterns
-    if (name.includes('command') || name.includes('cmd')) {
-      if (context === 'system') {
-        return 'ls -la';
-      }
-      return 'echo hello';
-    }
-
-    // Default string
-    return 'example';
-  }
-
-  private predictNumberValue(name: string, desc: string, context: string): number {
-    // Process ID patterns
-    if (name.includes('pid') || desc.includes('process') || desc.includes('pid')) {
-      return 1234;
-    }
-
-    // Port patterns
-    if (name.includes('port') || desc.includes('port')) {
-      return 8080;
-    }
-
-    // Size/length patterns
-    if (name.includes('size') || name.includes('length') || name.includes('limit') || name.includes('count')) {
-      return 10;
-    }
-
-    // Line number patterns
-    if (name.includes('line') || name.includes('head') || name.includes('tail')) {
-      return 5;
-    }
-
-    // Timeout patterns
-    if (name.includes('timeout') || name.includes('delay') || desc.includes('timeout')) {
-      return 5000;
-    }
-
-    // Default number
-    return 1;
-  }
-
-  private predictBooleanValue(name: string, desc: string): boolean {
-    // Negative patterns default to false
-    if (name.includes('disable') || name.includes('skip') || name.includes('ignore')) {
-      return false;
-    }
-
-    // Most booleans default to true for examples
-    return true;
-  }
-
-  private predictArrayValue(name: string, desc: string, context: string): any[] {
-    // File paths array
-    if (name.includes('path') || name.includes('file') || desc.includes('path')) {
-      return ['/path/to/file1.txt', '/path/to/file2.txt'];
-    }
-
-    // Arguments array
-    if (name.includes('arg') || name.includes('param') || desc.includes('argument')) {
-      return ['--verbose', '--output', 'result.txt'];
-    }
-
-    // Tags/keywords
-    if (name.includes('tag') || name.includes('keyword') || name.includes('label')) {
-      return ['tag1', 'tag2'];
-    }
-
-    // Default array
-    return ['item1', 'item2'];
-  }
-
-  private predictObjectValue(name: string, desc: string): object {
-    // Options/config object
-    if (name.includes('option') || name.includes('config') || name.includes('setting')) {
-      return { enabled: true, timeout: 5000 };
-    }
-
-    // Default object
-    return { key: 'value' };
-  }
-
-  private getDefaultForType(type: string): any {
-    switch (type) {
-      case 'string': return 'value';
-      case 'number':
-      case 'integer': return 0;
-      case 'boolean': return true;
-      case 'array': return [];
-      case 'object': return {};
-      default: return null;
+      logger.error(`Elicitation failed: ${error.message}`);
+      // Re-throw the error so ncp-management.ts can catch it and use native dialog fallback
+      throw error;
     }
   }
 }

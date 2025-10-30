@@ -66,10 +66,15 @@ describe('MCP Server Protocol Integration', () => {
       const initPromise = server.initialize();
 
       // Call find during indexing - should get progress message
-      const response = await server.handleFind(
-        { jsonrpc: '2.0', id: 'test-find', method: 'tools/call' },
-        { description: 'test query' }
-      );
+      const response = await server.handleRequest({
+        jsonrpc: '2.0',
+        id: 'test-find',
+        method: 'tools/call',
+        params: {
+          name: 'find',
+          arguments: { description: 'test query' }
+        }
+      });
 
       // Should get either results or progress message, but not hang
       expect(response).toBeDefined();

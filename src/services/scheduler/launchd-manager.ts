@@ -34,6 +34,37 @@ export class LaunchdManager {
   }
 
   /**
+   * Get helpful error message for launchd issues
+   */
+  private getLaunchdErrorMessage(operation: string, error: any): string {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+
+    return `Failed to ${operation} using launchd.
+
+Error: ${errorMsg}
+
+Troubleshooting steps:
+1. Ensure you're running on macOS (launchd is macOS-only)
+2. Check if launchctl is available:
+   which launchctl
+
+3. Verify LaunchAgents directory permissions:
+   ls -la ~/Library/LaunchAgents
+
+4. Check launchd service status:
+   launchctl list | grep com.portel.ncp
+
+5. View launchd logs for errors:
+   log show --predicate 'subsystem == "com.apple.launchd"' --last 1h
+
+For more information, visit:
+https://www.launchd.info/
+https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html
+
+This error message is also visible to AI assistants to help troubleshoot the issue.`;
+  }
+
+  /**
    * Convert cron expression to launchd calendar interval
    * Cron format: minute hour day month weekday
    */
@@ -228,9 +259,8 @@ ${calendarIntervalXML}
       }
 
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      logger.error(`[LaunchdManager] Failed to add job ${jobId}: ${errorMsg}`);
-      throw new Error(`Failed to add launchd job: ${errorMsg}`);
+      logger.error(`[LaunchdManager] Failed to add job ${jobId}`);
+      throw new Error(this.getLaunchdErrorMessage('add job', error));
     }
   }
 

@@ -3,7 +3,7 @@
  * Provides contextual help for tool discovery and execution
  */
 
-import { ParameterPredictor } from '../server/mcp-server.js';
+import { ParameterPredictor } from '../utils/parameter-predictor.js';
 import { ToolSchemaParser } from './tool-schema-parser.js';
 import { ToolContextResolver } from './tool-context-resolver.js';
 import { updater } from '../utils/updater.js';

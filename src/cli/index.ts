@@ -613,7 +613,9 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('schedule') ||
   process.argv.includes('doctor') ||
   process.argv.includes('credentials') ||
-  process.argv.includes('update');
+  process.argv.includes('update') ||
+  process.argv.includes('_job-run') ||
+  process.argv.includes('cleanup-runs');
 
 // Default to MCP server mode when no CLI commands are provided
 // This ensures compatibility with Claude Desktop and other MCP clients that expect server mode by default
@@ -1752,12 +1754,15 @@ program
     const depth = parseInt(options.depth || '2');
     const confidence_threshold = options.confidence_threshold ? parseFloat(options.confidence_threshold) : undefined;
 
-    const result = await server.handleFind(
-      { jsonrpc: '2.0', id: 'cli', method: 'tools/call' },
-      { description: normalizedQuery, limit, page, depth, confidence_threshold }
-    );
+    const result = await server.callTool('find', {
+      description: normalizedQuery,
+      limit,
+      page,
+      depth,
+      confidence_threshold
+    });
 
-    let formattedOutput = formatFindOutput(result.result.content[0].text);
+    let formattedOutput = formatFindOutput(result.content[0].text);
 
     // Extract MCP names from results and check for updates
     try {
@@ -2062,7 +2067,7 @@ program
         if (requiredParams.length > 0 && options.prompt !== false) {
           // Interactive prompting for parameters (default behavior)
           const { ParameterPrompter } = await import('../utils/parameter-prompter.js');
-          const { ParameterPredictor } = await import('../server/mcp-server.js');
+          const { ParameterPredictor } = await import('../utils/parameter-predictor.js');
 
           const prompter = new ParameterPrompter();
           const predictor = new ParameterPredictor();

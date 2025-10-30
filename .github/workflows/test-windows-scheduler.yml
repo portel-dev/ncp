@@ -269,14 +269,81 @@ jobs:
           Set-Content -Path 'test-cron-patterns.mjs' -Value $testScript
           node test-cron-patterns.mjs
 
+      - name: Test full Scheduler class integration
+        shell: pwsh
+        run: |
+          Write-Host "==================================="
+          Write-Host "Testing Full Scheduler Integration"
+          Write-Host "==================================="
+          Write-Host ""
+
+          # Create end-to-end test
+          $testScript = @'
+          import { Scheduler } from './dist/services/scheduler/scheduler.js';
+
+          console.log('🧪 Testing Full Scheduler Class (End-to-End)\n');
+
+          try {
+            const scheduler = new Scheduler();
+
+            if (!scheduler.isAvailable()) {
+              console.error('❌ Scheduler not available on this platform!');
+              process.exit(1);
+            }
+            console.log('✅ Scheduler initialized and available\n');
+
+            // Create a job through the full Scheduler class
+            console.log('📅 Creating job through Scheduler class...');
+            const job = await scheduler.createJob({
+              name: 'e2e-test-job',
+              schedule: '*/10 * * * *', // Every 10 minutes
+              tool: 'test:tool',
+              parameters: { test: true },
+              description: 'End-to-end test job',
+              skipValidation: true // Skip tool validation since it doesn't exist
+            });
+
+            console.log('✅ Job created via Scheduler class');
+            console.log('   ID:', job.id);
+            console.log('   Name:', job.name);
+            console.log('   Cron:', job.cronExpression);
+            console.log('');
+
+            // List jobs
+            console.log('📋 Listing all jobs...');
+            const jobs = await scheduler.listJobs();
+            console.log('✅ Found', jobs.length, 'job(s)');
+            console.log('');
+
+            // Delete job
+            console.log('🧹 Deleting job...');
+            await scheduler.deleteJob(job.id);
+            console.log('✅ Job deleted\n');
+
+            console.log('🎉 Full Scheduler integration test passed!');
+
+          } catch (error) {
+            console.error('❌ Test failed:', error.message);
+            if (error.stack) {
+              console.error(error.stack);
+            }
+            process.exit(1);
+          }
+          '@
+
+          Set-Content -Path 'test-full-scheduler.mjs' -Value $testScript
+          node test-full-scheduler.mjs
+
       - name: Cleanup all test tasks
         if: always()
         shell: pwsh
         run: |
           Write-Host "Cleaning up any remaining test tasks..."
-          schtasks /Query /FO CSV /NH | Select-String "NCP_TEST" | ForEach-Object {
+          schtasks /Query /FO CSV /NH | Select-String "NCP" | ForEach-Object {
             $taskName = ($_ -split ',')[0] -replace '"', ''
-            Write-Host "Deleting: $taskName"
-            schtasks /Delete /TN $taskName /F 2>&1 | Out-Null
+            if ($taskName -like "*NCP_*") {
+              Write-Host "Deleting: $taskName"
+              schtasks /Delete /TN $taskName /F 2>&1 | Out-Null
+            }
           }
           Write-Host "✅ Cleanup complete"

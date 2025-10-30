@@ -57,6 +57,31 @@ export class TaskSchedulerManager {
   }
 
   /**
+   * Get helpful error message when schtasks is not available
+   */
+  private getSchTasksNotAvailableMessage(): string {
+    return `Windows Task Scheduler (schtasks.exe) is not available on this system.
+
+This is required for scheduling jobs on Windows. The schtasks command should be included by default on Windows 10 and later.
+
+Possible solutions:
+1. Ensure you're running on Windows 10 or later
+2. Check if Task Scheduler service is running:
+   - Open Services (services.msc)
+   - Find "Task Scheduler" service
+   - Ensure it's running and set to Automatic
+
+3. If schtasks.exe is missing, try:
+   - Run System File Checker: sfc /scannow
+   - Reinstall Windows Management Instrumentation
+
+For more information, visit:
+https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/schtasks
+
+This error message is also visible to AI assistants to help troubleshoot the issue.`;
+  }
+
+  /**
    * Convert cron expression to Windows Task Scheduler schedule
    * This is a simplified conversion - some cron expressions cannot be represented in schtasks
    */
@@ -215,7 +240,7 @@ export class TaskSchedulerManager {
    */
   addJob(jobId: string, cronExpression: string, command: string): void {
     if (!this.isSchTasksAvailable()) {
-      throw new Error('schtasks command not found. Please ensure Windows Task Scheduler is available.');
+      throw new Error(this.getSchTasksNotAvailableMessage());
     }
 
     logger.info(`[TaskSchedulerManager] Adding job: ${jobId} with schedule: ${cronExpression}`);

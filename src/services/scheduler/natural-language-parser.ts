@@ -178,11 +178,11 @@ export class NaturalLanguageParser {
       const now = new Date();
       const targetTime = new Date(now.getTime() + milliseconds);
 
-      // Create one-time cron expression in UTC
-      const minute = targetTime.getUTCMinutes();
-      const hour = targetTime.getUTCHours();
-      const day = targetTime.getUTCDate();
-      const month = targetTime.getUTCMonth() + 1;
+      // Create one-time cron expression in local time (cron runs in system timezone)
+      const minute = targetTime.getMinutes();
+      const hour = targetTime.getHours();
+      const day = targetTime.getDate();
+      const month = targetTime.getMonth() + 1;
 
       return {
         success: true,

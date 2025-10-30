@@ -203,7 +203,7 @@ If you ran tests and didn't see ANY dialog boxes pop up in Claude Desktop, the e
    ```
 
 5. **Verify server declares elicitation capability:**
-   In `src/server/mcp-server-sdk.ts:44`, should have:
+   In `src/server/mcp-server.ts:44`, should have:
    ```typescript
    capabilities: {
      tools: {},
@@ -213,7 +213,7 @@ If you ran tests and didn't see ANY dialog boxes pop up in Claude Desktop, the e
 
 6. **Check initialization timing:**
    - Elicitation server must be set BEFORE tools are called
-   - Check constructor in `src/server/mcp-server-sdk.ts:54-60`
+   - Check constructor in `src/server/mcp-server.ts:54-60`
 
 ---
 

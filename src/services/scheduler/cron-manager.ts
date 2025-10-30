@@ -43,11 +43,48 @@ export class CronManager {
   }
 
   /**
+   * Get helpful error message when crontab is not available
+   */
+  private getCrontabNotAvailableMessage(): string {
+    return `The crontab command is not available on this system.
+
+This is required for scheduling jobs on Linux/Unix systems.
+
+Installation instructions by distribution:
+
+Ubuntu/Debian:
+  sudo apt-get update && sudo apt-get install cron
+
+Fedora/RHEL/CentOS:
+  sudo dnf install cronie
+  sudo systemctl enable crond
+  sudo systemctl start crond
+
+Alpine Linux:
+  apk add dcron
+  rc-update add dcron
+  rc-service dcron start
+
+Arch Linux:
+  sudo pacman -S cronie
+  sudo systemctl enable cronie
+  sudo systemctl start cronie
+
+After installation, verify with:
+  which crontab
+
+For more information, visit:
+https://man7.org/linux/man-pages/man1/crontab.1.html
+
+This error message is also visible to AI assistants to help troubleshoot the issue.`;
+  }
+
+  /**
    * Get current user's crontab
    */
   private getCurrentCrontab(): string {
     if (!this.isCrontabAvailable()) {
-      throw new Error('crontab command not found. Please install cron.');
+      throw new Error(this.getCrontabNotAvailableMessage());
     }
 
     try {

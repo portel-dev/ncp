@@ -86,25 +86,62 @@ export class JobExecutor {
       status: 'running'
     });
 
+    // Track original working directory for restoration
+    const originalCwd = process.cwd();
+
     try {
       logger.info(`[JobExecutor] Executing ${job.tool} with parameters: ${JSON.stringify(job.parameters)}`);
 
-      // Create orchestrator (same as 'ncp run' command)
-      const { NCPOrchestrator } = await import('../../orchestrator/ncp-orchestrator.js');
-      const orchestrator = new NCPOrchestrator('all', true); // Silent mode
+      // Change to home directory to use global ~/.ncp config
+      // Scheduled jobs are system-level automation and should use global MCP configuration
+      const { homedir } = await import('os');
+      const homeDirectory = homedir();
+      if (homeDirectory !== originalCwd) {
+        process.chdir(homeDirectory);
+        logger.debug(`[JobExecutor] Changed working directory from ${originalCwd} to ${homeDirectory} for global MCP access`);
+      }
 
-      // Initialize and wait for background init to complete
+      // For MCP tools like "apple-mcp:mail", use orchestrator with specific profile
+      // Extract MCP name from tool (e.g., "apple-mcp" from "apple-mcp:mail")
+      const mcpName = job.tool.includes(':') ? job.tool.split(':')[0] : null;
+
+      console.log(`[JobExecutor] DEBUG: Tool: ${job.tool}, MCP: ${mcpName || 'none'}`);
+      logger.debug(`[JobExecutor] Tool: ${job.tool}, MCP: ${mcpName || 'none'}`);
+
+      // Create orchestrator with specific MCP profile
+      console.log('[JobExecutor] DEBUG: Importing NCPOrchestrator...');
+      const { NCPOrchestrator } = await import('../../orchestrator/ncp-orchestrator.js');
+      console.log('[JobExecutor] DEBUG: Creating orchestrator instance...');
+      const orchestrator = new NCPOrchestrator(mcpName || 'all', true); // Silent mode
+      console.log('[JobExecutor] DEBUG: Orchestrator created');
+
+      // Initialize and wait for background init to complete (with timeout)
+      console.log('[JobExecutor] DEBUG: Calling initialize()...');
       await orchestrator.initialize();
-      await orchestrator.waitForInitialization();
+      console.log('[JobExecutor] DEBUG: Initialize complete');
+
+      // Wait for initialization with 30 second timeout
+      console.log('[JobExecutor] DEBUG: Waiting for initialization (30s timeout)...');
+      await this.executeWithTimeout(
+        () => orchestrator.waitForInitialization(),
+        30000
+      );
+      console.log('[JobExecutor] DEBUG: Initialization wait complete');
 
       // Execute tool with timeout
+      console.log(`[JobExecutor] DEBUG: Executing tool ${job.tool}...`);
       const execResult = await this.executeWithTimeout<any>(
         () => orchestrator.run(job.tool, job.parameters),
         executionTimeout
       );
+      console.log('[JobExecutor] DEBUG: Tool execution complete');
 
       // Cleanup orchestrator
       await orchestrator.cleanup();
+
+      // Restore original working directory
+      process.chdir(originalCwd);
+      logger.debug(`[JobExecutor] Restored working directory to ${originalCwd}`);
 
       if (!execResult.success) {
         throw new Error(execResult.error || 'Tool execution failed');
@@ -142,6 +179,14 @@ export class JobExecutor {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
       logger.error(`[JobExecutor] Execution ${executionId} failed: ${errorMessage}`);
+
+      // Restore original working directory
+      try {
+        process.chdir(originalCwd);
+        logger.debug(`[JobExecutor] Restored working directory to ${originalCwd} after error`);
+      } catch (chdirError) {
+        logger.warn(`[JobExecutor] Failed to restore working directory: ${chdirError}`);
+      }
 
       // Record failed execution
       this.executionRecorder.completeExecution(

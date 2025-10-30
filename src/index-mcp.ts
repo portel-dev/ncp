@@ -14,8 +14,8 @@
  *   - No CLI commands needed
  */
 
-// Testing SDK-based server implementation
-import { MCPServerSDK as MCPServer } from './server/mcp-server-sdk.js';
+// Using official SDK-based server implementation
+import { MCPServer } from './server/mcp-server.js';
 import { setOverrideWorkingDirectory } from './utils/ncp-paths.js';
 
 // Global error handlers to catch uncaught exceptions and log to stderr
