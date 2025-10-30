@@ -11,7 +11,7 @@
 
 > **1 MCP to rule them all**
 
-Your MCPs, [supercharged](#supercharged-features). [Find any tool instantly](#instant-tool-discovery), [load on demand](#on-demand-loading), [run on schedule](#automated-scheduling), [ready for any client](#universal-compatibility). [Smart loading](#smart-caching) saves tokens and energy.
+Your MCPs, [supercharged](#supercharged-features). Find any tool instantly, load on demand, run on schedule, ready for any client. Smart loading saves tokens and energy.
 
 ## 💍 **What is NCP?**
 
