@@ -7,6 +7,7 @@ import { JobManager } from './job-manager.js';
 import { ExecutionRecorder } from './execution-recorder.js';
 import { CronManager } from './cron-manager.js';
 import { LaunchdManager } from './launchd-manager.js';
+import { TaskSchedulerManager } from './task-scheduler-manager.js';
 import { JobExecutor } from './job-executor.js';
 import { NaturalLanguageParser } from './natural-language-parser.js';
 import { ToolValidator } from './tool-validator.js';
@@ -34,7 +35,7 @@ export interface CreateJobOptions {
 export class Scheduler {
   private jobManager: JobManager;
   public executionRecorder: ExecutionRecorder; // Public for access from SchedulerMCP
-  private scheduleManager?: CronManager | LaunchdManager;
+  private scheduleManager?: CronManager | LaunchdManager | TaskSchedulerManager;
   private jobExecutor: JobExecutor;
   private toolValidator: ToolValidator;
   private settingsManager: SettingsManager;
@@ -57,7 +58,15 @@ export class Scheduler {
       } catch (error) {
         logger.warn(`[Scheduler] Launchd manager initialization failed: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } else if (currentPlatform !== 'win32') {
+    } else if (currentPlatform === 'win32') {
+      // Windows - use Task Scheduler
+      try {
+        this.scheduleManager = new TaskSchedulerManager();
+        logger.info('[Scheduler] Using Task Scheduler for Windows scheduling');
+      } catch (error) {
+        logger.warn(`[Scheduler] Task Scheduler manager initialization failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } else {
       // Linux/Unix - use cron
       try {
         this.scheduleManager = new CronManager();
@@ -65,8 +74,6 @@ export class Scheduler {
       } catch (error) {
         logger.warn(`[Scheduler] Cron manager initialization failed: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } else {
-      logger.warn('[Scheduler] Windows platform detected - scheduling not available');
     }
   }
 
@@ -200,8 +207,10 @@ export class Scheduler {
       }
     }
 
-    // Validate cron expression
-    const cronValidation = CronManager.validateCronExpression(cronExpression);
+    // Validate cron expression (all managers use the same validation logic)
+    const cronValidation = this.scheduleManager instanceof TaskSchedulerManager
+      ? TaskSchedulerManager.validateCronExpression(cronExpression)
+      : CronManager.validateCronExpression(cronExpression);
     if (!cronValidation.valid) {
       throw new Error(`Invalid cron expression: ${cronValidation.error}`);
     }

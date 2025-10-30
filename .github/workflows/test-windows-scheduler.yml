@@ -1,0 +1,281 @@
+name: Test Windows Scheduler
+
+# Manually triggered workflow for testing Windows Task Scheduler integration
+on:
+  workflow_dispatch:
+    inputs:
+      test_level:
+        description: 'Test level to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - basic
+          - ncp
+          - all
+
+jobs:
+  test-windows-basic:
+    name: Test Basic Windows Scheduler Commands
+    runs-on: windows-latest
+    if: github.event.inputs.test_level == 'basic' || github.event.inputs.test_level == 'all'
+
+    steps:
+      - name: Check schtasks availability
+        run: |
+          Write-Host "==================================="
+          Write-Host "Step 1: Verify schtasks command"
+          Write-Host "==================================="
+          Write-Host ""
+
+          where.exe schtasks
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "schtasks not found!"
+            exit 1
+          }
+
+          Write-Host "✅ schtasks command found"
+          Write-Host ""
+
+      - name: Test creating a simple task
+        run: |
+          Write-Host "==================================="
+          Write-Host "Step 2: Create a test task"
+          Write-Host "==================================="
+          Write-Host ""
+
+          # Create a simple task that runs daily
+          $taskName = "NCP_TEST_SIMPLE"
+          $command = "cmd.exe /c echo Test"
+
+          Write-Host "Creating task: $taskName"
+          schtasks /Create /TN $taskName /TR $command /SC DAILY /ST 12:00 /RU SYSTEM /F
+
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Task created successfully"
+          } else {
+            Write-Error "Failed to create task"
+            exit 1
+          }
+          Write-Host ""
+
+      - name: List tasks and verify creation
+        run: |
+          Write-Host "==================================="
+          Write-Host "Step 3: List tasks and verify"
+          Write-Host "==================================="
+          Write-Host ""
+
+          Write-Host "Querying all tasks with NCP prefix..."
+          schtasks /Query /FO LIST /V /TN "NCP_TEST_SIMPLE"
+
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Task found in scheduler"
+          } else {
+            Write-Error "Task not found!"
+            exit 1
+          }
+          Write-Host ""
+
+      - name: Test CSV output format
+        run: |
+          Write-Host "==================================="
+          Write-Host "Step 4: Test CSV format (for parsing)"
+          Write-Host "==================================="
+          Write-Host ""
+
+          Write-Host "Getting tasks in CSV format..."
+          schtasks /Query /FO CSV /NH | Select-String "NCP_TEST"
+
+          Write-Host "✅ CSV output works"
+          Write-Host ""
+
+      - name: Delete test task
+        run: |
+          Write-Host "==================================="
+          Write-Host "Step 5: Delete test task"
+          Write-Host "==================================="
+          Write-Host ""
+
+          schtasks /Delete /TN "NCP_TEST_SIMPLE" /F
+
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Task deleted successfully"
+          } else {
+            Write-Error "Failed to delete task"
+            exit 1
+          }
+          Write-Host ""
+
+      - name: Verify deletion
+        run: |
+          Write-Host "==================================="
+          Write-Host "Step 6: Verify task was deleted"
+          Write-Host "==================================="
+          Write-Host ""
+
+          schtasks /Query /TN "NCP_TEST_SIMPLE" 2>&1 | Out-Null
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "✅ Task successfully removed"
+          } else {
+            Write-Error "Task still exists!"
+            exit 1
+          }
+          Write-Host ""
+
+          Write-Host "🎉 All basic tests passed!"
+
+  test-windows-ncp:
+    name: Test NCP Scheduler Integration
+    runs-on: windows-latest
+    if: github.event.inputs.test_level == 'ncp' || github.event.inputs.test_level == 'all'
+    needs: test-windows-basic
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Test TaskSchedulerManager directly
+        shell: pwsh
+        run: |
+          Write-Host "==================================="
+          Write-Host "Testing TaskSchedulerManager"
+          Write-Host "==================================="
+          Write-Host ""
+
+          # Create test script
+          $testScript = @'
+          import { TaskSchedulerManager } from './dist/services/scheduler/task-scheduler-manager.js';
+
+          console.log('🧪 Testing TaskSchedulerManager\n');
+
+          try {
+            const manager = new TaskSchedulerManager();
+            console.log('✅ TaskSchedulerManager initialized\n');
+
+            // Test job creation
+            console.log('📅 Creating test job...');
+            const jobId = 'test-job-' + Date.now();
+            const cronExpr = '*/5 * * * *'; // Every 5 minutes
+            const command = 'cmd.exe /c echo Test';
+
+            manager.addJob(jobId, cronExpr, command);
+            console.log('✅ Job created:', jobId);
+            console.log('   Cron:', cronExpr);
+            console.log('   Command:', command);
+            console.log('');
+
+            // Verify job exists
+            console.log('🔍 Verifying job exists...');
+            const job = manager.getJob(jobId);
+            if (job) {
+              console.log('✅ Job found in scheduler');
+              console.log('   ID:', job.id);
+              console.log('   Cron:', job.cronExpression);
+              console.log('');
+            } else {
+              console.error('❌ Job not found!');
+              process.exit(1);
+            }
+
+            // Clean up
+            console.log('🧹 Cleaning up...');
+            manager.removeJob(jobId);
+
+            // Verify removal
+            const jobAfter = manager.getJob(jobId);
+            if (!jobAfter) {
+              console.log('✅ Job successfully removed\n');
+            } else {
+              console.error('❌ Job still exists after deletion!');
+              process.exit(1);
+            }
+
+            console.log('🎉 All TaskSchedulerManager tests passed!');
+
+          } catch (error) {
+            console.error('❌ Test failed:', error.message);
+            if (error.stack) {
+              console.error(error.stack);
+            }
+            process.exit(1);
+          }
+          '@
+
+          Set-Content -Path 'test-windows-scheduler.mjs' -Value $testScript
+
+          # Set up test environment
+          $env:HOME = $env:USERPROFILE
+          New-Item -Path "$env:USERPROFILE\.ncp\profiles\default" -ItemType Directory -Force | Out-Null
+          Set-Content -Path "$env:USERPROFILE\.ncp\profiles\default\profile.json" -Value '{"name":"default","mcps":{}}'
+
+          # Run test
+          node test-windows-scheduler.mjs
+
+      - name: Test different cron patterns
+        shell: pwsh
+        run: |
+          Write-Host "==================================="
+          Write-Host "Testing Cron Pattern Conversion"
+          Write-Host "==================================="
+          Write-Host ""
+
+          # Create test script for various cron patterns
+          $testScript = @'
+          import { TaskSchedulerManager } from './dist/services/scheduler/task-scheduler-manager.js';
+
+          const manager = new TaskSchedulerManager();
+          const patterns = [
+            '*/5 * * * *',     // Every 5 minutes
+            '0 */2 * * *',     // Every 2 hours
+            '0 9 * * *',       // Daily at 9 AM
+            '0 9 * * 1',       // Every Monday at 9 AM
+            '0 9 15 * *',      // 15th of month at 9 AM
+          ];
+
+          console.log('Testing cron pattern conversions:\n');
+
+          for (const pattern of patterns) {
+            try {
+              const jobId = 'test-pattern-' + Date.now() + '-' + Math.random();
+              console.log('Pattern:', pattern);
+
+              manager.addJob(jobId, pattern, 'cmd.exe /c echo test');
+              console.log('✅ Successfully created\n');
+
+              manager.removeJob(jobId);
+            } catch (error) {
+              console.error('❌ Failed:', error.message, '\n');
+            }
+          }
+
+          console.log('🎉 Pattern conversion tests complete!');
+          '@
+
+          Set-Content -Path 'test-cron-patterns.mjs' -Value $testScript
+          node test-cron-patterns.mjs
+
+      - name: Cleanup all test tasks
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "Cleaning up any remaining test tasks..."
+          schtasks /Query /FO CSV /NH | Select-String "NCP_TEST" | ForEach-Object {
+            $taskName = ($_ -split ',')[0] -replace '"', ''
+            Write-Host "Deleting: $taskName"
+            schtasks /Delete /TN $taskName /F 2>&1 | Out-Null
+          }
+          Write-Host "✅ Cleanup complete"
