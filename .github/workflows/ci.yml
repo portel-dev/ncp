@@ -11,6 +11,7 @@ on:
       - 'tsconfig.json'
       - '.github/workflows/**'
       - 'scripts/**'
+      - 'manifest.json'
   pull_request:
     branches: [main, develop]
 
