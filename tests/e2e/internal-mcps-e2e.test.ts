@@ -91,7 +91,7 @@ describe('Internal MCPs - E2E Tests', () => {
 
   describe('MCP Management MCP', () => {
     test('should list available mcp management tools', () => {
-      const mcpMCP = manager.getAllEnabledInternalMCPs().find(m => m.name === 'ncp');
+      const mcpMCP = manager.getAllEnabledInternalMCPs().find(m => m.name === 'mcp');
 
       expect(mcpMCP).toBeDefined();
       expect(mcpMCP?.tools.length).toBeGreaterThan(0);
@@ -103,7 +103,7 @@ describe('Internal MCPs - E2E Tests', () => {
     });
 
     test('should list MCPs in profile', async () => {
-      const result = await manager.executeInternalTool('ncp', 'list', {
+      const result = await manager.executeInternalTool('mcp', 'list', {
         profile: 'default'
       });
 
@@ -112,7 +112,7 @@ describe('Internal MCPs - E2E Tests', () => {
     });
 
     test('should list MCPs from specific profile', async () => {
-      const result = await manager.executeInternalTool('ncp', 'list', {
+      const result = await manager.executeInternalTool('mcp', 'list', {
         profile: 'default'
       });
 

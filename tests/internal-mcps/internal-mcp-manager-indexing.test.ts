@@ -61,14 +61,14 @@ describe('InternalMCPManager - Index Management', () => {
 
     test('should handle multiple MCPs being disabled', async () => {
       await manager.disableInternalMCP('schedule');
-      await manager.disableInternalMCP('ncp');
+      await manager.disableInternalMCP('mcp');
 
       expect(manager.isInternalMCPDisabled('schedule')).toBe(true);
-      expect(manager.isInternalMCPDisabled('ncp')).toBe(true);
+      expect(manager.isInternalMCPDisabled('mcp')).toBe(true);
 
       const disabledList = manager.getDisabledInternalMCPs();
       expect(disabledList).toContain('schedule');
-      expect(disabledList).toContain('ncp');
+      expect(disabledList).toContain('mcp');
     });
   });
 
@@ -124,23 +124,23 @@ describe('InternalMCPManager - Index Management', () => {
 
     test('should return list of disabled MCPs', async () => {
       await manager.disableInternalMCP('schedule');
-      await manager.disableInternalMCP('ncp');
+      await manager.disableInternalMCP('mcp');
 
       const disabled = manager.getDisabledInternalMCPs();
       expect(disabled).toHaveLength(2);
       expect(disabled).toContain('schedule');
-      expect(disabled).toContain('ncp');
+      expect(disabled).toContain('mcp');
     });
 
     test('should update after enabling MCP', async () => {
       await manager.disableInternalMCP('schedule');
-      await manager.disableInternalMCP('ncp');
+      await manager.disableInternalMCP('mcp');
 
       await manager.enableInternalMCP('schedule');
 
       const disabled = manager.getDisabledInternalMCPs();
       expect(disabled).toHaveLength(1);
-      expect(disabled).toContain('ncp');
+      expect(disabled).toContain('mcp');
       expect(disabled).not.toContain('schedule');
     });
   });
@@ -153,7 +153,7 @@ describe('InternalMCPManager - Index Management', () => {
       expect(enabled.length).toBeGreaterThanOrEqual(2);
 
       const names = enabled.map(m => m.name);
-      expect(names).toContain('ncp');
+      expect(names).toContain('mcp');
       expect(names).toContain('schedule');
     });
 
@@ -163,7 +163,7 @@ describe('InternalMCPManager - Index Management', () => {
       const enabled = manager.getAllEnabledInternalMCPs();
       const names = enabled.map(m => m.name);
 
-      expect(names).toContain('ncp');
+      expect(names).toContain('mcp');
       expect(names).not.toContain('schedule');
     });
 
@@ -240,14 +240,14 @@ describe('InternalMCPManager - Index Management', () => {
 
     test('should maintain state across multiple operations', async () => {
       await manager.disableInternalMCP('schedule');
-      await manager.disableInternalMCP('ncp');
+      await manager.disableInternalMCP('mcp');
 
       expect(manager.getDisabledInternalMCPs()).toHaveLength(2);
 
       await manager.enableInternalMCP('schedule');
 
       expect(manager.getDisabledInternalMCPs()).toHaveLength(1);
-      expect(manager.getDisabledInternalMCPs()).toContain('ncp');
+      expect(manager.getDisabledInternalMCPs()).toContain('mcp');
     });
   });
 });

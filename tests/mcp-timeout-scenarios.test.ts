@@ -8,12 +8,18 @@ import { MCPServer } from '../src/server/mcp-server.js';
 
 describe('MCP Timeout Prevention Tests', () => {
   let server: MCPServer;
+  let timeoutIds: NodeJS.Timeout[] = [];
 
   beforeEach(() => {
     server = new MCPServer('test', false);
+    timeoutIds = [];
   });
 
   afterEach(async () => {
+    // Clear all pending timeouts
+    timeoutIds.forEach(id => clearTimeout(id));
+    timeoutIds = [];
+
     if (server) {
       await server.cleanup?.();
     }
@@ -36,9 +42,10 @@ describe('MCP Timeout Prevention Tests', () => {
             method: 'tools/list'
           }),
           // Fail if any request takes more than 1 second
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Request ${i} timed out`)), 1000)
-          )
+          new Promise((_, reject) => {
+            const timeoutId = setTimeout(() => reject(new Error(`Request ${i} timed out`)), 1000);
+            timeoutIds.push(timeoutId);
+          })
         ])
       );
 
@@ -57,9 +64,10 @@ describe('MCP Timeout Prevention Tests', () => {
     });
 
     it('should respond to initialize within 100ms even with slow indexing', async () => {
-      const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Initialize timed out')), 100)
-      );
+      const timeout = new Promise((_, reject) => {
+        const timeoutId = setTimeout(() => reject(new Error('Initialize timed out')), 100);
+        timeoutIds.push(timeoutId);
+      });
 
       const response = Promise.resolve(server.handleRequest({
         jsonrpc: '2.0',
