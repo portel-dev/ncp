@@ -3,6 +3,10 @@ set -e
 
 echo "🔨 Building NCP DXT from clean directory..."
 
+# Store project root directory
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+echo "📍 Project root: $PROJECT_ROOT"
+
 # Build TypeScript first
 echo "📦 Building TypeScript..."
 npm run build
@@ -47,14 +51,14 @@ fi
 
 # Pack DXT from clean directory
 echo "📦 Packing DXT..."
-npx @anthropic-ai/mcpb pack . /Users/arul/Projects/ncp-production-clean/ncp.dxt
+npx @anthropic-ai/mcpb pack . "$PROJECT_ROOT/ncp.dxt"
 
 # WORKAROUND: mcpb excludes build/ directories from node_modules
 # Extract DXT (zip format), manually add build directories, re-pack
 echo "🔧 Fixing missing build directories (mcpb workaround)..."
 PATCH_DIR=$(mktemp -d)
 cd "$PATCH_DIR"
-unzip -q /Users/arul/Projects/ncp-production-clean/ncp.dxt
+unzip -q "$PROJECT_ROOT/ncp.dxt"
 
 # Copy missing build directories from temp install
 if [ -d "$TEMP_DIR/node_modules/human-signals/build" ]; then
@@ -69,9 +73,9 @@ if [ -d "$TEMP_DIR/node_modules/execa/node_modules/human-signals/build" ]; then
 fi
 
 # Re-pack as zip (DXT is zip format, not tar.gz)
-rm -f /Users/arul/Projects/ncp-production-clean/ncp.dxt
-zip -qr /Users/arul/Projects/ncp-production-clean/ncp.dxt .
-cd /Users/arul/Projects/ncp-production-clean
+rm -f "$PROJECT_ROOT/ncp.dxt"
+zip -qr "$PROJECT_ROOT/ncp.dxt" .
+cd "$PROJECT_ROOT"
 
 # Cleanup temp directories
 rm -rf "$TEMP_DIR" "$PATCH_DIR"
@@ -82,7 +86,7 @@ echo "🧪 Testing DXT (MCP spec compliance)..."
 
 # Verify it's a valid zip file
 echo "   • Verifying zip format..."
-if ! unzip -t /Users/arul/Projects/ncp-production-clean/ncp.dxt > /dev/null 2>&1; then
+if ! unzip -t "$PROJECT_ROOT/ncp.dxt" > /dev/null 2>&1; then
   echo "   ❌ FAILED: DXT is not a valid zip file"
   exit 1
 fi
@@ -90,20 +94,20 @@ echo "   ✅ Valid zip format"
 
 TEST_DIR=$(mktemp -d)
 cd "$TEST_DIR"
-unzip -q /Users/arul/Projects/ncp-production-clean/ncp.dxt > /dev/null 2>&1
+unzip -q "$PROJECT_ROOT/ncp.dxt" > /dev/null 2>&1
 
 # Quick verification test
 echo "   • Checking dependencies..."
 if [ ! -d "node_modules/human-signals/build" ]; then
   echo "   ❌ FAILED: human-signals/build missing"
-  cd /Users/arul/Projects/ncp-production-clean
+  cd "$PROJECT_ROOT"
   rm -rf "$TEST_DIR"
   exit 1
 fi
 
 if [ ! -d "node_modules/execa/node_modules/human-signals/build" ]; then
   echo "   ❌ FAILED: execa/node_modules/human-signals/build missing"
-  cd /Users/arul/Projects/ncp-production-clean
+  cd "$PROJECT_ROOT"
   rm -rf "$TEST_DIR"
   exit 1
 fi
@@ -127,7 +131,7 @@ else
   echo "   ⚠️  Server test skipped (requires stdio mode)"
 fi
 
-cd /Users/arul/Projects/ncp-production-clean
+cd "$PROJECT_ROOT"
 rm -rf "$TEST_DIR"
 
 echo ""
