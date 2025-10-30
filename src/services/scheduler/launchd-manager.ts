@@ -39,29 +39,20 @@ export class LaunchdManager {
   private getLaunchdErrorMessage(operation: string, error: any): string {
     const errorMsg = error instanceof Error ? error.message : String(error);
 
-    return `Failed to ${operation} using launchd.
+    return `Failed to ${operation} with launchd: ${errorMsg}
 
-Error: ${errorMsg}
+Check launchd status:
+  launchctl list | grep com.portel.ncp
 
-Troubleshooting steps:
-1. Ensure you're running on macOS (launchd is macOS-only)
-2. Check if launchctl is available:
-   which launchctl
+Check permissions:
+  ls -la ~/Library/LaunchAgents
 
-3. Verify LaunchAgents directory permissions:
-   ls -la ~/Library/LaunchAgents
+View recent errors:
+  log show --predicate 'subsystem == "com.apple.launchd"' --last 1h
 
-4. Check launchd service status:
-   launchctl list | grep com.portel.ncp
+Docs: https://www.launchd.info/
 
-5. View launchd logs for errors:
-   log show --predicate 'subsystem == "com.apple.launchd"' --last 1h
-
-For more information, visit:
-https://www.launchd.info/
-https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html
-
-This error message is also visible to AI assistants to help troubleshoot the issue.`;
+(This message is visible to AI assistants for troubleshooting)`;
   }
 
   /**

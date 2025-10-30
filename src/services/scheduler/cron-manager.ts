@@ -46,37 +46,34 @@ export class CronManager {
    * Get helpful error message when crontab is not available
    */
   private getCrontabNotAvailableMessage(): string {
-    return `The crontab command is not available on this system.
+    // Detect distribution and provide specific command
+    let installCmd = 'sudo apt-get update && sudo apt-get install cron';  // Default to Ubuntu/Debian
 
-This is required for scheduling jobs on Linux/Unix systems.
+    try {
+      const osRelease = execSync('cat /etc/os-release 2>/dev/null || echo ""', { encoding: 'utf-8' });
 
-Installation instructions by distribution:
+      if (osRelease.includes('alpine')) {
+        installCmd = 'apk add dcron && rc-update add dcron && rc-service dcron start';
+      } else if (osRelease.includes('fedora') || osRelease.includes('rhel') || osRelease.includes('centos') || osRelease.includes('rocky')) {
+        installCmd = 'sudo dnf install cronie && sudo systemctl enable --now crond';
+      } else if (osRelease.includes('arch')) {
+        installCmd = 'sudo pacman -S cronie && sudo systemctl enable --now cronie';
+      }
+    } catch {
+      // Use default if detection fails
+    }
 
-Ubuntu/Debian:
-  sudo apt-get update && sudo apt-get install cron
+    return `crontab command not found. Cron needs to be installed.
 
-Fedora/RHEL/CentOS:
-  sudo dnf install cronie
-  sudo systemctl enable crond
-  sudo systemctl start crond
+Install cron:
+  ${installCmd}
 
-Alpine Linux:
-  apk add dcron
-  rc-update add dcron
-  rc-service dcron start
-
-Arch Linux:
-  sudo pacman -S cronie
-  sudo systemctl enable cronie
-  sudo systemctl start cronie
-
-After installation, verify with:
+Verify installation:
   which crontab
 
-For more information, visit:
-https://man7.org/linux/man-pages/man1/crontab.1.html
+Docs: https://man7.org/linux/man-pages/man1/crontab.1.html
 
-This error message is also visible to AI assistants to help troubleshoot the issue.`;
+(This message is visible to AI assistants for troubleshooting)`;
   }
 
   /**

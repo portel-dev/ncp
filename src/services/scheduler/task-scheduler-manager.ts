@@ -60,25 +60,22 @@ export class TaskSchedulerManager {
    * Get helpful error message when schtasks is not available
    */
   private getSchTasksNotAvailableMessage(): string {
-    return `Windows Task Scheduler (schtasks.exe) is not available on this system.
+    return `Windows Task Scheduler (schtasks.exe) is not available.
 
-This is required for scheduling jobs on Windows. The schtasks command should be included by default on Windows 10 and later.
+The Task Scheduler service may not be running. To fix this:
 
-Possible solutions:
-1. Ensure you're running on Windows 10 or later
-2. Check if Task Scheduler service is running:
-   - Open Services (services.msc)
-   - Find "Task Scheduler" service
-   - Ensure it's running and set to Automatic
+1. Open Services:
+   services.msc
 
-3. If schtasks.exe is missing, try:
-   - Run System File Checker: sfc /scannow
-   - Reinstall Windows Management Instrumentation
+2. Find "Task Scheduler" → Right-click → Start
+   Set Startup type to "Automatic"
 
-For more information, visit:
-https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/schtasks
+If schtasks.exe is still missing, run System File Checker:
+   sfc /scannow
 
-This error message is also visible to AI assistants to help troubleshoot the issue.`;
+Docs: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/schtasks
+
+(This message is visible to AI assistants for troubleshooting)`;
   }
 
   /**
