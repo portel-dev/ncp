@@ -9,6 +9,7 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
+      - 'jest.config.js'
       - '.github/workflows/**'
       - 'scripts/**'
       - 'manifest.json'
