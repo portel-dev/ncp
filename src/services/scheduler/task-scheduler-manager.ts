@@ -21,6 +21,7 @@ export interface TaskEntry {
 interface ScheduleInfo {
   scheduleType: 'MINUTE' | 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'ONCE';
   modifier?: string; // e.g., "5" for every 5 minutes, "MON,WED,FRI" for specific days
+  day?: string; // For MONTHLY schedules - day of month (1-31)
   startTime?: string; // HH:mm format
 }
 
@@ -138,7 +139,8 @@ export class TaskSchedulerManager {
 
       return {
         scheduleType: 'MONTHLY',
-        modifier: dayOfMonth, // Day of month
+        modifier: '1', // Every 1 month
+        day: dayOfMonth, // Day of month (1-31)
         startTime: `${startHour}:${startMinute}`
       };
     }
@@ -239,6 +241,11 @@ export class TaskSchedulerManager {
       } else {
         schTasksCmd += ` /MO ${schedule.modifier}`;
       }
+    }
+
+    // Add day parameter for MONTHLY schedules
+    if (schedule.day && schedule.scheduleType === 'MONTHLY') {
+      schTasksCmd += ` /D ${schedule.day}`;
     }
 
     if (schedule.startTime) {
