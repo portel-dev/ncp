@@ -292,11 +292,11 @@ Here's exactly how NCP empowers your MCPs:
 
 | Feature | What It Does | Why It Matters |
 |---------|-------------|----------------|
-| <a id="instant-tool-discovery">**🔍 Instant Tool Discovery**</a> | Semantic search understands intent ("read a file") not just keywords | Your AI finds the RIGHT tool in <1s instead of analyzing 50 schemas |
-| <a id="on-demand-loading">**📦 On-Demand Loading**</a> | MCPs and tools load only when needed, not at startup | Saves 97% of context tokens - AI starts working immediately |
-| <a id="automated-scheduling">**⏰ Automated Scheduling**</a> | Run any tool on cron schedules or natural language times | Background automation without keeping AI sessions open |
-| <a id="universal-compatibility">**🔌 Universal Compatibility**</a> | Works with Claude Desktop, Claude Code, Cursor, VS Code, and any MCP client | One configuration for all your AI tools - no vendor lock-in |
-| <a id="smart-caching">**💾 Smart Caching**</a> | Intelligent caching of tool schemas and responses | Eliminates redundant indexing - energy efficient and fast |
+| **🔍 Instant Tool Discovery** | Semantic search understands intent ("read a file") not just keywords | Your AI finds the RIGHT tool in <1s instead of analyzing 50 schemas |
+| **📦 On-Demand Loading** | MCPs and tools load only when needed, not at startup | Saves 97% of context tokens - AI starts working immediately |
+| **⏰ Automated Scheduling** | Run any tool on cron schedules or natural language times | Background automation without keeping AI sessions open |
+| **🔌 Universal Compatibility** | Works with Claude Desktop, Claude Code, Cursor, VS Code, and any MCP client | One configuration for all your AI tools - no vendor lock-in |
+| **💾 Smart Caching** | Intelligent caching of tool schemas and responses | Eliminates redundant indexing - energy efficient and fast |
 
 **The result:** Your MCPs go from scattered tools to a **unified, intelligent system** that your AI can actually use effectively.
 
