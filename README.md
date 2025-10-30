@@ -171,7 +171,7 @@ Choose your MCP client for detailed installation instructions:
 
 ---
 
-### Quick Start (npm) {#quick-start-npm}
+### Quick Start (npm)
 
 For advanced users or MCP clients not listed above:
 
