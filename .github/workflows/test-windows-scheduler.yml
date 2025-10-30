@@ -114,17 +114,18 @@ jobs:
           Write-Host "==================================="
           Write-Host ""
 
-          schtasks /Query /TN "NCP_TEST_SIMPLE" 2>&1 | Out-Null
+          $result = schtasks /Query /TN "NCP_TEST_SIMPLE" 2>&1
+          $taskExists = $LASTEXITCODE -eq 0
 
-          if ($LASTEXITCODE -ne 0) {
+          if (-not $taskExists) {
             Write-Host "✅ Task successfully removed"
+            Write-Host ""
+            Write-Host "🎉 All basic tests passed!"
+            exit 0
           } else {
             Write-Error "Task still exists!"
             exit 1
           }
-          Write-Host ""
-
-          Write-Host "🎉 All basic tests passed!"
 
   test-windows-ncp:
     name: Test NCP Scheduler Integration
