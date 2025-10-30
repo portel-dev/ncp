@@ -52,6 +52,9 @@ TESTING-*.md
 !jest.config.js
 !test/**/*.test.ts
 
+# Large generated test data files (can be regenerated with scripts)
+src/testing/real-mcp-definitions.json
+
 # IDE
 .idea/
 .vscode/

@@ -9,7 +9,8 @@
 
 import { homedir } from 'os';
 import { join } from 'path';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'fs';
+import { appendFile } from 'fs/promises';
 import { loadGlobalSettings } from './global-settings.js';
 
 export class Logger {
@@ -116,15 +117,15 @@ export class Logger {
   }
 
   /**
-   * Write message to log file
+   * Write message to log file (async, non-blocking)
+   * Fire-and-forget pattern - don't await to avoid blocking
    */
   private writeToFile(message: string): void {
     if (this.logFilePath) {
-      try {
-        appendFileSync(this.logFilePath, message);
-      } catch (error) {
+      // Fire and forget - don't await to keep logging non-blocking
+      appendFile(this.logFilePath, message).catch(() => {
         // Silently fail - don't spam console
-      }
+      });
     }
   }
 

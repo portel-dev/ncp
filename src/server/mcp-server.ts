@@ -32,6 +32,7 @@ export class MCPServer implements ElicitationServer {
   private orchestrator: NCPOrchestrator;
   private initializationPromise: Promise<void> | null = null;
   private isInitialized: boolean = false;
+  private initializationError: Error | null = null;
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
     // Create SDK Server instance with elicitation capability
@@ -68,16 +69,14 @@ export class MCPServer implements ElicitationServer {
 
         // Trigger auto-import asynchronously (don't block initialize response)
         if (clientInfo.name && clientInfo.name !== 'unknown') {
-          console.error(`[NCP DEBUG] Triggering auto-import for client: ${clientInfo.name}`);
+          logger.debug(`Triggering auto-import for client: ${clientInfo.name}`);
           this.orchestrator.triggerAutoImport(clientInfo.name).then(() => {
-            console.error(`[NCP DEBUG] Auto-import completed for ${clientInfo.name}`);
+            logger.debug(`Auto-import completed for ${clientInfo.name}`);
           }).catch(error => {
-            console.error(`[NCP DEBUG] Auto-import failed for ${clientInfo.name}: ${error.message}`);
-            console.error(`[NCP DEBUG] Stack:`, error.stack);
             logger.error(`Auto-import failed for ${clientInfo.name}: ${error.message}`);
           });
         } else {
-          console.error(`[NCP DEBUG] Skipping auto-import - clientInfo.name: ${clientInfo.name}`);
+          logger.debug(`Skipping auto-import - clientInfo.name: ${clientInfo.name}`);
         }
       }
     };
@@ -291,6 +290,7 @@ export class MCPServer implements ElicitationServer {
       logger.info('NCP MCP server indexing complete');
     }).catch((error) => {
       logger.error('Failed to initialize orchestrator:', error);
+      this.initializationError = error; // Store error for later checking
       this.isInitialized = true; // Mark as initialized even on error to unblock
     });
 
@@ -300,11 +300,23 @@ export class MCPServer implements ElicitationServer {
 
   async waitForInitialization(): Promise<void> {
     if (this.isInitialized) {
+      // If initialization failed, throw the stored error
+      if (this.initializationError) {
+        throw new Error(`Server initialization failed: ${this.initializationError.message}`, {
+          cause: this.initializationError
+        });
+      }
       return;
     }
 
     if (this.initializationPromise) {
       await this.initializationPromise;
+      // Check again after waiting
+      if (this.initializationError) {
+        throw new Error(`Server initialization failed: ${this.initializationError.message}`, {
+          cause: this.initializationError
+        });
+      }
     }
   }
 
@@ -359,7 +371,7 @@ export class MCPServer implements ElicitationServer {
           },
           serverInfo: {
             name: 'ncp',
-            version: '1.7.0'
+            version
           }
         }
       };
@@ -966,18 +978,18 @@ export class MCPServer implements ElicitationServer {
       }
 
       // Wait briefly for initialization to complete (max 2 seconds)
+      let timeoutId: NodeJS.Timeout | undefined;
       try {
-        let timeoutId: NodeJS.Timeout;
         await Promise.race([
           this.initializationPromise,
           new Promise((_, reject) => {
             timeoutId = setTimeout(() => reject(new Error('timeout')), 2000);
           })
-        ]).finally(() => {
-          if (timeoutId!) clearTimeout(timeoutId);
-        });
+        ]);
       } catch {
         // Continue even if timeout - try to execute with what's available
+      } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
       }
     }
 

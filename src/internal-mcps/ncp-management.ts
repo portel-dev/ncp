@@ -1457,10 +1457,22 @@ Do you want to remove this MCP?`;
       logger.warn(`MCP command "${baseCommand}" not in known safe commands list. Proceeding with caution.`);
     }
 
-    // Check for shell metacharacters that could be used for injection
-    const DANGEROUS_CHARS = /[;&|`$()<>]/;
+    // Check for shell metacharacters and control characters that could be used for injection
+    // Include newlines, carriage returns, and other control characters
+    const DANGEROUS_CHARS = /[;&|`$()<>\n\r\t\0]/;
     if (DANGEROUS_CHARS.test(command)) {
-      return `Command contains dangerous shell metacharacters: ${command}`;
+      return `Command contains dangerous shell metacharacters or control characters: ${command}`;
+    }
+
+    // Special validation for shell commands that can execute arbitrary code
+    const SHELL_COMMANDS = ['bash', 'sh', 'zsh'];
+    if (SHELL_COMMANDS.includes(baseCommand)) {
+      // Check if args contain -c flag which allows arbitrary command execution
+      for (const arg of args) {
+        if (arg === '-c' || arg.startsWith('-c=')) {
+          return `Shell command with -c flag is not allowed for security reasons: ${command}`;
+        }
+      }
     }
 
     // Validate args don't contain injection attempts
@@ -1469,10 +1481,9 @@ Do you want to remove this MCP?`;
         return `All arguments must be strings, got: ${typeof arg}`;
       }
 
-      // Check for dangerous patterns in args (more lenient than command)
+      // Check for dangerous patterns in args (same as command for consistency)
       // Allow common arg patterns like --flag, -f, @package, ./path
-      const VERY_DANGEROUS = /[;&|`$()><]/;
-      if (VERY_DANGEROUS.test(arg)) {
+      if (DANGEROUS_CHARS.test(arg)) {
         return `Argument contains dangerous characters: ${arg}`;
       }
     }

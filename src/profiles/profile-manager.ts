@@ -123,25 +123,17 @@ export class ProfileManager {
   }
 
   async initialize(skipAutoImport: boolean = false): Promise<void> {
-    // console.error(`[ProfileManager] initialize() called with skipAutoImport=${skipAutoImport}`);
-
     // Ensure profiles directory exists
     if (!existsSync(this.profilesDir)) {
       await fs.mkdir(this.profilesDir, { recursive: true });
     }
-    // console.error(`[ProfileManager] profiles directory ready: ${this.profilesDir}`);
 
     // Load existing profiles
     await this.loadProfiles();
-    // console.error(`[ProfileManager] loaded ${this.profiles.size} profiles`);
 
     // Create default universal profile if it doesn't exist
     if (!this.profiles.has('all')) {
-      // console.error(`[ProfileManager] creating default 'all' profile...`);
       await this.createDefaultProfile();
-      // console.error(`[ProfileManager] default profile created`);
-    } else {
-      // console.error(`[ProfileManager] 'all' profile already exists`);
     }
 
     // Auto-migrate credentials on first run (silent unless credentials found)
@@ -165,8 +157,6 @@ export class ProfileManager {
     // 2. Local project .ncp folders don't auto-sync with global Claude Desktop
     // 3. Only known/supported clients trigger auto-import
     // The skipAutoImport parameter is kept for backward compatibility but has no effect
-
-    // console.error(`[ProfileManager] initialize() completed`);
   }
 
   /**
@@ -229,7 +219,7 @@ export class ProfileManager {
 
       // Show simple message if there are new MCPs
       if (newMCPEntries.length > 0) {
-        console.error(`\n✨ Found ${newMCPEntries.length} new MCPs from ${importResult.clientName}`);
+        logger.info(`✨ Found ${newMCPEntries.length} new MCPs from ${importResult.clientName}`);
       }
 
       // Add all new MCPs without spawning them
@@ -260,7 +250,7 @@ export class ProfileManager {
             await this.addMCPToProfile('all', name, cleanConfig);
             return { name, success: true };
           } catch (error) {
-            console.warn(`Failed to import ${name}: ${error}`);
+            logger.warn(`Failed to import ${name}: ${error}`);
             return { name, success: false, error };
           }
         });
@@ -281,7 +271,7 @@ export class ProfileManager {
         }
       } catch (error: any) {
         // Timeout or critical error - log but don't block startup
-        console.warn(`Auto-import interrupted: ${error.message}`);
+        logger.warn(`Auto-import interrupted: ${error.message}`);
       }
 
       if (imported.length > 0) {
@@ -290,16 +280,16 @@ export class ProfileManager {
         const extensionsCount = missingMCPs.filter(m => m.config._source === '.dxt' || m.config._source === 'dxt').length;
 
         // Log import summary
-        console.error(`   - ${configCount} from config file`);
+        logger.info(`   - ${configCount} from config file`);
         if (extensionsCount > 0) {
-          console.error(`   - ${extensionsCount} from extensions`);
+          logger.info(`   - ${extensionsCount} from extensions`);
         }
-        console.error(`   → Added to ${path.join(this.profilesDir, 'all.json')}\n`);
+        logger.info(`   → Added to ${path.join(this.profilesDir, 'all.json')}`);
       }
     } catch (error) {
       // Silent failure - don't block startup if auto-import fails
       // User can still configure manually
-      console.warn(`Auto-sync failed: ${error}`);
+      logger.warn(`Auto-sync failed: ${error}`);
     }
   }
 
@@ -316,9 +306,7 @@ export class ProfileManager {
           // Skip profiles without a name field (invalid profile files)
           if (!profile.name || typeof profile.name !== 'string') {
             // Log as debug only - not user's problem if internal files are corrupted
-            if (process.env.NCP_DEBUG === 'true') {
-              console.error(`[DEBUG] Skipping invalid profile ${file}: missing or invalid 'name' field`);
-            }
+            logger.debug(`Skipping invalid profile ${file}: missing or invalid 'name' field`);
             continue;
           }
 

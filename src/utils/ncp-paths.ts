@@ -11,6 +11,15 @@ let _ncpBaseDir: string | null = null;
 let _overrideWorkingDirectory: string | null = null;
 
 /**
+ * Reset cached paths (for testing)
+ * Clears all cached state to force recalculation
+ */
+export function resetPathsCache(): void {
+  _ncpBaseDir = null;
+  _overrideWorkingDirectory = null;
+}
+
+/**
  * Set override working directory for profile resolution
  * This allows the --working-dir parameter to override process.cwd()
  */

@@ -8,6 +8,7 @@
 import prompts from 'prompts';
 import chalk from 'chalk';
 import { ConfigurationSchema, ConfigurationParameter } from './config-schema-reader.js';
+import { redactIfSensitive } from '../utils/redact-sensitive.js';
 
 export interface ConfigValues {
   environmentVariables: Record<string, string>;
@@ -218,10 +219,8 @@ export class ConfigPrompter {
     if (Object.keys(config.environmentVariables).length > 0) {
       console.log(chalk.bold('Environment Variables:'));
       Object.entries(config.environmentVariables).forEach(([key, value]) => {
-        // Mask sensitive values
-        const displayValue = key.includes('TOKEN') || key.includes('KEY') || key.includes('SECRET')
-          ? '********'
-          : value;
+        // Mask sensitive values using centralized utility
+        const displayValue = redactIfSensitive(key, value);
         console.log(chalk.dim(`  ${key}=${displayValue}`));
       });
       console.log('');
