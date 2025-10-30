@@ -11,7 +11,7 @@
 
 > **1 MCP to rule them all**
 
-Your MCPs, [supercharged](#supercharged-features). Find any tool instantly, load on demand, run on schedule, ready for any client. Smart loading saves tokens and energy.
+Your MCPs, [supercharged](#-supercharged-features). Find any tool instantly, load on demand, run on schedule, ready for any client. Smart loading saves tokens and energy.
 
 ## 💍 **What is NCP?**
 
@@ -39,17 +39,17 @@ Behind the scenes, NCP manages all 50+ tools: routing requests, discovering the 
 
 ## 📑 **Quick Navigation**
 
-- [The Problem](#the-mcp-paradox-from-assistant-to-desperate) - Why too many tools break your AI
-- [The Solution](#the-before--after-reality) - How NCP transforms your experience
-- [Getting Started](#prerequisites) - Installation & quick start
-- [Try It Out](#test-drive-see-the-difference-yourself) - See the CLI in action
-- [Supercharged Features](#supercharged-features) - How NCP empowers your MCPs
-- [Setup by Client](#configuration-for-different-ai-clients) - Claude Desktop, Cursor, VS Code, etc.
-- [Popular MCPs](#popular-mcps-that-work-great-with-ncp) - Community favorites to add
-- [Advanced Features](#advanced-features) - Project config, scheduling, remote MCPs
-- [Troubleshooting](#troubleshooting) - Common issues & solutions
-- [How It Works](#deep-dive-how-it-works) - Technical deep dive
-- [Contributing](#contributing) - Help us improve NCP
+- [The Problem](#-the-mcp-paradox-from-assistant-to-desperate) - Why too many tools break your AI
+- [The Solution](#-the-before--after-reality) - How NCP transforms your experience
+- [Getting Started](#-prerequisites) - Installation & quick start
+- [Try It Out](#-test-drive-see-the-difference-yourself) - See the CLI in action
+- [Supercharged Features](#-supercharged-features) - How NCP empowers your MCPs
+- [Setup by Client](#️-configuration-for-different-ai-clients) - Claude Desktop, Cursor, VS Code, etc.
+- [Popular MCPs](#-popular-mcps-that-work-great-with-ncp) - Community favorites to add
+- [Advanced Features](#-advanced-features) - Project config, scheduling, remote MCPs
+- [Troubleshooting](#-troubleshooting) - Common issues & solutions
+- [How It Works](#-deep-dive-how-it-works) - Technical deep dive
+- [Contributing](#-contributing) - Help us improve NCP
 
 ---
 
