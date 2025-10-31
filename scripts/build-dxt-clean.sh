@@ -51,7 +51,7 @@ fi
 
 # Pack DXT from clean directory
 echo "📦 Packing DXT..."
-npx @anthropic-ai/mcpb pack . "$PROJECT_ROOT/ncp.dxt"
+npx @anthropic-ai/mcpb@1.1.4 pack . "$PROJECT_ROOT/ncp.dxt"
 
 # WORKAROUND: mcpb excludes build/ directories from node_modules
 # Extract DXT (zip format), manually add build directories, re-pack
