@@ -2,10 +2,9 @@
  * NCP Management Internal MCP
  *
  * Provides tools for managing NCP configuration:
- * - add: Add single MCP
+ * - add: Add MCP(s) with smart detection (single/bulk/file/clipboard/URL)
  * - remove: Remove MCP
  * - list: List configured MCPs
- * - import: Bulk import (clipboard/file/discovery)
  * - export: Export configuration
  */
 
@@ -15,7 +14,7 @@ import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { RegistryMCPCandidate } from '../services/registry-client.js';
 import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
-import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials, collectBulkCredentials, elicitSelect, elicitMultiSelect, detectHTTPCredentials } from '../utils/elicitation-helper.js';
+import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials, collectBulkCredentials, elicitMultiSelect, detectHTTPCredentials } from '../utils/elicitation-helper.js';
 import { showConfirmDialog } from '../utils/native-dialog.js';
 
 export class NCPManagementMCP implements InternalMCP {
@@ -28,26 +27,26 @@ export class NCPManagementMCP implements InternalMCP {
   tools: InternalTool[] = [
     {
       name: 'add',
-      description: 'Add a new MCP server to NCP configuration via AI-assisted discovery. Workflow: 1) If uncertain about MCP name, use "find" method to discover MCPs (e.g., search "canva" or "design platform"). 2) From search results, extract the MCP name. 3) Call this tool with mcp_name. This allows intelligent MCP selection instead of manual typing. Auto-detects configuration from registry or accepts manual command/url specification.',
+      description: 'Add MCP server(s) to NCP with smart auto-detection of input type. Supports multiple modes: (1) SINGLE: Add one MCP from registry or manual config (e.g., "github", "canva"). (2) BULK: Pipe-separated names for multiple MCPs (e.g., "gmail | slack | github"). (3) FILE IMPORT: Path to config file (e.g., "~/backup.json", "./config.json"). (4) HTTP URL: Direct URL to HTTP/SSE server (e.g., "https://mcp.example.com"). (5) CLIPBOARD: Use special value "clipboard" to import from clipboard. For uncertain names, use "find" method first to discover available MCPs.',
       inputSchema: {
         type: 'object',
         properties: {
           mcp_name: {
             type: 'string',
-            description: 'REQUIRED. The exact MCP provider name to install. Pre-fill if extractable from user intent (e.g., "install canva" → "canva"). If uncertain, first use "find" method to discover MCPs semantically (e.g., find "design tool" or "canva"), then extract the mcp_name from results. Do not ask user to type the name - do the discovery work yourself.'
+            description: 'REQUIRED. Smart parameter that auto-detects mode: (1) Single name: "github" → registry lookup or manual. (2) Pipe-separated: "gmail | slack" → bulk install from registry. (3) File path: "~/config.json" or "./backup.json" → import from file. (4) HTTP URL: "https://mcp.example.com" → add HTTP server. (5) "clipboard" → import from clipboard. Pre-fill based on user intent, or use "find" method to discover MCP names first.'
           },
           command: {
             type: 'string',
-            description: 'Optional. Command to execute for stdio servers (e.g., "npx", "node", "python"). Only needed for manual configuration. Omit for auto-detect mode.'
+            description: 'Optional. Command for stdio servers (e.g., "npx", "python"). Only for manual single-MCP configuration when mcp_name is a simple name.'
           },
           args: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Optional. Command arguments for stdio servers (e.g., ["-y", "@modelcontextprotocol/server-github"]). Only needed for manual configuration.'
+            description: 'Optional. Command arguments for stdio servers. Only for manual single-MCP configuration.'
           },
           url: {
             type: 'string',
-            description: 'Optional. URL for HTTP/SSE servers (e.g., "https://api.example.com/mcp"). Only needed for manual HTTP/SSE configuration.'
+            description: 'Optional. URL for HTTP/SSE servers. Only for manual single-MCP configuration when mcp_name is a simple name (overrides auto-detected URL mode).'
           },
           profile: {
             type: 'string',
@@ -92,24 +91,6 @@ export class NCPManagementMCP implements InternalMCP {
       }
     },
     {
-      name: 'import',
-      description: 'Import MCPs from clipboard, file, or discovery with smart auto-detection. Three modes: (1) CLIPBOARD: Omit source parameter to import from clipboard. (2) FILE: Provide file path as source ("~/backup.json", "./config.json") to import from file. (3) DISCOVERY: Provide MCP names/queries as source to search registry and install. Discovery supports pipe-separated queries for bulk installation: "gmail | slack | github" searches and installs all three at once. The "from" parameter is optional - source type is auto-detected by default, but you can explicitly specify "from" to override auto-detection if needed.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          source: {
-            type: 'string',
-            description: 'OPTIONAL. Import source that is auto-detected by pattern: (1) Omit or empty → clipboard import. (2) Contains .json or path separators (/,~/,./) → file import from specified path. (3) Otherwise → discovery query to search registry. For discovery, use pipe separator "|" for bulk installation: "gmail | slack" searches both and installs all matches. Examples: source="gmail | slack | github" (discovery), source="~/backup.json" (file), omit entirely (clipboard).'
-          },
-          from: {
-            type: 'string',
-            enum: ['clipboard', 'file', 'discovery'],
-            description: 'OPTIONAL. Explicit override to force specific import mode, bypassing auto-detection. Use when auto-detection is ambiguous or you want explicit control. Usually not needed since source parameter is auto-detected. Examples: from="clipboard" forces clipboard even if source looks like path, from="discovery" treats source as query even if it contains slashes.'
-          }
-        }
-      }
-    },
-    {
       name: 'export',
       description: 'Export current NCP configuration. Use clipboard for security (no chat history), response for transparency.',
       inputSchema: {
@@ -128,6 +109,24 @@ export class NCPManagementMCP implements InternalMCP {
           profile: {
             type: 'string',
             description: 'Profile to export (default: "all")',
+            default: 'all'
+          }
+        }
+      }
+    },
+    {
+      name: 'doctor',
+      description: 'Run diagnostics on NCP system health and MCP configurations. Read-only - reports issues without making changes. Matches CLI: ncp doctor',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mcp_name: {
+            type: 'string',
+            description: 'Check specific MCP only (optional - omit to check all)'
+          },
+          profile: {
+            type: 'string',
+            description: 'Profile to check (default: "all")',
             default: 'all'
           }
         }
@@ -170,16 +169,16 @@ export class NCPManagementMCP implements InternalMCP {
         case 'list':
           return await this.handleList(parameters);
 
-        case 'import':
-          return await this.handleImport(parameters);
-
         case 'export':
           return await this.handleExport(parameters);
+
+        case 'doctor':
+          return await this.handleDoctor(parameters);
 
         default:
           return {
             success: false,
-            error: `Unknown tool: ${toolName}. Available tools: add, remove, list, import, export`
+            error: `Unknown tool: ${toolName}. Available tools: add, remove, list, export, doctor`
           };
       }
     } catch (error: any) {
@@ -199,11 +198,65 @@ export class NCPManagementMCP implements InternalMCP {
       };
     }
 
-    const mcpName = params.mcp_name;
+    let mcpName = params.mcp_name;
     let command = params.command;
     let commandArgs = params.args || [];
     let url = params.url;
     const profile = params.profile || 'all';
+
+    // === SMART AUTO-DETECTION (matching CLI behavior) ===
+
+    // 1. Special value: "clipboard" → import from clipboard
+    if (mcpName.toLowerCase() === 'clipboard') {
+      return await this.importFromClipboard();
+    }
+
+    // 2. Pipe-delimited bulk add → discovery mode with multiple queries
+    if (mcpName.includes('|') && !command && !url) {
+      return await this.importFromDiscovery(mcpName);
+    }
+
+    // 3. File path detection → import from file
+    // Check for: .json extension, path separators (/, ~/, ./)
+    if (!command && !url && (
+      mcpName.endsWith('.json') ||
+      mcpName.startsWith('/') ||
+      mcpName.startsWith('~/') ||
+      mcpName.startsWith('./')
+    )) {
+      return await this.importFromFile(mcpName);
+    }
+
+    // 4. HTTP URL detection → set url and continue with single add
+    if (!command && !url && (
+      mcpName.startsWith('http://') ||
+      mcpName.startsWith('https://')
+    )) {
+      try {
+        // Extract name from URL (domain-based)
+        const urlObj = new URL(mcpName);
+        const generatedName = urlObj.hostname
+          .replace(/\./g, '-')
+          .replace(/^www-/, '');
+
+        // Set url from the URL string and update mcpName to generated name
+        url = mcpName;
+        mcpName = generatedName;
+
+        logger.info(`Auto-detected HTTP URL: ${url}, using name: ${mcpName}`);
+      } catch (error: any) {
+        return {
+          success: false,
+          error: `Invalid URL format: ${mcpName}. Error: ${error.message}`
+        };
+      }
+      // Continue with single add logic below (will be HTTP transport)
+    }
+
+    // 5. Otherwise → single add mode (registry or manual)
+    // Continue with existing logic below...
+
+    // === END SMART AUTO-DETECTION ===
 
     // Validate transport type parameters
     const hasCommand = !!command;
@@ -723,118 +776,6 @@ Do you want to remove this MCP?`;
       success: true,
       content: successMessage
     };
-  }
-
-  /**
-   * Smart auto-detection of import source based on source parameter pattern
-   */
-  private detectImportSource(source?: string): 'clipboard' | 'file' | 'discovery' {
-    // No source = clipboard
-    if (!source) {
-      return 'clipboard';
-    }
-
-    // Looks like file path = file
-    // Contains: .json, /, ~/, ./
-    if (source.includes('.json') ||
-        source.startsWith('/') ||
-        source.startsWith('~/') ||
-        source.startsWith('./')) {
-      return 'file';
-    }
-
-    // Otherwise = discovery query
-    return 'discovery';
-  }
-
-  private async handleImport(params: any): Promise<InternalToolResult> {
-    const source = params?.source;
-
-    // Smart auto-detection if 'from' not explicitly provided
-    let from = params?.from || this.detectImportSource(source);
-
-    // If 'from' not specified and we have elicitation, let user choose source
-    // (This only happens if both from and source are missing)
-    if (!from && this.elicitationServer) {
-      const sources = [
-        { value: 'clipboard', label: 'Clipboard - Paste saved config' },
-        { value: 'file', label: 'File - Load from file path' },
-        { value: 'discovery', label: 'Discovery - Search registry' }
-      ];
-
-      from = await elicitSelect(
-        this.elicitationServer,
-        'import_source',
-        sources,
-        'Where would you like to import MCPs from?'
-      );
-
-      if (!from) {
-        return {
-          success: false,
-          error: 'Import source selection cancelled'
-        };
-      }
-
-      // Guide AI on next step if client has execution limitations
-      // (e.g., Copilot can't complete full elicitation flow)
-      if (!source && from === 'discovery') {
-        return {
-          success: true,
-          content: `✓ You selected: **Discovery**\n\n` +
-                   `Next step: Call \`mcp:import\` with:\n` +
-                   `- \`from\`: "discovery"\n` +
-                   `- \`source\`: your search term (e.g., "github", "filesystem")\n\n` +
-                   `Example: \`mcp:import\` with from="discovery" and source="github"`
-        };
-      }
-
-      if (!source && (from === 'file' || from === 'clipboard')) {
-        const nextAction = from === 'file'
-          ? 'provide a file path in the \`source\` parameter'
-          : 'have your MCP config JSON ready to paste to clipboard';
-
-        return {
-          success: true,
-          content: `✓ You selected: **${from.charAt(0).toUpperCase() + from.slice(1)}**\n\n` +
-                   `Next step: ${nextAction} and call \`mcp:import\` again with:\n` +
-                   `- \`from\`: "${from}"\n` +
-                   `- \`source\`: ${from === 'file' ? 'file path' : 'N/A (reads from clipboard)'}`
-        };
-      }
-    }
-
-    // Default to clipboard if no elicitation available
-    from = from || 'clipboard';
-
-    switch (from) {
-      case 'clipboard':
-        return await this.importFromClipboard();
-
-      case 'file':
-        if (!source) {
-          return {
-            success: false,
-            error: 'source parameter required when from=file (file path). Example: source="/path/to/config.json"'
-          };
-        }
-        return await this.importFromFile(source);
-
-      case 'discovery':
-        if (!source) {
-          return {
-            success: false,
-            error: 'source parameter required when from=discovery (search query). Example: source="github" to search for GitHub MCPs'
-          };
-        }
-        return await this.importFromDiscovery(source);
-
-      default:
-        return {
-          success: false,
-          error: `Invalid from parameter: ${from}. Use: clipboard, file, or discovery`
-        };
-    }
   }
 
   private async importFromClipboard(): Promise<InternalToolResult> {
@@ -1424,6 +1365,147 @@ Do you want to remove this MCP?`;
         return null;
       }
     }
+  }
+
+  private async handleDoctor(params: any): Promise<InternalToolResult> {
+    const mcpName = params?.mcp_name;
+    const profile = params?.profile || 'all';
+
+    const issues: string[] = [];
+    const warnings: string[] = [];
+    let checksPerformed = 0;
+
+    // 1. Check Node.js version
+    checksPerformed++;
+    const nodeVersion = process.version;
+    const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0]);
+    if (majorVersion < 18) {
+      issues.push(`Node.js ${nodeVersion} is outdated (minimum: v18.0.0)`);
+    }
+
+    // 2. Check config directory
+    checksPerformed++;
+    const configPath = this.profileManager!.getConfigPath();
+    try {
+      const fs = await import('fs/promises');
+      await fs.access(configPath);
+    } catch (error) {
+      issues.push(`Config directory not found: ${configPath}`);
+    }
+
+    // 3. Check profile exists and is valid JSON
+    checksPerformed++;
+    try {
+      const profilePath = await this.profileManager!.getProfilePath(profile);
+      const fs = await import('fs/promises');
+      const content = await fs.readFile(profilePath, 'utf-8');
+      JSON.parse(content); // Validate JSON
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        issues.push(`Profile "${profile}" not found`);
+      } else if (error instanceof SyntaxError) {
+        issues.push(`Profile "${profile}" contains invalid JSON`);
+      } else {
+        issues.push(`Failed to read profile "${profile}": ${error.message}`);
+      }
+    }
+
+    // 4. Check MCPs in profile
+    checksPerformed++;
+    let mcpsChecked = 0;
+    let mcpIssues = 0;
+
+    try {
+      const mcps = await this.profileManager!.getProfileMCPs(profile);
+      if (!mcps || Object.keys(mcps).length === 0) {
+        warnings.push(`No MCPs configured in profile "${profile}"`);
+      } else {
+        for (const [name, config] of Object.entries(mcps)) {
+          // If specific MCP requested, only check that one
+          if (mcpName && name !== mcpName) continue;
+
+          mcpsChecked++;
+
+          // Basic validation
+          if (!config.command && !config.url) {
+            issues.push(`MCP "${name}" missing both command and URL`);
+            mcpIssues++;
+            continue;
+          }
+
+          // Validate stdio config
+          if (config.command) {
+            const validationError = this.validateMCPCommand(config.command, config.args || []);
+            if (validationError) {
+              issues.push(`MCP "${name}" has invalid command: ${validationError}`);
+              mcpIssues++;
+            }
+          }
+
+          // Validate HTTP config
+          if (config.url) {
+            try {
+              new URL(config.url); // Validate URL format
+            } catch (error) {
+              issues.push(`MCP "${name}" has invalid URL: ${config.url}`);
+              mcpIssues++;
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      issues.push(`Failed to check MCPs: ${error.message}`);
+    }
+
+    // Build diagnostic report
+    const totalIssues = issues.length;
+    const status = totalIssues === 0 ? '✅ Healthy' : `⚠️  ${totalIssues} issue(s) found`;
+
+    let report = `🩺 **NCP Doctor - Diagnostics Report**\n\n`;
+    report += `**Status:** ${status}\n`;
+    report += `**Profile:** ${profile}\n`;
+    report += `**Checks Performed:** ${checksPerformed}\n`;
+    if (mcpsChecked > 0) {
+      report += `**MCPs Checked:** ${mcpsChecked}${mcpIssues > 0 ? ` (${mcpIssues} with issues)` : ''}\n`;
+    }
+    report += `\n`;
+
+    // System info
+    report += `**System Information:**\n`;
+    report += `  • Node.js: ${nodeVersion}\n`;
+    report += `  • Platform: ${process.platform}\n`;
+    report += `  • Architecture: ${process.arch}\n`;
+    report += `\n`;
+
+    // Issues
+    if (totalIssues > 0) {
+      report += `**Issues Found:**\n`;
+      issues.forEach((issue, i) => {
+        report += `  ${i + 1}. ❌ ${issue}\n`;
+      });
+      report += `\n`;
+    }
+
+    // Warnings
+    if (warnings.length > 0) {
+      report += `**Warnings:**\n`;
+      warnings.forEach((warning, i) => {
+        report += `  ${i + 1}. ⚠️  ${warning}\n`;
+      });
+      report += `\n`;
+    }
+
+    if (totalIssues === 0 && warnings.length === 0) {
+      report += `✅ All checks passed! NCP is healthy.\n`;
+    } else if (totalIssues > 0) {
+      report += `💡 **Note:** This is a read-only diagnostic. To fix issues, use the CLI:\n`;
+      report += `   • Run: \`ncp doctor --fix\` (requires user confirmation)\n`;
+    }
+
+    return {
+      success: totalIssues === 0,
+      content: report
+    };
   }
 
   /**

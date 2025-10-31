@@ -1,12 +1,7 @@
 /**
- * Scheduler Internal MCP - CRUD Design
+ * Scheduler Internal MCP
  *
- * Provides 5 clean CRUD tools for scheduling MCP tool executions:
- * - create: Create new scheduled job (matches run parameters + schedule + active)
- * - retrieve: Get jobs/executions/both with search and pagination
- * - update: Update existing job (including active state for pause/resume)
- * - delete: Remove scheduled job permanently
- * - validate: Dry-run test tool parameters (capability reference implementation)
+ * Provides tools for scheduling MCP tool executions with cron/launchd/Task Scheduler.
  */
 
 import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
@@ -252,6 +247,87 @@ export class SchedulerMCP implements InternalMCP {
         },
         required: ['job_id']
       }
+    },
+    {
+      name: 'list',
+      description: 'List all scheduled jobs (simpler alternative to retrieve). Matches CLI: ncp schedule list',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['active', 'paused', 'completed', 'error', 'all'],
+            description: 'Filter by job status',
+            default: 'all'
+          }
+        }
+      }
+    },
+    {
+      name: 'get',
+      description: 'Get details for a specific scheduled job (simpler alternative to retrieve). Matches CLI: ncp schedule get <id>',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          job_id: {
+            type: 'string',
+            description: 'Job ID or name to retrieve'
+          }
+        },
+        required: ['job_id']
+      }
+    },
+    {
+      name: 'pause',
+      description: 'Pause a scheduled job (stops future executions). Matches CLI: ncp schedule pause <id>',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          job_id: {
+            type: 'string',
+            description: 'Job ID or name to pause'
+          }
+        },
+        required: ['job_id']
+      }
+    },
+    {
+      name: 'resume',
+      description: 'Resume a paused job (re-enables future executions). Matches CLI: ncp schedule resume <id>',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          job_id: {
+            type: 'string',
+            description: 'Job ID or name to resume'
+          }
+        },
+        required: ['job_id']
+      }
+    },
+    {
+      name: 'executions',
+      description: 'View execution history for all jobs or specific job. Matches CLI: ncp schedule executions',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          job_id: {
+            type: 'string',
+            description: 'Filter to specific job by ID or name (optional - omit for all jobs)'
+          },
+          status: {
+            type: 'string',
+            enum: ['success', 'failure', 'timeout', 'all'],
+            description: 'Filter by execution status',
+            default: 'all'
+          },
+          limit: {
+            type: 'number',
+            description: 'Maximum results to return',
+            default: 50
+          }
+        }
+      }
     }
   ];
 
@@ -280,6 +356,19 @@ export class SchedulerMCP implements InternalMCP {
           return await this.handleUpdate(args);
         case 'delete':
           return await this.handleDelete(args);
+
+        // CLI-style action tools
+        case 'list':
+          return await this.handleList(args);
+        case 'get':
+          return await this.handleGet(args);
+        case 'pause':
+          return await this.handlePause(args);
+        case 'resume':
+          return await this.handleResume(args);
+        case 'executions':
+          return await this.handleExecutions(args);
+
         default:
           return {
             success: false,
@@ -818,5 +907,95 @@ export class SchedulerMCP implements InternalMCP {
               `${execution.error ? `\n❌ Error: ${execution.error.message}` : ''}`
       }]
     };
+  }
+
+  /**
+   * List all jobs (simpler alternative to retrieve)
+   * Delegates to handleRetrieve with include='jobs'
+   */
+  private async handleList(args: any): Promise<InternalToolResult> {
+    return await this.handleRetrieve({
+      include: 'jobs',
+      status: args?.status || 'all'
+    });
+  }
+
+  /**
+   * Get specific job details
+   * Delegates to handleRetrieve with job_id filter
+   */
+  private async handleGet(args: any): Promise<InternalToolResult> {
+    if (!args?.job_id) {
+      return {
+        success: false,
+        error: 'job_id parameter is required',
+        content: [{
+          type: 'text',
+          text: '❌ job_id parameter is required'
+        }]
+      };
+    }
+
+    return await this.handleRetrieve({
+      include: 'jobs',
+      job_id: args.job_id
+    });
+  }
+
+  /**
+   * Pause a job (set active=false)
+   * Delegates to handleUpdate with active=false
+   */
+  private async handlePause(args: any): Promise<InternalToolResult> {
+    if (!args?.job_id) {
+      return {
+        success: false,
+        error: 'job_id parameter is required',
+        content: [{
+          type: 'text',
+          text: '❌ job_id parameter is required'
+        }]
+      };
+    }
+
+    return await this.handleUpdate({
+      job_id: args.job_id,
+      active: false
+    });
+  }
+
+  /**
+   * Resume a job (set active=true)
+   * Delegates to handleUpdate with active=true
+   */
+  private async handleResume(args: any): Promise<InternalToolResult> {
+    if (!args?.job_id) {
+      return {
+        success: false,
+        error: 'job_id parameter is required',
+        content: [{
+          type: 'text',
+          text: '❌ job_id parameter is required'
+        }]
+      };
+    }
+
+    return await this.handleUpdate({
+      job_id: args.job_id,
+      active: true
+    });
+  }
+
+  /**
+   * View execution history
+   * Delegates to handleRetrieve with include='executions'
+   */
+  private async handleExecutions(args: any): Promise<InternalToolResult> {
+    return await this.handleRetrieve({
+      include: 'executions',
+      job_id: args?.job_id,
+      status: args?.status || 'all',
+      limit: args?.limit || 50
+    });
   }
 }
