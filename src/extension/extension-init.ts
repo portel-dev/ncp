@@ -7,7 +7,7 @@
 
 import { homedir } from 'os';
 import { join } from 'path';
-import { existsSync, mkdirSync, symlinkSync, unlinkSync, chmodSync } from 'fs';
+import { existsSync, mkdirSync, symlinkSync, unlinkSync, chmodSync, readlinkSync } from 'fs';
 import { logger } from '../utils/logger.js';
 import { importFromClient } from '../utils/client-importer.js';
 import ProfileManager from '../profiles/profile-manager.js';
@@ -111,12 +111,29 @@ async function setupGlobalCLI(debug: boolean): Promise<void> {
     // Create symlink in /usr/local/bin (requires sudo, may fail)
     const globalLink = '/usr/local/bin/ncp';
 
-    // Remove existing symlink if present
+    // Check if existing symlink points to npm package
     if (existsSync(globalLink)) {
       try {
+        const target = readlinkSync(globalLink);
+
+        // If it points to npm package, don't overwrite
+        if (target.includes('node_modules/@portel/ncp') || target.includes('node_modules\\@portel\\ncp')) {
+          logger.info('NPM-installed ncp detected, skipping DXT global CLI setup');
+          logger.info('Using npm version. To use DXT version, run: npm uninstall -g @portel/ncp');
+          if (debug) {
+            logger.debug(`Existing symlink: ${globalLink} -> ${target}`);
+          }
+          return;
+        }
+
+        // Otherwise, remove the existing symlink (might be old DXT or something else)
         unlinkSync(globalLink);
+        if (debug) {
+          logger.debug(`Removed existing symlink: ${globalLink} -> ${target}`);
+        }
       } catch (err) {
-        // Ignore errors, might be a file or permission issue
+        // Ignore errors - might be a regular file or permission issue
+        // Will try to create symlink anyway
       }
     }
 
