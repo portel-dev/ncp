@@ -111,14 +111,15 @@ export const CLIENT_REGISTRY: Record<string, ClientDefinition> = {
 
   /**
    * Cursor (IDE)
-   * Uses JSON config in VS Code-like structure
+   * Uses JSON config in home directory .cursor folder
+   * Note: Cursor stores MCP config at ~/.cursor/mcp.json (not in Application Support)
    */
   'cursor': {
     displayName: 'Cursor',
     configPaths: {
-      darwin: '~/Library/Application Support/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json',
-      win32: '%APPDATA%/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json',
-      linux: '~/.config/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json'
+      darwin: '~/.cursor/mcp.json',
+      win32: '%USERPROFILE%/.cursor/mcp.json',
+      linux: '~/.cursor/mcp.json'
     },
     configFormat: 'json',
     mcpServersPath: 'mcpServers'
@@ -204,12 +205,13 @@ export const CLIENT_REGISTRY: Record<string, ClientDefinition> = {
 
   /**
    * Enconvo (Mac AI Assistant)
-   * Uses JSON config in application support
+   * Uses JSON config in .config directory
+   * Note: Enconvo stores config at ~/.config/enconvo/mcp_config.json
    */
   'enconvo': {
     displayName: 'Enconvo',
     configPaths: {
-      darwin: '~/Library/Application Support/Enconvo/mcp_config.json'
+      darwin: '~/.config/enconvo/mcp_config.json'
       // macOS only currently
     },
     configFormat: 'json',
