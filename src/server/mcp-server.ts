@@ -26,6 +26,26 @@ import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, gener
 import chalk from 'chalk';
 import type { ElicitationServer } from '../utils/elicitation-helper.js';
 import { version } from '../utils/version.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Get the directory of the current file
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load and encode the NCP icon as a data URI
+function getIconDataURI(): string {
+  try {
+    const iconPath = join(__dirname, '..', '..', 'assets', 'icons', 'ncp.png');
+    const iconBuffer = readFileSync(iconPath);
+    const base64Icon = iconBuffer.toString('base64');
+    return `data:image/png;base64,${base64Icon}`;
+  } catch (error) {
+    logger.warn(`Failed to load icon: ${error}`);
+    return '';
+  }
+}
 
 export class MCPServer implements ElicitationServer {
   private server: Server;
@@ -35,11 +55,15 @@ export class MCPServer implements ElicitationServer {
   private initializationError: Error | null = null;
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
+    // Load icon data URI
+    const iconDataURI = getIconDataURI();
+
     // Create SDK Server instance with elicitation capability
     this.server = new Server(
       {
         name: 'ncp',
         version: version,  // Read version from package.json dynamically
+        ...(iconDataURI && { icon: { src: iconDataURI } })  // Add icon if successfully loaded
       },
       {
         capabilities: {
@@ -357,6 +381,9 @@ export class MCPServer implements ElicitationServer {
     const method = request.method;
 
     if (method === 'initialize') {
+      // Load icon for test responses
+      const iconDataURI = getIconDataURI();
+
       // Return initialization response
       return {
         jsonrpc: '2.0',
@@ -371,7 +398,8 @@ export class MCPServer implements ElicitationServer {
           },
           serverInfo: {
             name: 'ncp',
-            version
+            version,
+            ...(iconDataURI && { icon: { src: iconDataURI } })  // Add icon if successfully loaded
           }
         }
       };

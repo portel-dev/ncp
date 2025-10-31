@@ -101,3 +101,4 @@ experiment-*.js
 # Date-prefixed conversation exports (move to ~/Projects/ncp/ instead of deleting!)
 # See .conversation-exports.md for details
 2025-*.txt
+test-configs/
