@@ -41,6 +41,7 @@
     "test:client-registry": "node scripts/test-client-registry.js",
     "test:registry-security": "node scripts/test-registry-security.js",
     "test:http-auth": "node scripts/test-http-auth.js",
+    "verify-clients": "npm run build && node scripts/verify-client-configs.js",
     "build:dxt": "bash scripts/build-dxt-clean.sh",
     "build:dxt:patched": "npm run build:dxt && ./scripts/patch-dxt-zip.sh",
     "build:dxt:signed": "npm run build:dxt:patched && npx @anthropic-ai/mcpb sign ncp.dxt --self-signed && npm run test:dxt",
