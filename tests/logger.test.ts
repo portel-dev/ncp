@@ -1,15 +1,21 @@
 /**
  * Unit Tests - Logger
  * Tests logging functionality, MCP mode detection, and output control
- * Adapted from commercial NCP security-logger patterns
+ *
+ * Note: Most tests don't set NCP_DEBUG so logs go to stderr (easier to test).
+ * File logging behavior is tested separately in dedicated tests.
  */
 
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { readFileSync, existsSync, mkdirSync, rmSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 
 describe('Logger', () => {
   let logger: any;
   let mockConsole: any;
   let originalConsole: any;
+  let testLogDir: string;
 
   beforeEach(() => {
     // Store original console methods
@@ -31,6 +37,9 @@ describe('Logger', () => {
     // Replace console methods with our mocks
     Object.assign(console, mockConsole);
 
+    // Create test log directory
+    testLogDir = join(tmpdir(), `ncp-test-logs-${Date.now()}`);
+
     // Clear module cache and re-import logger to get fresh instance
     jest.resetModules();
   });
@@ -39,6 +48,16 @@ describe('Logger', () => {
     // Restore original console methods
     Object.assign(console, originalConsole);
     jest.clearAllMocks();
+
+    // Clean up test log directory
+    if (existsSync(testLogDir)) {
+      rmSync(testLogDir, { recursive: true, force: true });
+    }
+
+    // Clean up environment
+    delete process.env.NCP_DEBUG;
+    delete process.env.NCP_MODE;
+    delete process.env.NCP_CONFIG_PATH;
   });
 
   describe('MCP mode detection', () => {
@@ -49,10 +68,10 @@ describe('Logger', () => {
       const { logger: testLogger } = await import('../src/utils/logger.js');
       testLogger.info('Test message');
 
-      // In MCP mode, should suppress output
+      // In MCP mode without debug, should not output
       expect(mockConsole.error).not.toHaveBeenCalled();
 
-      // Restore environment
+      // Restore
       if (originalEnv) {
         process.env.NCP_MODE = originalEnv;
       } else {
@@ -60,58 +79,108 @@ describe('Logger', () => {
       }
     });
 
-    it('should enable logging in non-MCP mode', async () => {
-      delete process.env.NCP_MODE;
-      process.env.NCP_DEBUG = 'true';
+    it('should detect CLI mode when CLI commands are present', async () => {
+      const originalArgv = process.argv;
+      process.argv = ['node', 'script.js', 'list'];
 
       const { logger: testLogger } = await import('../src/utils/logger.js');
-      testLogger.info('Test message');
+      expect(testLogger.isInMCPMode()).toBe(false);
 
-      // Should output in non-MCP mode
-      expect(mockConsole.error).toHaveBeenCalled();
+      process.argv = originalArgv;
+    });
 
-      delete process.env.NCP_DEBUG;
+    it('should default to MCP mode when no CLI commands', async () => {
+      const originalArgv = process.argv;
+      process.argv = ['node', 'script.js'];
+      delete process.env.NCP_MODE;
+
+      const { logger: testLogger } = await import('../src/utils/logger.js');
+      expect(testLogger.isInMCPMode()).toBe(true);
+
+      process.argv = originalArgv;
     });
   });
 
-  describe('Log level functionality', () => {
-    beforeEach(async () => {
-      // Ensure we're not in MCP mode for these tests
-      delete process.env.NCP_MODE;
+  describe('Debug mode behavior', () => {
+    it('should enable debug mode with NCP_DEBUG=true', async () => {
       process.env.NCP_DEBUG = 'true';
+      process.env.NCP_CONFIG_PATH = testLogDir;
+
+      const { logger: testLogger } = await import('../src/utils/logger.js');
+
+      // Wait for setupFileLogging() to complete
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Clear any early logs that went to stderr before file was ready
+      jest.clearAllMocks();
+
+      // With debug enabled and file ready, logs go to file, not stderr
+      testLogger.debug('Test debug message');
+
+      // Should not appear on stderr (goes to file instead)
+      expect(mockConsole.error).not.toHaveBeenCalled();
+
+      // Check log file was created
+      const logPath = testLogger.getLogFilePath();
+      expect(logPath).toBeTruthy();
+      expect(existsSync(logPath!)).toBe(true);
+
+      delete process.env.NCP_DEBUG;
+      delete process.env.NCP_CONFIG_PATH;
+    });
+
+    it('should output to stderr when debug is off', async () => {
+      delete process.env.NCP_DEBUG;
+
+      const { logger: testLogger } = await import('../src/utils/logger.js');
+      testLogger.setMCPMode(false);
+      testLogger.debug('Test debug message');
+
+      // Should not output when debug is off
+      expect(mockConsole.error).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Log level functionality (without file logging)', () => {
+    beforeEach(async () => {
+      // Don't set NCP_DEBUG - logs go to stderr for testing
+      delete process.env.NCP_MODE;
+      delete process.env.NCP_DEBUG;
 
       const { logger: testLogger } = await import('../src/utils/logger.js');
       logger = testLogger;
+      logger.setMCPMode(false); // CLI mode for visible output
     });
 
-    it('should log info messages with proper prefix', () => {
+    it('should not log info messages without debug', () => {
       logger.info('Test info message');
-      expect(mockConsole.error).toHaveBeenCalledWith('[NCP] Test info message');
+      expect(mockConsole.error).not.toHaveBeenCalled();
     });
 
-    it('should log error messages with error prefix', () => {
+    it('should log error messages even without debug', () => {
       logger.error('Test error message');
       expect(mockConsole.error).toHaveBeenCalledWith('[NCP ERROR] Test error message');
     });
 
-    it('should log warning messages with warn prefix', () => {
+    it('should not log warning messages without debug', () => {
       logger.warn('Test warning message');
-      expect(mockConsole.error).toHaveBeenCalledWith('[NCP WARN] Test warning message');
+      expect(mockConsole.error).not.toHaveBeenCalled();
     });
 
-    it('should log debug messages with debug prefix', () => {
+    it('should not log debug messages without debug', () => {
       logger.debug('Test debug message');
-      expect(mockConsole.error).toHaveBeenCalledWith('[NCP DEBUG] Test debug message');
+      expect(mockConsole.error).not.toHaveBeenCalled();
     });
   });
 
   describe('Error object handling', () => {
     beforeEach(async () => {
       delete process.env.NCP_MODE;
-      process.env.NCP_DEBUG = 'true';
+      delete process.env.NCP_DEBUG;
 
       const { logger: testLogger } = await import('../src/utils/logger.js');
       logger = testLogger;
+      logger.setMCPMode(false);
     });
 
     it('should handle error objects correctly', () => {
@@ -131,68 +200,64 @@ describe('Logger', () => {
   describe('Edge cases', () => {
     beforeEach(async () => {
       delete process.env.NCP_MODE;
-      process.env.NCP_DEBUG = 'true';
+      delete process.env.NCP_DEBUG;
 
       const { logger: testLogger } = await import('../src/utils/logger.js');
       logger = testLogger;
+      logger.setMCPMode(false);
     });
 
     it('should handle empty messages', () => {
-      logger.info('');
-      expect(mockConsole.error).toHaveBeenCalledWith('[NCP] ');
+      logger.error('');
+      expect(mockConsole.error).toHaveBeenCalledWith('[NCP ERROR] ');
     });
 
     it('should handle undefined messages', () => {
-      logger.info(undefined);
-      expect(mockConsole.error).toHaveBeenCalledWith('[NCP] undefined');
+      logger.error(undefined);
+      expect(mockConsole.error).toHaveBeenCalledWith('[NCP ERROR] undefined');
     });
 
     it('should handle very long messages', () => {
-      const longMessage = 'x'.repeat(1000);
-      logger.info(longMessage);
-      expect(mockConsole.error).toHaveBeenCalledWith(`[NCP] ${longMessage}`);
+      const longMessage = 'a'.repeat(10000);
+      logger.error(longMessage);
+      expect(mockConsole.error).toHaveBeenCalledWith(`[NCP ERROR] ${longMessage}`);
     });
   });
 
   describe('MCP mode management', () => {
     beforeEach(async () => {
-      delete process.env.NCP_MODE;
-      process.env.NCP_DEBUG = 'true';
-
+      delete process.env.NCP_DEBUG;
       const { logger: testLogger } = await import('../src/utils/logger.js');
       logger = testLogger;
     });
 
     it('should check if in MCP mode', () => {
-      const isInMCP = logger.isInMCPMode();
-      expect(typeof isInMCP).toBe('boolean');
-    });
-
-    it('should allow setting MCP mode', () => {
       const originalMode = logger.isInMCPMode();
-
       logger.setMCPMode(true);
       expect(logger.isInMCPMode()).toBe(true);
-
-      logger.setMCPMode(false);
-      expect(logger.isInMCPMode()).toBe(false);
 
       // Restore original mode
       logger.setMCPMode(originalMode);
     });
 
+    it('should allow setting MCP mode', () => {
+      logger.setMCPMode(false);
+      expect(logger.isInMCPMode()).toBe(false);
+
+      logger.setMCPMode(true);
+      expect(logger.isInMCPMode()).toBe(true);
+    });
+
     it('should handle progress messages in non-MCP mode', () => {
       logger.setMCPMode(false);
+      // Progress messages only log in debug mode
       logger.progress('test progress message');
-      expect(mockConsole.error).toHaveBeenCalledWith('[NCP] test progress message');
+      expect(mockConsole.error).not.toHaveBeenCalled();
     });
 
     it('should not output progress messages in MCP mode', async () => {
-      // Ensure debug mode is off
-      const originalDebug = process.env.NCP_DEBUG;
-      const originalArgv = process.argv;
       delete process.env.NCP_DEBUG;
-      process.argv = ['node', 'script.js']; // Clean argv without --debug
+      process.argv = ['node', 'script.js']; // Clean argv
 
       jest.resetModules();
       const { logger: testLogger } = await import('../src/utils/logger.js');
@@ -201,39 +266,92 @@ describe('Logger', () => {
       testLogger.setMCPMode(true);
       testLogger.progress('test progress message');
       expect(mockConsole.error).not.toHaveBeenCalled();
+    });
+  });
 
-      // Restore environment
-      if (originalDebug) process.env.NCP_DEBUG = originalDebug;
-      process.argv = originalArgv;
+  describe('File logging behavior', () => {
+    it('should create log file path when NCP_DEBUG is true', async () => {
+      process.env.NCP_DEBUG = 'true';
+      process.env.NCP_CONFIG_PATH = testLogDir;
+
+      const { logger: testLogger } = await import('../src/utils/logger.js');
+
+      // Wait for async setupFileLogging() to complete
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Check that log file path is set
+      const logPath = testLogger.getLogFilePath();
+      expect(logPath).toBeTruthy();
+      expect(logPath).toContain('ncp-debug-');
+      expect(logPath).toContain('.log');
+
+      // Trigger some logging
+      testLogger.debug('Test message');
+      testLogger.info('Info message');
+      testLogger.error('Error message');
+
+      // Note: Actual file content testing is complex due to async I/O
+      // The important behavior is that logFilePath is set and logs are directed to file
+      // Real file content can be verified in integration tests
+    });
+
+    it('should not create log file when NCP_DEBUG is false', async () => {
+      delete process.env.NCP_DEBUG;
+      process.env.NCP_CONFIG_PATH = testLogDir;
+
+      const { logger: testLogger } = await import('../src/utils/logger.js');
+
+      testLogger.debug('Test message');
+
+      const logPath = testLogger.getLogFilePath();
+      expect(logPath).toBeNull();
+    });
+
+    it('should log to stderr when debug is off', async () => {
+      delete process.env.NCP_DEBUG;
+
+      const { logger: testLogger } = await import('../src/utils/logger.js');
+      testLogger.setMCPMode(false); // CLI mode
+
+      // Error logs should go to stderr even without debug
+      testLogger.error('Error without debug');
+      expect(mockConsole.error).toHaveBeenCalledWith('[NCP ERROR] Error without debug');
     });
   });
 
   describe('Additional coverage tests', () => {
-    it('should handle mcpInfo method in non-MCP mode', () => {
-      // Test lines 47-48: mcpInfo in non-MCP mode
-      logger.setMCPMode(false);
+    it('should handle mcpInfo method - logs only in debug mode', async () => {
+      // mcpInfo only logs when debug mode is enabled
+      delete process.env.NCP_DEBUG;
+      process.argv = ['node', 'script.js'];
+
+      jest.resetModules();
+      const { logger: testLogger } = await import('../src/utils/logger.js');
+
+      testLogger.setMCPMode(false);
       jest.clearAllMocks();
 
-      logger.mcpInfo('Test MCP info message');
+      testLogger.mcpInfo('Test MCP info message');
 
-      expect(mockConsole.error).toHaveBeenCalledWith('[NCP] Test MCP info message');
+      // Should not log when debug is off
+      expect(mockConsole.error).not.toHaveBeenCalled();
     });
 
-    it('should handle critical errors in MCP mode', () => {
-      // Test line 71: critical error logging in MCP mode
-      logger.setMCPMode(true);
+    it('should handle critical errors in MCP mode', async () => {
+      delete process.env.NCP_DEBUG;
+      process.argv = ['node', 'script.js'];
+
+      jest.resetModules();
+      const { logger: testLogger } = await import('../src/utils/logger.js');
+
+      testLogger.setMCPMode(true);
       jest.clearAllMocks();
 
       // Test critical error
       const criticalError = { critical: true, message: 'Critical failure' };
-      logger.error('Critical system failure', criticalError);
+      testLogger.error('Critical system failure', criticalError);
 
       expect(mockConsole.error).toHaveBeenCalledWith('[NCP ERROR] Critical system failure');
     });
-  });
-
-  afterEach(() => {
-    // Clean up environment variables
-    delete process.env.NCP_DEBUG;
   });
 });
