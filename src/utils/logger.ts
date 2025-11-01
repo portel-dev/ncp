@@ -4,7 +4,7 @@
  * Controls logging based on context:
  * - When running as MCP server: minimal/no logging to stderr
  * - When running as CLI or debugging: full logging
- * - When debug enabled as extension: file-based logging
+ * - When debug enabled (NCP_DEBUG=true): file-based logging
  */
 
 import { homedir } from 'os';
@@ -34,8 +34,8 @@ export class Logger {
     this.debugMode = process.env.NCP_DEBUG === 'true' ||
                      process.argv.includes('--debug');
 
-    // Set up file-based logging for extensions with debug enabled
-    if (this.debugMode && (process.env.NCP_MODE === 'extension' || process.env.NCP_MODE === 'mcp')) {
+    // Set up file-based logging when debug is enabled
+    if (this.debugMode) {
       // Fire and forget - don't block constructor
       this.setupFileLogging().catch(error => {
         console.error(`[NCP] Failed to set up file logging: ${error.message}`);
