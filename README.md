@@ -180,7 +180,7 @@ Add to your client's MCP configuration:
 {
   "mcpServers": {
     "ncp": {
-      "command": "ncp-mcp"
+      "command": "ncp"
     }
   }
 }

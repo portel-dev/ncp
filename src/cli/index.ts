@@ -595,8 +595,17 @@ ${chalk.bold.white('Examples:')}
 
 
 // Check if we should run as MCP server
-// MCP server mode: default when no CLI commands are provided, or when --profile is specified
+// MCP server mode detection follows DXT config pattern:
+// 1. Any NCP_* environment variable → MCP mode (DXT pattern)
+// 2. CLI commands present → CLI mode
+// 3. No params at all → MCP mode (backward compat)
+// 4. Otherwise (--profile, --working-dir) → MCP mode
+
 const profileIndex = process.argv.indexOf('--profile');
+
+// Check for NCP_* environment variables (DXT config pattern)
+const hasNcpEnvVars = Object.keys(process.env).some(key => key.startsWith('NCP_'));
+
 const hasCommands = process.argv.includes('find') ||
   process.argv.includes('add') ||
   process.argv.includes('list') ||
@@ -619,27 +628,40 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('_task-execute') ||
   process.argv.includes('cleanup-runs');
 
-// Default to MCP server mode when no CLI commands are provided
-// This ensures compatibility with Claude Desktop and other MCP clients that expect server mode by default
+// Decision logic:
+// - NCP_* env vars + no CLI commands → MCP mode
+// - CLI commands present → CLI mode
+// - No CLI commands → MCP mode (default)
 const shouldRunAsServer = !hasCommands;
 
 if (shouldRunAsServer) {
-  // Handle --working-dir parameter for MCP server mode
-  const workingDirIndex = process.argv.indexOf('--working-dir');
-  if (workingDirIndex !== -1 && workingDirIndex + 1 < process.argv.length) {
-    const workingDirValue = process.argv[workingDirIndex + 1];
-    setOverrideWorkingDirectory(workingDirValue);
+  // Configuration priority: ENV VAR > command-line arg > default
+
+  // Working directory: NCP_WORKING_DIR env var or --working-dir arg
+  const workingDir = process.env.NCP_WORKING_DIR || (() => {
+    const workingDirIndex = process.argv.indexOf('--working-dir');
+    return workingDirIndex !== -1 && workingDirIndex + 1 < process.argv.length
+      ? process.argv[workingDirIndex + 1]
+      : null;
+  })();
+
+  if (workingDir) {
+    setOverrideWorkingDirectory(workingDir);
   }
 
-  // Running as MCP server: ncp (defaults to 'all' profile) or ncp --profile <name>
+  // Profile: NCP_PROFILE env var or --profile arg or 'all' default
   // ⚠️ CRITICAL: Default MUST be 'all' - DO NOT CHANGE to 'default' or anything else!
-  const profileName = profileIndex !== -1 ? (process.argv[profileIndex + 1] || 'all') : 'all';
+  const profileName = process.env.NCP_PROFILE || (() => {
+    return profileIndex !== -1 ? (process.argv[profileIndex + 1] || 'all') : 'all';
+  })();
 
   // Debug logging for integration tests
   if (process.env.NCP_DEBUG === 'true') {
-    console.error(`[DEBUG] profileIndex: ${profileIndex}`);
+    console.error(`[DEBUG] MCP server mode`);
+    console.error(`[DEBUG] NCP_* env vars detected: ${hasNcpEnvVars}`);
+    console.error(`[DEBUG] Working directory: ${workingDir || 'default'}`);
+    console.error(`[DEBUG] Profile: ${profileName}`);
     console.error(`[DEBUG] process.argv: ${process.argv.join(' ')}`);
-    console.error(`[DEBUG] Selected profile: ${profileName}`);
   }
 
   const server = new MCPServer(profileName);

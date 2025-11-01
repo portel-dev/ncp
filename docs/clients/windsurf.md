@@ -26,7 +26,7 @@ npm install -g @portel/ncp
 {
   "mcpServers": {
     "ncp": {
-      "command": "ncp-mcp"
+      "command": "ncp"
     }
   }
 }
@@ -58,12 +58,16 @@ Separate work and personal MCPs:
 {
   "mcpServers": {
     "ncp-work": {
-      "command": "ncp-mcp",
-      "args": ["--profile", "work"]
+      "command": "ncp",
+      "env": {
+        "NCP_PROFILE": "work"
+      }
     },
     "ncp-personal": {
-      "command": "ncp-mcp",
-      "args": ["--profile", "personal"]
+      "command": "ncp",
+      "env": {
+        "NCP_PROFILE": "personal"
+      }
     }
   }
 }
@@ -77,7 +81,7 @@ Enable logging to `~/.ncp/logs/`:
 {
   "mcpServers": {
     "ncp": {
-      "command": "ncp-mcp",
+      "command": "ncp",
       "env": {
         "NCP_DEBUG": "true"
       }
@@ -92,8 +96,10 @@ Enable logging to `~/.ncp/logs/`:
 {
   "mcpServers": {
     "ncp": {
-      "command": "ncp-mcp",
-      "args": ["--working-dir", "/path/to/workspace"]
+      "command": "ncp",
+      "env": {
+        "NCP_WORKING_DIR": "/path/to/workspace"
+      }
     }
   }
 }

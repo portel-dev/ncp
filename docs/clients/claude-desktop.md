@@ -239,7 +239,9 @@ ncp add --profile prod database npx production-db-server
   "mcpServers": {
     "ncp": {
       "command": "ncp",
-      "args": ["--profile", "dev"]
+      "env": {
+        "NCP_PROFILE": "dev"
+      }
     }
   }
 }

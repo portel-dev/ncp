@@ -24,16 +24,14 @@ mkdir -p .continue/mcpServers
 **Create `.continue/mcpServers/ncp.yaml`:**
 ```yaml
 name: ncp
-command: ncp-mcp
-args: []
+command: ncp
 ```
 
 **Or use JSON** (`.continue/mcpServers/ncp.json`):
 ```json
 {
   "name": "ncp",
-  "command": "ncp-mcp",
-  "args": []
+  "command": "ncp"
 }
 ```
 
@@ -63,19 +61,17 @@ Separate work and personal MCPs:
 **.continue/mcpServers/ncp-work.yaml:**
 ```yaml
 name: ncp-work
-command: ncp-mcp
-args:
-  - --profile
-  - work
+command: ncp
+env:
+  NCP_PROFILE: work
 ```
 
 **.continue/mcpServers/ncp-personal.yaml:**
 ```yaml
 name: ncp-personal
-command: ncp-mcp
-args:
-  - --profile
-  - personal
+command: ncp
+env:
+  NCP_PROFILE: personal
 ```
 
 ### Debug Logs
@@ -84,8 +80,7 @@ Enable logging to `~/.ncp/logs/`:
 
 ```yaml
 name: ncp
-command: ncp-mcp
-args: []
+command: ncp
 env:
   NCP_DEBUG: "true"
 ```
@@ -94,10 +89,9 @@ env:
 
 ```yaml
 name: ncp
-command: ncp-mcp
-args:
-  - --working-dir
-  - /path/to/workspace
+command: ncp
+env:
+  NCP_WORKING_DIR: /path/to/workspace
 ```
 
 ---

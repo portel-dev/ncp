@@ -160,7 +160,9 @@ ncp list --profile all
   "mcpServers": {
     "ncp": {
       "command": "ncp",
-      "args": ["--profile", "all"]
+      "env": {
+        "NCP_PROFILE": "all"
+      }
     }
   }
 }

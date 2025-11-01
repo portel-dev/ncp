@@ -17,7 +17,7 @@ Create `.vscode/mcp.json` in your workspace root:
   "servers": {
     "ncp": {
       "type": "stdio",
-      "command": "ncp-mcp"
+      "command": "ncp"
     }
   }
 }
@@ -55,13 +55,17 @@ Separate work and personal MCPs:
   "servers": {
     "ncp-work": {
       "type": "stdio",
-      "command": "ncp-mcp",
-      "args": ["--profile", "work"]
+      "command": "ncp",
+      "env": {
+        "NCP_PROFILE": "work"
+      }
     },
     "ncp-personal": {
       "type": "stdio",
-      "command": "ncp-mcp",
-      "args": ["--profile", "personal"]
+      "command": "ncp",
+      "env": {
+        "NCP_PROFILE": "personal"
+      }
     }
   }
 }
@@ -76,7 +80,7 @@ Enable logging to `~/.ncp/logs/`:
   "servers": {
     "ncp": {
       "type": "stdio",
-      "command": "ncp-mcp",
+      "command": "ncp",
       "env": {
         "NCP_DEBUG": "true"
       }
@@ -92,8 +96,10 @@ Enable logging to `~/.ncp/logs/`:
   "servers": {
     "ncp": {
       "type": "stdio",
-      "command": "ncp-mcp",
-      "args": ["--working-dir", "${workspaceFolder}"]
+      "command": "ncp",
+      "env": {
+        "NCP_WORKING_DIR": "${workspaceFolder}"
+      }
     }
   }
 }

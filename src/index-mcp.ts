@@ -35,23 +35,32 @@ process.on('unhandledRejection', (reason, promise) => {
 // Wrap entire startup in async function
 (async () => {
   try {
-    // Handle --working-dir parameter for MCP server mode
-    const workingDirIndex = process.argv.indexOf('--working-dir');
-    if (workingDirIndex !== -1 && workingDirIndex + 1 < process.argv.length) {
-      const workingDirValue = process.argv[workingDirIndex + 1];
-      setOverrideWorkingDirectory(workingDirValue);
+    // Configuration priority: ENV VAR > command-line arg > default
+
+    // Working directory: NCP_WORKING_DIR env var or --working-dir arg
+    const workingDir = process.env.NCP_WORKING_DIR || (() => {
+      const workingDirIndex = process.argv.indexOf('--working-dir');
+      return workingDirIndex !== -1 && workingDirIndex + 1 < process.argv.length
+        ? process.argv[workingDirIndex + 1]
+        : null;
+    })();
+
+    if (workingDir) {
+      setOverrideWorkingDirectory(workingDir);
     }
 
-    // Handle --profile parameter
-    const profileIndex = process.argv.indexOf('--profile');
-    const profileName = profileIndex !== -1 ? (process.argv[profileIndex + 1] || 'all') : 'all';
+    // Profile: NCP_PROFILE env var or --profile arg or 'all' default
+    const profileName = process.env.NCP_PROFILE || (() => {
+      const profileIndex = process.argv.indexOf('--profile');
+      return profileIndex !== -1 ? (process.argv[profileIndex + 1] || 'all') : 'all';
+    })();
 
     // Debug logging for integration tests
     if (process.env.NCP_DEBUG === 'true') {
       console.error(`[DEBUG] MCP-only mode`);
-      console.error(`[DEBUG] profileIndex: ${profileIndex}`);
+      console.error(`[DEBUG] Working directory: ${workingDir || 'default'}`);
+      console.error(`[DEBUG] Profile: ${profileName}`);
       console.error(`[DEBUG] process.argv: ${process.argv.join(' ')}`);
-      console.error(`[DEBUG] Selected profile: ${profileName}`);
     }
 
     // Start MCP server and await it to keep process alive
