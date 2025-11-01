@@ -29,6 +29,7 @@ import { version } from '../utils/version.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { SessionNotificationManager } from '../utils/session-notifications.js';
 
 // Get the directory of the current file
 const __filename = fileURLToPath(import.meta.url);
@@ -53,8 +54,12 @@ export class MCPServer implements ElicitationServer {
   private initializationPromise: Promise<void> | null = null;
   private isInitialized: boolean = false;
   private initializationError: Error | null = null;
+  private notifications: SessionNotificationManager;
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
+    // Initialize session-scoped notification manager
+    this.notifications = new SessionNotificationManager();
+
     // Load icon data URI
     const iconDataURI = getIconDataURI();
 
@@ -104,7 +109,11 @@ export class MCPServer implements ElicitationServer {
         // Trigger auto-import asynchronously (don't block initialize response)
         if (clientInfo.name && clientInfo.name !== 'unknown') {
           logger.debug(`Triggering auto-import for client: ${clientInfo.name}`);
-          this.orchestrator.triggerAutoImport(clientInfo.name).then(() => {
+          this.orchestrator.triggerAutoImport(
+            clientInfo.name,
+            this,  // elicitation server for config replacement dialog
+            this.notifications  // notification manager for tips
+          ).then(() => {
             logger.debug(`Auto-import completed for ${clientInfo.name}`);
           }).catch(error => {
             logger.error(`Auto-import failed for ${clientInfo.name}: ${error.message}`);
@@ -168,6 +177,15 @@ export class MCPServer implements ElicitationServer {
               }],
               isError: true,
             };
+        }
+
+        // Append notifications to response (if any)
+        if (this.notifications.hasNotifications() && result.content && result.content.length > 0) {
+          const notificationText = this.notifications.formatForResponse();
+          const firstContent = result.content[0];
+          if (firstContent.type === 'text') {
+            firstContent.text += notificationText;
+          }
         }
 
         // Log successful response

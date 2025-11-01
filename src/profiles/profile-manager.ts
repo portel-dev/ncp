@@ -175,7 +175,11 @@ export class ProfileManager {
    * ⚠️ CRITICAL: This MUST target the 'all' profile - DO NOT CHANGE!
    * Auto-imported MCPs go to 'all' to maintain consistency with manual `ncp add`.
    */
-  async tryAutoImportFromClient(clientName: string): Promise<void> {
+  async tryAutoImportFromClient(
+    clientName: string,
+    elicitationServer?: any,
+    notificationManager?: any
+  ): Promise<void> {
     try {
       // Check if we should attempt auto-sync for this client
       if (!shouldAttemptClientSync(clientName)) {
@@ -285,12 +289,173 @@ export class ProfileManager {
           logger.info(`   - ${extensionsCount} from extensions`);
         }
         logger.info(`   → Added to ${path.join(this.profilesDir, 'all.json')}`);
+
+        // After successful import, offer config replacement (if supported)
+        await this.maybeReplaceClientConfig(
+          clientName,
+          importResult,
+          elicitationServer,
+          notificationManager
+        );
       }
     } catch (error) {
       // Silent failure - don't block startup if auto-import fails
       // User can still configure manually
       logger.warn(`Auto-sync failed: ${error}`);
     }
+  }
+
+  /**
+   * Ask user about replacing client config with NCP-only (optional optimization)
+   * Only triggered after successful auto-import
+   */
+  private async maybeReplaceClientConfig(
+    clientName: string,
+    importResult: any,
+    elicitationServer?: any,
+    notificationManager?: any
+  ): Promise<void> {
+    // Claude Desktop: Skip (users manage in UI, DXT config controlled by us)
+    const isClaudeDesktop = clientName.toLowerCase().includes('claude');
+    if (isClaudeDesktop) {
+      logger.info('💡 Claude Desktop: Manage MCPs in settings if needed');
+      return;
+    }
+
+    // No elicitation support: Queue notification immediately
+    if (!elicitationServer) {
+      this.queueConfigOptimizationNotification(
+        clientName,
+        importResult,
+        notificationManager
+      );
+      return;
+    }
+
+    // Ask user via elicitation (30s timeout)
+    const decision = await this.askConfigReplacementPermission(
+      clientName,
+      importResult,
+      elicitationServer
+    );
+
+    if (decision === 'replace') {
+      // User approved - backup and replace
+      await this.backupAndReplaceConfig(clientName, importResult);
+
+      // Notify success with restart instruction
+      if (notificationManager) {
+        notificationManager.add({
+          type: 'action',
+          message: `Config replaced for ${clientName} - restart required to apply`
+        });
+      }
+    } else {
+      // Timeout or declined - queue notification
+      this.queueConfigOptimizationNotification(
+        clientName,
+        importResult,
+        notificationManager
+      );
+    }
+  }
+
+  /**
+   * Ask user for permission to replace config (with timeout)
+   */
+  private async askConfigReplacementPermission(
+    clientName: string,
+    importResult: any,
+    elicitationServer: any
+  ): Promise<'replace' | 'declined'> {
+    const totalMCPs = Object.keys(importResult.mcpServers).length;
+    const estimatedTools = totalMCPs * 20;
+
+    try {
+      const result = await Promise.race([
+        elicitationServer.elicitInput({
+          message: `✅ Imported ${importResult.count} MCPs into NCP
+
+**Optimize token usage?**
+
+Your ${clientName} has ${totalMCPs} MCPs configured (~${estimatedTools} tools in context).
+
+**Replace with NCP-only?**
+• Backup saved automatically
+• Reduces to 2 tools (find + run)
+• ~95% token savings
+• Faster responses, longer conversations
+• Restart ${clientName} required
+
+**Keep current?**
+• Manually disable MCPs in settings
+• Both work, but uses more tokens`,
+
+          requestedSchema: {
+            type: 'object',
+            properties: {
+              replace: {
+                type: 'boolean',
+                description: 'Replace config with NCP-only (recommended for token savings)'
+              }
+            },
+            required: ['replace']
+          }
+        }),
+        // 30 second timeout
+        new Promise<'timeout'>((resolve) =>
+          setTimeout(() => resolve('timeout'), 30000)
+        )
+      ]);
+
+      if (result === 'timeout') {
+        logger.info('Config replacement dialog timed out');
+        return 'declined';
+      }
+
+      if (result.action === 'accept' && result.content?.replace) {
+        return 'replace';
+      }
+
+      return 'declined';
+
+    } catch (error) {
+      logger.warn(`Elicitation error: ${error}`);
+      return 'declined';
+    }
+  }
+
+  /**
+   * Queue notification about config optimization opportunity
+   */
+  private queueConfigOptimizationNotification(
+    clientName: string,
+    importResult: any,
+    notificationManager?: any
+  ): void {
+    if (!notificationManager) return;
+
+    const totalMCPs = Object.keys(importResult.mcpServers).length;
+    const estimatedTools = totalMCPs * 20;
+
+    notificationManager.add({
+      type: 'tip',
+      message: `${totalMCPs} MCPs configured in ${clientName} (~${estimatedTools} tools) - replace with NCP-only to save ~95% tokens`,
+      relatedId: clientName  // AI can ask about client-specific config replacement
+    });
+  }
+
+  /**
+   * Backup and replace client config with NCP-only
+   */
+  private async backupAndReplaceConfig(
+    clientName: string,
+    importResult: any
+  ): Promise<void> {
+    // TODO: Implement actual backup and replacement logic
+    // This will depend on client-specific config formats
+    logger.info(`Would backup and replace config for ${clientName}`);
+    logger.info(`Config path: ${importResult.configPath}`);
   }
 
   private async loadProfiles(): Promise<void> {

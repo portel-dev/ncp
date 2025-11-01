@@ -291,10 +291,45 @@ ${calendarIntervalXML}
   }
 
   /**
-   * Get all scheduled jobs (stub - not needed for launchd)
-   * Returns empty array since launchd jobs are managed independently
+   * Get all scheduled NCP jobs from launchd
+   * Lists all launchd agents with our label prefix
    */
   getJobs(): Array<{ id: string; cronExpression: string; command: string }> {
-    return [];
+    try {
+      // List all loaded launchd agents with our prefix
+      const output = execSync(
+        `launchctl list | grep "${LaunchdManager.LABEL_PREFIX}" | awk '{print $3}'`,
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
+      ).trim();
+
+      if (!output) {
+        return [];
+      }
+
+      const labels = output.split('\n').filter(line => line.trim());
+      const jobs: Array<{ id: string; cronExpression: string; command: string }> = [];
+
+      for (const label of labels) {
+        // Extract job ID from label (com.portel.ncp.job.<jobId>)
+        const jobId = label.replace(LaunchdManager.LABEL_PREFIX, '');
+
+        // Try to read the plist file to get cron expression and command
+        const plistPath = this.getPlistPath(jobId);
+        if (existsSync(plistPath)) {
+          // For now, we can't easily extract cron from plist, so use placeholder
+          // The important part is that we return the job ID so scheduler knows it exists
+          jobs.push({
+            id: jobId,
+            cronExpression: '', // Not easily extractable from plist
+            command: '' // Not easily extractable from plist
+          });
+        }
+      }
+
+      return jobs;
+    } catch (error) {
+      logger.debug(`[LaunchdManager] Failed to list jobs: ${error instanceof Error ? error.message : String(error)}`);
+      return [];
+    }
   }
 }

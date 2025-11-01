@@ -2108,7 +2108,11 @@ export class NCPOrchestrator {
    * Called by MCPServer after it receives clientInfo from initialize request
    * Re-indexes any new MCPs that were added by auto-import
    */
-  async triggerAutoImport(clientName: string): Promise<void> {
+  async triggerAutoImport(
+    clientName: string,
+    elicitationServer?: any,
+    notificationManager?: any
+  ): Promise<void> {
     if (!this.profileManager) {
       // ProfileManager not initialized yet, skip auto-import
       logger.warn('ProfileManager not initialized, skipping auto-import');
@@ -2124,7 +2128,12 @@ export class NCPOrchestrator {
       const mcpsBefore = new Set(Object.keys(profileBefore.mcpServers));
 
       // Run auto-import (adds new MCPs to profile)
-      await this.profileManager.tryAutoImportFromClient(clientName);
+      // Pass elicitation server and notification manager for config replacement flow
+      await this.profileManager.tryAutoImportFromClient(
+        clientName,
+        elicitationServer,
+        notificationManager
+      );
 
       // Get updated profile after auto-import
       const profileAfter = await this.profileManager.getProfile(this.profileName);

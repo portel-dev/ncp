@@ -10,8 +10,9 @@ import { tmpdir } from 'os';
 /**
  * Create isolated test directory
  */
+let testDirCounter = 0;
 export function createTestDirectory(): string {
-  const testDir = join(tmpdir(), `ncp-scheduler-test-${Date.now()}`);
+  const testDir = join(tmpdir(), `ncp-scheduler-test-${Date.now()}-${testDirCounter++}`);
   mkdirSync(testDir, { recursive: true });
   return testDir;
 }

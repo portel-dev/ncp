@@ -1,4 +1,4 @@
-# NCP Setup for Cursor
+# NCP Setup for Windsurf
 
 ## 🚀 Quick Setup
 
@@ -10,15 +10,16 @@ npm install -g @portel/ncp
 
 ### Step 2: Configure MCP Server
 
-**Global configuration:**
+**Config file location:**
 ```bash
-~/.cursor/mcp.json
+# macOS/Linux
+~/.codeium/windsurf/mcp_config.json
+
+# Windows
+%USERPROFILE%\.codeium\windsurf\mcp_config.json
 ```
 
-**Project-specific:**
-```bash
-<project-root>/.cursor/mcp.json
-```
+**Or use Windsurf UI:** Settings (`Cmd/Ctrl + ,`) → Advanced Settings → Cascade → Manage MCP Servers → View raw config
 
 **Configuration:**
 ```json
@@ -31,17 +32,19 @@ npm install -g @portel/ncp
 }
 ```
 
-### Step 3: Restart Cursor
+### Step 3: Restart Windsurf
 
-Close and reopen Cursor IDE.
+Close and reopen Windsurf IDE.
 
 ---
 
 ## 📖 Official Documentation
 
-For complete Cursor MCP setup, troubleshooting, and features:
+For complete Windsurf MCP setup, Cascade features, and troubleshooting:
 
-**📚 [Official Cursor MCP Guide](https://docs.cursor.com/context/model-context-protocol)**
+**📚 [Official Windsurf MCP Guide](https://docs.windsurf.com/windsurf/cascade/mcp)**
+
+**📚 [Windsurf Configuration Tutorial](https://windsurf.com/university/tutorials/configuring-first-mcp-server)**
 
 ---
 

@@ -143,17 +143,19 @@ With NCP as Chief of Staff:
 
 ## 🚀 **Installation**
 
-Choose your MCP client for detailed installation instructions:
+Choose your MCP client for setup instructions:
 
-| Client | Installation Guide | Best For |
-|--------|-------------------|----------|
-| **Claude Desktop** | **[→ Full Guide](docs/clients/claude-desktop.md)** | One-click .dxt install with auto-sync |
-| **Claude Code** | Works out of the box! | Terminal-first AI workflows |
-| **Cursor** | **[→ Full Guide](docs/clients/cursor.md)** | Code editor with AI + Composer |
-| **VS Code** | **[→ Full Guide](docs/clients/vscode.md)** | GitHub Copilot + Agent Mode |
-| **Cline** | **[→ Full Guide](docs/clients/cline.md)** | VS Code AI extension with MCP |
-| **Continue** | **[→ Full Guide](docs/clients/continue.md)** | VS Code AI assistant with Agent Mode |
-| **Other Clients** | [Quick Start ↓](#quick-start-npm) | Any MCP-compatible client |
+| Client | Description | Setup Guide |
+|--------|-------------|-------------|
+| **Claude Desktop** | Anthropic's official desktop app. **Best for NCP** - one-click .dxt install with auto-sync | **[→ Full Guide](docs/clients/claude-desktop.md)** |
+| **Claude Code** | Terminal-first AI workflow. Works out of the box! | Built-in support |
+| **VS Code** | GitHub Copilot with Agent Mode. Use NCP for semantic tool discovery | **[→ Setup](docs/clients/vscode.md)** |
+| **Cursor** | AI-first code editor with Composer. Popular VS Code alternative | **[→ Setup](docs/clients/cursor.md)** |
+| **Windsurf** | Codeium's AI-native IDE with Cascade. Built on VS Code | **[→ Setup](docs/clients/windsurf.md)** |
+| **Cline** | VS Code extension for AI-assisted development with MCP support | **[→ Setup](docs/clients/cline.md)** |
+| **Continue** | VS Code AI assistant with Agent Mode and local LLM support | **[→ Setup](docs/clients/continue.md)** |
+| **Want more clients?** | See the full list of MCP-compatible clients and tools | [Official MCP Clients](https://github.com/modelcontextprotocol/servers#clients) • [Awesome MCP](https://github.com/punkpeye/awesome-mcp) |
+| **Other Clients** | Any MCP-compatible client via npm | [Quick Start ↓](#quick-start-npm) |
 
 ---
 
@@ -171,14 +173,14 @@ npm install -g @portel/ncp
 ncp config import  # Paste your config JSON when prompted
 ```
 
-**Step 3: Configure your client**
+**Step 3: Configure your MCP client**
 
-Replace your MCP configuration with:
+Add to your client's MCP configuration:
 ```json
 {
   "mcpServers": {
     "ncp": {
-      "command": "ncp"
+      "command": "ncp-mcp"
     }
   }
 }
@@ -341,71 +343,6 @@ ncp add postgres npx @modelcontextprotocol/server-postgres
 ncp add puppeteer npx @hisma/server-puppeteer
 ```
 
----
-
-## ⚙️ **Configuration for Different AI Clients**
-
-### **Claude Desktop** (Most Popular)
-
-**📖 [→ Full Installation Guide](docs/clients/claude-desktop.md)** - Complete guide with .dxt installation, auto-sync, configuration options, and troubleshooting.
-
-**Quick config snippet** (for npm installation):
-```json
-{
-  "mcpServers": {
-    "ncp": {
-      "command": "ncp"
-    }
-  }
-}
-```
-
-**📌 Important:** Restart Claude Desktop after saving the config file.
-
-### **Claude Code**
-NCP works automatically! Just run:
-```bash
-ncp add <your-mcps>
-```
-
-### **VS Code with GitHub Copilot**
-
-**Settings File Location:**
-- **macOS:** `~/Library/Application Support/Code/User/settings.json`
-- **Windows:** `%APPDATA%\Code\User\settings.json`
-- **Linux:** `~/.config/Code/User/settings.json`
-
-Add to your VS Code `settings.json`:
-```json
-{
-  "mcp.servers": {
-    "ncp": {
-      "command": "ncp"
-    }
-  }
-}
-```
-
-**📌 Important:** Restart VS Code after saving the settings file.
-
-> **Disclaimer:** Configuration paths and methods are accurate as of this writing. VS Code and its extensions may change these locations or integration methods. Please consult the [official VS Code documentation](https://code.visualstudio.com/docs) for the most current information.
-
-### **Cursor IDE**
-```json
-{
-  "mcp": {
-    "servers": {
-      "ncp": {
-        "command": "ncp"
-      }
-    }
-  }
-}
-```
-
-> **Disclaimer:** Configuration format and location may vary by Cursor IDE version. Please refer to [Cursor's official documentation](https://cursor.sh/docs) for the most up-to-date setup instructions.
-
----
 
 ## 🤖 **Internal MCPs**
 

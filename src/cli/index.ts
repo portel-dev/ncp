@@ -615,6 +615,8 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('credentials') ||
   process.argv.includes('update') ||
   process.argv.includes('_job-run') ||
+  process.argv.includes('_timing-run') ||
+  process.argv.includes('_task-execute') ||
   process.argv.includes('cleanup-runs');
 
 // Default to MCP server mode when no CLI commands are provided
@@ -2737,6 +2739,130 @@ const executeScheduledCmd = program
     }
   });
 (executeScheduledCmd as any).hidden = true;
+
+// Scheduler V2: Execute timing group (called by OS scheduler)
+const executeTimingCmd = program
+  .command('_timing-run <timing-id>')
+  .description('Execute all active tasks for a timing group (internal use - called by OS scheduler)')
+  .option('--timeout <ms>', 'Execution timeout in milliseconds per task', '300000')
+  .action(async (timingId, options) => {
+    try {
+      const { TimingExecutor } = await import('../services/scheduler/timing-executor.js');
+      const executor = new TimingExecutor();
+
+      const timeout = parseInt(options.timeout);
+      const result = await executor.executeTimingGroup(timingId, timeout);
+
+      console.log(`Timing ${timingId} execution summary:`);
+      console.log(`  Total tasks: ${result.totalTasks}`);
+      console.log(`  Active tasks: ${result.activeTasks}`);
+      console.log(`  Executed: ${result.executedTasks}`);
+      console.log(`  Successful: ${result.successfulTasks}`);
+      console.log(`  Failed: ${result.failedTasks}`);
+      console.log(`  Skipped: ${result.skippedTasks}`);
+      console.log(`  Duration: ${result.totalDuration}ms`);
+
+      // Exit with success if at least one task succeeded, or if there were no tasks to run
+      if (result.successfulTasks > 0 || result.executedTasks === 0) {
+        process.exit(0);
+      } else {
+        process.exit(1);
+      }
+    } catch (error) {
+      console.error(`❌ Timing execution failed: ${error instanceof Error ? error.message : String(error)}`);
+      process.exit(1);
+    }
+  });
+(executeTimingCmd as any).hidden = true;
+
+// Scheduler V2: Execute single task in isolated process (called by timing executor)
+const executeTaskCmd = program
+  .command('_task-execute <task-id>')
+  .description('Execute a single task (internal use - called by timing executor in child process)')
+  .option('--timeout <ms>', 'Execution timeout in milliseconds', '300000')
+  .action(async (taskId, options) => {
+    try {
+      const { TaskManager } = await import('../services/scheduler/task-manager.js');
+      const { ExecutionRecorder } = await import('../services/scheduler/execution-recorder.js');
+      const { v4: uuidv4 } = await import('uuid');
+
+      const taskManager = new TaskManager();
+      const executionRecorder = new ExecutionRecorder();
+
+      // Load task
+      const task = taskManager.getTask(taskId);
+      if (!task) {
+        console.error(`Task ${taskId} not found`);
+        process.exit(1);
+      }
+
+      // Check if task is active
+      if (task.status !== 'active') {
+        console.log(`Task ${task.name} is not active (status: ${task.status}), skipping`);
+        process.exit(0); // Exit successfully but don't execute
+      }
+
+      const executionId = uuidv4();
+      const timeout = parseInt(options.timeout);
+
+      // Start execution recording
+      executionRecorder.startExecution({
+        executionId,
+        jobId: task.id,
+        jobName: task.name,
+        tool: task.tool,
+        parameters: task.parameters,
+        startedAt: new Date().toISOString(),
+        status: 'running'
+      });
+
+      console.log(`Executing task: ${task.name}`);
+      console.log(`Tool: ${task.tool}`);
+      console.log(`Parameters: ${JSON.stringify(task.parameters)}`);
+
+      const startTime = Date.now();
+
+      // Change to home directory for global MCP access
+      const { homedir } = await import('os');
+      process.chdir(homedir());
+
+      // Execute tool using orchestrator
+      const { NCPOrchestrator } = await import('../orchestrator/ncp-orchestrator.js');
+      const mcpName = task.tool.includes(':') ? task.tool.split(':')[0] : null;
+      const orchestrator = new NCPOrchestrator(mcpName || 'all', true);
+
+      await orchestrator.initialize();
+      await orchestrator.waitForInitialization();
+
+      const execResult = await Promise.race([
+        orchestrator.run(task.tool, task.parameters),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout after ${timeout}ms`)), timeout)
+        )
+      ]);
+
+      await orchestrator.cleanup();
+
+      const duration = Date.now() - startTime;
+
+      if (!(execResult as any).success) {
+        throw new Error((execResult as any).error || 'Tool execution failed');
+      }
+
+      // Record successful execution
+      executionRecorder.completeExecution(executionId, 'success', (execResult as any).content);
+      taskManager.recordExecution(taskId, executionId, new Date().toISOString());
+
+      console.log(`✅ Task completed successfully (${duration}ms)`);
+      process.exit(0);
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Task execution failed: ${errorMessage}`);
+      process.exit(1);
+    }
+  });
+(executeTaskCmd as any).hidden = true;
 
 // Scheduler: Cleanup old execution records (internal - hidden from help)
 const cleanupRunsCmd = program

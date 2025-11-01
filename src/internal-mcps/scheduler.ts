@@ -803,7 +803,7 @@ export class SchedulerMCP implements InternalMCP {
     if (filters.query) {
       const q = filters.query.toLowerCase();
       filtered = executions.filter(exec =>
-        exec.jobName.toLowerCase().includes(q) ||
+        (exec.jobName || exec.taskName || '').toLowerCase().includes(q) ||
         exec.tool.toLowerCase().includes(q)
       );
     }

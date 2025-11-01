@@ -1,24 +1,25 @@
 /**
- * Scheduler Service - Main orchestrator for scheduled jobs
- * Combines job management, cron manipulation, and execution recording
+ * Scheduler Service - Main orchestrator for scheduled tasks with timing groups
+ * Uses timing groups to reduce OS scheduler entries and enable parallel execution
  */
 
-import { JobManager } from './job-manager.js';
+import { TaskManager } from './task-manager.js';
 import { ExecutionRecorder } from './execution-recorder.js';
 import { CronManager } from './cron-manager.js';
 import { LaunchdManager } from './launchd-manager.js';
 import { TaskSchedulerManager } from './task-scheduler-manager.js';
-import { JobExecutor } from './job-executor.js';
+import { TimingExecutor } from './timing-executor.js';
 import { NaturalLanguageParser } from './natural-language-parser.js';
 import { ToolValidator } from './tool-validator.js';
 import { SettingsManager } from './settings-manager.js';
-import { ScheduledJob, ExecutionSummary, SchedulerConfig } from '../../types/scheduler.js';
+import { ScheduledTask, TaskExecutionSummary, SchedulerConfig, TimingGroup } from '../../types/scheduler.js';
 import { logger } from '../../utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
 import { platform } from 'os';
+import { normalizeCronExpression } from './cron-expression-utils.js';
 
-export interface CreateJobOptions {
+export interface CreateTaskOptions {
   name: string;
   schedule: string; // Natural language, cron expression, or RFC 3339 datetime
   timezone?: string; // IANA timezone (e.g., "America/New_York"), defaults to system timezone
@@ -32,26 +33,28 @@ export interface CreateJobOptions {
   testRun?: boolean; // Run tool once to test before scheduling
 }
 
+// Backward compatibility alias
+export type CreateJobOptions = CreateTaskOptions;
+
 export class Scheduler {
-  private jobManager: JobManager;
+  private taskManager: TaskManager;
   public executionRecorder: ExecutionRecorder; // Public for access from SchedulerMCP
   private scheduleManager?: CronManager | LaunchdManager | TaskSchedulerManager;
-  private jobExecutor: JobExecutor;
+  private timingExecutor: TimingExecutor;
   private toolValidator: ToolValidator;
   private settingsManager: SettingsManager;
-  private cleanupJobId?: string; // ID of the automatic cleanup job
+  private cleanupTimingId?: string; // ID of the automatic cleanup timing
 
   constructor(orchestrator?: any) { // NCPOrchestrator - using any to avoid circular dependency
-    this.jobManager = new JobManager();
+    this.taskManager = new TaskManager();
     this.executionRecorder = new ExecutionRecorder();
-    this.jobExecutor = new JobExecutor();
+    this.timingExecutor = new TimingExecutor();
     this.toolValidator = new ToolValidator(orchestrator);
     this.settingsManager = new SettingsManager();
 
     // Initialize platform-specific scheduler
     const currentPlatform = platform();
     if (currentPlatform === 'darwin') {
-      // macOS - use launchd (doesn't require Full Disk Access)
       try {
         this.scheduleManager = new LaunchdManager();
         logger.info('[Scheduler] Using launchd for macOS scheduling');
@@ -59,7 +62,6 @@ export class Scheduler {
         logger.warn(`[Scheduler] Launchd manager initialization failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     } else if (currentPlatform === 'win32') {
-      // Windows - use Task Scheduler
       try {
         this.scheduleManager = new TaskSchedulerManager();
         logger.info('[Scheduler] Using Task Scheduler for Windows scheduling');
@@ -67,7 +69,6 @@ export class Scheduler {
         logger.warn(`[Scheduler] Task Scheduler manager initialization failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     } else {
-      // Linux/Unix - use cron
       try {
         this.scheduleManager = new CronManager();
         logger.info('[Scheduler] Using cron for Linux/Unix scheduling');
@@ -85,58 +86,48 @@ export class Scheduler {
   }
 
   /**
-   * Set up automatic cleanup job (internal system job)
-   * Creates a cron job that runs cleanup on configured schedule
-   *
-   * NOTE: Only sets up if jobs actually exist to avoid unnecessary crontab modifications
-   * on every CLI invocation (which triggers macOS admin permission dialogs)
+   * Set up automatic cleanup timing (internal system timing)
    */
   private setupAutomaticCleanup(): void {
     if (!this.scheduleManager) {
-      return; // No cron manager available
+      return;
     }
 
     const config = this.settingsManager.getConfig();
 
-    // Skip if auto-cleanup is disabled
     if (!config.enableAutoCleanup) {
       logger.debug('[Scheduler] Automatic cleanup is disabled');
       return;
     }
 
-    // Skip if no jobs exist - don't modify crontab unnecessarily
-    // This prevents permission dialogs on every CLI command
-    const allJobs = this.jobManager.getAllJobs();
-    if (allJobs.length === 0) {
-      logger.debug('[Scheduler] Skipping cleanup setup - no scheduled jobs exist');
+    // Skip if no tasks exist
+    const allTasks = this.taskManager.getAllTasks();
+    if (allTasks.length === 0) {
+      logger.debug('[Scheduler] Skipping cleanup setup - no scheduled tasks exist');
       return;
     }
 
     try {
-      // Check if cleanup job already exists in crontab
-      const existingJobs = this.scheduleManager.getJobs();
-      const cleanupJobId = '__ncp_automatic_cleanup__';
-      const cleanupExists = existingJobs.some(j => j.id === cleanupJobId);
+      const existingTimings = this.scheduleManager.getJobs();
+      const cleanupTimingId = '__ncp_automatic_cleanup__';
+      const cleanupExists = existingTimings.some(t => t.id === cleanupTimingId);
 
       if (cleanupExists) {
-        logger.debug('[Scheduler] Automatic cleanup job already exists');
-        this.cleanupJobId = cleanupJobId;
-        return; // Already set up, don't modify crontab
+        logger.debug('[Scheduler] Automatic cleanup timing already exists');
+        this.cleanupTimingId = cleanupTimingId;
+        return;
       }
 
       const ncpPath = this.getNCPExecutablePath();
       const cleanupSchedule = config.cleanupSchedule || '0 0 * * *';
 
-      // Create a special internal job ID for cleanup
-      this.cleanupJobId = cleanupJobId;
+      this.cleanupTimingId = cleanupTimingId;
 
-      // Create cron job that calls the cleanup-runs CLI command
       const command = `${ncpPath} cleanup-runs --max-age ${config.maxExecutionAgeDays || 14} --max-count ${config.maxExecutionsPerJob || 100}`;
 
-      this.scheduleManager.addJob(this.cleanupJobId, cleanupSchedule, command);
+      this.scheduleManager.addJob(this.cleanupTimingId, cleanupSchedule, command);
 
       logger.info(`[Scheduler] Automatic cleanup enabled: ${cleanupSchedule}`);
-      logger.info(`[Scheduler] Cleanup policy: ${config.maxExecutionAgeDays || 14} days, ${config.maxExecutionsPerJob || 100} runs per job`);
     } catch (error) {
       logger.error(`[Scheduler] Failed to setup automatic cleanup: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -147,24 +138,22 @@ export class Scheduler {
    */
   private getNCPExecutablePath(): string {
     try {
-      // Use 'which ncp' to find the ncp executable
       const ncpPath = execSync('which ncp', { encoding: 'utf-8' }).trim();
       return ncpPath;
     } catch {
-      // Fallback to npx if ncp is not in PATH
       return 'npx ncp';
     }
   }
 
   /**
-   * Create a new scheduled job
+   * Create a new scheduled task
    */
-  async createJob(options: CreateJobOptions): Promise<ScheduledJob> {
+  async createTask(options: CreateTaskOptions): Promise<ScheduledTask> {
     if (!this.scheduleManager) {
       throw new Error('Scheduler not available on this platform');
     }
 
-    logger.info(`[Scheduler] Creating job: ${options.name}`);
+    logger.info(`[Scheduler] Creating task: ${options.name}`);
 
     // Default timezone to system timezone if not provided
     const timezone = options.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -173,20 +162,19 @@ export class Scheduler {
     let cronExpression: string;
     let fireOnce = options.fireOnce || false;
 
-    // Check if it's RFC 3339 datetime (one-time execution with timezone)
+    // Check if it's RFC 3339 datetime (one-time execution)
     if (this.isRFC3339DateTime(options.schedule)) {
       const scheduledDate = new Date(options.schedule);
       if (isNaN(scheduledDate.getTime())) {
         throw new Error(`Invalid RFC 3339 datetime: ${options.schedule}`);
       }
 
-      // Convert to cron expression for the scheduled time (in system local time)
       const minute = scheduledDate.getMinutes();
       const hour = scheduledDate.getHours();
       const day = scheduledDate.getDate();
       const month = scheduledDate.getMonth() + 1;
       cronExpression = `${minute} ${hour} ${day} ${month} *`;
-      fireOnce = true; // RFC 3339 datetime is always one-time
+      fireOnce = true;
 
       logger.info(`[Scheduler] Converted RFC 3339 datetime to cron: ${cronExpression}`);
     }
@@ -201,13 +189,12 @@ export class Scheduler {
       }
       cronExpression = parseResult.cronExpression!;
 
-      // If parser determined it's a one-time execution, set fireOnce
       if (parseResult.fireOnce) {
         fireOnce = true;
       }
     }
 
-    // Validate cron expression (all managers use the same validation logic)
+    // Validate cron expression
     const cronValidation = this.scheduleManager instanceof TaskSchedulerManager
       ? TaskSchedulerManager.validateCronExpression(cronExpression)
       : CronManager.validateCronExpression(cronExpression);
@@ -224,7 +211,7 @@ export class Scheduler {
         options.parameters,
         {
           testRun: options.testRun,
-          timeout: 30000 // 30 second timeout for test runs
+          timeout: 30000
         }
       );
 
@@ -234,12 +221,10 @@ export class Scheduler {
         throw new Error(errorMsg);
       }
 
-      // Log warnings if any
       if (toolValidation.warnings.length > 0) {
         logger.warn(`[Scheduler] Validation warnings:\n${toolValidation.warnings.join('\n')}`);
       }
 
-      // Log test execution result if performed
       if (toolValidation.testExecutionResult) {
         if (toolValidation.testExecutionResult.success) {
           logger.info(`[Scheduler] Test execution succeeded (${toolValidation.testExecutionResult.duration}ms)`);
@@ -251,14 +236,31 @@ export class Scheduler {
       logger.warn(`[Scheduler] Skipping tool validation (skipValidation=true)`);
     }
 
-    // Create job object
-    const jobId = uuidv4();
-    const job: ScheduledJob = {
-      id: jobId,
+    // Get or create timing group
+    const timingId = this.taskManager.getOrCreateTimingGroup(cronExpression, timezone);
+    const timing = this.taskManager.getTimingGroup(timingId)!;
+
+    // Check if we need to create OS schedule for this timing
+    const existingOSTimings = this.scheduleManager.getJobs();
+    const osTimingExists = existingOSTimings.some(t => t.id === timingId);
+
+    if (!osTimingExists) {
+      // Create OS schedule for this timing group
+      const ncpPath = this.getNCPExecutablePath();
+      const command = `${ncpPath} _timing-run ${timingId}`;
+      this.scheduleManager.addJob(timingId, cronExpression, command);
+      logger.info(`[Scheduler] Created OS schedule for timing: ${timing.name} (${timingId})`);
+    }
+
+    // Create task object
+    const taskId = uuidv4();
+    const task: ScheduledTask = {
+      id: taskId,
       name: options.name,
       description: options.description,
-      cronExpression,
-      timezone, // Store IANA timezone
+      timingId,
+      cronExpression, // Backward compat - denormalized from timing
+      timezone, // Backward compat - denormalized from timing
       tool: options.tool,
       parameters: options.parameters,
       fireOnce,
@@ -267,25 +269,28 @@ export class Scheduler {
       createdAt: new Date().toISOString(),
       status: 'active',
       executionCount: 0,
-      workingDirectory: process.cwd() // Save current working directory for execution
+      workingDirectory: process.cwd()
     };
 
-    // Save job to storage
-    this.jobManager.createJob(job);
+    // Save task to storage
+    this.taskManager.createTask(task);
 
-    // Add to crontab
-    const ncpPath = this.getNCPExecutablePath();
-    const command = `${ncpPath} _job-run ${jobId}`;
-    this.scheduleManager.addJob(jobId, cronExpression, command);
-
-    // Set up automatic cleanup (only runs once, is idempotent)
+    // Set up automatic cleanup
     this.setupAutomaticCleanup();
 
-    logger.info(`[Scheduler] Job created successfully: ${job.name} (${jobId})`);
+    logger.info(`[Scheduler] Task created successfully: ${task.name} (${taskId})`);
+    logger.info(`[Scheduler] Timing: ${timing.name} (${timingId})`);
     logger.info(`[Scheduler] Schedule: ${cronExpression}`);
-    logger.info(`[Scheduler] Command: ${command}`);
 
-    return job;
+    return task;
+  }
+
+  /**
+   * Create a new scheduled job (backward compatibility wrapper for createTask)
+   * @deprecated Use createTask() instead
+   */
+  async createJob(options: CreateJobOptions): Promise<ScheduledTask> {
+    return this.createTask(options);
   }
 
   /**
@@ -297,79 +302,90 @@ export class Scheduler {
   }
 
   /**
-   * Check if string is an RFC 3339 datetime with timezone
-   * Examples: "2025-12-25T15:00:00-05:00", "2025-12-25T20:00:00Z"
+   * Check if string is an RFC 3339 datetime
    */
   private isRFC3339DateTime(schedule: string): boolean {
-    // RFC 3339 format includes date, time, and timezone offset
-    // Must have 'T' separator and either 'Z' or timezone offset ('+'/'-')
     const rfc3339Pattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
     return rfc3339Pattern.test(schedule.trim());
   }
 
   /**
-   * Get a job by ID
+   * Get a task by ID
    */
-  getJob(jobId: string): ScheduledJob | null {
-    return this.jobManager.getJob(jobId);
+  getTask(taskId: string): ScheduledTask | null {
+    return this.taskManager.getTask(taskId);
   }
 
   /**
-   * Get a job by name
+   * Get a task by name
    */
-  getJobByName(name: string): ScheduledJob | null {
-    return this.jobManager.getJobByName(name);
+  getTaskByName(name: string): ScheduledTask | null {
+    return this.taskManager.getTaskByName(name);
   }
 
   /**
-   * List all jobs
+   * List all tasks
    */
-  listJobs(statusFilter?: ScheduledJob['status']): ScheduledJob[] {
+  listTasks(statusFilter?: ScheduledTask['status']): ScheduledTask[] {
     if (statusFilter) {
-      return this.jobManager.getJobsByStatus(statusFilter);
+      return this.taskManager.getTasksByStatus(statusFilter);
     }
-    return this.jobManager.getAllJobs();
+    return this.taskManager.getAllTasks();
   }
 
   /**
-   * Update a job
+   * List all timing groups
    */
-  async updateJob(jobId: string, updates: Partial<CreateJobOptions>): Promise<ScheduledJob> {
+  listTimingGroups(): TimingGroup[] {
+    return this.taskManager.getAllTimingGroups();
+  }
+
+  /**
+   * Get tasks for a timing group
+   */
+  getTasksForTiming(timingId: string): ScheduledTask[] {
+    return this.taskManager.getTasksForTiming(timingId);
+  }
+
+  /**
+   * Update a task
+   */
+  async updateTask(taskId: string, updates: Partial<CreateTaskOptions>): Promise<ScheduledTask> {
     if (!this.scheduleManager) {
       throw new Error('Scheduler not available on this platform');
     }
 
-    const job = this.jobManager.getJob(jobId);
-    if (!job) {
-      throw new Error(`Job ${jobId} not found`);
+    const task = this.taskManager.getTask(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
     }
 
     // Build update object
-    const jobUpdates: Partial<ScheduledJob> = {};
+    const taskUpdates: Partial<ScheduledTask> = {};
 
     if (updates.name !== undefined) {
-      jobUpdates.name = updates.name;
+      taskUpdates.name = updates.name;
     }
     if (updates.description !== undefined) {
-      jobUpdates.description = updates.description;
+      taskUpdates.description = updates.description;
     }
     if (updates.tool !== undefined) {
-      jobUpdates.tool = updates.tool;
+      taskUpdates.tool = updates.tool;
     }
     if (updates.parameters !== undefined) {
-      jobUpdates.parameters = updates.parameters;
+      taskUpdates.parameters = updates.parameters;
     }
     if (updates.fireOnce !== undefined) {
-      jobUpdates.fireOnce = updates.fireOnce;
+      taskUpdates.fireOnce = updates.fireOnce;
     }
     if (updates.maxExecutions !== undefined) {
-      jobUpdates.maxExecutions = updates.maxExecutions;
+      taskUpdates.maxExecutions = updates.maxExecutions;
     }
     if (updates.endDate !== undefined) {
-      jobUpdates.endDate = updates.endDate;
+      taskUpdates.endDate = updates.endDate;
     }
 
-    // Handle schedule update
+    // Handle schedule update (requires moving to different timing group)
     if (updates.schedule !== undefined) {
       let cronExpression: string;
       if (this.isCronExpression(updates.schedule)) {
@@ -387,139 +403,165 @@ export class Scheduler {
         throw new Error(`Invalid cron expression: ${validation.error}`);
       }
 
-      jobUpdates.cronExpression = cronExpression;
+      // Get or create new timing group
+      const newTimingId = this.taskManager.getOrCreateTimingGroup(cronExpression, updates.timezone);
 
-      // Update crontab
-      const ncpPath = this.getNCPExecutablePath();
-      const command = `${ncpPath} _job-run ${jobId}`;
-      this.scheduleManager.addJob(jobId, cronExpression, command);
+      // If timing changed, need to move task to new timing group
+      if (newTimingId !== task.timingId) {
+        // Remove from old timing (may delete timing if it was the last task)
+        const shouldRemoveOldTiming = this.taskManager.removeTaskFromTiming(task.id, task.timingId);
+        if (shouldRemoveOldTiming) {
+          this.scheduleManager.removeJob(task.timingId);
+          logger.info(`[Scheduler] Removed empty timing from OS scheduler: ${task.timingId}`);
+        }
+
+        // Add to new timing
+        this.taskManager.addTaskToTiming(task.id, newTimingId);
+
+        // Create OS schedule if needed
+        const existingOSTimings = this.scheduleManager.getJobs();
+        const osTimingExists = existingOSTimings.some(t => t.id === newTimingId);
+        if (!osTimingExists) {
+          const ncpPath = this.getNCPExecutablePath();
+          const command = `${ncpPath} _timing-run ${newTimingId}`;
+          this.scheduleManager.addJob(newTimingId, cronExpression, command);
+          logger.info(`[Scheduler] Created OS schedule for new timing: ${newTimingId}`);
+        }
+
+        // Note: we can't directly update timingId in taskUpdates since it's not in the allowed updates
+        // We need to manually set it
+        const storage = (this.taskManager as any).loadStorage();
+        storage.tasks[taskId].timingId = newTimingId;
+        (this.taskManager as any).saveStorage(storage);
+      }
     }
 
-    // Update job in storage
-    this.jobManager.updateJob(jobId, jobUpdates);
+    // Update task in storage
+    this.taskManager.updateTask(taskId, taskUpdates);
 
-    const updatedJob = this.jobManager.getJob(jobId)!;
-    logger.info(`[Scheduler] Job updated: ${updatedJob.name} (${jobId})`);
+    const updatedTask = this.taskManager.getTask(taskId)!;
+    logger.info(`[Scheduler] Task updated: ${updatedTask.name} (${taskId})`);
 
-    return updatedJob;
+    return updatedTask;
   }
 
   /**
-   * Pause a job
+   * Pause a task (marks it as paused, but timing group remains active if other tasks use it)
    */
-  pauseJob(jobId: string): void {
+  pauseTask(taskId: string): void {
+    const task = this.taskManager.getTask(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    this.taskManager.updateTask(taskId, { status: 'paused' });
+
+    logger.info(`[Scheduler] Task paused: ${task.name} (${taskId})`);
+    logger.info(`[Scheduler] Note: OS schedule for timing ${task.timingId} remains active (other tasks may use it)`);
+  }
+
+  /**
+   * Resume a paused task
+   */
+  resumeTask(taskId: string): void {
+    const task = this.taskManager.getTask(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    if (task.status !== 'paused') {
+      throw new Error(`Task is not paused (current status: ${task.status})`);
+    }
+
+    this.taskManager.updateTask(taskId, { status: 'active' });
+
+    logger.info(`[Scheduler] Task resumed: ${task.name} (${taskId})`);
+  }
+
+  /**
+   * Delete a task (removes from timing group, deletes timing if it was the last task)
+   */
+  deleteTask(taskId: string): void {
     if (!this.scheduleManager) {
       throw new Error('Scheduler not available on this platform');
     }
 
-    const job = this.jobManager.getJob(jobId);
-    if (!job) {
-      throw new Error(`Job ${jobId} not found`);
+    const task = this.taskManager.getTask(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
     }
 
-    // Remove from crontab
-    this.scheduleManager.removeJob(jobId);
+    // Delete task (returns true if timing should be removed from OS)
+    const shouldRemoveTiming = this.taskManager.deleteTask(taskId);
 
-    // Update status
-    this.jobManager.updateJob(jobId, { status: 'paused' });
+    // Remove timing from OS scheduler if it was the last task
+    if (shouldRemoveTiming) {
+      this.scheduleManager.removeJob(task.timingId);
+      logger.info(`[Scheduler] Removed timing from OS scheduler: ${task.timingId} (was last task)`);
+    }
 
-    logger.info(`[Scheduler] Job paused: ${job.name} (${jobId})`);
+    logger.info(`[Scheduler] Task deleted: ${task.name} (${taskId})`);
   }
 
   /**
-   * Resume a paused job
+   * Get executions for a task
    */
-  resumeJob(jobId: string): void {
-    if (!this.scheduleManager) {
-      throw new Error('Scheduler not available on this platform');
-    }
-
-    const job = this.jobManager.getJob(jobId);
-    if (!job) {
-      throw new Error(`Job ${jobId} not found`);
-    }
-
-    if (job.status !== 'paused') {
-      throw new Error(`Job is not paused (current status: ${job.status})`);
-    }
-
-    // Add back to crontab
-    const ncpPath = this.getNCPExecutablePath();
-    const command = `${ncpPath} _job-run ${jobId}`;
-    this.scheduleManager.addJob(jobId, job.cronExpression, command);
-
-    // Update status
-    this.jobManager.updateJob(jobId, { status: 'active' });
-
-    logger.info(`[Scheduler] Job resumed: ${job.name} (${jobId})`);
-  }
-
-  /**
-   * Delete a job
-   */
-  deleteJob(jobId: string): void {
-    if (!this.scheduleManager) {
-      throw new Error('Scheduler not available on this platform');
-    }
-
-    const job = this.jobManager.getJob(jobId);
-    if (!job) {
-      throw new Error(`Job ${jobId} not found`);
-    }
-
-    // Remove from crontab
-    this.scheduleManager.removeJob(jobId);
-
-    // Delete from storage
-    this.jobManager.deleteJob(jobId);
-
-    logger.info(`[Scheduler] Job deleted: ${job.name} (${jobId})`);
-  }
-
-  /**
-   * Get executions for a job
-   */
-  getExecutions(jobId: string): ExecutionSummary[] {
-    return this.executionRecorder.getExecutionsForJob(jobId);
+  getExecutions(taskId: string): TaskExecutionSummary[] {
+    return this.executionRecorder.getExecutionsForJob(taskId) as any;
   }
 
   /**
    * Query executions
    */
   queryExecutions(filters?: {
-    jobId?: string;
+    taskId?: string;
+    jobId?: string; // Backward compat
     status?: string;
     startDate?: string;
     endDate?: string;
-  }): ExecutionSummary[] {
-    return this.executionRecorder.queryExecutions(filters);
+  }): TaskExecutionSummary[] {
+    // Support both taskId and jobId (backward compat)
+    const taskId = filters?.taskId || filters?.jobId;
+    const actualFilters = {
+      ...filters,
+      jobId: taskId
+    };
+
+    const results = this.executionRecorder.queryExecutions(actualFilters as any) as any[];
+
+    // Populate backward compat fields
+    return results.map(result => ({
+      ...result,
+      jobId: result.taskId || result.jobId,
+      jobName: result.taskName || result.jobName
+    }));
   }
 
   /**
    * Get execution statistics
    */
-  getExecutionStatistics(jobId?: string) {
-    return this.executionRecorder.getStatistics(jobId);
+  getExecutionStatistics(taskId?: string) {
+    return this.executionRecorder.getStatistics(taskId);
   }
 
   /**
-   * Get job statistics
+   * Get task statistics
    */
-  getJobStatistics() {
-    return this.jobManager.getStatistics();
+  getTaskStatistics() {
+    return this.taskManager.getStatistics();
   }
 
   /**
    * Clean up old executions
    */
-  async cleanupOldExecutions(maxAgeDays: number = 30, maxExecutionsPerJob: number = 100): Promise<void> {
-    await this.jobExecutor.cleanupOldExecutions(maxAgeDays, maxExecutionsPerJob);
+  async cleanupOldExecutions(maxAgeDays: number = 30, maxExecutionsPerTask: number = 100): Promise<void> {
+    await this.timingExecutor.cleanupOldExecutions(maxAgeDays, maxExecutionsPerTask);
   }
 
   /**
-   * Sync jobs with crontab (repair/reconcile)
+   * Sync timings with OS scheduler (repair/reconcile)
    */
-  syncWithCrontab(): { added: number; removed: number; errors: string[] } {
+  syncWithScheduler(): { added: number; removed: number; errors: string[] } {
     if (!this.scheduleManager) {
       throw new Error('Scheduler not available on this platform');
     }
@@ -528,38 +570,43 @@ export class Scheduler {
     let added = 0;
     let removed = 0;
 
-    // Get all active jobs from storage
-    const activeJobs = this.jobManager.getJobsByStatus('active');
+    // Get all timing groups
+    const timingGroups = this.taskManager.getAllTimingGroups();
 
-    // Get all jobs from crontab
-    const cronJobs = this.scheduleManager.getJobs();
-    const cronJobIds = new Set(cronJobs.map(j => j.id));
+    // Get all OS schedules
+    const osSchedules = this.scheduleManager.getJobs();
+    const osScheduleIds = new Set(osSchedules.map(s => s.id));
 
-    // Add missing jobs to crontab
-    for (const job of activeJobs) {
-      if (!cronJobIds.has(job.id)) {
+    // Add missing timings to OS scheduler (only if they have active tasks)
+    for (const timing of timingGroups) {
+      const activeTasks = this.taskManager.getActiveTasksForTiming(timing.id);
+      if (activeTasks.length > 0 && !osScheduleIds.has(timing.id)) {
         try {
           const ncpPath = this.getNCPExecutablePath();
-          const command = `${ncpPath} _job-run ${job.id}`;
-          this.scheduleManager.addJob(job.id, job.cronExpression, command);
+          const command = `${ncpPath} _timing-run ${timing.id}`;
+          this.scheduleManager.addJob(timing.id, timing.cronExpression, command);
           added++;
-          logger.info(`[Scheduler] Added missing job to crontab: ${job.name}`);
+          logger.info(`[Scheduler] Added missing timing to OS scheduler: ${timing.name}`);
         } catch (error) {
-          errors.push(`Failed to add ${job.id}: ${error instanceof Error ? error.message : String(error)}`);
+          errors.push(`Failed to add ${timing.id}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
     }
 
-    // Remove orphaned jobs from crontab
-    const activeJobIds = new Set(activeJobs.map(j => j.id));
-    for (const cronJob of cronJobs) {
-      if (!activeJobIds.has(cronJob.id)) {
+    // Remove orphaned OS schedules (timings that no longer exist or have no active tasks)
+    const timingIds = new Set(timingGroups.map(t => t.id));
+    for (const osSchedule of osSchedules) {
+      const timing = this.taskManager.getTimingGroup(osSchedule.id);
+      const shouldRemove = !timingIds.has(osSchedule.id) ||
+                          (timing && this.taskManager.getActiveTasksForTiming(timing.id).length === 0);
+
+      if (shouldRemove && osSchedule.id !== this.cleanupTimingId) { // Don't remove cleanup timing
         try {
-          this.scheduleManager.removeJob(cronJob.id);
+          this.scheduleManager.removeJob(osSchedule.id);
           removed++;
-          logger.info(`[Scheduler] Removed orphaned job from crontab: ${cronJob.id}`);
+          logger.info(`[Scheduler] Removed orphaned OS schedule: ${osSchedule.id}`);
         } catch (error) {
-          errors.push(`Failed to remove ${cronJob.id}: ${error instanceof Error ? error.message : String(error)}`);
+          errors.push(`Failed to remove ${osSchedule.id}: ${error instanceof Error ? error.message : String(error)}`);
         }
       }
     }
@@ -567,5 +614,89 @@ export class Scheduler {
     logger.info(`[Scheduler] Sync complete: added ${added}, removed ${removed}, errors ${errors.length}`);
 
     return { added, removed, errors };
+  }
+
+  // =============================================================================
+  // BACKWARD COMPATIBILITY METHODS (V1 API)
+  // =============================================================================
+
+  /**
+   * Get a job by ID (backward compatibility wrapper)
+   * @deprecated Use getTask() instead
+   */
+  getJob(taskId: string): ScheduledTask | null {
+    return this.getTask(taskId);
+  }
+
+  /**
+   * Get a job by name (backward compatibility wrapper)
+   * @deprecated Use getTaskByName() instead
+   */
+  getJobByName(name: string): ScheduledTask | null {
+    return this.getTaskByName(name);
+  }
+
+  /**
+   * List all jobs (backward compatibility wrapper)
+   * @deprecated Use listTasks() instead
+   */
+  listJobs(statusFilter?: ScheduledTask['status']): ScheduledTask[] {
+    return this.listTasks(statusFilter);
+  }
+
+  /**
+   * Update a job (backward compatibility wrapper)
+   * @deprecated Use updateTask() instead
+   */
+  async updateJob(taskId: string, updates: Partial<CreateJobOptions>): Promise<ScheduledTask> {
+    return this.updateTask(taskId, updates);
+  }
+
+  /**
+   * Pause a job (backward compatibility wrapper)
+   * @deprecated Use pauseTask() instead
+   */
+  pauseJob(taskId: string): void {
+    return this.pauseTask(taskId);
+  }
+
+  /**
+   * Resume a job (backward compatibility wrapper)
+   * @deprecated Use resumeTask() instead
+   */
+  resumeJob(taskId: string): void {
+    return this.resumeTask(taskId);
+  }
+
+  /**
+   * Delete a job (backward compatibility wrapper)
+   * @deprecated Use deleteTask() instead
+   */
+  deleteJob(taskId: string): void {
+    return this.deleteTask(taskId);
+  }
+
+  /**
+   * Get job statistics (backward compatibility wrapper)
+   * @deprecated Use getTaskStatistics() instead
+   */
+  getJobStatistics() {
+    const stats = this.getTaskStatistics();
+    // Map new property names to old names for backward compatibility
+    return {
+      total: stats.totalTasks,
+      active: stats.activeTasks,
+      paused: stats.pausedTasks,
+      completed: stats.completedTasks,
+      error: stats.errorTasks
+    };
+  }
+
+  /**
+   * Sync jobs with OS scheduler (backward compatibility wrapper)
+   * @deprecated Use syncWithScheduler() instead
+   */
+  syncWithCrontab(): { added: number; removed: number; errors: string[] } {
+    return this.syncWithScheduler();
   }
 }
