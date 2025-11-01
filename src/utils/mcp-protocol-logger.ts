@@ -1,7 +1,10 @@
 /**
  * MCP Protocol Logger
  *
- * Logs MCP requests and responses to JSONL format for debugging
+ * Two separate logs:
+ * 1. Communication log (mcp-protocol.jsonl) - All MCP requests/responses including handshake
+ * 2. Error log (mcp-errors.jsonl) - All errors that occur during MCP operations
+ *
  * - Only active when NCP_DEBUG=true
  * - Rotation settings configurable via ~/.ncp/settings.json
  * - Auto-rotates by trimming top lines (default: 2000 lines = 1000 request/response pairs)
@@ -14,7 +17,8 @@ import { getNcpBaseDirectory } from './ncp-paths.js';
 import { loadGlobalSettings } from './global-settings.js';
 
 export class MCPProtocolLogger {
-  private logFilePath: string;
+  private protocolLogPath: string;
+  private errorLogPath: string;
   private enabled: boolean;
   private writeQueue: Promise<void> = Promise.resolve();
   private rotationEnabled: boolean = true;
@@ -27,7 +31,8 @@ export class MCPProtocolLogger {
     if (this.enabled) {
       const ncpDir = getNcpBaseDirectory();
       const logsDir = join(ncpDir, 'logs');
-      this.logFilePath = join(logsDir, 'mcp-protocol.jsonl');
+      this.protocolLogPath = join(logsDir, 'mcp-protocol.jsonl');
+      this.errorLogPath = join(logsDir, 'mcp-errors.jsonl');
 
       // Ensure logs directory exists
       try {
@@ -42,7 +47,8 @@ export class MCPProtocolLogger {
       // Load settings asynchronously
       this.settingsLoaded = this.loadSettings();
     } else {
-      this.logFilePath = '';
+      this.protocolLogPath = '';
+      this.errorLogPath = '';
       this.settingsLoaded = Promise.resolve();
     }
   }
@@ -62,6 +68,46 @@ export class MCPProtocolLogger {
   }
 
   /**
+   * Log MCP initialize handshake (request + response)
+   */
+  async logInitialize(clientInfo: any, serverInfo: any, protocolVersion: string): Promise<void> {
+    if (!this.enabled) return;
+
+    // Log initialize request
+    const requestEntry = {
+      type: 'request',
+      timestamp: new Date().toISOString(),
+      method: 'initialize',
+      params: {
+        protocolVersion,
+        clientInfo,
+        capabilities: {}
+      }
+    };
+
+    await this.appendLine(this.protocolLogPath, JSON.stringify(requestEntry));
+
+    // Log initialize response
+    const responseEntry = {
+      type: 'response',
+      timestamp: new Date().toISOString(),
+      method: 'initialize',
+      result: {
+        protocolVersion,
+        serverInfo,
+        capabilities: {
+          tools: {},
+          prompts: {},
+          resources: {},
+          elicitation: {}
+        }
+      }
+    };
+
+    await this.appendLine(this.protocolLogPath, JSON.stringify(responseEntry));
+  }
+
+  /**
    * Log an MCP request
    */
   async logRequest(method: string, params: any): Promise<void> {
@@ -74,7 +120,7 @@ export class MCPProtocolLogger {
       params
     };
 
-    await this.appendLine(JSON.stringify(entry));
+    await this.appendLine(this.protocolLogPath, JSON.stringify(entry));
   }
 
   /**
@@ -90,13 +136,33 @@ export class MCPProtocolLogger {
       ...(error ? { error } : { result })
     };
 
-    await this.appendLine(JSON.stringify(entry));
+    await this.appendLine(this.protocolLogPath, JSON.stringify(entry));
   }
 
   /**
-   * Append a line to the log file with rotation
+   * Log an error to the error log
    */
-  private async appendLine(line: string): Promise<void> {
+  async logError(error: any, context?: string): Promise<void> {
+    if (!this.enabled) return;
+
+    const entry = {
+      timestamp: new Date().toISOString(),
+      context: context || 'unknown',
+      error: {
+        message: error.message || String(error),
+        stack: error.stack,
+        code: error.code,
+        ...error
+      }
+    };
+
+    await this.appendLine(this.errorLogPath, JSON.stringify(entry));
+  }
+
+  /**
+   * Append a line to the specified log file with rotation
+   */
+  private async appendLine(logPath: string, line: string): Promise<void> {
     // Ensure settings are loaded first
     await this.settingsLoaded;
 
@@ -105,8 +171,8 @@ export class MCPProtocolLogger {
       try {
         // Read current content if file exists
         let lines: string[] = [];
-        if (existsSync(this.logFilePath)) {
-          const content = await fs.readFile(this.logFilePath, 'utf-8');
+        if (existsSync(logPath)) {
+          const content = await fs.readFile(logPath, 'utf-8');
           lines = content.split('\n').filter(l => l.trim().length > 0);
         }
 
@@ -119,7 +185,7 @@ export class MCPProtocolLogger {
         }
 
         // Write back
-        await fs.writeFile(this.logFilePath, lines.join('\n') + '\n', 'utf-8');
+        await fs.writeFile(logPath, lines.join('\n') + '\n', 'utf-8');
       } catch (error: any) {
         // Silent fail - don't break MCP operations due to logging issues
         console.error(`[MCP Protocol Logger] Failed to write: ${error.message}`);
@@ -136,8 +202,11 @@ export class MCPProtocolLogger {
     if (!this.enabled) return;
 
     try {
-      if (existsSync(this.logFilePath)) {
-        await fs.unlink(this.logFilePath);
+      if (existsSync(this.protocolLogPath)) {
+        await fs.unlink(this.protocolLogPath);
+      }
+      if (existsSync(this.errorLogPath)) {
+        await fs.unlink(this.errorLogPath);
       }
     } catch (error: any) {
       console.error(`[MCP Protocol Logger] Failed to clear: ${error.message}`);
@@ -149,19 +218,20 @@ export class MCPProtocolLogger {
    * @param count Number of request/response pairs to return (default: 100)
    */
   async readRecent(count: number = 100): Promise<string> {
-    if (!this.enabled || !existsSync(this.logFilePath)) {
+    if (!this.enabled || !existsSync(this.protocolLogPath)) {
       return '';
     }
 
     try {
-      const content = await fs.readFile(this.logFilePath, 'utf-8');
+      const content = await fs.readFile(this.protocolLogPath, 'utf-8');
       const lines = content.split('\n').filter(l => l.trim().length > 0);
 
       // Get last N*2 lines (each pair = request + response)
       const recentLines = lines.slice(-(count * 2));
       return recentLines.join('\n');
     } catch (error: any) {
-      return `Error reading protocol log: ${error.message}`;
+      return `Error reading protocol log: ${error.message}`
+;
     }
   }
 }

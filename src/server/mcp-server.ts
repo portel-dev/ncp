@@ -91,6 +91,16 @@ export class MCPServer implements ElicitationServer {
         this.orchestrator.setClientInfo(clientInfo);
         logger.debug(`Client info captured: ${clientInfo.name} v${clientInfo.version}`);
 
+        // Log initialize handshake to protocol log
+        const serverInfo = {
+          name: 'ncp',
+          version,
+          ...(iconDataURI && { icon: { src: iconDataURI } })
+        };
+        mcpProtocolLogger.logInitialize(clientInfo, serverInfo, '2024-11-05').catch(error => {
+          logger.error('Failed to log initialize handshake', error);
+        });
+
         // Trigger auto-import asynchronously (don't block initialize response)
         if (clientInfo.name && clientInfo.name !== 'unknown') {
           logger.debug(`Triggering auto-import for client: ${clientInfo.name}`);
@@ -165,6 +175,10 @@ export class MCPServer implements ElicitationServer {
         return result;
       } catch (error: any) {
         logger.error(`Tool execution failed: ${name} - ${error.message}`);
+
+        // Log to error log
+        mcpProtocolLogger.logError(error, `tools/call:${name}`).catch(() => {});
+
         const errorResult = {
           content: [{
             type: 'text',
@@ -221,6 +235,10 @@ export class MCPServer implements ElicitationServer {
         return result;
       } catch (error: any) {
         logger.error(`Resource read failed: ${uri} - ${error.message}`);
+
+        // Log to error log
+        mcpProtocolLogger.logError(error, `resources/read:${uri}`).catch(() => {});
+
         await mcpProtocolLogger.logResponse('resources/read', null, {
           code: 'RESOURCE_READ_FAILED',
           message: error.message
@@ -314,6 +332,10 @@ export class MCPServer implements ElicitationServer {
       logger.info('NCP MCP server indexing complete');
     }).catch((error) => {
       logger.error('Failed to initialize orchestrator:', error);
+
+      // Log to error log
+      mcpProtocolLogger.logError(error, 'orchestrator:initialize').catch(() => {});
+
       this.initializationError = error; // Store error for later checking
       this.isInitialized = true; // Mark as initialized even on error to unblock
     });
