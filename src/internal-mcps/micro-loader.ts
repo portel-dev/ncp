@@ -1,7 +1,7 @@
 /**
- * SimpleMCP Loader
+ * MicroMCP Loader
  *
- * Discovers and loads SimpleMCP classes from:
+ * Discovers and loads MicroMCP classes from:
  * 1. Built-in directory (src/internal-mcps/)
  * 2. Global user directory (~/.ncp/internal/)
  * 3. Project-local directory (.ncp/internal/)
@@ -11,14 +11,14 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as crypto from 'crypto';
-import { SimpleMCP } from './base-mcp.js';
-import { SimpleMCPAdapter } from './simple-mcp-adapter.js';
+import { MicroMCP } from './base-micro.js';
+import { MicroMCPAdapter } from './micro-adapter.js';
 import { InternalMCP } from './types.js';
 import { logger } from '../utils/logger.js';
 import { DependencyManager } from './dependency-manager.js';
 import envPaths from 'env-paths';
 
-export class SimpleMCPLoader {
+export class MicroMCPLoader {
   private loadedMCPs: Map<string, InternalMCP> = new Map();
   private dependencyManager: DependencyManager;
 
@@ -27,7 +27,7 @@ export class SimpleMCPLoader {
   }
 
   /**
-   * Load all SimpleMCP classes from multiple directories
+   * Load all MicroMCP classes from multiple directories
    */
   async loadAll(directories: string[]): Promise<InternalMCP[]> {
     const mcps: InternalMCP[] = [];
@@ -45,7 +45,7 @@ export class SimpleMCPLoader {
   }
 
   /**
-   * Load SimpleMCP classes from a directory
+   * Load MicroMCP classes from a directory
    */
   async loadFromDirectory(directory: string): Promise<InternalMCP[]> {
     const mcps: InternalMCP[] = [];
@@ -57,7 +57,7 @@ export class SimpleMCPLoader {
         return mcps;
       }
 
-      // Find all .mcp.ts and .mcp.js files
+      // Find all .micro.ts and .micro.js files
       const files = await this.findMCPFiles(directory);
 
       logger.debug(`Found ${files.length} MCP files in ${directory}`);
@@ -83,7 +83,7 @@ export class SimpleMCPLoader {
   }
 
   /**
-   * Find all .mcp.ts and .mcp.js files in a directory
+   * Find all .micro.ts and .micro.js files in a directory
    */
   private async findMCPFiles(directory: string): Promise<string[]> {
     const files: string[] = [];
@@ -109,7 +109,7 @@ export class SimpleMCPLoader {
    * Check if file is an MCP file
    */
   private isMCPFile(filename: string): boolean {
-    return filename.endsWith('.mcp.ts') || filename.endsWith('.mcp.js');
+    return filename.endsWith('.micro.ts') || filename.endsWith('.micro.js');
   }
 
   /**
@@ -120,10 +120,22 @@ export class SimpleMCPLoader {
       // Find source .ts file if we're loading from dist
       let sourceFilePath = filePath;
       if (filePath.includes('/dist/') && filePath.endsWith('.js')) {
-        // Convert dist/.../*.js to src/.../*.ts
-        sourceFilePath = filePath
-          .replace('/dist/', '/src/')
-          .replace('.mcp.js', '.mcp.ts');
+        // First try .schema.json in dist (for packaged DXT)
+        // If not found, will fall back to src/*.ts in development
+        sourceFilePath = filePath.replace('.micro.js', '.micro.ts');
+
+        // Check if we should try src/ instead (development mode)
+        const schemaInDist = filePath.replace('.micro.js', '.micro.schema.json');
+        try {
+          await fs.access(schemaInDist);
+          // Schema file exists in dist, use dist path
+          sourceFilePath = filePath.replace('.micro.js', '.micro.ts');
+        } catch {
+          // No schema in dist, try src/ (development mode)
+          sourceFilePath = filePath
+            .replace('/dist/', '/src/')
+            .replace('.micro.js', '.micro.ts');
+        }
       }
 
       // Extract and install dependencies (only if source file exists)
@@ -135,7 +147,7 @@ export class SimpleMCPLoader {
           logger.info(`📦 Found ${dependencies.length} dependencies in ${path.basename(filePath)}`);
 
           // Get MCP name for cache directory
-          const mcpName = path.basename(filePath, '.mcp.js').replace('.mcp.ts', '');
+          const mcpName = path.basename(filePath, '.micro.js').replace('.micro.ts', '');
 
           // Install dependencies
           await this.dependencyManager.ensureDependencies(mcpName, dependencies);
@@ -163,7 +175,7 @@ export class SimpleMCPLoader {
         module = await import(fileUrl);
       }
 
-      // Find all exported classes (SimpleMCP or plain classes)
+      // Find all exported classes (MicroMCP or plain classes)
       const mcpClasses = this.findMCPClasses(module);
 
       if (mcpClasses.length === 0) {
@@ -187,9 +199,9 @@ export class SimpleMCPLoader {
       }
 
       // Create adapter (async initialization)
-      const adapter = await SimpleMCPAdapter.create(MCPClass, instance, sourceFilePath);
+      const adapter = await MicroMCPAdapter.create(MCPClass, instance, sourceFilePath);
 
-      logger.info(`✅ Loaded SimpleMCP: ${adapter.name} (${adapter.tools.length} tools)`);
+      logger.info(`✅ Loaded MicroMCP: ${adapter.name} (${adapter.tools.length} tools)`);
 
       return adapter;
     } catch (error: any) {

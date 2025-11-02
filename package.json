@@ -17,7 +17,9 @@
   },
   "type": "module",
   "scripts": {
-    "build": "tsc && chmod +x dist/index.js dist/index-mcp.js",
+    "extract-schemas": "tsx scripts/extract-schemas.ts",
+    "copy-schemas": "mkdir -p dist/internal-mcps/examples && cp src/internal-mcps/examples/*.schema.json dist/internal-mcps/examples/ 2>/dev/null || true",
+    "build": "npm run extract-schemas && tsc && npm run copy-schemas && chmod +x dist/index.js dist/index-mcp.js",
     "postinstall": "npm run build:if-dev",
     "build:if-dev": "[ -d node_modules/typescript ] && npm run build || echo 'Build skipped (production install)'",
     "start": "node dist/index.js",

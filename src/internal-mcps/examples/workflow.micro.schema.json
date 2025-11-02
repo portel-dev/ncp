@@ -1,0 +1,105 @@
+[
+  {
+    "name": "get",
+    "description": "Returns the workflow plan for Claude to execute",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "workflowName": {
+          "type": "string"
+        },
+        "context": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "workflowName"
+      ]
+    }
+  },
+  {
+    "name": "list",
+    "description": "List all available workflows",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "requiredContext": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "steps"
+      ]
+    }
+  },
+  {
+    "name": "create",
+    "description": "Create a custom workflow definition",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "requiredContext": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "steps"
+      ]
+    }
+  },
+  {
+    "name": "generate",
+    "description": "Returns a suggested workflow structure for Claude to review and customize",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "availableTools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "description"
+      ]
+    }
+  }
+]

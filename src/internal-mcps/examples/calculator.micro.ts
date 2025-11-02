@@ -1,16 +1,16 @@
 /**
  * Example: Calculator MCP
  *
- * Demonstrates the SimpleMCP pattern:
+ * Demonstrates the MicroMCP pattern:
  * - Class name "Calculator" → MCP name "calculator"
  * - Public methods → Tools
  * - JSDoc → Tool descriptions
  * - TypeScript types → Schemas
  */
 
-import { SimpleMCP } from '../base-mcp.js';
+import { MicroMCP } from '../base-micro.js';
 
-export class Calculator extends SimpleMCP {
+export class Calculator extends MicroMCP {
   /**
    * Add two numbers together
    * @param a First number to add

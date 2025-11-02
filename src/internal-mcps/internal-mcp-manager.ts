@@ -10,7 +10,7 @@ import { NCPManagementMCP } from './ncp-management.js';
 import { SchedulerMCP } from './scheduler.js';
 import { AnalyticsMCP } from './analytics.js';
 import { CLISuggestionsMCP } from './cli-suggestions.js';
-import { SimpleMCPLoader } from './simple-mcp-loader.js';
+import { MicroMCPLoader } from './micro-loader.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
@@ -24,12 +24,12 @@ export class InternalMCPManager {
   private internalMCPs: Map<string, InternalMCP> = new Map();
   private disabledInternalMCPs: Set<string> = new Set();
   private ragEngine: any = null; // PersistentRAGEngine instance (set via setRAGEngine)
-  private simpleMCPLoader: SimpleMCPLoader;
+  private simpleMCPLoader: MicroMCPLoader;
 
   constructor() {
-    this.simpleMCPLoader = new SimpleMCPLoader();
+    this.simpleMCPLoader = new MicroMCPLoader();
 
-    // Register legacy internal MCPs (will be migrated to SimpleMCP)
+    // Register legacy internal MCPs (will be migrated to MicroMCP)
     this.registerInternalMCP(new NCPManagementMCP());
     this.registerInternalMCP(new SchedulerMCP());
     this.registerInternalMCP(new AnalyticsMCP());
@@ -37,11 +37,11 @@ export class InternalMCPManager {
   }
 
   /**
-   * Load SimpleMCP classes from standard directories
+   * Load MicroMCP classes from standard directories
    */
-  async loadSimpleMCPs(): Promise<void> {
+  async loadMicroMCPs(): Promise<void> {
     const directories = [
-      // Built-in SimpleMCPs (in src/internal-mcps/examples/)
+      // Built-in MicroMCPs (in src/internal-mcps/examples/)
       path.join(__dirname, 'examples'),
 
       // Global user MCPs (~/.ncp/internal/)
@@ -51,7 +51,7 @@ export class InternalMCPManager {
       path.join(process.cwd(), '.ncp', 'internal'),
     ];
 
-    logger.debug(`Loading SimpleMCPs from directories: ${directories.join(', ')}`);
+    logger.debug(`Loading MicroMCPs from directories: ${directories.join(', ')}`);
 
     const mcps = await this.simpleMCPLoader.loadAll(directories);
 
@@ -60,7 +60,7 @@ export class InternalMCPManager {
       this.registerInternalMCP(mcp);
     }
 
-    logger.info(`✅ Loaded ${mcps.length} SimpleMCP(s)`);
+    logger.info(`✅ Loaded ${mcps.length} MicroMCP(s)`);
   }
 
   /**

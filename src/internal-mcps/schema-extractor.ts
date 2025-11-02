@@ -20,7 +20,7 @@ export interface ExtractedSchema {
 }
 
 /**
- * Extract schemas from a SimpleMCP class file
+ * Extract schemas from a MicroMCP class file
  */
 export class SchemaExtractor {
   /**

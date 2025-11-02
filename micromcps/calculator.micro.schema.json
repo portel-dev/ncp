@@ -1,0 +1,107 @@
+[
+  {
+    "name": "add",
+    "description": "Add two numbers together",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "a": {
+          "description": "First number to add",
+          "type": "number"
+        },
+        "b": {
+          "description": "Second number to add",
+          "type": "number"
+        }
+      },
+      "required": [
+        "a",
+        "b"
+      ]
+    }
+  },
+  {
+    "name": "subtract",
+    "description": "Subtract second number from first number",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "a": {
+          "description": "Number to subtract from",
+          "type": "number"
+        },
+        "b": {
+          "description": "Number to subtract",
+          "type": "number"
+        }
+      },
+      "required": [
+        "a",
+        "b"
+      ]
+    }
+  },
+  {
+    "name": "multiply",
+    "description": "Multiply two numbers",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "a": {
+          "description": "First number",
+          "type": "number"
+        },
+        "b": {
+          "description": "Second number",
+          "type": "number"
+        }
+      },
+      "required": [
+        "a",
+        "b"
+      ]
+    }
+  },
+  {
+    "name": "divide",
+    "description": "Divide first number by second number",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "a": {
+          "description": "Dividend",
+          "type": "number"
+        },
+        "b": {
+          "description": "Divisor (must not be zero)",
+          "type": "number"
+        }
+      },
+      "required": [
+        "a",
+        "b"
+      ]
+    }
+  },
+  {
+    "name": "power",
+    "description": "Calculate power of a number",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "base": {
+          "description": "The base number",
+          "type": "number"
+        },
+        "exponent": {
+          "description": "The exponent",
+          "type": "number"
+        }
+      },
+      "required": [
+        "base",
+        "exponent"
+      ]
+    }
+  }
+]

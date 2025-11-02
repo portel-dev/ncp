@@ -1,5 +1,5 @@
 /**
- * Dependency Manager for SimpleMCPs
+ * Dependency Manager for MicroMCPs
  *
  * Handles automatic installation of dependencies declared in MCP files
  * Similar to Python's UV or npx behavior
@@ -17,7 +17,7 @@ interface DependencySpec {
 }
 
 /**
- * Manages dependencies for SimpleMCPs
+ * Manages dependencies for MicroMCPs
  */
 export class DependencyManager {
   private cacheDir: string;

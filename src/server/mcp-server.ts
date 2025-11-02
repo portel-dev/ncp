@@ -333,11 +333,22 @@ export class MCPServer implements ElicitationServer {
       }
     ];
 
-    // Add internal MCP tools if orchestrator is initialized
-    // Internal MCPs (ncp:add, ncp:import, ncp:list, ncp:remove, ncp:export) are always available
-    // They don't depend on orchestrator initialization status
-    // Note: We'll expose them later when we implement elicitation for credentials
-    // For now, they're accessible via run("ncp:add", ...) but not listed separately
+    // Add internal MCP tools
+    // Internal MCPs are always available (don't depend on orchestrator initialization)
+    const internalMCPManager = this.orchestrator.getInternalMCPManager();
+    if (internalMCPManager) {
+      const internalMCPs = internalMCPManager.getAllEnabledInternalMCPs();
+
+      for (const mcp of internalMCPs) {
+        for (const tool of mcp.tools) {
+          coreTools.push({
+            name: `${mcp.name}:${tool.name}`,
+            description: tool.description,
+            inputSchema: tool.inputSchema as any
+          });
+        }
+      }
+    }
 
     return coreTools;
   }
@@ -876,9 +887,9 @@ export class MCPServer implements ElicitationServer {
           output += `\n🚀 **To install:**\n\n`;
 
           // Check if query is a simple MCP name (single word, likely a direct MCP name)
-          const isSimpleMCPName = description.trim().split(/\s+/).length === 1;
+          const isMicroMCPName = description.trim().split(/\s+/).length === 1;
 
-          if (isSimpleMCPName) {
+          if (isMicroMCPName) {
             // For simple queries like "canva", prioritize direct add
             output += `**Option 1: Try direct add (recommended for exact names):**\n`;
             output += `\`\`\`\nrun("ncp:add", {\n`;
@@ -917,9 +928,9 @@ export class MCPServer implements ElicitationServer {
       }
 
       // Fallback: No registry results, suggest direct add or show samples
-      const isSimpleMCPName = description.trim().split(/\s+/).length === 1;
+      const isMicroMCPName = description.trim().split(/\s+/).length === 1;
 
-      if (isSimpleMCPName) {
+      if (isMicroMCPName) {
         // For simple queries, suggest trying direct add first
         output += `💡 **Try adding directly:**\n\n`;
         output += `\`\`\`\nrun("ncp:add", {\n`;

@@ -217,8 +217,8 @@ export class NCPOrchestrator {
         // Initialize internal MCPs with ProfileManager
         this.internalMCPManager.initialize(this.profileManager);
 
-        // Load SimpleMCP classes from standard directories
-        await this.internalMCPManager.loadSimpleMCPs();
+        // Load MicroMCP classes from standard directories
+        await this.internalMCPManager.loadMicroMCPs();
 
         // Inject orchestrator into SchedulerMCP for tool validation (Phase 1 Step 4)
         const allInternalMCPs = this.internalMCPManager.getAllEnabledInternalMCPs();

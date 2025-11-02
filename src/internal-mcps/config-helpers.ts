@@ -1,5 +1,5 @@
 /**
- * Configuration Helper Utilities for SimpleMCP
+ * Configuration Helper Utilities for MicroMCP
  *
  * Provides utility functions for validating and accessing environment variables
  * with clear, actionable error messages.

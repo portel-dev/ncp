@@ -17,7 +17,7 @@
  * 4. Schedule workflow: ncp run schedule:add command="ncp run workflow:get ..." schedule="0 9 * * *"
  */
 
-import { SimpleMCP } from '../base-mcp.js';
+import { MicroMCP } from '../base-micro.js';
 
 interface WorkflowStep {
   name: string;
@@ -37,7 +37,7 @@ interface WorkflowDefinition {
   recommendedSchedule?: string; // Cron expression for scheduling
 }
 
-export class Workflow extends SimpleMCP {
+export class Workflow extends MicroMCP {
   /**
    * Get a predefined workflow definition
    * Returns the workflow plan for Claude to execute

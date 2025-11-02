@@ -1,12 +1,12 @@
 /**
- * Simple Base Class for Internal MCPs
+ * MicroMCP Base Class for Internal MCPs
  *
  * Just extend this class and define public methods - they automatically become tools!
  * NCP handles the MCP protocol (find/run), so we just need the class structure.
  *
  * Usage:
  * ```typescript
- * class Calculator extends SimpleMCP {
+ * class Calculator extends MicroMCP {
  *   // Method name becomes tool name
  *   // JSDoc becomes tool description
  *   // TypeScript types become schema
@@ -42,7 +42,7 @@ import { logger } from '../utils/logger.js';
  * - Public methods = Tools
  * - Return value = Tool result
  */
-export class SimpleMCP {
+export class MicroMCP {
   /**
    * Get MCP name from class name
    * Converts PascalCase to kebab-case (e.g., MyAwesomeMCP → my-awesome-mcp)
@@ -65,7 +65,7 @@ export class SimpleMCP {
 
     // Get all property names from prototype chain
     let current = prototype;
-    while (current && current !== SimpleMCP.prototype) {
+    while (current && current !== MicroMCP.prototype) {
       Object.getOwnPropertyNames(current).forEach((name) => {
         // Skip constructor, private methods (starting with _), and lifecycle hooks
         if (

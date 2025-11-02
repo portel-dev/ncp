@@ -5,7 +5,7 @@
  * No base class, no decorators, no framework coupling.
  */
 
-export class String {
+export class StringMCP {
   /**
    * Convert string to uppercase
    * @param text Text to convert
