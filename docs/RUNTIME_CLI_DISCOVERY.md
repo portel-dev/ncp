@@ -126,29 +126,75 @@ run("cli:browse", { category: "media" })
 
 ## User Workflow (Zero Knowledge Required)
 
-### Scenario: User needs to convert a video
+### Scenario 1: Auto-scan on startup (with shell access)
+
+```javascript
+// 1. User initializes NCP with Shell MCP installed
+// Auto-scan detects shell access and scans in background
+// → Discovers ffmpeg, jq, git, etc. are installed
+
+// 2. User asks AI to convert video
+find("convert video")
+// → Returns: ffmpeg:convert, handbrake:transcode (if installed)
+
+// All discovered automatically - zero manual steps!
+```
+
+### Scenario 2: Fallback scan on empty results
 
 ```javascript
 // 1. User asks AI to convert video
-// AI searches for capability
 find("convert video")
-// → No indexed tools found
+// → No results initially
 
-// 2. AI scans system for what's available
+// 2. NCP detects empty results + shell access
+// → Triggers CLI scan automatically
+// → Retries search after scan
+
+// 3. Returns discovered tools
+// → ffmpeg:convert (0.82 confidence)
+// → handbrake:transcode (0.76 confidence)
+
+// Auto-recovery - zero manual intervention!
+```
+
+### Scenario 3: Manual discovery (advanced users)
+
+```javascript
+// 1. User explicitly scans
 run("cli:scan")
 // → Discovers ffmpeg, handbrake, etc. are installed
 
-// 3. AI searches for relevant tools
+// 2. Search for specific capabilities
 run("cli:search", { query: "convert video" })
 // → Returns ffmpeg, handbrake with descriptions
 
-// 4. AI adds most relevant tool
+// 3. Add specific tool
 run("ncp:add", { mcp_name: "cli:ffmpeg" })
-// → ffmpeg now indexed
+// → ffmpeg now indexed for discovery
+```
 
-// 5. AI can now discover and use
-find("convert video")
-// → Returns: ffmpeg:convert (0.82 confidence)
+## Conditional Auto-Scanning
+
+Auto-scanning is **smart and non-intrusive**:
+
+### When it triggers:
+- ✅ **On startup**: If Shell or desktop-commander MCP is present
+- ✅ **On empty search**: If find() returns no results and shell access available
+- ✅ **Force mode**: Set `NCP_FORCE_CLI_SCAN=true` to always scan
+
+### When it DOESN'T trigger:
+- ❌ No shell access (no way to discover tools)
+- ❌ User disabled it (`NCP_DISABLE_CLI_SCAN=true`)
+- ❌ Already scanned (1 hour cache)
+
+### Environment Variables:
+```bash
+# Disable auto-scanning (manual only)
+export NCP_DISABLE_CLI_SCAN=true
+
+# Force scanning even without shell access
+export NCP_FORCE_CLI_SCAN=true
 ```
 
 ## Benefits vs. Static Catalog
@@ -297,15 +343,31 @@ const mediaTools = await scanner.getToolsByCategory("media");
 console.log(mediaTools);
 ```
 
+## Implemented Features
+
+- [x] **Conditional auto-scanning** - Triggers based on shell access
+- [x] **Fallback on empty results** - Auto-scans and retries when no tools found
+- [x] **Environment variable controls** - NCP_DISABLE_CLI_SCAN, NCP_FORCE_CLI_SCAN
+- [x] **Smart caching** - 1 hour TTL, prevents redundant scans
+- [x] **Non-blocking background scans** - No impact on initialization speed
+
 ## Future Enhancements
 
-- [ ] Parallel scanning for speed
+- [ ] Parallel scanning for speed (currently sequential)
 - [ ] Parse man pages for richer descriptions
 - [ ] Tool usage analytics (most used tools)
 - [ ] Auto-suggest based on file types in context
-- [ ] Integration with package managers (brew, apt)
+- [ ] Integration with package managers (brew, apt) for installation hints
 - [ ] Tool version compatibility warnings
+- [ ] Smart re-scan triggers (new tools installed, PATH changes)
 
 ## Conclusion
 
-Runtime CLI discovery eliminates maintenance burden while providing more accurate, user-specific tool suggestions. The system discovers what's actually installed and parses current help output, ensuring recommendations are always correct and up-to-date.
+Runtime CLI discovery with conditional auto-scanning eliminates maintenance burden while providing accurate, user-specific tool suggestions. The system:
+
+1. **Automatically discovers** what's installed when shell access is available
+2. **Falls back gracefully** when searches return empty results
+3. **Respects user control** via environment variables
+4. **Parses current help output** ensuring recommendations are always correct and up-to-date
+
+Zero maintenance, maximum utility.
