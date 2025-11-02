@@ -315,10 +315,22 @@ export class ProfileManager {
     elicitationServer?: any,
     notificationManager?: any
   ): Promise<void> {
-    // Claude Desktop: Skip (users manage in UI, DXT config controlled by us)
+    // Claude Desktop: Special case - users can disable MCPs via UI
     const isClaudeDesktop = clientName.toLowerCase().includes('claude');
     if (isClaudeDesktop) {
       logger.info('💡 Claude Desktop: Manage MCPs in settings if needed');
+
+      // Show notification about disabling MCPs in UI to save tokens
+      if (notificationManager) {
+        const totalMCPs = Object.keys(importResult.mcpServers).length;
+        const estimatedTools = totalMCPs * 20;
+
+        notificationManager.add({
+          type: 'tip',
+          message: `${totalMCPs} MCPs configured (~${estimatedTools} tools) - disable them in Claude Desktop settings to save ~95% tokens (NCP manages them all)`,
+          relatedId: 'claude-desktop-ui'
+        });
+      }
       return;
     }
 
@@ -427,6 +439,7 @@ Your ${clientName} has ${totalMCPs} MCPs configured (~${estimatedTools} tools in
 
   /**
    * Queue notification about config optimization opportunity
+   * (for non-Claude Desktop clients that can't disable MCPs via UI)
    */
   private queueConfigOptimizationNotification(
     clientName: string,
@@ -440,7 +453,7 @@ Your ${clientName} has ${totalMCPs} MCPs configured (~${estimatedTools} tools in
 
     notificationManager.add({
       type: 'tip',
-      message: `${totalMCPs} MCPs configured in ${clientName} (~${estimatedTools} tools) - replace with NCP-only to save ~95% tokens`,
+      message: `${totalMCPs} MCPs configured (~${estimatedTools} tools) - replace ${clientName} config with NCP-only to save ~95% tokens`,
       relatedId: clientName  // AI can ask about client-specific config replacement
     });
   }
