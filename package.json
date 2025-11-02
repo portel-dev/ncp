@@ -101,6 +101,7 @@
     "marked-terminal": "^7.3.0",
     "prettyjson": "^1.2.5",
     "prompts": "^2.4.2",
+    "tsx": "^4.20.6",
     "uuid": "^11.0.5",
     "yaml": "^2.8.1"
   },
@@ -133,7 +134,6 @@
     "mcp-server-kubernetes": "^2.9.6",
     "release-it": "^19.0.4",
     "ts-jest": "^29.4.2",
-    "tsx": "^4.20.5",
     "typescript": "^5.0.0"
   }
 }

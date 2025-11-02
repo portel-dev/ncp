@@ -32,14 +32,32 @@ export class SimpleMCPAdapter implements InternalMCP {
     this.instance = instance;
     this.sourceFilePath = sourceFilePath;
 
-    // Get MCP name from class
-    this.name = mcpClass.getMCPName();
+    // Get MCP name from class (handle both SimpleMCP subclasses and plain classes)
+    this.name = this.getMCPName(mcpClass);
 
     // Get description from class JSDoc or use default
     this.description = this.extractClassDescription() || `${this.name} MCP (built-in)`;
 
     // Tools will be initialized asynchronously
     this.tools = [];
+  }
+
+  /**
+   * Get MCP name from class (supports both SimpleMCP subclasses and plain classes)
+   */
+  private getMCPName(mcpClass: any): string {
+    // Try to use SimpleMCP's method if available
+    if (typeof mcpClass.getMCPName === 'function') {
+      return mcpClass.getMCPName();
+    }
+
+    // Fallback: implement convention for plain classes
+    // Convert PascalCase to kebab-case (e.g., MyAwesomeMCP → my-awesome-mcp)
+    return mcpClass.name
+      .replace(/MCP$/, '') // Remove "MCP" suffix if present
+      .replace(/([A-Z])/g, '-$1')
+      .toLowerCase()
+      .replace(/^-/, ''); // Remove leading dash
   }
 
   /**
@@ -56,10 +74,39 @@ export class SimpleMCPAdapter implements InternalMCP {
   }
 
   /**
+   * Get tool methods from class (supports both SimpleMCP subclasses and plain classes)
+   */
+  private getToolMethods(mcpClass: any): string[] {
+    // Try to use SimpleMCP's method if available
+    if (typeof mcpClass.getToolMethods === 'function') {
+      return mcpClass.getToolMethods();
+    }
+
+    // Fallback: implement convention for plain classes
+    const prototype = mcpClass.prototype;
+    const methods: string[] = [];
+
+    Object.getOwnPropertyNames(prototype).forEach((name) => {
+      // Skip constructor, private methods (starting with _), and lifecycle hooks
+      if (
+        name !== 'constructor' &&
+        !name.startsWith('_') &&
+        name !== 'onInitialize' &&
+        name !== 'onShutdown' &&
+        typeof prototype[name] === 'function'
+      ) {
+        methods.push(name);
+      }
+    });
+
+    return methods;
+  }
+
+  /**
    * Initialize tools from class methods
    */
   private async initializeTools(): Promise<void> {
-    const methodNames = this.mcpClass.getToolMethods();
+    const methodNames = this.getToolMethods(this.mcpClass);
 
     // If source file available, extract schemas from source code
     if (this.sourceFilePath) {
@@ -124,11 +171,25 @@ export class SimpleMCPAdapter implements InternalMCP {
   }
 
   /**
-   * Execute a tool by delegating to the SimpleMCP instance
+   * Execute a tool (supports both SimpleMCP subclasses and plain classes)
    */
   async executeTool(toolName: string, parameters: any): Promise<InternalToolResult> {
     try {
-      const result = await this.instance.executeTool(toolName, parameters);
+      let result: any;
+
+      // Check if instance has SimpleMCP's executeTool method
+      if (typeof this.instance.executeTool === 'function') {
+        result = await this.instance.executeTool(toolName, parameters);
+      } else {
+        // Plain class - call method directly
+        const method = (this.instance as any)[toolName];
+
+        if (!method || typeof method !== 'function') {
+          throw new Error(`Tool not found: ${toolName}`);
+        }
+
+        result = await method.call(this.instance, parameters);
+      }
 
       // Normalize result to InternalToolResult format
       if (typeof result === 'string') {

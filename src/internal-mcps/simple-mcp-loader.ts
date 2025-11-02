@@ -10,11 +10,13 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+import * as crypto from 'crypto';
 import { SimpleMCP } from './base-mcp.js';
 import { SimpleMCPAdapter } from './simple-mcp-adapter.js';
 import { InternalMCP } from './types.js';
 import { logger } from '../utils/logger.js';
 import { DependencyManager } from './dependency-manager.js';
+import envPaths from 'env-paths';
 
 export class SimpleMCPLoader {
   private loadedMCPs: Map<string, InternalMCP> = new Map();
@@ -124,24 +126,42 @@ export class SimpleMCPLoader {
           .replace('.mcp.js', '.mcp.ts');
       }
 
-      // Extract and install dependencies
-      const dependencies = await this.dependencyManager.extractDependencies(sourceFilePath);
+      // Extract and install dependencies (only if source file exists)
+      try {
+        await fs.access(sourceFilePath);
+        const dependencies = await this.dependencyManager.extractDependencies(sourceFilePath);
 
-      if (dependencies.length > 0) {
-        logger.info(`📦 Found ${dependencies.length} dependencies in ${path.basename(filePath)}`);
+        if (dependencies.length > 0) {
+          logger.info(`📦 Found ${dependencies.length} dependencies in ${path.basename(filePath)}`);
 
-        // Get MCP name for cache directory
-        const mcpName = path.basename(filePath, '.mcp.js').replace('.mcp.ts', '');
+          // Get MCP name for cache directory
+          const mcpName = path.basename(filePath, '.mcp.js').replace('.mcp.ts', '');
 
-        // Install dependencies
-        await this.dependencyManager.ensureDependencies(mcpName, dependencies);
+          // Install dependencies
+          await this.dependencyManager.ensureDependencies(mcpName, dependencies);
+        }
+      } catch (error: any) {
+        // Source file doesn't exist (production mode) - skip dependency extraction
+        logger.debug(`Skipping dependency extraction for ${path.basename(filePath)} (source not found)`);
       }
 
       // Convert file path to file:// URL for ESM imports
       const fileUrl = pathToFileURL(filePath).href;
 
       // Dynamically import the module
-      const module = await import(fileUrl);
+      let module: any;
+
+      if (filePath.endsWith('.ts')) {
+        // Compile TypeScript to JavaScript using esbuild
+        logger.debug(`Compiling TypeScript file: ${path.basename(filePath)}`);
+
+        const cachedJsPath = await this.compileTypeScript(filePath);
+        const cachedJsUrl = pathToFileURL(cachedJsPath).href;
+        module = await import(cachedJsUrl);
+      } else {
+        // Regular JavaScript import
+        module = await import(fileUrl);
+      }
 
       // Find all exported classes (SimpleMCP or plain classes)
       const mcpClasses = this.findMCPClasses(module);
@@ -176,6 +196,49 @@ export class SimpleMCPLoader {
       logger.error(`Failed to load ${filePath}: ${error.message}`);
       return null;
     }
+  }
+
+  /**
+   * Compile TypeScript file to JavaScript and cache it
+   */
+  private async compileTypeScript(tsFilePath: string): Promise<string> {
+    // Generate cache path based on file content hash
+    const tsContent = await fs.readFile(tsFilePath, 'utf-8');
+    const hash = crypto.createHash('sha256').update(tsContent).digest('hex').slice(0, 16);
+
+    const paths = envPaths('ncp', { suffix: '' });
+    const cacheDir = path.join(paths.cache, 'compiled-mcp');
+    const fileName = path.basename(tsFilePath, '.ts');
+    const cachedJsPath = path.join(cacheDir, `${fileName}.${hash}.mjs`);
+
+    // Check if cached version exists
+    try {
+      await fs.access(cachedJsPath);
+      logger.debug(`Using cached compiled version: ${path.basename(cachedJsPath)}`);
+      return cachedJsPath;
+    } catch {
+      // Cache miss - compile it
+    }
+
+    // Compile TypeScript to JavaScript
+    logger.debug(`Compiling ${path.basename(tsFilePath)} with esbuild...`);
+
+    const esbuild = await import('esbuild');
+    const result = await esbuild.transform(tsContent, {
+      loader: 'ts',
+      format: 'esm',
+      target: 'es2022',
+      sourcemap: 'inline'
+    });
+
+    // Ensure cache directory exists
+    await fs.mkdir(cacheDir, { recursive: true });
+
+    // Write compiled JavaScript to cache
+    await fs.writeFile(cachedJsPath, result.code, 'utf-8');
+    logger.debug(`Cached compiled JS: ${path.basename(cachedJsPath)}`);
+
+    return cachedJsPath;
   }
 
   /**
