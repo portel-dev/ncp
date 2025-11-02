@@ -217,6 +217,9 @@ export class NCPOrchestrator {
         // Initialize internal MCPs with ProfileManager
         this.internalMCPManager.initialize(this.profileManager);
 
+        // Load SimpleMCP classes from standard directories
+        await this.internalMCPManager.loadSimpleMCPs();
+
         // Inject orchestrator into SchedulerMCP for tool validation (Phase 1 Step 4)
         const allInternalMCPs = this.internalMCPManager.getAllEnabledInternalMCPs();
         const schedulerMCP = allInternalMCPs.find(mcp => mcp.name === 'schedule');
@@ -356,6 +359,12 @@ export class NCPOrchestrator {
     // Get list of MCPs that need indexing
     const indexedMCPs = this.csvCache.getIndexedMCPs();
     const mcpsToIndex = mcpConfigs.filter(config => {
+      // Skip CLI tools - they are loaded from cache only, no connection needed
+      if (config.env && config.env.NCP_CLI_TOOL === 'true') {
+        logger.debug(`Skipping connection for CLI tool: ${config.name}`);
+        return false;
+      }
+
       const tools = profile.mcpServers[config.name];
       const currentHash = CSVCache.hashProfile(tools);
 
@@ -455,10 +464,35 @@ export class NCPOrchestrator {
     // Rebuild definitions and tool mappings from cache
     for (const config of mcpConfigs) {
       const mcpTools = toolsByMCP.get(config.name) || [];
-      if (mcpTools.length === 0) continue;
 
       // Get MCP metadata for schemas
       const mcpMetadata = metadataCache.mcps[config.name];
+
+      // Special handling for CLI tools: they're in metadata cache but not CSV cache
+      if (mcpTools.length === 0 && mcpMetadata && config.env && config.env.NCP_CLI_TOOL === 'true') {
+        logger.info(`Loading CLI tool ${config.name} from metadata cache only`);
+
+        // Build tools array from metadata
+        const cliTools: CachedTool[] = mcpMetadata.tools.map((tool: any) => ({
+          mcpName: config.name,
+          toolId: `${config.name}:${tool.name}`,
+          toolName: tool.name,
+          description: tool.description,
+          hash: '',
+          timestamp: new Date().toISOString()
+        }));
+
+        // Add to toolsByMCP so it's processed below
+        toolsByMCP.set(config.name, cliTools);
+        // Continue to process this CLI tool below
+      } else if (mcpTools.length === 0) {
+        // No tools in CSV cache and not a CLI tool
+        continue;
+      }
+
+      // Get tools again (may have been added above for CLI tools)
+      const tools = toolsByMCP.get(config.name) || [];
+      if (tools.length === 0) continue;
 
       // CRITICAL: If metadata cache doesn't have this MCP's schemas, skip loading from cache
       // This forces re-indexing to populate the metadata cache with schemas
@@ -474,7 +508,7 @@ export class NCPOrchestrator {
       this.definitions.set(config.name, {
         name: config.name,
         config,
-        tools: mcpTools.map(t => {
+        tools: tools.map(t => {
           // Find schema in metadata cache
           const toolMetadata = mcpMetadata?.tools?.find(mt => mt.name === t.toolName);
           return {
@@ -487,7 +521,7 @@ export class NCPOrchestrator {
       });
 
       // Add to all tools and create mappings
-      for (const cachedTool of mcpTools) {
+      for (const cachedTool of tools) {
         const tool = {
           name: cachedTool.toolName,
           description: cachedTool.description,
@@ -500,7 +534,7 @@ export class NCPOrchestrator {
       }
 
       // Index tools in discovery engine
-      const discoveryTools = mcpTools.map(t => ({
+      const discoveryTools = tools.map(t => ({
         id: t.toolId,
         name: t.toolName,
         description: t.description

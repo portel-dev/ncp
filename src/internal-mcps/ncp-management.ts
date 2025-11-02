@@ -16,6 +16,7 @@ import { RegistryMCPCandidate } from '../services/registry-client.js';
 import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
 import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials, collectBulkCredentials, elicitMultiSelect, detectHTTPCredentials } from '../utils/elicitation-helper.js';
 import { showConfirmDialog } from '../utils/native-dialog.js';
+import { CLIIndexer } from '../services/cli-indexer.js';
 
 export class NCPManagementMCP implements InternalMCP {
   name = 'mcp';
@@ -253,7 +254,13 @@ export class NCPManagementMCP implements InternalMCP {
       // Continue with single add logic below (will be HTTP transport)
     }
 
-    // 5. Otherwise → single add mode (registry or manual)
+    // 5. CLI tool detection → index CLI tool for discovery
+    if (!command && !url && mcpName.startsWith('cli:')) {
+      const cliToolName = mcpName.substring(4); // Remove "cli:" prefix
+      return await this.addCliTool(cliToolName, profile);
+    }
+
+    // 6. Otherwise → single add mode (registry or manual)
     // Continue with existing logic below...
 
     // === END SMART AUTO-DETECTION ===
@@ -1506,6 +1513,63 @@ Do you want to remove this MCP?`;
       success: totalIssues === 0,
       content: report
     };
+  }
+
+  /**
+   * Add CLI tool for discovery
+   * Indexes CLI tool operations so they appear in find() results
+   */
+  private async addCliTool(cliToolName: string, profile: string): Promise<InternalToolResult> {
+    try {
+      logger.info(`Adding CLI tool: ${cliToolName}`);
+
+      const indexer = new CLIIndexer();
+
+      // Check if tool is available
+      const { CLIParser } = await import('../services/cli-parser.js');
+      const parser = new CLIParser();
+      const isAvailable = await parser.isCliAvailable(cliToolName);
+
+      if (!isAvailable) {
+        return {
+          success: false,
+          error: `❌ CLI tool "${cliToolName}" not found on system.\n\n` +
+                 `Please install ${cliToolName} first, then try again.\n` +
+                 `For example: brew install ${cliToolName} (macOS) or apt install ${cliToolName} (Linux)`
+        };
+      }
+
+      // Index the tool
+      const operationCount = await indexer.indexCliTool({
+        baseCommand: cliToolName
+      });
+
+      // Add to profile so orchestrator loads it
+      // Use a special marker to indicate this is a CLI tool (not a real MCP)
+      await this.profileManager!.addMCPToProfile(profile, cliToolName, {
+        command: cliToolName,
+        args: [],
+        env: { NCP_CLI_TOOL: 'true' }  // Marker for CLI tools
+      });
+
+      logger.info(`Added ${cliToolName} to profile ${profile}`);
+
+      return {
+        success: true,
+        content: `✅ Added CLI tool: ${cliToolName}\n` +
+                 `   Indexed ${operationCount} operations for discovery\n\n` +
+                 `You can now use find() to discover ${cliToolName} operations:\n` +
+                 `   find("${cliToolName}")\n` +
+                 `   find("convert video")  # For ffmpeg\n\n` +
+                 `Note: CLI tools are indexed for discovery only. The AI will execute them via shell commands.`
+      };
+    } catch (error: any) {
+      logger.error(`Failed to add CLI tool ${cliToolName}:`, error);
+      return {
+        success: false,
+        error: `Failed to add CLI tool: ${error.message}`
+      };
+    }
   }
 
   /**

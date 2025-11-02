@@ -9,19 +9,58 @@ import { InternalMCP, InternalToolResult, ElicitationCapable } from './types.js'
 import { NCPManagementMCP } from './ncp-management.js';
 import { SchedulerMCP } from './scheduler.js';
 import { AnalyticsMCP } from './analytics.js';
+import { CLISuggestionsMCP } from './cli-suggestions.js';
+import { SimpleMCPLoader } from './simple-mcp-loader.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+import * as os from 'os';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export class InternalMCPManager {
   private internalMCPs: Map<string, InternalMCP> = new Map();
   private disabledInternalMCPs: Set<string> = new Set();
   private ragEngine: any = null; // PersistentRAGEngine instance (set via setRAGEngine)
+  private simpleMCPLoader: SimpleMCPLoader;
 
   constructor() {
-    // Register internal MCPs
+    this.simpleMCPLoader = new SimpleMCPLoader();
+
+    // Register legacy internal MCPs (will be migrated to SimpleMCP)
     this.registerInternalMCP(new NCPManagementMCP());
     this.registerInternalMCP(new SchedulerMCP());
     this.registerInternalMCP(new AnalyticsMCP());
+    this.registerInternalMCP(new CLISuggestionsMCP());
+  }
+
+  /**
+   * Load SimpleMCP classes from standard directories
+   */
+  async loadSimpleMCPs(): Promise<void> {
+    const directories = [
+      // Built-in SimpleMCPs (in src/internal-mcps/examples/)
+      path.join(__dirname, 'examples'),
+
+      // Global user MCPs (~/.ncp/internal/)
+      path.join(os.homedir(), '.ncp', 'internal'),
+
+      // Project-local MCPs (.ncp/internal/)
+      path.join(process.cwd(), '.ncp', 'internal'),
+    ];
+
+    logger.debug(`Loading SimpleMCPs from directories: ${directories.join(', ')}`);
+
+    const mcps = await this.simpleMCPLoader.loadAll(directories);
+
+    // Register loaded MCPs
+    for (const mcp of mcps) {
+      this.registerInternalMCP(mcp);
+    }
+
+    logger.info(`✅ Loaded ${mcps.length} SimpleMCP(s)`);
   }
 
   /**

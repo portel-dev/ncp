@@ -1,0 +1,244 @@
+/**
+ * SimpleMCP Loader
+ *
+ * Discovers and loads SimpleMCP classes from:
+ * 1. Built-in directory (src/internal-mcps/)
+ * 2. Global user directory (~/.ncp/internal/)
+ * 3. Project-local directory (.ncp/internal/)
+ */
+
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
+import { SimpleMCP } from './base-mcp.js';
+import { SimpleMCPAdapter } from './simple-mcp-adapter.js';
+import { InternalMCP } from './types.js';
+import { logger } from '../utils/logger.js';
+import { DependencyManager } from './dependency-manager.js';
+
+export class SimpleMCPLoader {
+  private loadedMCPs: Map<string, InternalMCP> = new Map();
+  private dependencyManager: DependencyManager;
+
+  constructor() {
+    this.dependencyManager = new DependencyManager();
+  }
+
+  /**
+   * Load all SimpleMCP classes from multiple directories
+   */
+  async loadAll(directories: string[]): Promise<InternalMCP[]> {
+    const mcps: InternalMCP[] = [];
+
+    for (const directory of directories) {
+      try {
+        const dirMCPs = await this.loadFromDirectory(directory);
+        mcps.push(...dirMCPs);
+      } catch (error: any) {
+        logger.warn(`Failed to load MCPs from ${directory}: ${error.message}`);
+      }
+    }
+
+    return mcps;
+  }
+
+  /**
+   * Load SimpleMCP classes from a directory
+   */
+  async loadFromDirectory(directory: string): Promise<InternalMCP[]> {
+    const mcps: InternalMCP[] = [];
+
+    try {
+      // Check if directory exists
+      const stat = await fs.stat(directory);
+      if (!stat.isDirectory()) {
+        return mcps;
+      }
+
+      // Find all .mcp.ts and .mcp.js files
+      const files = await this.findMCPFiles(directory);
+
+      logger.debug(`Found ${files.length} MCP files in ${directory}`);
+
+      // Load each file
+      for (const filePath of files) {
+        try {
+          const mcp = await this.loadMCPFile(filePath);
+          if (mcp) {
+            mcps.push(mcp);
+            this.loadedMCPs.set(mcp.name, mcp);
+          }
+        } catch (error: any) {
+          logger.error(`Failed to load MCP from ${filePath}: ${error.message}`);
+        }
+      }
+    } catch (error: any) {
+      // Directory doesn't exist or can't be read
+      logger.debug(`Cannot load from ${directory}: ${error.message}`);
+    }
+
+    return mcps;
+  }
+
+  /**
+   * Find all .mcp.ts and .mcp.js files in a directory
+   */
+  private async findMCPFiles(directory: string): Promise<string[]> {
+    const files: string[] = [];
+
+    const entries = await fs.readdir(directory, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(directory, entry.name);
+
+      if (entry.isDirectory()) {
+        // Recursively search subdirectories
+        const subFiles = await this.findMCPFiles(fullPath);
+        files.push(...subFiles);
+      } else if (entry.isFile() && this.isMCPFile(entry.name)) {
+        files.push(fullPath);
+      }
+    }
+
+    return files;
+  }
+
+  /**
+   * Check if file is an MCP file
+   */
+  private isMCPFile(filename: string): boolean {
+    return filename.endsWith('.mcp.ts') || filename.endsWith('.mcp.js');
+  }
+
+  /**
+   * Load a single MCP file
+   */
+  private async loadMCPFile(filePath: string): Promise<InternalMCP | null> {
+    try {
+      // Find source .ts file if we're loading from dist
+      let sourceFilePath = filePath;
+      if (filePath.includes('/dist/') && filePath.endsWith('.js')) {
+        // Convert dist/.../*.js to src/.../*.ts
+        sourceFilePath = filePath
+          .replace('/dist/', '/src/')
+          .replace('.mcp.js', '.mcp.ts');
+      }
+
+      // Extract and install dependencies
+      const dependencies = await this.dependencyManager.extractDependencies(sourceFilePath);
+
+      if (dependencies.length > 0) {
+        logger.info(`📦 Found ${dependencies.length} dependencies in ${path.basename(filePath)}`);
+
+        // Get MCP name for cache directory
+        const mcpName = path.basename(filePath, '.mcp.js').replace('.mcp.ts', '');
+
+        // Install dependencies
+        await this.dependencyManager.ensureDependencies(mcpName, dependencies);
+      }
+
+      // Convert file path to file:// URL for ESM imports
+      const fileUrl = pathToFileURL(filePath).href;
+
+      // Dynamically import the module
+      const module = await import(fileUrl);
+
+      // Find all exported classes (SimpleMCP or plain classes)
+      const mcpClasses = this.findMCPClasses(module);
+
+      if (mcpClasses.length === 0) {
+        logger.warn(`No MCP classes found in ${path.basename(filePath)}`);
+        return null;
+      }
+
+      if (mcpClasses.length > 1) {
+        logger.warn(
+          `Multiple MCP classes found in ${path.basename(filePath)}. Using first one.`
+        );
+      }
+
+      // Use the first MCP class found
+      const MCPClass = mcpClasses[0];
+      const instance = new MCPClass();
+
+      // Call lifecycle hook if present
+      if (instance.onInitialize) {
+        await instance.onInitialize();
+      }
+
+      // Create adapter (async initialization)
+      const adapter = await SimpleMCPAdapter.create(MCPClass, instance, sourceFilePath);
+
+      logger.info(`✅ Loaded SimpleMCP: ${adapter.name} (${adapter.tools.length} tools)`);
+
+      return adapter;
+    } catch (error: any) {
+      logger.error(`Failed to load ${filePath}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Find all classes in a module
+   *
+   * Accepts ANY class - no base class requirement!
+   * Just like PHP Restler, we use pure convention.
+   */
+  private findMCPClasses(module: any): Array<any> {
+    const classes: Array<any> = [];
+
+    for (const exportedItem of Object.values(module)) {
+      if (typeof exportedItem === 'function' && this.isClass(exportedItem)) {
+        // Check if it has async methods (indication it's an MCP)
+        if (this.hasAsyncMethods(exportedItem)) {
+          classes.push(exportedItem);
+        }
+      }
+    }
+
+    return classes;
+  }
+
+  /**
+   * Check if a function is a class constructor
+   */
+  private isClass(fn: any): boolean {
+    return typeof fn === 'function' && /^\s*class\s+/.test(fn.toString());
+  }
+
+  /**
+   * Check if a class has async methods
+   */
+  private hasAsyncMethods(ClassConstructor: any): boolean {
+    const prototype = ClassConstructor.prototype;
+
+    for (const key of Object.getOwnPropertyNames(prototype)) {
+      if (key === 'constructor') continue;
+
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
+      if (descriptor && typeof descriptor.value === 'function') {
+        // Check if it's an async function
+        const fn = descriptor.value;
+        if (fn.constructor.name === 'AsyncFunction') {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Get all loaded MCPs
+   */
+  getLoadedMCPs(): InternalMCP[] {
+    return Array.from(this.loadedMCPs.values());
+  }
+
+  /**
+   * Get a loaded MCP by name
+   */
+  getMCP(name: string): InternalMCP | undefined {
+    return this.loadedMCPs.get(name);
+  }
+}
