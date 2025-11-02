@@ -39,6 +39,7 @@ export interface Provider {
   recommended: 'stdio' | 'http';
   stdio?: ProviderStdioConfig;
   http?: ProviderHttpConfig;
+  _meta?: any;  // Preserve MCP metadata (for MicroMCP detection, etc.)
 }
 
 export interface ProviderRegistry {
@@ -111,6 +112,11 @@ function transformMCPToProvider(mcp: any): Provider | null {
           needsSetup: true
         };
       }
+    }
+
+    // Preserve _meta for MicroMCP detection and other features
+    if (mcp._meta) {
+      provider._meta = mcp._meta;
     }
 
     return provider;

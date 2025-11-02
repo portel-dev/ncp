@@ -44,6 +44,9 @@ export class InternalMCPManager {
       // Built-in MicroMCPs (in src/internal-mcps/examples/)
       path.join(__dirname, 'examples'),
 
+      // Installed MicroMCPs from registry (~/.ncp/micromcps/)
+      path.join(os.homedir(), '.ncp', 'micromcps'),
+
       // Global user MCPs (~/.ncp/internal/)
       path.join(os.homedir(), '.ncp', 'internal'),
 

@@ -102,3 +102,4 @@ experiment-*.js
 # See .conversation-exports.md for details
 2025-*.txt
 test-configs/
+.claude/settings.local.json

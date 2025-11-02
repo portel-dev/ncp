@@ -292,6 +292,11 @@ export class NCPManagementMCP implements InternalMCP {
           };
         }
 
+        // Handle MicroMCP installation (different flow)
+        if (provider._meta?.isMicroMCP && provider._meta?.sourceUrl) {
+          return await this.installMicroMCP(mcpName, provider, profile);
+        }
+
         // Use provider metadata to build config
         const transport = provider.recommended || 'stdio';
 
@@ -1513,6 +1518,72 @@ Do you want to remove this MCP?`;
       success: totalIssues === 0,
       content: report
     };
+  }
+
+  /**
+   * Install MicroMCP from registry
+   * Downloads .micro.ts file and optional schema, saves to ~/.ncp/micromcps/
+   */
+  private async installMicroMCP(name: string, provider: any, profile: string): Promise<InternalToolResult> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const os = await import('os');
+
+      // Create micromcps directory
+      const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
+      await fs.mkdir(microDir, { recursive: true });
+
+      const baseName = name.replace(/^micromcp-/, ''); // Remove prefix if present
+      const microFile = path.join(microDir, `${baseName}.micro.ts`);
+      const schemaFile = path.join(microDir, `${baseName}.micro.schema.json`);
+
+      logger.info(`Installing MicroMCP "${baseName}" from ${provider._meta.sourceUrl}`);
+
+      // Download .micro.ts file
+      const sourceResponse = await fetch(provider._meta.sourceUrl);
+      if (!sourceResponse.ok) {
+        throw new Error(`Failed to download MicroMCP source: ${sourceResponse.statusText}`);
+      }
+      const sourceContent = await sourceResponse.text();
+      await fs.writeFile(microFile, sourceContent, 'utf8');
+
+      // Download schema if available
+      let schemaDownloaded = false;
+      if (provider._meta.schemaUrl) {
+        try {
+          const schemaResponse = await fetch(provider._meta.schemaUrl);
+          if (schemaResponse.ok) {
+            const schemaContent = await schemaResponse.text();
+            await fs.writeFile(schemaFile, schemaContent, 'utf8');
+            schemaDownloaded = true;
+            logger.info(`Downloaded schema for "${baseName}"`);
+          }
+        } catch (error: any) {
+          logger.warn(`Failed to download schema: ${error.message}`);
+        }
+      }
+
+      // MicroMCPs are auto-loaded from ~/.ncp/micromcps/ directory
+      // No need to track in profile - they'll be discovered on next startup
+
+      return {
+        success: true,
+        content: [
+          { type: 'text', text: `✅ MicroMCP "${baseName}" installed successfully!\n\n` +
+            `📍 Location: ${microFile}\n` +
+            (schemaDownloaded ? `📋 Schema: ${schemaFile}\n` : '') +
+            `\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'` +
+            `\n🔍 Discover tools: ncp find ${baseName}` }
+        ]
+      };
+    } catch (error: any) {
+      logger.error(`Failed to install MicroMCP: ${error.message}`);
+      return {
+        success: false,
+        error: `Failed to install MicroMCP: ${error.message}`
+      };
+    }
   }
 
   /**
