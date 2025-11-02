@@ -218,7 +218,12 @@ export class NCPManagementMCP implements InternalMCP {
     }
 
     // 3. File path detection → import from file
-    // Check for: .json extension, path separators (/, ~/, ./)
+    // 3a. MicroMCP file (.micro.ts)
+    if (!command && !url && mcpName.endsWith('.micro.ts')) {
+      return await this.importMicroMCPFromFile(mcpName, profile);
+    }
+
+    // 3b. JSON config file (.json or paths)
     if (!command && !url && (
       mcpName.endsWith('.json') ||
       mcpName.startsWith('/') ||
@@ -798,17 +803,30 @@ Do you want to remove this MCP?`;
       if (!clipboardContent || clipboardContent.trim().length === 0) {
         return {
           success: false,
-          error: 'Clipboard is empty. Copy a valid MCP configuration JSON first.'
+          error: 'Clipboard is empty. Copy a valid MCP configuration JSON or MicroMCP TypeScript code.'
         };
       }
 
-      const config = JSON.parse(clipboardContent.trim());
+      const trimmed = clipboardContent.trim();
+
+      // Detect format: TypeScript (MicroMCP) vs JSON (config)
+      // TypeScript indicators: contains "export class", "implements MicroMCP", etc.
+      const isMicroMCP = trimmed.includes('export class') &&
+                        (trimmed.includes('implements MicroMCP') || trimmed.includes('@tool'));
+
+      if (isMicroMCP) {
+        // Import as MicroMCP TypeScript code
+        return await this.importMicroMCPFromClipboard(trimmed);
+      }
+
+      // Try to parse as JSON config
+      const config = JSON.parse(trimmed);
 
       // Validate and import
       if (!config.mcpServers || typeof config.mcpServers !== 'object') {
         return {
           success: false,
-          error: 'Invalid config format. Expected: {"mcpServers": {...}}'
+          error: 'Invalid config format. Expected: {"mcpServers": {...}} or MicroMCP TypeScript code'
         };
       }
 
@@ -828,6 +846,61 @@ Do you want to remove this MCP?`;
       return {
         success: false,
         error: `Failed to import from clipboard: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Import MicroMCP from clipboard containing TypeScript code
+   */
+  private async importMicroMCPFromClipboard(tsContent: string): Promise<InternalToolResult> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const os = await import('os');
+
+      // Try to extract class name from: export class CalculatorMCP
+      const classMatch = tsContent.match(/export\s+class\s+(\w+)/);
+      if (!classMatch) {
+        return {
+          success: false,
+          error: 'Could not detect MicroMCP class name. Expected "export class <Name>MCP"'
+        };
+      }
+
+      // Extract base name (e.g., "CalculatorMCP" → "calculator")
+      const className = classMatch[1];
+      const baseName = className
+        .replace(/MCP$/, '')  // Remove "MCP" suffix
+        .replace(/([A-Z])/g, (match, p1, offset) => offset > 0 ? '-' + p1.toLowerCase() : p1.toLowerCase())
+        .replace(/^-/, '');  // Remove leading dash
+
+      // Create destination directory
+      const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
+      await fs.mkdir(microDir, { recursive: true });
+
+      const destFile = path.join(microDir, `${baseName}.micro.ts`);
+
+      // Write TypeScript code to file
+      await fs.writeFile(destFile, tsContent, 'utf8');
+      logger.info(`Saved MicroMCP from clipboard: ${baseName}.micro.ts`);
+
+      return {
+        success: true,
+        content: [
+          { type: 'text', text: `✅ MicroMCP "${baseName}" imported from clipboard!\n\n` +
+            `📍 Location: ${destFile}\n` +
+            `📝 Class: ${className}\n` +
+            `\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'` +
+            `\n🔍 Discover tools: ncp find ${baseName}` +
+            `\n\n⚠️  Restart NCP to load the new MicroMCP` }
+        ]
+      };
+    } catch (error: any) {
+      logger.error(`Failed to import MicroMCP from clipboard: ${error.message}`);
+      return {
+        success: false,
+        error: `Failed to import MicroMCP from clipboard: ${error.message}`
       };
     }
   }
@@ -1581,6 +1654,90 @@ Do you want to remove this MCP?`;
       return {
         success: false,
         error: `Failed to install MicroMCP: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Import MicroMCP from a local .micro.ts file
+   * Copies the file (and optional schema) to ~/.ncp/micromcps/
+   */
+  private async importMicroMCPFromFile(filePath: string, profile: string): Promise<InternalToolResult> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const os = await import('os');
+
+      // Resolve path (handle ~/, ./, absolute)
+      let resolvedPath = filePath;
+      if (filePath.startsWith('~/')) {
+        resolvedPath = path.join(os.homedir(), filePath.substring(2));
+      } else if (filePath.startsWith('./')) {
+        resolvedPath = path.resolve(process.cwd(), filePath);
+      }
+
+      // Check if file exists
+      try {
+        await fs.access(resolvedPath);
+      } catch {
+        return {
+          success: false,
+          error: `File not found: ${resolvedPath}`
+        };
+      }
+
+      // Extract base name from filename (e.g., "calculator.micro.ts" → "calculator")
+      const fileName = path.basename(resolvedPath);
+      if (!fileName.endsWith('.micro.ts')) {
+        return {
+          success: false,
+          error: `Invalid MicroMCP file. Expected .micro.ts extension, got: ${fileName}`
+        };
+      }
+      const baseName = fileName.replace('.micro.ts', '');
+
+      // Create destination directory
+      const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
+      await fs.mkdir(microDir, { recursive: true });
+
+      const destFile = path.join(microDir, fileName);
+      const destSchema = path.join(microDir, `${baseName}.micro.schema.json`);
+
+      // Copy .micro.ts file
+      await fs.copyFile(resolvedPath, destFile);
+      logger.info(`Copied MicroMCP file: ${fileName}`);
+
+      // Check for optional schema file in same directory
+      let schemaImported = false;
+      const sourceDir = path.dirname(resolvedPath);
+      const sourceSchema = path.join(sourceDir, `${baseName}.micro.schema.json`);
+
+      try {
+        await fs.access(sourceSchema);
+        await fs.copyFile(sourceSchema, destSchema);
+        schemaImported = true;
+        logger.info(`Copied schema file: ${baseName}.micro.schema.json`);
+      } catch {
+        // Schema file is optional
+        logger.debug(`No schema file found for ${baseName}`);
+      }
+
+      return {
+        success: true,
+        content: [
+          { type: 'text', text: `✅ MicroMCP "${baseName}" imported successfully!\n\n` +
+            `📍 Location: ${destFile}\n` +
+            (schemaImported ? `📋 Schema: ${destSchema}\n` : '') +
+            `\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'` +
+            `\n🔍 Discover tools: ncp find ${baseName}` +
+            `\n\n⚠️  Restart NCP to load the new MicroMCP` }
+        ]
+      };
+    } catch (error: any) {
+      logger.error(`Failed to import MicroMCP from file: ${error.message}`);
+      return {
+        success: false,
+        error: `Failed to import MicroMCP: ${error.message}`
       };
     }
   }
