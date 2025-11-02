@@ -5,6 +5,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { InitializedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -123,6 +124,15 @@ export class MCPServer implements ElicitationServer {
         }
       }
     };
+
+    // BUGFIX: Manually register notification handler to ensure oninitialized gets called
+    // The SDK's constructor already set up a handler, but it captured undefined.
+    // We need to re-register it after setting the callback.
+    this.server.setNotificationHandler(InitializedNotificationSchema, () => {
+      if (this.server.oninitialized) {
+        this.server.oninitialized();
+      }
+    });
 
     // Wire up elicitation server to internal MCPs IMMEDIATELY
     // This must happen before initialization so confirmations work from the start
