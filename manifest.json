@@ -1,5 +1,5 @@
 {
-  "manifest_version": "0.3",
+  "manifest_version": "0.2",
   "name": "ncp",
   "display_name": "Natural Context Provider",
   "version": "1.7.0",

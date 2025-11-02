@@ -107,7 +107,7 @@
   "devDependencies": {
     "@agent-infra/mcp-server-browser": "^1.2.23",
     "@amap/amap-maps-mcp-server": "^0.0.8",
-    "@anthropic-ai/mcpb": "^1.1.1",
+    "@anthropic-ai/mcpb": "1.1.1",
     "@apify/actors-mcp-server": "^0.4.15",
     "@benborla29/mcp-server-mysql": "^2.0.5",
     "@currents/mcp": "^2.0.0",
