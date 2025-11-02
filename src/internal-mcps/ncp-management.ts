@@ -1534,11 +1534,10 @@ Do you want to remove this MCP?`;
       const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
       await fs.mkdir(microDir, { recursive: true });
 
-      const baseName = name.replace(/^micromcp-/, ''); // Remove prefix if present
-      const microFile = path.join(microDir, `${baseName}.micro.ts`);
-      const schemaFile = path.join(microDir, `${baseName}.micro.schema.json`);
+      const microFile = path.join(microDir, `${name}.micro.ts`);
+      const schemaFile = path.join(microDir, `${name}.micro.schema.json`);
 
-      logger.info(`Installing MicroMCP "${baseName}" from ${provider._meta.sourceUrl}`);
+      logger.info(`Installing MicroMCP "${name}" from ${provider._meta.sourceUrl}`);
 
       // Download .micro.ts file
       const sourceResponse = await fetch(provider._meta.sourceUrl);
@@ -1557,7 +1556,7 @@ Do you want to remove this MCP?`;
             const schemaContent = await schemaResponse.text();
             await fs.writeFile(schemaFile, schemaContent, 'utf8');
             schemaDownloaded = true;
-            logger.info(`Downloaded schema for "${baseName}"`);
+            logger.info(`Downloaded schema for "${name}"`);
           }
         } catch (error: any) {
           logger.warn(`Failed to download schema: ${error.message}`);
@@ -1570,11 +1569,11 @@ Do you want to remove this MCP?`;
       return {
         success: true,
         content: [
-          { type: 'text', text: `✅ MicroMCP "${baseName}" installed successfully!\n\n` +
+          { type: 'text', text: `✅ MicroMCP "${name}" installed successfully!\n\n` +
             `📍 Location: ${microFile}\n` +
             (schemaDownloaded ? `📋 Schema: ${schemaFile}\n` : '') +
-            `\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'` +
-            `\n🔍 Discover tools: ncp find ${baseName}` }
+            `\n💡 Usage: ncp run ${name}:tool_name --params '{"param":"value"}'` +
+            `\n🔍 Discover tools: ncp find ${name}` }
         ]
       };
     } catch (error: any) {
