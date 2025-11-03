@@ -1,31 +1,51 @@
 /**
  * CLI Suggestions Internal MCP
- * Provides CLI tool suggestions based on user queries
+ * Provides CLI tool suggestions based on runtime scanning
+ * Zero maintenance - discovers tools dynamically
  */
 
 import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
-import { suggestCLITools, getInstallCommand, getCategories, getToolsByCategory, CLI_TOOL_CATALOG } from '../services/cli-catalog.js';
+import { CLIScanner } from '../services/cli-scanner.js';
 import { CLIParser } from '../services/cli-parser.js';
 
 export class CLISuggestionsMCP implements InternalMCP {
   name = 'cli';
-  description = 'CLI tool suggestions and catalog (built-in)';
+  description = 'CLI tool discovery and suggestions (built-in)';
+  private scanner: CLIScanner;
+
+  constructor() {
+    this.scanner = new CLIScanner();
+  }
 
   tools: InternalTool[] = [
     {
-      name: 'suggest',
-      description: 'Get CLI tool suggestions for a specific task. Returns popular CLI tools that can help with the task, along with installation instructions.',
+      name: 'scan',
+      description: 'Scan system for available CLI tools. Discovers tools dynamically with zero maintenance.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          force_refresh: {
+            type: 'boolean',
+            description: 'Force re-scan even if cache is fresh (default: false)',
+            default: false
+          }
+        }
+      }
+    },
+    {
+      name: 'search',
+      description: 'Search for CLI tools by capability or name. Returns tools actually installed on this system.',
       inputSchema: {
         type: 'object',
         properties: {
           query: {
             type: 'string',
-            description: 'Task description (e.g., "convert video", "process json", "search files")'
+            description: 'Search query (e.g., "convert video", "process json", "search files")'
           },
           limit: {
             type: 'number',
-            description: 'Maximum number of suggestions (default: 3)',
-            default: 3
+            description: 'Maximum number of results (default: 5)',
+            default: 5
           }
         },
         required: ['query']
@@ -33,7 +53,7 @@ export class CLISuggestionsMCP implements InternalMCP {
     },
     {
       name: 'check',
-      description: 'Check if a CLI tool is installed on the system',
+      description: 'Check if a specific CLI tool is installed and get its details',
       inputSchema: {
         type: 'object',
         properties: {
@@ -46,14 +66,14 @@ export class CLISuggestionsMCP implements InternalMCP {
       }
     },
     {
-      name: 'catalog',
-      description: 'Browse the CLI tool catalog by category or list all categories',
+      name: 'browse',
+      description: 'Browse available CLI tools by category or list all categories',
       inputSchema: {
         type: 'object',
         properties: {
           category: {
             type: 'string',
-            description: 'Optional category to filter by (e.g., "media", "data", "development"). Omit to list all categories.'
+            description: 'Optional category to filter by. Omit to list all categories.'
           }
         }
       }
@@ -63,14 +83,17 @@ export class CLISuggestionsMCP implements InternalMCP {
   async executeTool(toolName: string, parameters: any): Promise<InternalToolResult> {
     try {
       switch (toolName) {
-        case 'suggest':
-          return await this.handleSuggest(parameters);
+        case 'scan':
+          return await this.handleScan(parameters);
+
+        case 'search':
+          return await this.handleSearch(parameters);
 
         case 'check':
           return await this.handleCheck(parameters);
 
-        case 'catalog':
-          return await this.handleCatalog(parameters);
+        case 'browse':
+          return await this.handleBrowse(parameters);
 
         default:
           return {
@@ -86,9 +109,46 @@ export class CLISuggestionsMCP implements InternalMCP {
     }
   }
 
-  private async handleSuggest(params: any): Promise<InternalToolResult> {
+  private async handleScan(params: any): Promise<InternalToolResult> {
+    const forceRefresh = params?.force_refresh || false;
+
+    const tools = await this.scanner.scanSystem(forceRefresh);
+
+    // Group by category for better presentation
+    const byCategory = tools.reduce((acc, tool) => {
+      if (!acc[tool.category]) {
+        acc[tool.category] = [];
+      }
+      acc[tool.category].push(tool);
+      return acc;
+    }, {} as Record<string, typeof tools>);
+
+    let content = `🔍 System Scan Complete\n\n`;
+    content += `Found **${tools.length}** CLI tools\n\n`;
+
+    for (const [category, categoryTools] of Object.entries(byCategory)) {
+      content += `**${category}** (${categoryTools.length} tools)\n`;
+      content += `   ${categoryTools.slice(0, 10).map(t => t.name).join(', ')}`;
+      if (categoryTools.length > 10) {
+        content += ` ...and ${categoryTools.length - 10} more`;
+      }
+      content += `\n\n`;
+    }
+
+    content += `💡 **Next steps:**\n`;
+    content += `   • Search for tools: run("cli:search", { query: "convert video" })\n`;
+    content += `   • Browse category: run("cli:browse", { category: "media" })\n`;
+    content += `   • Add tool to NCP: run("ncp:add", { mcp_name: "cli:ffmpeg" })`;
+
+    return {
+      success: true,
+      content
+    };
+  }
+
+  private async handleSearch(params: any): Promise<InternalToolResult> {
     const query = params.query;
-    const limit = params.limit || 3;
+    const limit = params.limit || 5;
 
     if (!query) {
       return {
@@ -97,33 +157,34 @@ export class CLISuggestionsMCP implements InternalMCP {
       };
     }
 
-    const suggestions = suggestCLITools(query, limit);
+    const results = await this.scanner.searchTools(query);
+    const limited = results.slice(0, limit);
 
-    if (suggestions.length === 0) {
+    if (limited.length === 0) {
       return {
         success: true,
-        content: `No CLI tool suggestions found for "${query}".\n\nTry browsing the catalog with:\n  run("cli:catalog")`
+        content: `No CLI tools found for "${query}" on this system.\n\n💡 Try:\n   • run("cli:scan", { force_refresh: true })\n   • Installing the tool you need, then scanning again`
       };
     }
 
-    let content = `💡 CLI Tool Suggestions for "${query}":\n\n`;
+    let content = `🔍 CLI Tools for "${query}":\n\n`;
 
-    for (const tool of suggestions) {
+    for (const tool of limited) {
       content += `**${tool.name}** - ${tool.description}\n`;
+      content += `   Category: ${tool.category}\n`;
+      content += `   Path: ${tool.path}\n`;
 
-      const installCmd = getInstallCommand(tool.name);
-      if (installCmd) {
-        content += `   Install: \`${installCmd}\`\n`;
-      }
-
-      if (tool.homepage) {
-        content += `   Learn more: ${tool.homepage}\n`;
+      if (tool.capabilities.length > 0) {
+        content += `   Capabilities: ${tool.capabilities.slice(0, 5).join(', ')}\n`;
       }
 
       content += `   Add to NCP: run("ncp:add", { mcp_name: "cli:${tool.name}" })\n\n`;
     }
 
-    content += `💡 **Tip**: Install the tool first, then add it to NCP to make it discoverable.`;
+    if (results.length > limit) {
+      content += `\n...and ${results.length - limit} more tools.\n`;
+      content += `Run with limit: ${results.length} to see all.`;
+    }
 
     return {
       success: true,
@@ -144,60 +205,65 @@ export class CLISuggestionsMCP implements InternalMCP {
     const parser = new CLIParser();
     const isAvailable = await parser.isCliAvailable(toolName);
 
-    if (isAvailable) {
-      const version = await parser.getVersion(toolName);
-
-      let content = `✅ **${toolName}** is installed\n`;
-      if (version) {
-        content += `   Version: ${version}\n`;
-      }
-      content += `\nAdd to NCP: run("ncp:add", { mcp_name: "cli:${toolName}" })`;
-
+    if (!isAvailable) {
       return {
         success: true,
-        content
-      };
-    } else {
-      const catalogTool = CLI_TOOL_CATALOG[toolName];
-      const installCmd = getInstallCommand(toolName);
-
-      let content = `❌ **${toolName}** is not installed\n\n`;
-
-      if (catalogTool) {
-        content += `${catalogTool.description}\n\n`;
-      }
-
-      if (installCmd) {
-        content += `Install with:\n   ${installCmd}\n\n`;
-      }
-
-      if (catalogTool?.homepage) {
-        content += `Learn more: ${catalogTool.homepage}`;
-      }
-
-      return {
-        success: true,
-        content
+        content: `❌ **${toolName}** is not installed or not in PATH\n\n💡 **Tips:**\n   • Check spelling\n   • Install the tool if needed\n   • Run cli:scan to see what's available`
       };
     }
+
+    // Try to find in scanned tools
+    const scannedTools = await this.scanner.scanSystem();
+    const tool = scannedTools.find(t => t.name === toolName);
+
+    let content = `✅ **${toolName}** is installed\n\n`;
+
+    if (tool) {
+      content += `**Description:** ${tool.description}\n`;
+      content += `**Category:** ${tool.category}\n`;
+      content += `**Path:** ${tool.path}\n`;
+
+      if (tool.capabilities.length > 0) {
+        content += `**Capabilities:** ${tool.capabilities.join(', ')}\n`;
+      }
+    } else {
+      // Tool exists but wasn't in scan (might be too obscure)
+      const version = await parser.getVersion(toolName);
+      if (version) {
+        content += `**Version:** ${version}\n`;
+      }
+    }
+
+    content += `\n**Add to NCP:** run("ncp:add", { mcp_name: "cli:${toolName}" })`;
+
+    return {
+      success: true,
+      content
+    };
   }
 
-  private async handleCatalog(params: any): Promise<InternalToolResult> {
+  private async handleBrowse(params: any): Promise<InternalToolResult> {
     const category = params?.category;
 
     if (!category) {
       // List all categories
-      const categories = getCategories();
+      const categories = await this.scanner.getCategories();
+      const allTools = await this.scanner.scanSystem();
 
-      let content = `📚 CLI Tool Catalog Categories:\n\n`;
+      let content = `📚 CLI Tool Categories (${allTools.length} total tools):\n\n`;
 
       for (const cat of categories) {
-        const tools = getToolsByCategory(cat);
-        content += `**${cat}** (${tools.length} tools)\n`;
-        content += `   ${tools.map(t => t.name).join(', ')}\n\n`;
+        const catTools = allTools.filter(t => t.category === cat);
+        content += `**${cat}** (${catTools.length} tools)\n`;
+        const examples = catTools.slice(0, 5).map(t => t.name).join(', ');
+        content += `   Examples: ${examples}\n`;
+        if (catTools.length > 5) {
+          content += `   ...and ${catTools.length - 5} more\n`;
+        }
+        content += `\n`;
       }
 
-      content += `\nView tools in a category:\n  run("cli:catalog", { category: "media" })`;
+      content += `\n💡 **Browse a category:**\n   run("cli:browse", { category: "media" })`;
 
       return {
         success: true,
@@ -205,32 +271,22 @@ export class CLISuggestionsMCP implements InternalMCP {
       };
     } else {
       // List tools in category
-      const tools = getToolsByCategory(category);
+      const tools = await this.scanner.getToolsByCategory(category);
 
       if (tools.length === 0) {
+        const categories = await this.scanner.getCategories();
         return {
           success: true,
-          content: `No tools found in category "${category}".\n\nAvailable categories: ${getCategories().join(', ')}`
+          content: `No tools found in category "${category}".\n\nAvailable categories: ${categories.join(', ')}`
         };
       }
 
-      let content = `📚 **${category}** tools:\n\n`;
+      let content = `📚 **${category}** tools (${tools.length} found):\n\n`;
 
       for (const tool of tools) {
         content += `**${tool.name}** - ${tool.description}\n`;
-
-        const parser = new CLIParser();
-        const isInstalled = await parser.isCliAvailable(tool.name);
-
-        if (isInstalled) {
-          content += `   ✅ Installed\n`;
-        } else {
-          const installCmd = getInstallCommand(tool.name);
-          if (installCmd) {
-            content += `   Install: \`${installCmd}\`\n`;
-          }
-        }
-        content += `\n`;
+        content += `   ${tool.path}\n`;
+        content += `   Add: run("ncp:add", { mcp_name: "cli:${tool.name}" })\n\n`;
       }
 
       return {

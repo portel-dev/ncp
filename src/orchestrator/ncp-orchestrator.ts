@@ -439,6 +439,52 @@ export class NCPOrchestrator {
     const internalMCPs = this.internalMCPManager.getAllInternalMCPs().length;
     const loadTime = Date.now() - startTime;
     logger.info(`🚀 NCP initialized in ${loadTime}ms with ${this.allTools.length} tools from ${externalMCPs} external + ${internalMCPs} internal MCPs`);
+
+    // Trigger CLI auto-discovery if shell access is available
+    await this.maybeAutoScanCLITools();
+  }
+
+  /**
+   * Conditionally trigger CLI auto-discovery
+   * Only scans if shell access is available and not disabled
+   */
+  private async maybeAutoScanCLITools(): Promise<void> {
+    // Check if disabled via environment variable
+    if (process.env.NCP_DISABLE_CLI_SCAN === 'true') {
+      logger.debug('CLI auto-scan disabled via NCP_DISABLE_CLI_SCAN');
+      return;
+    }
+
+    // Check if shell access is available
+    const hasShellAccess = this.definitions.has('Shell') ||
+                          this.definitions.has('desktop-commander');
+
+    if (!hasShellAccess && process.env.NCP_FORCE_CLI_SCAN !== 'true') {
+      logger.debug('No shell access detected, skipping CLI auto-scan');
+      return;
+    }
+
+    logger.info('🔍 Shell access detected, scanning for CLI tools...');
+
+    // Run scan in background (non-blocking)
+    this.runBackgroundCliScan().catch(err => {
+      logger.warn('CLI auto-scan failed:', err);
+    });
+  }
+
+  /**
+   * Run CLI scan in background
+   */
+  private async runBackgroundCliScan(): Promise<void> {
+    const internalMCP = this.internalMCPManager.getAllInternalMCPs().find(m => m.name === 'cli');
+    if (internalMCP) {
+      const result = await internalMCP.executeTool('scan', { force_refresh: false });
+      if (result.success) {
+        logger.info('✅ CLI auto-scan completed');
+      } else {
+        logger.warn('CLI auto-scan failed:', result.error);
+      }
+    }
   }
 
   /**
@@ -1027,7 +1073,53 @@ export class NCPOrchestrator {
       const sortedResults = healthyResults.sort((a, b) => b.confidence - a.confidence);
 
       // Return up to the original limit after filtering and sorting
-      const finalResults = sortedResults.slice(0, limit);
+      let finalResults = sortedResults.slice(0, limit);
+
+      // FALLBACK: If no results and shell access available, try CLI scan + retry
+      if (finalResults.length === 0 && process.env.NCP_DISABLE_CLI_SCAN !== 'true') {
+        const hasShellAccess = this.definitions.has('Shell') || this.definitions.has('desktop-commander');
+
+        if (hasShellAccess) {
+          logger.info(`🔍 No results found for "${query}", triggering CLI scan...`);
+
+          // Trigger CLI scan and wait for completion
+          try {
+            await this.runBackgroundCliScan();
+
+            // Retry search once after scan
+            const retryResults = await this.discovery.findRelevantTools(query, doubleLimit, confidenceThreshold);
+            const retryAdjusted = this.adjustScoresUniversally(query, retryResults);
+            const retryParsed = retryAdjusted.map(result => {
+              const parts = result.name.includes(':') ? result.name.split(':', 2) : [this.toolToMCP.get(result.name) || 'unknown', result.name];
+              const mcpName = parts[0];
+              const toolName = parts[1] || result.name;
+              const prefixedToolName = `${mcpName}:${toolName}`;
+              const fullTool = this.allTools.find(t =>
+                (t.name === prefixedToolName || t.name === toolName) && t.mcpName === mcpName
+              );
+              return {
+                toolName: fullTool?.name || prefixedToolName,
+                mcpName,
+                confidence: result.confidence,
+                description: detailed ? fullTool?.description : undefined,
+                schema: detailed ? this.getToolSchema(mcpName, toolName) : undefined
+              };
+            });
+
+            const retryHealthy = retryParsed.filter(result => {
+              return this.healthMonitor.getHealthyMCPs([result.mcpName]).length > 0;
+            });
+
+            finalResults = retryHealthy.sort((a, b) => b.confidence - a.confidence).slice(0, limit);
+
+            if (finalResults.length > 0) {
+              logger.info(`✅ Found ${finalResults.length} tools after CLI scan`);
+            }
+          } catch (error: any) {
+            logger.warn('CLI fallback scan failed:', error);
+          }
+        }
+      }
 
       if (healthyResults.length < parsedResults.length) {
         logger.debug(`Health filtering: ${parsedResults.length - healthyResults.length} tools filtered out from disabled MCPs`);
