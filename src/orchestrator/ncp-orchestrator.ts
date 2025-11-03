@@ -181,6 +181,7 @@ export class NCPOrchestrator {
   private internalMCPManager: InternalMCPManager;
   private backgroundInitPromise: Promise<void> | null = null;
   private newlyIndexedMCPs: Set<string> = new Set();  // Track MCPs indexed in current run
+  private cliScanner: any = null; // CLIScanner instance for query-specific enhancement
 
   private forceRetry: boolean = false;
 
@@ -477,18 +478,61 @@ export class NCPOrchestrator {
    * Run CLI scan in background to enhance vector search
    * Discovered tools are indexed as capabilities to help AI understand shell possibilities
    */
+  /**
+   * Background CLI scan - Only scans and caches CLI tools
+   * Enhancement happens dynamically during search (query-specific)
+   */
   private async runBackgroundCliScan(): Promise<void> {
     const { CLIScanner } = await import('../services/cli-scanner.js');
-    const scanner = new CLIScanner();
+
+    // Store scanner instance for query-specific enhancement
+    this.cliScanner = new CLIScanner();
 
     try {
-      const tools = await scanner.scanSystem(false);
-      logger.info(`✅ CLI scan complete: discovered ${tools.length} tools to enhance search`);
+      // Scan system and cache results
+      const tools = await this.cliScanner.scanSystem(false);
+      logger.info(`✅ CLI scan complete: discovered ${tools.length} tools (cached for query-specific enhancement)`);
 
-      // TODO: Index these tools into discovery engine
-      // For now, they're cached by CLIScanner for future queries
+      // Check if shell MCPs exist
+      const shellMCPs = Array.from(this.definitions.keys()).filter(mcpName => {
+        const lower = mcpName.toLowerCase();
+        return lower.includes('shell') ||
+               lower.includes('command') ||
+               lower.includes('terminal') ||
+               lower.includes('cli');
+      });
+
+      if (shellMCPs.length === 0) {
+        logger.debug('No shell MCPs found - CLI tools cached but won\'t be used');
+      } else {
+        logger.debug(`CLI tools ready for dynamic enhancement with ${shellMCPs.length} shell MCP(s)`);
+      }
     } catch (error: any) {
       logger.warn(`CLI scan error: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get relevant CLI tools for a query (query-specific matching)
+   * Returns CLI tool descriptions that match the query
+   */
+  private async getRelevantCLITools(query: string, limit: number = 3): Promise<string[]> {
+    if (!this.cliScanner) {
+      return [];
+    }
+
+    try {
+      // Search cached CLI tools for query-relevant matches
+      const matches = await this.cliScanner.searchTools(query);
+
+      // Return top N matches with their descriptions
+      return matches.slice(0, limit).map((tool: any) => {
+        const capabilities = tool.capabilities.slice(0, 3).join(', ');
+        return `${tool.name} (${capabilities}): ${tool.description || 'command-line tool'}`;
+      });
+    } catch (error: any) {
+      logger.debug(`CLI tool search error: ${error.message}`);
+      return [];
     }
   }
 
@@ -1080,6 +1124,34 @@ export class NCPOrchestrator {
       // Return up to the original limit after filtering and sorting
       let finalResults = sortedResults.slice(0, limit);
 
+      // DYNAMIC CLI ENHANCEMENT: Enhance shell tools with query-specific CLI tool info
+      if (this.cliScanner && finalResults.length > 0 && detailed) {
+        const relevantCLITools = await this.getRelevantCLITools(query, 3);
+
+        if (relevantCLITools.length > 0) {
+          // Check which results are from shell MCPs
+          finalResults = finalResults.map(result => {
+            const isShellMCP = result.mcpName.toLowerCase().includes('shell') ||
+                              result.mcpName.toLowerCase().includes('command') ||
+                              result.mcpName.toLowerCase().includes('terminal') ||
+                              result.mcpName.toLowerCase().includes('cli');
+
+            const isExecutionTool = result.toolName.toLowerCase().includes('execute') ||
+                                   result.toolName.toLowerCase().includes('run') ||
+                                   result.toolName.toLowerCase().includes('command');
+
+            // Enhance shell execution tools with relevant CLI tool info
+            if (isShellMCP && isExecutionTool && result.description) {
+              const cliInfo = relevantCLITools.join('; ');
+              result.description = `${result.description}. Relevant CLI tools for "${query}": ${cliInfo}`;
+              logger.debug(`Enhanced ${result.toolName} with CLI info: ${relevantCLITools.length} tools`);
+            }
+
+            return result;
+          });
+        }
+      }
+
       // FALLBACK: If no results and shell access available, try CLI scan + retry
       if (finalResults.length === 0 && process.env.NCP_DISABLE_CLI_SCAN !== 'true') {
         const hasShellAccess = this.definitions.has('Shell') || this.definitions.has('desktop-commander');
@@ -1117,8 +1189,35 @@ export class NCPOrchestrator {
 
             finalResults = retryHealthy.sort((a, b) => b.confidence - a.confidence).slice(0, limit);
 
+            // Enhance retry results with CLI info if detailed
             if (finalResults.length > 0) {
               logger.info(`✅ Found ${finalResults.length} tools after CLI scan`);
+
+              // Apply same dynamic enhancement to retry results
+              if (this.cliScanner && detailed) {
+                const relevantCLITools = await this.getRelevantCLITools(query, 3);
+
+                if (relevantCLITools.length > 0) {
+                  finalResults = finalResults.map(result => {
+                    const isShellMCP = result.mcpName.toLowerCase().includes('shell') ||
+                                      result.mcpName.toLowerCase().includes('command') ||
+                                      result.mcpName.toLowerCase().includes('terminal') ||
+                                      result.mcpName.toLowerCase().includes('cli');
+
+                    const isExecutionTool = result.toolName.toLowerCase().includes('execute') ||
+                                           result.toolName.toLowerCase().includes('run') ||
+                                           result.toolName.toLowerCase().includes('command');
+
+                    if (isShellMCP && isExecutionTool && result.description) {
+                      const cliInfo = relevantCLITools.join('; ');
+                      result.description = `${result.description}. Relevant CLI tools for "${query}": ${cliInfo}`;
+                      logger.debug(`Enhanced ${result.toolName} with CLI info (retry): ${relevantCLITools.length} tools`);
+                    }
+
+                    return result;
+                  });
+                }
+              }
             }
           } catch (error: any) {
             logger.warn(`CLI fallback scan failed: ${error}`);
