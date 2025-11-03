@@ -988,9 +988,10 @@ Do you want to remove this MCP?`;
         const options = uniqueCandidates.map(c => {
           // Build label with security indicators
           const trustBadge = c.isTrusted ? '✓ ' : '';
-          const transportBadge = c.transport === 'stdio' ? '💻' : '🌐';
+          const isMicroMCP = c._meta?.isMicroMCP;
+          const transportBadge = isMicroMCP ? '📦' : (c.transport === 'stdio' ? '💻' : '🌐');
           const envInfo = c.envVars?.length ? ` (${c.envVars.length} env vars)` : '';
-          const transportInfo = c.transport !== 'stdio' ? ` [${c.transport.toUpperCase()}]` : '';
+          const transportInfo = isMicroMCP ? ' [MicroMCP]' : (c.transport !== 'stdio' ? ` [${c.transport.toUpperCase()}]` : '');
 
           return {
             value: c.name,
@@ -1010,7 +1011,7 @@ Do you want to remove this MCP?`;
                      `Only select MCPs from sources you trust.\n\n`;
         }
 
-        message += `Badges: ✓=Trusted 💻=stdio 🌐=HTTP/SSE`;
+        message += `Badges: ✓=Trusted 💻=stdio 🌐=HTTP/SSE 📦=MicroMCP`;
 
         const selected = await elicitMultiSelect(
           this.elicitationServer,
@@ -1053,6 +1054,19 @@ Do you want to remove this MCP?`;
         try {
           // Get detailed info including env vars
           const details = await registryClient.getDetailedInfo(candidate.name);
+
+          // Check if this is a MicroMCP (different installation flow)
+          if (details._meta?.isMicroMCP && details._meta?.sourceUrl) {
+            const result = await this.installMicroMCP(candidate.name, details, 'all');
+            if (result.success) {
+              imported++;
+              importedNames.push(candidate.displayName);
+              logger.info(`Installed MicroMCP ${candidate.displayName} from registry`);
+            } else {
+              errors.push(`${candidate.displayName}: ${result.error}`);
+            }
+            continue; // Skip regular MCP installation
+          }
 
           // Build config based on transport type (without credentials)
           let config: any;

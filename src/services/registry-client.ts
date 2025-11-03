@@ -46,6 +46,11 @@ export interface RegistryServer {
       publishedAt?: string;
       updatedAt?: string;
     };
+    // MicroMCP metadata
+    isMicroMCP?: boolean;
+    sourceUrl?: string;
+    schemaUrl?: string;
+    [key: string]: any; // Allow additional metadata
   };
 }
 
@@ -74,6 +79,11 @@ export interface ServerSearchResult {
       publishedAt?: string;
       updatedAt?: string;
     };
+    // MicroMCP metadata
+    isMicroMCP?: boolean;
+    sourceUrl?: string;
+    schemaUrl?: string;
+    [key: string]: any; // Allow additional metadata
   };
 }
 
@@ -108,6 +118,7 @@ export interface RegistryMCPCandidate {
   publishedAt?: string;
   isTrusted?: boolean;
   qualityScore?: number; // For debugging/transparency
+  _meta?: any; // Metadata from registry (e.g., MicroMCP detection)
 }
 
 export interface RegistrySearchOptions {
@@ -443,6 +454,7 @@ export class RegistryClient {
       isSecret?: boolean;
       default?: string;
     }>;
+    _meta?: any; // Metadata from registry (e.g., MicroMCP detection)
   }> {
     const server = await this.getServer(serverName);
     const pkg = server.server.packages?.[0];
@@ -454,7 +466,8 @@ export class RegistryClient {
         transport: remote.type === 'sse' ? 'sse' : 'http',
         url: remote.url,
         remoteType: remote.type,
-        envVars: remote.environmentVariables
+        envVars: remote.environmentVariables,
+        _meta: server._meta
       };
     }
 
@@ -463,7 +476,8 @@ export class RegistryClient {
         transport: 'stdio',
         command: pkg.runtimeHint || 'npx',
         args: [pkg.identifier],
-        envVars: pkg.environmentVariables
+        envVars: pkg.environmentVariables,
+        _meta: server._meta
       };
     }
 
