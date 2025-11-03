@@ -967,9 +967,69 @@ program
       }
     }
 
-    // Smart detection: Check if this is a manual HTTP URL
+    // Smart detection: Check if this is a URL
     if ((providerName.startsWith('http://') || providerName.startsWith('https://')) && !command) {
-      // Extract name from URL (use domain or "custom-http")
+      // Check if it's a .micro.ts file URL
+      if (providerName.endsWith('.micro.ts')) {
+        console.log(chalk.blue(`\n📥 Downloading MicroMCP from URL: ${providerName}`));
+        try {
+          const fs = await import('fs/promises');
+          const path = await import('path');
+          const os = await import('os');
+
+          // Download the file
+          const response = await fetch(providerName);
+          if (!response.ok) {
+            throw new Error(`Failed to download: ${response.statusText}`);
+          }
+          const tsContent = await response.text();
+
+          // Extract filename from URL
+          const urlPath = new URL(providerName).pathname;
+          const fileName = path.basename(urlPath);
+          const baseName = fileName.replace('.micro.ts', '');
+
+          // Create destination directory
+          const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
+          await fs.mkdir(microDir, { recursive: true });
+
+          const destFile = path.join(microDir, fileName);
+
+          // Save the file
+          await fs.writeFile(destFile, tsContent, 'utf8');
+
+          // Try to download optional schema file
+          let schemaImported = false;
+          const schemaUrl = providerName.replace('.micro.ts', '.micro.schema.json');
+          try {
+            const schemaResponse = await fetch(schemaUrl);
+            if (schemaResponse.ok) {
+              const schemaContent = await schemaResponse.text();
+              const destSchema = path.join(microDir, `${baseName}.micro.schema.json`);
+              await fs.writeFile(destSchema, schemaContent, 'utf8');
+              schemaImported = true;
+              console.log(chalk.green(`✅ Downloaded schema`));
+            }
+          } catch {
+            // Schema is optional
+          }
+
+          console.log(chalk.green(`\n✅ MicroMCP "${baseName}" downloaded successfully!`));
+          console.log(chalk.dim(`📍 Location: ${destFile}`));
+          if (schemaImported) {
+            console.log(chalk.dim(`📋 Schema: ${path.join(microDir, `${baseName}.micro.schema.json`)}`));
+          }
+          console.log(chalk.blue(`\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'`));
+          console.log(chalk.blue(`🔍 Discover tools: ncp find ${baseName}`));
+          console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new MicroMCP`));
+          return;
+        } catch (error: any) {
+          console.log(chalk.red(`\n✗ Download failed: ${error.message}`));
+          process.exit(1);
+        }
+      }
+
+      // Otherwise, treat as HTTP/SSE MCP server URL
       const urlObj = new URL(providerName);
       const name = urlObj.hostname.replace(/\./g, '-') || 'custom-http';
 

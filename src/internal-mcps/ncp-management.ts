@@ -233,11 +233,17 @@ export class NCPManagementMCP implements InternalMCP {
       return await this.importFromFile(mcpName);
     }
 
-    // 4. HTTP URL detection → set url and continue with single add
+    // 4. HTTP URL detection
     if (!command && !url && (
       mcpName.startsWith('http://') ||
       mcpName.startsWith('https://')
     )) {
+      // 4a. Check if it's a .micro.ts file URL → download MicroMCP
+      if (mcpName.endsWith('.micro.ts')) {
+        return await this.downloadMicroMCPFromURL(mcpName, profile);
+      }
+
+      // 4b. Otherwise → HTTP/SSE MCP server URL
       try {
         // Extract name from URL (domain-based)
         const urlObj = new URL(mcpName);
@@ -1738,6 +1744,75 @@ Do you want to remove this MCP?`;
       return {
         success: false,
         error: `Failed to import MicroMCP: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Download MicroMCP from a URL
+   * Downloads .micro.ts file and optional schema from HTTP(S) URL
+   */
+  private async downloadMicroMCPFromURL(fileUrl: string, profile: string): Promise<InternalToolResult> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const os = await import('os');
+
+      logger.info(`Downloading MicroMCP from URL: ${fileUrl}`);
+
+      // Download .micro.ts file
+      const response = await fetch(fileUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download: ${response.statusText}`);
+      }
+      const tsContent = await response.text();
+
+      // Extract filename from URL
+      const urlPath = new URL(fileUrl).pathname;
+      const fileName = path.basename(urlPath);
+      const baseName = fileName.replace('.micro.ts', '');
+
+      // Create destination directory
+      const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
+      await fs.mkdir(microDir, { recursive: true });
+
+      const destFile = path.join(microDir, fileName);
+      const destSchema = path.join(microDir, `${baseName}.micro.schema.json`);
+
+      // Save the .micro.ts file
+      await fs.writeFile(destFile, tsContent, 'utf8');
+      logger.info(`Saved MicroMCP: ${fileName}`);
+
+      // Try to download optional schema file
+      let schemaDownloaded = false;
+      const schemaUrl = fileUrl.replace('.micro.ts', '.micro.schema.json');
+      try {
+        const schemaResponse = await fetch(schemaUrl);
+        if (schemaResponse.ok) {
+          const schemaContent = await schemaResponse.text();
+          await fs.writeFile(destSchema, schemaContent, 'utf8');
+          schemaDownloaded = true;
+          logger.info(`Downloaded schema for "${baseName}"`);
+        }
+      } catch (error: any) {
+        logger.debug(`Schema not available at ${schemaUrl}`);
+      }
+
+      return {
+        success: true,
+        content: [
+          { type: 'text', text: `✅ MicroMCP "${baseName}" downloaded successfully!\n\n` +
+            `📍 Location: ${destFile}\n` +
+            (schemaDownloaded ? `📋 Schema: ${destSchema}\n` : '') +
+            `\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'` +
+            `\n🔍 Discover tools: ncp find ${baseName}` }
+        ]
+      };
+    } catch (error: any) {
+      logger.error(`Failed to download MicroMCP from URL: ${error.message}`);
+      return {
+        success: false,
+        error: `Failed to download MicroMCP: ${error.message}`
       };
     }
   }
