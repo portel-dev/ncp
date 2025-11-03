@@ -300,6 +300,17 @@ export class ConfigManager {
         return;
       }
 
+      // Detect format: TypeScript (MicroMCP) vs JSON (config)
+      const trimmed = clipboardContent.trim();
+      const isMicroMCP = trimmed.includes('export class') &&
+                        (trimmed.includes('implements MicroMCP') || trimmed.includes('@tool'));
+
+      if (isMicroMCP) {
+        // Handle MicroMCP TypeScript code
+        await this.importMicroMCPFromClipboard(trimmed);
+        return;
+      }
+
       // Display clipboard content in a highlighted box
       console.log(chalk.blue('📋 Clipboard content detected:'));
       this.displayJsonInBox(clipboardContent);
@@ -311,7 +322,7 @@ export class ConfigManager {
         parsedData = JSON.parse(clipboardContent);
       } catch (jsonError) {
         console.log(chalk.red('❌ Invalid JSON format in clipboard'));
-        console.log(chalk.yellow('💡 Please ensure your clipboard contains valid JSON'));
+        console.log(chalk.yellow('💡 Please ensure your clipboard contains valid JSON or MicroMCP TypeScript code'));
         return;
       }
 
@@ -404,6 +415,46 @@ export class ConfigManager {
 
     // Bottom border
     console.log(chalk.gray('└' + '─'.repeat(boxWidth - 2) + '┘'));
+  }
+
+  /**
+   * Import MicroMCP from clipboard containing TypeScript code
+   */
+  private async importMicroMCPFromClipboard(tsContent: string): Promise<void> {
+    const { basename, join } = await import('path');
+    const { homedir } = await import('os');
+    const { writeFile, mkdir } = await import('fs/promises');
+
+    // Extract class name from: export class CalculatorMCP
+    const classMatch = tsContent.match(/export\s+class\s+(\w+)/);
+    if (!classMatch) {
+      console.log(chalk.red('❌ Could not detect MicroMCP class name'));
+      console.log(chalk.yellow('💡 Expected "export class <Name>MCP" in clipboard'));
+      return;
+    }
+
+    // Extract base name (e.g., "CalculatorMCP" → "calculator")
+    const className = classMatch[1];
+    const baseName = className
+      .replace(/MCP$/, '')  // Remove "MCP" suffix
+      .replace(/([A-Z])/g, (match, p1, offset) => offset > 0 ? '-' + p1.toLowerCase() : p1.toLowerCase())
+      .replace(/^-/, '');  // Remove leading dash
+
+    // Create destination directory
+    const microDir = join(homedir(), '.ncp', 'micromcps');
+    await mkdir(microDir, { recursive: true });
+
+    const destFile = join(microDir, `${baseName}.micro.ts`);
+
+    // Write TypeScript code to file
+    await writeFile(destFile, tsContent, 'utf8');
+
+    console.log(chalk.green(`\n✅ MicroMCP "${baseName}" imported from clipboard!`));
+    console.log(chalk.dim(`📍 Location: ${destFile}`));
+    console.log(chalk.dim(`📝 Class: ${className}`));
+    console.log(chalk.blue(`\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'`));
+    console.log(chalk.blue(`🔍 Discover tools: ncp find ${baseName}`));
+    console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new MicroMCP`));
   }
 
   /**
