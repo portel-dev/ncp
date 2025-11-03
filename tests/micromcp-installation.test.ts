@@ -9,8 +9,7 @@
  * 5. Edge cases (errors, missing files, permissions, etc.)
  */
 
-import { describe, it, before, after } from 'node:test';
-import assert from 'node:assert';
+import { describe, it, beforeAll, afterAll, expect } from '@jest/globals';
 import { execSync, spawn } from 'node:child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -120,12 +119,12 @@ async function cleanupMicroMCP(name: string) {
 }
 
 describe('MicroMCP Installation - URL', () => {
-  before(async () => {
+  beforeAll(async () => {
     console.log('\n🧪 Setting up MicroMCP installation tests...');
     await backupMicroMCPs();
   });
 
-  after(async () => {
+  afterAll(async () => {
     console.log('\n🧹 Cleaning up test environment...');
     await restoreMicroMCPs();
   });
@@ -141,12 +140,12 @@ describe('MicroMCP Installation - URL', () => {
 
     // Verify files exist
     const microFile = path.join(MICROMCP_DIR, `${name}.micro.ts`);
-    assert(await fileExists(microFile), `${name}.micro.ts should exist`);
+    expect(await fileExists(microFile)).toBe(true);
 
     // Verify content is valid TypeScript
     const content = await readFile(microFile);
-    assert(content.includes('export class'), 'Should contain export class');
-    assert(content.includes('MicroMCP'), 'Should implement MicroMCP');
+    expect(content).toContain('export class');
+    expect(content).toContain('MicroMCP');
 
     console.log(`✅ Successfully installed ${name} from URL`);
   });
@@ -171,8 +170,9 @@ describe('MicroMCP Installation - URL', () => {
     console.log('\n❌ Testing 404 URL handling...');
 
     const output = runNCP(`add "${invalidUrl}"`, true);
-    assert(output.includes('404') || output.includes('Failed') || output.includes('not found'),
-      'Should report download failure');
+    expect(
+      output.includes('404') || output.includes('Failed') || output.includes('not found')
+    ).toBeTruthy();
 
     console.log('✅ Handled 404 error correctly');
   });
@@ -183,8 +183,9 @@ describe('MicroMCP Installation - URL', () => {
     console.log('\n🌐 Testing network error handling...');
 
     const output = runNCP(`add "${invalidUrl}"`, true);
-    assert(output.includes('Failed') || output.includes('error'),
-      'Should report network failure');
+    expect(
+      output.includes('Failed') || output.includes('error')
+    ).toBeTruthy();
 
     console.log('✅ Handled network error correctly');
   });
@@ -199,7 +200,7 @@ describe('MicroMCP Installation - URL', () => {
 
     // Should NOT create a .micro.ts file
     const microFile = path.join(MICROMCP_DIR, 'mcp-server.micro.ts');
-    assert(!await fileExists(microFile), 'Should not create .micro.ts for HTTP URL');
+    expect(await fileExists(microFile)).toBe(false);
 
     console.log('✅ Correctly distinguished HTTP server from MicroMCP URL');
   });
@@ -217,12 +218,12 @@ describe('MicroMCP Installation - Local File', () => {
 
     // Verify files exist
     const microFile = path.join(MICROMCP_DIR, `${name}.micro.ts`);
-    assert(await fileExists(microFile), `${name}.micro.ts should exist`);
+    expect(await fileExists(microFile)).toBe(true);
 
     // Verify content matches
     const originalContent = await readFile(testFile);
     const installedContent = await readFile(microFile);
-    assert(originalContent === installedContent, 'Content should match');
+    expect(originalContent).toBe(installedContent);
 
     // Cleanup
     await fs.unlink(testFile);
@@ -255,8 +256,8 @@ describe('MicroMCP Installation - Local File', () => {
     const installedMicro = path.join(MICROMCP_DIR, `${name}.micro.ts`);
     const installedSchema = path.join(MICROMCP_DIR, `${name}.micro.schema.json`);
 
-    assert(await fileExists(installedMicro), `${name}.micro.ts should exist`);
-    assert(await fileExists(installedSchema), `${name}.micro.schema.json should exist`);
+    expect(await fileExists(installedMicro)).toBe(true);
+    expect(await fileExists(installedSchema)).toBe(true);
 
     // Cleanup
     await fs.unlink(testFile);
@@ -272,8 +273,9 @@ describe('MicroMCP Installation - Local File', () => {
     console.log('\n❌ Testing missing local file...');
 
     const output = runNCP(`add "${nonexistentFile}"`, true);
-    assert(output.includes('not found') || output.includes('ENOENT') || output.includes('Failed'),
-      'Should report file not found');
+    expect(
+      output.includes('not found') || output.includes('ENOENT') || output.includes('Failed')
+    ).toBeTruthy();
 
     console.log('✅ Handled missing file correctly');
   });
@@ -284,8 +286,9 @@ describe('MicroMCP Installation - Local File', () => {
     console.log('\n❌ Testing invalid file path...');
 
     const output = runNCP(`add "${invalidPath}"`, true);
-    assert(output.includes('not found') || output.includes('ENOENT') || output.includes('Failed'),
-      'Should report invalid path');
+    expect(
+      output.includes('not found') || output.includes('ENOENT') || output.includes('Failed')
+    ).toBeTruthy();
 
     console.log('✅ Handled invalid path correctly');
   });
@@ -306,7 +309,7 @@ describe('MicroMCP Installation - Local File', () => {
     runNCP(`add "${testFile}"`);
 
     const microFile = path.join(MICROMCP_DIR, `${name}.micro.ts`);
-    assert(await fileExists(microFile), 'File should be installed (validation at runtime)');
+    expect(await fileExists(microFile)).toBe(true);
 
     // Cleanup
     await fs.unlink(testFile);
@@ -344,7 +347,7 @@ export class ClipboardTestMCP implements MicroMCP {
 
     // Verify file exists
     const microFile = path.join(MICROMCP_DIR, `${name}.micro.ts`);
-    assert(await fileExists(microFile), 'Should install from clipboard');
+    expect(await fileExists(microFile)).toBe(true);
 
     // Cleanup
     await cleanupMicroMCP(name);
@@ -360,8 +363,9 @@ export class ClipboardTestMCP implements MicroMCP {
     console.log('\n❌ Testing empty clipboard...');
 
     const output = runNCP('add clipboard', true);
-    assert(output.includes('empty') || output.includes('Failed'),
-      'Should report empty clipboard');
+    expect(
+      output.includes('empty') || output.includes('Failed')
+    ).toBeTruthy();
 
     console.log('✅ Handled empty clipboard correctly');
   });
@@ -394,14 +398,14 @@ describe('MicroMCP Installation - Edge Cases', () => {
 
     const microFile = path.join(MICROMCP_DIR, `${name}.micro.ts`);
     const content1 = await readFile(microFile);
-    assert(content1.includes('Version 1'), 'First version installed');
+    expect(content1).toContain('Version 1');
 
     // Install second version
     const testFile2 = await createTestMicroMCP(name, '// Version 2');
     runNCP(`add "${testFile2}"`);
 
     const content2 = await readFile(microFile);
-    assert(content2.includes('Version 2'), 'Second version should overwrite');
+    expect(content2).toContain('Version 2');
 
     // Cleanup
     await fs.unlink(testFile1);
@@ -423,8 +427,9 @@ describe('MicroMCP Installation - Edge Cases', () => {
     // Restore permissions
     await fs.chmod(MICROMCP_DIR, 0o755);
 
-    assert(output.includes('permission') || output.includes('EACCES') || output.includes('Failed'),
-      'Should report permission error');
+    expect(
+      output.includes('permission') || output.includes('EACCES') || output.includes('Failed')
+    ).toBeTruthy();
 
     // Cleanup
     await fs.unlink(testFile);
@@ -459,8 +464,8 @@ describe('MicroMCP Installation - Edge Cases', () => {
     const microFile = path.join(MICROMCP_DIR, `${name}.micro.ts`);
     const stats = await fs.stat(microFile);
 
-    assert(stats.isFile(), 'Should be a regular file');
-    assert(stats.size > 0, 'Should have content');
+    expect(stats.isFile()).toBe(true);
+    expect(stats.size).toBeGreaterThan(0);
 
     // Cleanup
     await fs.unlink(testFile);
