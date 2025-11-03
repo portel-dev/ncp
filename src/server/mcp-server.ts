@@ -333,22 +333,8 @@ export class MCPServer implements ElicitationServer {
       }
     ];
 
-    // Add internal MCP tools
-    // Internal MCPs are always available (don't depend on orchestrator initialization)
-    const internalMCPManager = this.orchestrator.getInternalMCPManager();
-    if (internalMCPManager) {
-      const internalMCPs = internalMCPManager.getAllEnabledInternalMCPs();
-
-      for (const mcp of internalMCPs) {
-        for (const tool of mcp.tools) {
-          coreTools.push({
-            name: `${mcp.name}:${tool.name}`,
-            description: tool.description,
-            inputSchema: tool.inputSchema as any
-          });
-        }
-      }
-    }
+    // Internal MCPs are indexed and accessible via find/run, not exposed as direct tools
+    // This keeps the tool list minimal (only 2 tools) to avoid overwhelming AI
 
     return coreTools;
   }

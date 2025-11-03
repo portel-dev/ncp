@@ -40,8 +40,8 @@ export class InternalMCPManager {
    */
   async loadMicroMCPs(): Promise<void> {
     const directories = [
-      // Built-in MicroMCPs (in src/internal-mcps/examples/)
-      path.join(__dirname, 'examples'),
+      // Built-in MicroMCPs (in src/internal-mcps/)
+      __dirname,
 
       // Installed MicroMCPs from registry (~/.ncp/micromcps/)
       path.join(os.homedir(), '.ncp', 'micromcps'),

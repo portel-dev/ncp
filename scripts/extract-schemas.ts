@@ -61,7 +61,7 @@ async function main() {
 
   const projectRoot = path.join(__dirname, '..');
   const searchDirs = [
-    path.join(projectRoot, 'src/internal-mcps/examples'),
+    path.join(projectRoot, 'src/internal-mcps'),
     // Add more directories if needed
   ];
 
