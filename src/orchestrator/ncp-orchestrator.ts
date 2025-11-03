@@ -457,9 +457,13 @@ export class NCPOrchestrator {
       return;
     }
 
-    // Check if shell access is available
-    const hasShellAccess = this.definitions.has('Shell') ||
-                          this.definitions.has('desktop-commander');
+    // Check if shell access is available (external or internal MCPs)
+    const hasExternalShell = this.definitions.has('Shell') ||
+                             this.definitions.has('desktop-commander');
+    const hasInternalShell = this.internalMCPManager.isInternalMCP('shell') &&
+                             !this.internalMCPManager.isInternalMCPDisabled('shell');
+
+    const hasShellAccess = hasExternalShell || hasInternalShell;
 
     if (!hasShellAccess) {
       logger.debug('No shell MCP detected, skipping CLI auto-scan');

@@ -1,0 +1,155 @@
+[
+  {
+    "name": "shouldLoad",
+    "description": "Check if this MCP should be loaded based on environment",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "number"
+        },
+        "env": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "command"
+      ]
+    }
+  },
+  {
+    "name": "execute",
+    "description": "Execute a shell command",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "number"
+        },
+        "env": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "command"
+      ]
+    }
+  },
+  {
+    "name": "run",
+    "description": "Run a command and return only stdout (convenience method)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "command"
+      ]
+    }
+  },
+  {
+    "name": "which",
+    "description": "Check if a command exists on the system",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ]
+    }
+  },
+  {
+    "name": "getEnv",
+    "description": "Get environment variable value",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "variable": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "variable"
+      ]
+    }
+  },
+  {
+    "name": "ls",
+    "description": "List files in a directory",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "all": {
+          "type": "boolean"
+        },
+        "long": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  {
+    "name": "pwd",
+    "description": "Get current working directory",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ]
+    }
+  },
+  {
+    "name": "cd",
+    "description": "Change directory and execute command",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ]
+    }
+  }
+]
