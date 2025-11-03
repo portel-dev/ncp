@@ -189,6 +189,9 @@ export class ConfigManager {
   private async importFromFile(filePath: string, profileName: string, dryRun: boolean): Promise<void> {
     // Expand tilde to home directory
     const { homedir } = await import('os');
+    const { basename, dirname, join } = await import('path');
+    const { copyFile, mkdir, access } = await import('fs/promises');
+
     const expandedPath = filePath.startsWith('~') ?
       filePath.replace('~', homedir()) :
       filePath;
@@ -197,6 +200,61 @@ export class ConfigManager {
       throw new Error(`Configuration file not found at: ${filePath}\n\nPlease check that the file exists and the path is correct.`);
     }
 
+    // Check if this is a MicroMCP file
+    if (expandedPath.endsWith('.micro.ts')) {
+      try {
+        const fileName = basename(expandedPath);
+        const baseName = fileName.replace('.micro.ts', '');
+
+        // Create micromcps directory
+        const microDir = join(homedir(), '.ncp', 'micromcps');
+        await mkdir(microDir, { recursive: true });
+
+        const destFile = join(microDir, fileName);
+        const destSchema = join(microDir, `${baseName}.micro.schema.json`);
+
+        if (dryRun) {
+          console.log(chalk.blue('\n📋 Dry-run mode: Would import MicroMCP:'));
+          console.log(chalk.dim(`   Source: ${expandedPath}`));
+          console.log(chalk.dim(`   Destination: ${destFile}`));
+          return;
+        }
+
+        // Copy .micro.ts file
+        await copyFile(expandedPath, destFile);
+        console.log(chalk.green(`✅ Copied ${fileName}`));
+
+        // Check for optional schema file
+        let schemaImported = false;
+        const sourceDir = dirname(expandedPath);
+        const sourceSchema = join(sourceDir, `${baseName}.micro.schema.json`);
+
+        try {
+          await access(sourceSchema);
+          await copyFile(sourceSchema, destSchema);
+          schemaImported = true;
+          console.log(chalk.green(`✅ Copied ${baseName}.micro.schema.json`));
+        } catch {
+          // Schema is optional
+        }
+
+        console.log(chalk.green(`\n✅ MicroMCP "${baseName}" imported successfully!`));
+        console.log(chalk.dim(`📍 Location: ${destFile}`));
+        if (schemaImported) {
+          console.log(chalk.dim(`📋 Schema: ${destSchema}`));
+        }
+        console.log(chalk.blue(`\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'`));
+        console.log(chalk.blue(`🔍 Discover tools: ncp find ${baseName}`));
+        console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new MicroMCP`));
+        return;
+      } catch (error: any) {
+        const errorResult = ErrorHandler.handle(error, ErrorHandler.fileOperation('import MicroMCP', filePath));
+        console.log(ErrorHandler.formatForConsole(errorResult));
+        return;
+      }
+    }
+
+    // Handle JSON config files
     try {
       const content = readFileSync(expandedPath, 'utf-8');
       const parsedData = JSON.parse(content);
