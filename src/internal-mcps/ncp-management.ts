@@ -28,13 +28,13 @@ export class NCPManagementMCP implements InternalMCP {
   tools: InternalTool[] = [
     {
       name: 'add',
-      description: 'Add MCP server(s) to NCP with smart auto-detection of input type. Supports multiple modes: (1) SINGLE: Add one MCP from registry or manual config (e.g., "github", "canva"). (2) BULK: Pipe-separated names for multiple MCPs (e.g., "gmail | slack | github"). (3) FILE IMPORT: Path to config file (e.g., "~/backup.json", "./config.json"). (4) HTTP URL: Direct URL to HTTP/SSE server (e.g., "https://mcp.example.com"). (5) CLIPBOARD: Use special value "clipboard" to import from clipboard. For uncertain names, use "find" method first to discover available MCPs.',
+      description: 'Add MCP server(s) to NCP with smart auto-detection of input type. Supports multiple modes: (1) SINGLE: Add one MCP from registry or manual config (e.g., "github", "canva"). (2) BULK: Pipe-separated names for multiple MCPs (e.g., "gmail | slack | github"). (3) FILE IMPORT: Path to config file or MicroMCP (e.g., "~/backup.json", "./calculator.micro.ts"). (4) URL: HTTP/SSE server URL (e.g., "https://mcp.example.com") or MicroMCP file URL (e.g., "https://example.com/calc.micro.ts"). (5) CLIPBOARD: Use special value "clipboard" to import from clipboard (auto-detects JSON config or TypeScript MicroMCP). For uncertain names, use "find" method first to discover available MCPs.',
       inputSchema: {
         type: 'object',
         properties: {
           mcp_name: {
             type: 'string',
-            description: 'REQUIRED. Smart parameter that auto-detects mode: (1) Single name: "github" → registry lookup or manual. (2) Pipe-separated: "gmail | slack" → bulk install from registry. (3) File path: "~/config.json" or "./backup.json" → import from file. (4) HTTP URL: "https://mcp.example.com" → add HTTP server. (5) "clipboard" → import from clipboard. Pre-fill based on user intent, or use "find" method to discover MCP names first.'
+            description: 'REQUIRED. Smart parameter that auto-detects mode: (1) Single name: "github" → registry lookup or manual. (2) Pipe-separated: "gmail | slack" → bulk install from registry. (3) File path: "~/config.json" (JSON config) or "./calculator.micro.ts" (MicroMCP) → import from file. (4) URL: "https://mcp.example.com" (HTTP/SSE server) or "https://example.com/calc.micro.ts" (MicroMCP download). (5) "clipboard" → import from clipboard (auto-detects JSON or TypeScript). Pre-fill based on user intent, or use "find" method to discover MCP names first.'
           },
           command: {
             type: 'string',
