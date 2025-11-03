@@ -5,6 +5,10 @@ export default {
   testMatch: [
     '**/?(*.)+(spec|test).[tj]s'
   ],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    'micromcp-installation.test.ts' // macOS-specific, requires pbcopy and makes network requests
+  ],
   transform: {
     '^.+\\.ts$': ['ts-jest', {
       useESM: true,
