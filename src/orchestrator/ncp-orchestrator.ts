@@ -446,12 +446,13 @@ export class NCPOrchestrator {
 
   /**
    * Conditionally trigger CLI auto-discovery
-   * Only scans if shell access is available and not disabled
+   * Enhances vector search by indexing available CLI tools when shell MCP is present
+   * Enable with: export NCP_CLI_AUTOSCAN=true
    */
   private async maybeAutoScanCLITools(): Promise<void> {
-    // Check if disabled via environment variable
-    if (process.env.NCP_DISABLE_CLI_SCAN === 'true') {
-      logger.debug('CLI auto-scan disabled via NCP_DISABLE_CLI_SCAN');
+    // Opt-in only - disabled by default
+    if (process.env.NCP_CLI_AUTOSCAN !== 'true') {
+      logger.debug('CLI auto-scan not enabled (set NCP_CLI_AUTOSCAN=true to enable)');
       return;
     }
 
@@ -459,12 +460,12 @@ export class NCPOrchestrator {
     const hasShellAccess = this.definitions.has('Shell') ||
                           this.definitions.has('desktop-commander');
 
-    if (!hasShellAccess && process.env.NCP_FORCE_CLI_SCAN !== 'true') {
-      logger.debug('No shell access detected, skipping CLI auto-scan');
+    if (!hasShellAccess) {
+      logger.debug('No shell MCP detected, skipping CLI auto-scan');
       return;
     }
 
-    logger.info('🔍 Shell access detected, scanning for CLI tools...');
+    logger.info('🔍 Shell MCP detected, scanning CLI tools to enhance search...');
 
     // Run scan in background (non-blocking)
     this.runBackgroundCliScan().catch(err => {
@@ -473,17 +474,21 @@ export class NCPOrchestrator {
   }
 
   /**
-   * Run CLI scan in background
+   * Run CLI scan in background to enhance vector search
+   * Discovered tools are indexed as capabilities to help AI understand shell possibilities
    */
   private async runBackgroundCliScan(): Promise<void> {
-    const internalMCP = this.internalMCPManager.getAllInternalMCPs().find(m => m.name === 'cli');
-    if (internalMCP) {
-      const result = await internalMCP.executeTool('scan', { force_refresh: false });
-      if (result.success) {
-        logger.info('✅ CLI auto-scan completed');
-      } else {
-        logger.warn(`CLI auto-scan failed: ${result.error}`);
-      }
+    const { CLIScanner } = await import('../services/cli-scanner.js');
+    const scanner = new CLIScanner();
+
+    try {
+      const tools = await scanner.scanSystem(false);
+      logger.info(`✅ CLI scan complete: discovered ${tools.length} tools to enhance search`);
+
+      // TODO: Index these tools into discovery engine
+      // For now, they're cached by CLIScanner for future queries
+    } catch (error: any) {
+      logger.warn(`CLI scan error: ${error.message}`);
     }
   }
 

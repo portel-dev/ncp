@@ -9,7 +9,6 @@ import { InternalMCP, InternalToolResult, ElicitationCapable } from './types.js'
 import { NCPManagementMCP } from './ncp-management.js';
 import { SchedulerMCP } from './scheduler.js';
 import { AnalyticsMCP } from './analytics.js';
-import { CLISuggestionsMCP } from './cli-suggestions.js';
 import { MicroMCPLoader } from './micro-loader.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
@@ -33,7 +32,7 @@ export class InternalMCPManager {
     this.registerInternalMCP(new NCPManagementMCP());
     this.registerInternalMCP(new SchedulerMCP());
     this.registerInternalMCP(new AnalyticsMCP());
-    this.registerInternalMCP(new CLISuggestionsMCP());
+    // Note: CLI discovery is internal to orchestrator, not exposed as tools
   }
 
   /**
