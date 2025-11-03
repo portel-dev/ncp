@@ -1,13 +1,13 @@
 /**
  * CLI Scanner - Runtime Discovery
- * Automatically discovers CLI tools installed on the system
- * Zero maintenance - parses actual help output at runtime
+ * Discovers CLI tools from curated catalog that are installed on the system
+ * Fast and reliable - checks existence of known useful tools
  */
 
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { logger } from '../utils/logger.js';
-import { CLIParser, CLIToolInfo } from './cli-parser.js';
+import { CLI_TOOL_CATALOG, ToolDefinition } from './cli-tool-catalog.js';
 
 const execAsync = promisify(exec);
 
@@ -23,7 +23,6 @@ export interface ScannedTool {
  * CLI Scanner - discovers tools at runtime
  */
 export class CLIScanner {
-  private parser: CLIParser;
   private scanCache: Map<string, ScannedTool> = new Map();
   private lastScanTime: number = 0;
   private readonly CACHE_TTL = 3600000; // 1 hour
@@ -50,11 +49,11 @@ export class CLIScanner {
   ];
 
   constructor() {
-    this.parser = new CLIParser();
+    // No initialization needed - we use the curated catalog
   }
 
   /**
-   * Scan system for available CLI tools
+   * Scan system for available CLI tools using curated catalog
    */
   async scanSystem(forceRefresh: boolean = false): Promise<ScannedTool[]> {
     // Return cached results if fresh
@@ -63,39 +62,34 @@ export class CLIScanner {
       return Array.from(this.scanCache.values());
     }
 
-    logger.info('🔍 Scanning system for CLI tools...');
+    logger.info('🔍 Scanning system for CLI tools from catalog...');
     const startTime = Date.now();
 
     try {
-      // Get all available commands
-      const commands = await this.getAvailableCommands();
-      logger.debug(`Found ${commands.length} total commands`);
-
-      // Filter to potentially useful tools
-      const candidates = this.filterCandidates(commands);
-      logger.debug(`Filtered to ${candidates.length} candidates`);
-
-      // Analyze each candidate
       const scanned: ScannedTool[] = [];
-      let analyzed = 0;
 
-      for (const command of candidates.slice(0, 100)) { // Limit to 100 for performance
-        const tool = await this.analyzeCommand(command);
-        if (tool) {
+      // Check each tool from catalog
+      for (const toolDef of CLI_TOOL_CATALOG) {
+        const path = await this.getCommandPath(toolDef.name);
+
+        if (path) {
+          const tool: ScannedTool = {
+            name: toolDef.name,
+            path,
+            description: toolDef.description,
+            category: toolDef.category,
+            capabilities: toolDef.capabilities
+          };
+
           scanned.push(tool);
           this.scanCache.set(tool.name, tool);
-        }
-
-        analyzed++;
-        if (analyzed % 10 === 0) {
-          logger.debug(`Analyzed ${analyzed}/${candidates.length} tools...`);
         }
       }
 
       this.lastScanTime = Date.now();
       const duration = Date.now() - startTime;
 
-      logger.info(`✅ Scanned ${scanned.length} CLI tools in ${duration}ms`);
+      logger.info(`✅ Found ${scanned.length}/${CLI_TOOL_CATALOG.length} CLI tools in ${duration}ms`);
       return scanned;
 
     } catch (error: any) {
@@ -176,49 +170,6 @@ export class CLIScanner {
     });
   }
 
-  /**
-   * Analyze a command to extract metadata
-   */
-  private async analyzeCommand(command: string): Promise<ScannedTool | null> {
-    try {
-      // Check if tool exists and is accessible
-      const isAvailable = await this.parser.isCliAvailable(command);
-      if (!isAvailable) {
-        return null;
-      }
-
-      // Get tool path
-      const path = await this.getCommandPath(command);
-      if (!path) {
-        return null;
-      }
-
-      // Try to get help output (with timeout)
-      const helpOutput = await this.getHelpOutput(command);
-      if (!helpOutput) {
-        return null;
-      }
-
-      // Extract description and capabilities
-      const description = this.extractDescription(helpOutput);
-      const capabilities = this.extractCapabilities(command, helpOutput);
-
-      // Categorize
-      const category = this.categorize(command, description, capabilities);
-
-      return {
-        name: command,
-        path,
-        description,
-        category,
-        capabilities
-      };
-
-    } catch (error) {
-      logger.debug(`Failed to analyze ${command}: ${error}`);
-      return null;
-    }
-  }
 
   /**
    * Get command path
