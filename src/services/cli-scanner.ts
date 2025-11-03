@@ -62,14 +62,25 @@ export class CLIScanner {
       return Array.from(this.scanCache.values());
     }
 
-    logger.info('🔍 Scanning system for CLI tools from catalog...');
+    const platform = process.platform as 'linux' | 'darwin' | 'win32';
+    logger.info(`🔍 Scanning system for CLI tools from catalog (${platform})...`);
     const startTime = Date.now();
 
     try {
       const scanned: ScannedTool[] = [];
 
-      // Check each tool from catalog
-      for (const toolDef of CLI_TOOL_CATALOG) {
+      // Filter catalog by platform
+      const platformTools = CLI_TOOL_CATALOG.filter(toolDef => {
+        // If no platforms specified, tool works on all platforms
+        if (!toolDef.platforms || toolDef.platforms.length === 0) {
+          return true;
+        }
+        // Otherwise, check if current platform is supported
+        return toolDef.platforms.includes(platform);
+      });
+
+      // Check each tool from filtered catalog
+      for (const toolDef of platformTools) {
         const path = await this.getCommandPath(toolDef.name);
 
         if (path) {
@@ -89,7 +100,7 @@ export class CLIScanner {
       this.lastScanTime = Date.now();
       const duration = Date.now() - startTime;
 
-      logger.info(`✅ Found ${scanned.length}/${CLI_TOOL_CATALOG.length} CLI tools in ${duration}ms`);
+      logger.info(`✅ Found ${scanned.length}/${platformTools.length} CLI tools in ${duration}ms`);
       return scanned;
 
     } catch (error: any) {
@@ -172,12 +183,17 @@ export class CLIScanner {
 
 
   /**
-   * Get command path
+   * Get command path (cross-platform)
    */
   private async getCommandPath(command: string): Promise<string | null> {
     try {
-      const { stdout } = await execAsync(`which ${command}`, { timeout: 1000 });
-      return stdout.trim();
+      // Use 'where' on Windows, 'which' on Unix
+      const cmd = process.platform === 'win32' ? 'where' : 'which';
+      const { stdout } = await execAsync(`${cmd} ${command}`, { timeout: 1000 });
+
+      // 'where' returns multiple paths on Windows, take first
+      const path = stdout.trim().split('\n')[0];
+      return path || null;
     } catch {
       return null;
     }

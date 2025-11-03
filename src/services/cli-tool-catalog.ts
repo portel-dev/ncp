@@ -10,12 +10,16 @@ export interface ToolDefinition {
   description: string;
   category: string;
   capabilities: string[];
+  platforms?: ('linux' | 'darwin' | 'win32')[]; // Supported platforms (undefined = all)
   packageManagers?: {
     brew?: string;
     apt?: string;
     npm?: string;
     pip?: string;
     cargo?: string;
+    choco?: string;    // Windows Chocolatey
+    scoop?: string;    // Windows Scoop
+    winget?: string;   // Windows Package Manager
   };
 }
 
@@ -810,6 +814,130 @@ export const CLI_TOOL_CATALOG: ToolDefinition[] = [
     description: 'Strip last component from file name',
     category: 'utilities',
     capabilities: ['path', 'directory'],
-    packageManagers: {}
+    packageManagers: {},
+    platforms: ['linux', 'darwin']
+  },
+
+  // ===== Windows-Specific Tools =====
+  {
+    name: 'powershell',
+    description: 'Windows PowerShell',
+    category: 'windows',
+    capabilities: ['shell', 'script', 'automation', 'windows'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+  {
+    name: 'pwsh',
+    description: 'PowerShell Core (cross-platform)',
+    category: 'windows',
+    capabilities: ['shell', 'script', 'automation', 'powershell'],
+    packageManagers: { winget: 'Microsoft.PowerShell', choco: 'powershell-core' }
+  },
+  {
+    name: 'cmd',
+    description: 'Windows Command Prompt',
+    category: 'windows',
+    capabilities: ['shell', 'cmd', 'windows'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+  {
+    name: 'wsl',
+    description: 'Windows Subsystem for Linux',
+    category: 'windows',
+    capabilities: ['linux', 'wsl', 'subsystem', 'bash'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+  {
+    name: 'winget',
+    description: 'Windows Package Manager',
+    category: 'package-manager',
+    capabilities: ['install', 'package', 'windows'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+  {
+    name: 'choco',
+    description: 'Chocolatey package manager',
+    category: 'package-manager',
+    capabilities: ['install', 'package', 'windows'],
+    packageManagers: { choco: 'chocolatey' },
+    platforms: ['win32']
+  },
+  {
+    name: 'scoop',
+    description: 'Scoop command-line installer',
+    category: 'package-manager',
+    capabilities: ['install', 'package', 'windows'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+
+  // Windows utilities
+  {
+    name: 'robocopy',
+    description: 'Robust file copy utility',
+    category: 'file-system',
+    capabilities: ['copy', 'sync', 'backup', 'file'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+  {
+    name: 'xcopy',
+    description: 'Extended copy utility',
+    category: 'file-system',
+    capabilities: ['copy', 'file', 'directory'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+  {
+    name: 'tasklist',
+    description: 'Display running processes',
+    category: 'process',
+    capabilities: ['process', 'list', 'monitor'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+  {
+    name: 'taskkill',
+    description: 'Terminate processes',
+    category: 'process',
+    capabilities: ['kill', 'process', 'terminate'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+  {
+    name: 'netsh',
+    description: 'Network Shell utility',
+    category: 'network',
+    capabilities: ['network', 'configure', 'interface'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+  {
+    name: 'ipconfig',
+    description: 'Display network configuration',
+    category: 'network',
+    capabilities: ['network', 'ip', 'configuration'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+  {
+    name: 'systeminfo',
+    description: 'Display system information',
+    category: 'utilities',
+    capabilities: ['system', 'info', 'hardware'],
+    packageManagers: {},
+    platforms: ['win32']
+  },
+  {
+    name: 'wmic',
+    description: 'Windows Management Instrumentation Command',
+    category: 'utilities',
+    capabilities: ['system', 'management', 'wmi'],
+    packageManagers: {},
+    platforms: ['win32']
   },
 ];
