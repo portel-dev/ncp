@@ -72,6 +72,8 @@ yarn-error.log*
 # Scripts directory (development files not for release)
 scripts/
 !scripts/*.cjs
+!scripts/*.ts
+!scripts/*.sh
 !scripts/cleanup/
 !scripts/test-*.js
 !scripts/test-*.sh
