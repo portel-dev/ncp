@@ -70,6 +70,18 @@
       "title": "Enable MCP Management (Built-in)",
       "description": "Add, remove, and manage MCPs in your configuration. Provides 5 tools: add, remove, list, update, search.",
       "default": true
+    },
+    "enable_shell_micromcp": {
+      "type": "boolean",
+      "title": "Enable Shell MicroMCP (Built-in)",
+      "description": "Enable command-line execution capabilities. Provides 8 tools: execute, run, which, getEnv, ls, pwd, cd, shouldLoad. Opt-in for security.",
+      "default": false
+    },
+    "enable_cli_discovery": {
+      "type": "boolean",
+      "title": "Enable CLI Discovery (Built-in)",
+      "description": "Automatically discover and index CLI tools installed on your system (ffmpeg, git, jq, etc.). Enhances shell command searchability with ~150+ curated tools.",
+      "default": false
     }
   },
   "server": {
@@ -92,6 +104,8 @@
         "NCP_ENABLE_LOG_ROTATION": "${user_config.enable_log_rotation}",
         "NCP_ENABLE_SCHEDULE_MCP": "${user_config.enable_schedule_mcp}",
         "NCP_ENABLE_MCP_MANAGEMENT": "${user_config.enable_mcp_management}",
+        "NCP_ENABLE_SHELL": "${user_config.enable_shell_micromcp}",
+        "NCP_CLI_AUTOSCAN": "${user_config.enable_cli_discovery}",
         "NCP_MODE": "extension"
       }
     }
