@@ -459,4 +459,357 @@ export const CLI_TOOL_CATALOG: ToolDefinition[] = [
     capabilities: ['ruby', 'package', 'install'],
     packageManagers: { brew: 'ruby' }
   },
+
+  // ===== System/Built-in Text Processing Tools =====
+  {
+    name: 'grep',
+    description: 'Search text using patterns',
+    category: 'text-processing',
+    capabilities: ['search', 'filter', 'pattern', 'regex', 'text'],
+    packageManagers: {} // Built-in on Unix systems
+  },
+  {
+    name: 'egrep',
+    description: 'Extended grep with regex support',
+    category: 'text-processing',
+    capabilities: ['search', 'filter', 'regex', 'text'],
+    packageManagers: {}
+  },
+  {
+    name: 'sed',
+    description: 'Stream editor for filtering and transforming text',
+    category: 'text-processing',
+    capabilities: ['edit', 'transform', 'replace', 'text', 'stream'],
+    packageManagers: {}
+  },
+  {
+    name: 'awk',
+    description: 'Pattern scanning and processing language',
+    category: 'text-processing',
+    capabilities: ['parse', 'process', 'text', 'columns', 'data'],
+    packageManagers: {}
+  },
+  {
+    name: 'cut',
+    description: 'Remove sections from lines of files',
+    category: 'text-processing',
+    capabilities: ['extract', 'columns', 'text', 'split'],
+    packageManagers: {}
+  },
+  {
+    name: 'sort',
+    description: 'Sort lines of text files',
+    category: 'text-processing',
+    capabilities: ['sort', 'order', 'text'],
+    packageManagers: {}
+  },
+  {
+    name: 'uniq',
+    description: 'Report or omit repeated lines',
+    category: 'text-processing',
+    capabilities: ['unique', 'deduplicate', 'text'],
+    packageManagers: {}
+  },
+  {
+    name: 'wc',
+    description: 'Print newline, word, and byte counts',
+    category: 'text-processing',
+    capabilities: ['count', 'lines', 'words', 'text'],
+    packageManagers: {}
+  },
+  {
+    name: 'tr',
+    description: 'Translate or delete characters',
+    category: 'text-processing',
+    capabilities: ['translate', 'replace', 'transform', 'text'],
+    packageManagers: {}
+  },
+  {
+    name: 'head',
+    description: 'Output the first part of files',
+    category: 'text-processing',
+    capabilities: ['head', 'preview', 'text', 'file'],
+    packageManagers: {}
+  },
+  {
+    name: 'tail',
+    description: 'Output the last part of files',
+    category: 'text-processing',
+    capabilities: ['tail', 'monitor', 'text', 'file', 'log'],
+    packageManagers: {}
+  },
+
+  // ===== System File/Directory Tools =====
+  {
+    name: 'find',
+    description: 'Search for files in a directory hierarchy',
+    category: 'file-system',
+    capabilities: ['find', 'search', 'file', 'directory'],
+    packageManagers: {}
+  },
+  {
+    name: 'xargs',
+    description: 'Build and execute command lines from standard input',
+    category: 'file-system',
+    capabilities: ['execute', 'batch', 'command'],
+    packageManagers: {}
+  },
+  {
+    name: 'chmod',
+    description: 'Change file mode bits',
+    category: 'file-system',
+    capabilities: ['permission', 'file', 'security'],
+    packageManagers: {}
+  },
+  {
+    name: 'chown',
+    description: 'Change file owner and group',
+    category: 'file-system',
+    capabilities: ['owner', 'file', 'permission'],
+    packageManagers: {}
+  },
+  {
+    name: 'mkdir',
+    description: 'Make directories',
+    category: 'file-system',
+    capabilities: ['create', 'directory', 'folder'],
+    packageManagers: {}
+  },
+  {
+    name: 'rm',
+    description: 'Remove files or directories',
+    category: 'file-system',
+    capabilities: ['delete', 'remove', 'file'],
+    packageManagers: {}
+  },
+  {
+    name: 'cp',
+    description: 'Copy files and directories',
+    category: 'file-system',
+    capabilities: ['copy', 'file', 'directory'],
+    packageManagers: {}
+  },
+  {
+    name: 'mv',
+    description: 'Move or rename files',
+    category: 'file-system',
+    capabilities: ['move', 'rename', 'file'],
+    packageManagers: {}
+  },
+  {
+    name: 'ln',
+    description: 'Make links between files',
+    category: 'file-system',
+    capabilities: ['link', 'symlink', 'file'],
+    packageManagers: {}
+  },
+  {
+    name: 'ls',
+    description: 'List directory contents',
+    category: 'file-system',
+    capabilities: ['list', 'directory', 'file'],
+    packageManagers: {}
+  },
+  {
+    name: 'du',
+    description: 'Estimate file space usage',
+    category: 'file-system',
+    capabilities: ['disk', 'usage', 'size', 'space'],
+    packageManagers: {}
+  },
+  {
+    name: 'df',
+    description: 'Report file system disk space usage',
+    category: 'file-system',
+    capabilities: ['disk', 'space', 'filesystem', 'usage'],
+    packageManagers: {}
+  },
+  {
+    name: 'diff',
+    description: 'Compare files line by line',
+    category: 'file-system',
+    capabilities: ['compare', 'diff', 'file', 'text'],
+    packageManagers: {}
+  },
+  {
+    name: 'patch',
+    description: 'Apply a diff file to an original',
+    category: 'file-system',
+    capabilities: ['patch', 'apply', 'diff'],
+    packageManagers: {}
+  },
+
+  // ===== Process Management =====
+  {
+    name: 'ps',
+    description: 'Report process status',
+    category: 'process',
+    capabilities: ['process', 'list', 'monitor', 'status'],
+    packageManagers: {}
+  },
+  {
+    name: 'top',
+    description: 'Display system tasks',
+    category: 'process',
+    capabilities: ['monitor', 'process', 'performance', 'cpu', 'memory'],
+    packageManagers: {}
+  },
+  {
+    name: 'kill',
+    description: 'Send signals to processes',
+    category: 'process',
+    capabilities: ['kill', 'signal', 'process', 'terminate'],
+    packageManagers: {}
+  },
+  {
+    name: 'killall',
+    description: 'Kill processes by name',
+    category: 'process',
+    capabilities: ['kill', 'process', 'terminate'],
+    packageManagers: {}
+  },
+  {
+    name: 'pkill',
+    description: 'Signal processes based on name',
+    category: 'process',
+    capabilities: ['kill', 'signal', 'process'],
+    packageManagers: {}
+  },
+  {
+    name: 'pgrep',
+    description: 'Look up processes based on name',
+    category: 'process',
+    capabilities: ['search', 'process', 'find'],
+    packageManagers: {}
+  },
+
+  // ===== Network Tools (Often Pre-installed) =====
+  {
+    name: 'ssh',
+    description: 'OpenSSH remote login client',
+    category: 'network',
+    capabilities: ['ssh', 'remote', 'login', 'secure'],
+    packageManagers: {}
+  },
+  {
+    name: 'scp',
+    description: 'Secure copy (remote file copy)',
+    category: 'network',
+    capabilities: ['copy', 'transfer', 'ssh', 'file'],
+    packageManagers: {}
+  },
+  {
+    name: 'sftp',
+    description: 'Secure file transfer program',
+    category: 'network',
+    capabilities: ['transfer', 'ftp', 'ssh', 'file'],
+    packageManagers: {}
+  },
+  {
+    name: 'ping',
+    description: 'Send ICMP ECHO_REQUEST to network hosts',
+    category: 'network',
+    capabilities: ['ping', 'network', 'test', 'connectivity'],
+    packageManagers: {}
+  },
+  {
+    name: 'traceroute',
+    description: 'Print the route packets trace to network host',
+    category: 'network',
+    capabilities: ['trace', 'network', 'route', 'diagnostic'],
+    packageManagers: {}
+  },
+  {
+    name: 'netstat',
+    description: 'Print network connections, routing tables',
+    category: 'network',
+    capabilities: ['network', 'connections', 'ports', 'status'],
+    packageManagers: {}
+  },
+  {
+    name: 'ifconfig',
+    description: 'Configure network interface',
+    category: 'network',
+    capabilities: ['network', 'interface', 'configure', 'ip'],
+    packageManagers: {}
+  },
+  {
+    name: 'ip',
+    description: 'Show/manipulate routing, devices, policy routing',
+    category: 'network',
+    capabilities: ['network', 'route', 'interface', 'ip'],
+    packageManagers: {}
+  },
+
+  // ===== Misc System Tools =====
+  {
+    name: 'cron',
+    description: 'Daemon to execute scheduled commands',
+    category: 'utilities',
+    capabilities: ['schedule', 'cron', 'automation', 'task'],
+    packageManagers: {}
+  },
+  {
+    name: 'crontab',
+    description: 'Maintain crontab files',
+    category: 'utilities',
+    capabilities: ['schedule', 'cron', 'automation'],
+    packageManagers: {}
+  },
+  {
+    name: 'date',
+    description: 'Print or set system date and time',
+    category: 'utilities',
+    capabilities: ['date', 'time', 'timestamp'],
+    packageManagers: {}
+  },
+  {
+    name: 'cal',
+    description: 'Display a calendar',
+    category: 'utilities',
+    capabilities: ['calendar', 'date'],
+    packageManagers: {}
+  },
+  {
+    name: 'uptime',
+    description: 'Tell how long the system has been running',
+    category: 'utilities',
+    capabilities: ['uptime', 'system', 'status'],
+    packageManagers: {}
+  },
+  {
+    name: 'whoami',
+    description: 'Print effective user name',
+    category: 'utilities',
+    capabilities: ['user', 'identity'],
+    packageManagers: {}
+  },
+  {
+    name: 'env',
+    description: 'Run a program in a modified environment',
+    category: 'utilities',
+    capabilities: ['environment', 'variable', 'execute'],
+    packageManagers: {}
+  },
+  {
+    name: 'printenv',
+    description: 'Print environment variables',
+    category: 'utilities',
+    capabilities: ['environment', 'variable', 'list'],
+    packageManagers: {}
+  },
+  {
+    name: 'basename',
+    description: 'Strip directory and suffix from filenames',
+    category: 'utilities',
+    capabilities: ['path', 'file', 'name'],
+    packageManagers: {}
+  },
+  {
+    name: 'dirname',
+    description: 'Strip last component from file name',
+    category: 'utilities',
+    capabilities: ['path', 'directory'],
+    packageManagers: {}
+  },
 ];
