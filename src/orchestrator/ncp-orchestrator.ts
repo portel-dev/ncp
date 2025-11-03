@@ -468,7 +468,7 @@ export class NCPOrchestrator {
 
     // Run scan in background (non-blocking)
     this.runBackgroundCliScan().catch(err => {
-      logger.warn('CLI auto-scan failed:', err);
+      logger.warn(`CLI auto-scan failed: ${err}`);
     });
   }
 
@@ -482,7 +482,7 @@ export class NCPOrchestrator {
       if (result.success) {
         logger.info('✅ CLI auto-scan completed');
       } else {
-        logger.warn('CLI auto-scan failed:', result.error);
+        logger.warn(`CLI auto-scan failed: ${result.error}`);
       }
     }
   }
@@ -1116,7 +1116,7 @@ export class NCPOrchestrator {
               logger.info(`✅ Found ${finalResults.length} tools after CLI scan`);
             }
           } catch (error: any) {
-            logger.warn('CLI fallback scan failed:', error);
+            logger.warn(`CLI fallback scan failed: ${error}`);
           }
         }
       }

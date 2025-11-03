@@ -215,7 +215,7 @@ export class CLIScanner {
       };
 
     } catch (error) {
-      logger.debug(`Failed to analyze ${command}:`, error);
+      logger.debug(`Failed to analyze ${command}: ${error}`);
       return null;
     }
   }
