@@ -1,21 +1,37 @@
 /**
  * Unified Registry Client
  *
- * Uses custom registry (api.mcps.portel.dev) as primary source
- * Falls back to official Anthropic registry on failure
+ * Aggregates results from:
+ * 1. Custom registry (api.mcps.portel.dev) - NCP's own registry
+ * 2. Official Anthropic registry - MCP ecosystem
+ * 3. Photon marketplaces - Photon ecosystem (portel-dev/photons + user-defined)
  */
 
 import { logger } from '../utils/logger.js';
 import { CustomRegistryClient } from './custom-registry-client.js';
 import { RegistryClient, RegistryMCPCandidate, RegistrySearchOptions } from './registry-client.js';
+import { PhotonMarketplaceClient } from './photon-marketplace-client.js';
 
 export class UnifiedRegistryClient {
   private customClient = new CustomRegistryClient();
   private officialClient = new RegistryClient();
+  private photonClient = new PhotonMarketplaceClient();
+  private photonInitialized = false;
 
   /**
-   * Search for MCPs with selection format
-   * Tries custom registry first, falls back to official on API failure only
+   * Initialize Photon marketplace client (lazy initialization)
+   */
+  private async ensurePhotonClient(): Promise<void> {
+    if (!this.photonInitialized) {
+      await this.photonClient.initialize();
+      await this.photonClient.autoUpdateStaleCaches();
+      this.photonInitialized = true;
+    }
+  }
+
+  /**
+   * Search for MCPs and Photons with selection format
+   * Aggregates results from custom registry, official registry, and Photon marketplaces
    */
   async searchForSelection(query: string, options: RegistrySearchOptions = {}): Promise<RegistryMCPCandidate[]> {
     // Simplify verbose AI-generated queries to core keywords
@@ -23,14 +39,16 @@ export class UnifiedRegistryClient {
     const simplifiedQuery = this.simplifyQuery(query);
     logger.debug(`Original query: "${query}", Simplified: "${simplifiedQuery}"`);
 
+    const allResults: RegistryMCPCandidate[] = [];
+
+    // Search MCP registries
     try {
       logger.debug('Searching custom registry...');
       const customResults = await this.customClient.searchForSelection(simplifiedQuery, options.limit || 20);
-
       logger.debug(`Found ${customResults.length} results from custom registry`);
 
       // Convert custom registry format to RegistryMCPCandidate format
-      return customResults.map((result, index) => ({
+      allResults.push(...customResults.map((result, index) => ({
         number: index + 1,
         name: result.name,
         displayName: result.displayName,
@@ -47,23 +65,68 @@ export class UnifiedRegistryClient {
         },
         isTrusted: result.verified,
         qualityScore: result.score
-      }));
+      })));
     } catch (error: any) {
-      // Only fallback to official on API errors (not on empty results)
-      // Custom registry aggregates from official, so if custom has 0 results,
-      // official will also have 0 results (they have the same data)
-      logger.warn(`Custom registry API failed: ${error.message}, falling back to official`);
+      logger.warn(`Custom registry API failed: ${error.message}, trying official registry`);
 
       try {
         logger.debug('Searching official registry as fallback...');
         const officialResults = await this.officialClient.searchForSelection(simplifiedQuery, options);
         logger.debug(`Found ${officialResults.length} results from official registry`);
-        return officialResults;
+        allResults.push(...officialResults);
       } catch (officialError: any) {
-        logger.error(`Both registries failed: ${officialError.message}`);
-        throw new Error(`Failed to search registries: ${error.message}`);
+        logger.error(`Both MCP registries failed: ${officialError.message}`);
       }
     }
+
+    // Also search Photon marketplaces
+    try {
+      await this.ensurePhotonClient();
+      logger.debug('Searching Photon marketplaces...');
+      const photonResults = await this.photonClient.search(simplifiedQuery);
+      logger.debug(`Found ${photonResults.size} Photon(s) from marketplaces`);
+
+      // Convert Photon results to RegistryMCPCandidate format
+      for (const [photonName, sources] of photonResults.entries()) {
+        const source = sources[0]; // Use first source
+        const metadata = source.metadata;
+
+        allResults.push({
+          number: allResults.length + 1,
+          name: photonName,
+          displayName: metadata?.description || photonName,
+          description: metadata?.description || `Photon from ${source.marketplace.name}`,
+          version: metadata?.version || '1.0.0',
+          transport: 'stdio',
+          command: 'photon', // Marker for Photon installation
+          args: ['cli', photonName], // Photon CLI command
+          status: 'active',
+          repository: {
+            url: source.marketplace.repo ? `https://github.com/${source.marketplace.repo}` : source.marketplace.url,
+            source: source.marketplace.source
+          },
+          isTrusted: source.marketplace.name === 'photons', // Official marketplace
+          qualityScore: source.marketplace.name === 'photons' ? 100 : 50,
+          _meta: {
+            isPhoton: true,
+            marketplace: source.marketplace.name,
+            marketplaceUrl: source.marketplace.url,
+            tags: metadata?.tags,
+            category: metadata?.category,
+          }
+        });
+      }
+    } catch (photonError: any) {
+      logger.debug(`Photon marketplace search failed: ${photonError.message}`);
+      // Continue even if Photon search fails
+    }
+
+    // Re-number results
+    allResults.forEach((result, index) => {
+      result.number = index + 1;
+    });
+
+    return allResults;
   }
 
   /**
