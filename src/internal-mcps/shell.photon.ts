@@ -1,5 +1,5 @@
 /**
- * Shell MicroMCP - Command-Line Execution
+ * Shell Photon - Command-Line Execution
  *
  * Provides basic shell command execution capabilities.
  * Enable with: NCP_ENABLE_SHELL=true

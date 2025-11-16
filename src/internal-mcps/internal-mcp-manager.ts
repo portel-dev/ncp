@@ -9,7 +9,7 @@ import { InternalMCP, InternalToolResult, ElicitationCapable } from './types.js'
 import { NCPManagementMCP } from './ncp-management.js';
 import { SchedulerMCP } from './scheduler.js';
 import { AnalyticsMCP } from './analytics.js';
-import { MicroMCPLoader } from './micro-loader.js';
+import { PhotonLoader } from './micro-loader.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
@@ -23,12 +23,12 @@ export class InternalMCPManager {
   private internalMCPs: Map<string, InternalMCP> = new Map();
   private disabledInternalMCPs: Set<string> = new Set();
   private ragEngine: any = null; // PersistentRAGEngine instance (set via setRAGEngine)
-  private simpleMCPLoader: MicroMCPLoader;
+  private simpleMCPLoader: PhotonLoader;
 
   constructor() {
-    this.simpleMCPLoader = new MicroMCPLoader();
+    this.simpleMCPLoader = new PhotonLoader();
 
-    // Register legacy internal MCPs (will be migrated to MicroMCP)
+    // Register legacy internal MCPs (will be migrated to Photon)
     this.registerInternalMCP(new NCPManagementMCP());
     this.registerInternalMCP(new SchedulerMCP());
     this.registerInternalMCP(new AnalyticsMCP());
@@ -36,15 +36,15 @@ export class InternalMCPManager {
   }
 
   /**
-   * Load MicroMCP classes from standard directories
+   * Load Photon classes from standard directories
    */
-  async loadMicroMCPs(): Promise<void> {
+  async loadPhotons(): Promise<void> {
     const directories = [
-      // Built-in MicroMCPs (in src/internal-mcps/)
+      // Built-in Photons (in src/internal-mcps/)
       __dirname,
 
-      // Installed MicroMCPs from registry (~/.ncp/micromcps/)
-      path.join(os.homedir(), '.ncp', 'micromcps'),
+      // Installed Photons from registry (~/.ncp/photons/)
+      path.join(os.homedir(), '.ncp', 'photons'),
 
       // Global user MCPs (~/.ncp/internal/)
       path.join(os.homedir(), '.ncp', 'internal'),
@@ -53,7 +53,7 @@ export class InternalMCPManager {
       path.join(process.cwd(), '.ncp', 'internal'),
     ];
 
-    logger.debug(`Loading MicroMCPs from directories: ${directories.join(', ')}`);
+    logger.debug(`Loading Photons from directories: ${directories.join(', ')}`);
 
     const mcps = await this.simpleMCPLoader.loadAll(directories);
 
@@ -62,7 +62,7 @@ export class InternalMCPManager {
       this.registerInternalMCP(mcp);
     }
 
-    logger.info(`✅ Loaded ${mcps.length} MicroMCP(s)`);
+    logger.info(`✅ Loaded ${mcps.length} Photon(s)`);
   }
 
   /**

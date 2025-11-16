@@ -218,15 +218,24 @@ export class NCPOrchestrator {
         // Initialize internal MCPs with ProfileManager
         this.internalMCPManager.initialize(this.profileManager);
 
-        // Load MicroMCP classes from standard directories
-        await this.internalMCPManager.loadMicroMCPs();
+        // Load Photon classes from standard directories
+        await this.internalMCPManager.loadPhotons();
 
         // Inject orchestrator into SchedulerMCP for tool validation (Phase 1 Step 4)
         const allInternalMCPs = this.internalMCPManager.getAllEnabledInternalMCPs();
+
+        // Inject orchestrator into SchedulerMCP
         const schedulerMCP = allInternalMCPs.find(mcp => mcp.name === 'schedule');
         if (schedulerMCP && 'setOrchestrator' in schedulerMCP) {
           logger.info('[NCPOrchestrator] Injecting orchestrator into SchedulerMCP');
           (schedulerMCP as any).setOrchestrator(this);
+        }
+
+        // Inject orchestrator into IntelligenceMCP
+        const intelligenceMCP = allInternalMCPs.find(mcp => mcp.name === 'intelligence');
+        if (intelligenceMCP && 'setOrchestrator' in intelligenceMCP) {
+          logger.info('[NCPOrchestrator] Injecting orchestrator into IntelligenceMCP');
+          (intelligenceMCP as any).setOrchestrator(this);
         }
       }
 

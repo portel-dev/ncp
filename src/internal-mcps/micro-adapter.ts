@@ -1,52 +1,52 @@
 /**
- * MicroMCP Adapter
+ * Photon Adapter
  *
- * Adapts MicroMCP classes to the InternalMCP interface
+ * Adapts Photon classes to the InternalMCP interface
  * Handles schema extraction and tool registration
  */
 
 import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
-import { MicroMCP } from './base-micro.js';
+import { Photon } from './base-photon.js';
 import { SchemaExtractor } from './schema-extractor.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
 
 /**
- * Adapter that converts MicroMCP instances to InternalMCP interface
+ * Adapter that converts Photon instances to InternalMCP interface
  */
-export class MicroMCPAdapter implements InternalMCP {
+export class PhotonAdapter implements InternalMCP {
   public readonly name: string;
   public readonly description: string;
   public tools: InternalTool[];
 
-  private instance: MicroMCP;
-  private mcpClass: typeof MicroMCP;
+  private instance: Photon;
+  private mcpClass: typeof Photon;
   private sourceFilePath?: string;
 
   private constructor(
-    mcpClass: typeof MicroMCP,
-    instance: MicroMCP,
+    mcpClass: typeof Photon,
+    instance: Photon,
     sourceFilePath?: string
   ) {
     this.mcpClass = mcpClass;
     this.instance = instance;
     this.sourceFilePath = sourceFilePath;
 
-    // Get MCP name from class (handle both MicroMCP subclasses and plain classes)
+    // Get MCP name from class (handle both Photon subclasses and plain classes)
     this.name = this.getMCPName(mcpClass);
 
     // Get description from class JSDoc or use default
-    this.description = this.extractClassDescription() || `${this.name} MCP (built-in)`;
+    this.description = this.extractClassDescription() || `${this.name} Photon (built-in)`;
 
     // Tools will be initialized asynchronously
     this.tools = [];
   }
 
   /**
-   * Get MCP name from class (supports both MicroMCP subclasses and plain classes)
+   * Get MCP name from class (supports both Photon subclasses and plain classes)
    */
   private getMCPName(mcpClass: any): string {
-    // Try to use MicroMCP's method if available
+    // Try to use Photon's method if available
     if (typeof mcpClass.getMCPName === 'function') {
       return mcpClass.getMCPName();
     }
@@ -61,23 +61,23 @@ export class MicroMCPAdapter implements InternalMCP {
   }
 
   /**
-   * Create and initialize a MicroMCPAdapter
+   * Create and initialize a PhotonAdapter
    */
   static async create(
-    mcpClass: typeof MicroMCP,
-    instance: MicroMCP,
+    mcpClass: typeof Photon,
+    instance: Photon,
     sourceFilePath?: string
-  ): Promise<MicroMCPAdapter> {
-    const adapter = new MicroMCPAdapter(mcpClass, instance, sourceFilePath);
+  ): Promise<PhotonAdapter> {
+    const adapter = new PhotonAdapter(mcpClass, instance, sourceFilePath);
     await adapter.initializeTools();
     return adapter;
   }
 
   /**
-   * Get tool methods from class (supports both MicroMCP subclasses and plain classes)
+   * Get tool methods from class (supports both Photon subclasses and plain classes)
    */
   private getToolMethods(mcpClass: any): string[] {
-    // Try to use MicroMCP's method if available
+    // Try to use Photon's method if available
     if (typeof mcpClass.getToolMethods === 'function') {
       return mcpClass.getToolMethods();
     }
@@ -197,13 +197,13 @@ export class MicroMCPAdapter implements InternalMCP {
   }
 
   /**
-   * Execute a tool (supports both MicroMCP subclasses and plain classes)
+   * Execute a tool (supports both Photon subclasses and plain classes)
    */
   async executeTool(toolName: string, parameters: any): Promise<InternalToolResult> {
     try {
       let result: any;
 
-      // Check if instance has MicroMCP's executeTool method
+      // Check if instance has Photon's executeTool method
       if (typeof this.instance.executeTool === 'function') {
         result = await this.instance.executeTool(toolName, parameters);
       } else {

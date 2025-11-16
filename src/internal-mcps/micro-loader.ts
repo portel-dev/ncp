@@ -1,7 +1,7 @@
 /**
- * MicroMCP Loader
+ * Photon Loader
  *
- * Discovers and loads MicroMCP classes from:
+ * Discovers and loads Photon classes from:
  * 1. Built-in directory (src/internal-mcps/)
  * 2. Global user directory (~/.ncp/internal/)
  * 3. Project-local directory (.ncp/internal/)
@@ -11,14 +11,14 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as crypto from 'crypto';
-import { MicroMCP } from './base-micro.js';
-import { MicroMCPAdapter } from './micro-adapter.js';
+import { Photon } from './base-photon.js';
+import { PhotonAdapter } from './micro-adapter.js';
 import { InternalMCP } from './types.js';
 import { logger } from '../utils/logger.js';
 import { DependencyManager } from './dependency-manager.js';
 import envPaths from 'env-paths';
 
-export class MicroMCPLoader {
+export class PhotonLoader {
   private loadedMCPs: Map<string, InternalMCP> = new Map();
   private dependencyManager: DependencyManager;
 
@@ -27,7 +27,7 @@ export class MicroMCPLoader {
   }
 
   /**
-   * Load all MicroMCP classes from multiple directories
+   * Load all Photon classes from multiple directories
    */
   async loadAll(directories: string[]): Promise<InternalMCP[]> {
     const mcps: InternalMCP[] = [];
@@ -45,7 +45,7 @@ export class MicroMCPLoader {
   }
 
   /**
-   * Load MicroMCP classes from a directory
+   * Load Photon classes from a directory
    */
   async loadFromDirectory(directory: string): Promise<InternalMCP[]> {
     const mcps: InternalMCP[] = [];
@@ -106,10 +106,11 @@ export class MicroMCPLoader {
   }
 
   /**
-   * Check if file is an MCP file
+   * Check if file is a Photon file
    */
   private isMCPFile(filename: string): boolean {
-    return filename.endsWith('.micro.ts') || filename.endsWith('.micro.js');
+    return filename.endsWith('.photon.ts') || filename.endsWith('.photon.js') ||
+           filename.endsWith('.micro.ts') || filename.endsWith('.micro.js'); // Backward compat during migration
   }
 
   /**
@@ -120,21 +121,24 @@ export class MicroMCPLoader {
       // Find source .ts file if we're loading from dist
       let sourceFilePath = filePath;
       if (filePath.includes('/dist/') && filePath.endsWith('.js')) {
+        const isPhoton = filePath.endsWith('.photon.js');
+        const ext = isPhoton ? '.photon' : '.micro';
+
         // First try .schema.json in dist (for packaged DXT)
         // If not found, will fall back to src/*.ts in development
-        sourceFilePath = filePath.replace('.micro.js', '.micro.ts');
+        sourceFilePath = filePath.replace(`${ext}.js`, `${ext}.ts`);
 
         // Check if we should try src/ instead (development mode)
-        const schemaInDist = filePath.replace('.micro.js', '.micro.schema.json');
+        const schemaInDist = filePath.replace(`${ext}.js`, `${ext}.schema.json`);
         try {
           await fs.access(schemaInDist);
           // Schema file exists in dist, use dist path
-          sourceFilePath = filePath.replace('.micro.js', '.micro.ts');
+          sourceFilePath = filePath.replace(`${ext}.js`, `${ext}.ts`);
         } catch {
           // No schema in dist, try src/ (development mode)
           sourceFilePath = filePath
             .replace('/dist/', '/src/')
-            .replace('.micro.js', '.micro.ts');
+            .replace(`${ext}.js`, `${ext}.ts`);
         }
       }
 
@@ -175,21 +179,21 @@ export class MicroMCPLoader {
         module = await import(fileUrl);
       }
 
-      // Find all exported classes (MicroMCP or plain classes)
+      // Find all exported classes (Photon or plain classes)
       const mcpClasses = this.findMCPClasses(module);
 
       if (mcpClasses.length === 0) {
-        logger.warn(`No MCP classes found in ${path.basename(filePath)}`);
+        logger.warn(`No Photon classes found in ${path.basename(filePath)}`);
         return null;
       }
 
       if (mcpClasses.length > 1) {
         logger.warn(
-          `Multiple MCP classes found in ${path.basename(filePath)}. Using first one.`
+          `Multiple Photon classes found in ${path.basename(filePath)}. Using first one.`
         );
       }
 
-      // Use the first MCP class found
+      // Use the first Photon class found
       const MCPClass = mcpClasses[0];
       const instance = new MCPClass();
 
@@ -199,9 +203,9 @@ export class MicroMCPLoader {
       }
 
       // Create adapter (async initialization)
-      const adapter = await MicroMCPAdapter.create(MCPClass, instance, sourceFilePath);
+      const adapter = await PhotonAdapter.create(MCPClass, instance, sourceFilePath);
 
-      logger.info(`✅ Loaded MicroMCP: ${adapter.name} (${adapter.tools.length} tools)`);
+      logger.info(`✅ Loaded Photon: ${adapter.name} (${adapter.tools.length} tools)`);
 
       return adapter;
     } catch (error: any) {
@@ -264,7 +268,7 @@ export class MicroMCPLoader {
 
     for (const exportedItem of Object.values(module)) {
       if (typeof exportedItem === 'function' && this.isClass(exportedItem)) {
-        // Check if it has async methods (indication it's an MCP)
+        // Check if it has async methods (indication it's a Photon)
         if (this.hasAsyncMethods(exportedItem)) {
           classes.push(exportedItem);
         }
