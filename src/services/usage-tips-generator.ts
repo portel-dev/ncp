@@ -139,15 +139,65 @@ export class UsageTipsGenerator {
       const exampleTool = this.findToolWithParameters(results);
       const exampleParams = this.generateExampleParams(exampleTool);
 
+      // Generate Code-Mode example
+      const codeModeExample = this.generateCodeModeExample(results.slice(0, 3));
+
       if (exampleParams === '{}') {
-        return `• **Run tools**: Use \`ncp run ${exampleTool.toolName}\` to execute (no parameters needed)\n`;
+        return `• **Run tools**: Use \`ncp run ${exampleTool.toolName}\` to execute (no parameters needed)\n` +
+               `• **Code-Mode** (fastest): ${codeModeExample}\n`;
       } else {
-        return `• **Run tools**: Use \`ncp run ${exampleTool.toolName}\` (interactive prompts) or \`--params '${exampleParams}'\`\n`;
+        return `• **Run tools**: Use \`ncp run ${exampleTool.toolName}\` (interactive prompts) or \`--params '${exampleParams}'\`\n` +
+               `• **Code-Mode** (fastest): ${codeModeExample}\n`;
       }
     } else {
       // At depth 0-1, use interactive prompting
       return `• **Run tools**: Use \`ncp run ${results[0].toolName}\` to execute (interactive prompts for parameters)\n`;
     }
+  }
+
+  /**
+   * Generate Code-Mode usage example from discovered tools
+   */
+  private static generateCodeModeExample(tools: any[]): string {
+    if (tools.length === 0) return '';
+
+    // Pick the first tool with parameters as example
+    const exampleTool = this.findToolWithParameters(tools);
+    const [mcpName, toolName] = exampleTool.toolName.split(':');
+
+    // Generate example parameters based on schema
+    const exampleParams = this.generateExampleParamsForCode(exampleTool);
+
+    if (exampleParams) {
+      return `\`const result = await ${mcpName}.${toolName}(${exampleParams})\``;
+    } else {
+      return `\`const result = await ${mcpName}.${toolName}()\``;
+    }
+  }
+
+  /**
+   * Generate example parameters formatted for Code-Mode (inline object)
+   */
+  private static generateExampleParamsForCode(tool: any): string {
+    if (!tool.schema || !tool.schema.properties) return '';
+
+    const params = ToolSchemaParser.parseParameters(tool.schema);
+    const requiredParams = params.filter(p => p.required);
+
+    // Only show required params in example, max 2 for brevity
+    const paramsToShow = requiredParams.length > 0
+      ? requiredParams.slice(0, 2)
+      : params.slice(0, 2);
+
+    if (paramsToShow.length === 0) return '';
+
+    const predictor = new ParameterPredictor();
+    const paramPairs = paramsToShow.map(param => {
+      const value = predictor.predictValue(param.name, param.type, param.description || '');
+      return `${param.name}: ${JSON.stringify(value)}`;
+    });
+
+    return `{ ${paramPairs.join(', ')} }`;
   }
 
   /**
