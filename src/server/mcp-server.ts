@@ -417,7 +417,7 @@ export class MCPServer implements ElicitationServer {
 
   /**
    * Public method for CLI to call tools programmatically
-   * @param toolName - Name of the tool to call ('find' or 'run')
+   * @param toolName - Name of the tool to call ('find', 'run', or 'code')
    * @param args - Tool arguments
    * @returns Tool result
    */
@@ -427,6 +427,8 @@ export class MCPServer implements ElicitationServer {
         return await this.handleFind(args);
       case 'run':
         return await this.handleRun(args);
+      case 'code':
+        return await this.handleCode(args);
       default:
         throw new Error(`Unknown tool: ${toolName}`);
     }

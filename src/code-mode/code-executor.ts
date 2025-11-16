@@ -51,12 +51,10 @@ export class CodeExecutor {
   /**
    * Get all registered namespace names
    */
-  getInterfaces(): string[] {
-    const interfaces: string[] = [];
+  getInterfaces(): Record<string, string[]> {
+    const interfaces: Record<string, string[]> = {};
     for (const [name, ns] of this.namespaces) {
-      for (const toolName of ns.tools.keys()) {
-        interfaces.push(`${name}.${toolName}`);
-      }
+      interfaces[name] = Array.from(ns.tools.keys());
     }
     return interfaces;
   }

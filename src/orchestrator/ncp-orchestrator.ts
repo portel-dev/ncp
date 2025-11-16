@@ -502,7 +502,7 @@ export class NCPOrchestrator {
    * Enables AI to execute TypeScript code with tool access as namespaces
    */
   private async registerCodeModeNamespaces(): Promise<void> {
-    logger.debug('Registering Code-Mode namespaces...');
+    logger.info(`🔧 Registering Code-Mode namespaces (${this.definitions.size} external MCPs, ${this.internalMCPManager.getAllInternalMCPs().length} internal)...`);
 
     // Register NCP's own core tools for progressive disclosure
     const ncpNamespace: ToolNamespace = {
