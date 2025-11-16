@@ -623,6 +623,11 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('doctor') ||
   process.argv.includes('credentials') ||
   process.argv.includes('update') ||
+  process.argv.includes('photon') ||
+  process.argv.includes('photon:marketplace') ||
+  process.argv.includes('photon:search') ||
+  process.argv.includes('photon:install') ||
+  process.argv.includes('photon:list') ||
   process.argv.includes('_job-run') ||
   process.argv.includes('_timing-run') ||
   process.argv.includes('_task-execute') ||
@@ -3233,5 +3238,317 @@ program
       process.exit(1);
     }
   });
+
+// ====================================
+// Photon Marketplace Commands
+// ====================================
+
+program
+  .command('photon')
+  .description('Manage Photon marketplaces and installations')
+  .action(() => {
+    console.log(chalk.cyan('\n📦 Photon Marketplace Commands:\n'));
+    console.log('  photon marketplace list              List all configured marketplaces');
+    console.log('  photon marketplace add <source>      Add a new marketplace');
+    console.log('  photon marketplace remove <name>     Remove a marketplace');
+    console.log('  photon marketplace update [name]     Update marketplace cache');
+    console.log('  photon search <query>                Search for Photons');
+    console.log('  photon install <name>                Install a Photon');
+    console.log('  photon list                          List installed Photons');
+    console.log(chalk.dim('\nExamples:'));
+    console.log(chalk.dim('  ncp photon marketplace add username/repo'));
+    console.log(chalk.dim('  ncp photon search calculator'));
+    console.log(chalk.dim('  ncp photon install calculator\n'));
+  });
+
+program
+  .command('photon:marketplace')
+  .description('Manage Photon marketplaces')
+  .argument('[action]', 'Action: list, add, remove, update')
+  .argument('[source]', 'Marketplace source (for add) or name (for remove)')
+  .action(async (action?: string, source?: string) => {
+    const { PhotonMarketplaceClient } = await import('../services/photon-marketplace-client.js');
+    const client = new PhotonMarketplaceClient();
+    await client.initialize();
+
+    if (!action || action === 'list') {
+      // List all marketplaces
+      const marketplaces = client.getAll();
+
+      if (marketplaces.length === 0) {
+        console.log(chalk.yellow('No marketplaces configured'));
+        return;
+      }
+
+      console.log(chalk.cyan('\n📦 Photon Marketplaces:\n'));
+      for (const marketplace of marketplaces) {
+        const status = marketplace.enabled ? chalk.green('✓') : chalk.red('✗');
+        const official = marketplace.name === 'photons' ? chalk.blue(' (official)') : '';
+        console.log(`${status} ${chalk.bold(marketplace.name)}${official}`);
+        console.log(chalk.dim(`   Source: ${marketplace.source}`));
+        console.log(chalk.dim(`   Type: ${marketplace.sourceType}`));
+        if (marketplace.lastUpdated) {
+          console.log(chalk.dim(`   Updated: ${new Date(marketplace.lastUpdated).toLocaleString()}`));
+        }
+        console.log();
+      }
+
+      // Show counts
+      const counts = await client.getMarketplaceCounts();
+      console.log(chalk.cyan('Photon counts per marketplace:'));
+      for (const [name, count] of counts.entries()) {
+        console.log(chalk.dim(`   ${name}: ${count} Photons`));
+      }
+    } else if (action === 'add') {
+      if (!source) {
+        console.error(chalk.red('Error: Please provide a marketplace source'));
+        console.log(chalk.dim('\nExamples:'));
+        console.log(chalk.dim('  ncp photon:marketplace add username/repo'));
+        console.log(chalk.dim('  ncp photon:marketplace add https://github.com/username/repo'));
+        console.log(chalk.dim('  ncp photon:marketplace add ./local/path'));
+        process.exit(1);
+      }
+
+      try {
+        const result = await client.add(source);
+
+        if (!result.added) {
+          console.log(chalk.yellow(`Marketplace already exists: ${result.marketplace.name}`));
+        } else {
+          console.log(chalk.green(`✅ Added marketplace: ${result.marketplace.name}`));
+          console.log(chalk.dim(`   Source: ${result.marketplace.source}`));
+
+          // Update cache
+          console.log(chalk.dim('\nUpdating marketplace cache...'));
+          const success = await client.updateMarketplaceCache(result.marketplace.name);
+          if (success) {
+            console.log(chalk.green('✅ Cache updated'));
+          } else {
+            console.log(chalk.yellow('⚠️  Could not fetch marketplace manifest'));
+          }
+        }
+      } catch (error: any) {
+        console.error(chalk.red(`Error: ${error.message}`));
+        process.exit(1);
+      }
+    } else if (action === 'remove') {
+      if (!source) {
+        console.error(chalk.red('Error: Please provide a marketplace name'));
+        process.exit(1);
+      }
+
+      try {
+        const success = await client.remove(source);
+        if (success) {
+          console.log(chalk.green(`✅ Removed marketplace: ${source}`));
+        } else {
+          console.error(chalk.red(`Marketplace not found: ${source}`));
+          process.exit(1);
+        }
+      } catch (error: any) {
+        console.error(chalk.red(`Error: ${error.message}`));
+        process.exit(1);
+      }
+    } else if (action === 'update') {
+      if (source) {
+        // Update specific marketplace
+        console.log(chalk.dim(`Updating marketplace: ${source}...`));
+        const success = await client.updateMarketplaceCache(source);
+        if (success) {
+          console.log(chalk.green(`✅ Updated ${source}`));
+        } else {
+          console.error(chalk.red(`Failed to update ${source}`));
+          process.exit(1);
+        }
+      } else {
+        // Update all marketplaces
+        console.log(chalk.dim('Updating all marketplaces...'));
+        const results = await client.updateAllCaches();
+
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const [name, success] of results.entries()) {
+          if (success) {
+            console.log(chalk.green(`✅ ${name}`));
+            successCount++;
+          } else {
+            console.log(chalk.red(`✗ ${name}`));
+            failCount++;
+          }
+        }
+
+        console.log(chalk.cyan(`\nUpdated ${successCount} marketplace(s)`));
+        if (failCount > 0) {
+          console.log(chalk.yellow(`Failed to update ${failCount} marketplace(s)`));
+        }
+      }
+    } else {
+      console.error(chalk.red(`Unknown action: ${action}`));
+      console.log(chalk.dim('Valid actions: list, add, remove, update'));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('photon:search')
+  .description('Search for Photons in all marketplaces')
+  .argument('<query>', 'Search query')
+  .action(async (query: string) => {
+    const { PhotonMarketplaceClient } = await import('../services/photon-marketplace-client.js');
+    const client = new PhotonMarketplaceClient();
+    await client.initialize();
+    await client.autoUpdateStaleCaches();
+
+    const results = await client.search(query);
+
+    if (results.size === 0) {
+      console.log(chalk.yellow(`No Photons found matching "${query}"`));
+      return;
+    }
+
+    console.log(chalk.cyan(`\n🔍 Found ${results.size} Photon(s):\n`));
+
+    for (const [name, sources] of results.entries()) {
+      const source = sources[0];
+      const metadata = source.metadata;
+
+      console.log(chalk.bold(name));
+      if (metadata?.description) {
+        console.log(chalk.dim(`   ${metadata.description}`));
+      }
+      if (metadata?.version) {
+        console.log(chalk.dim(`   Version: ${metadata.version}`));
+      }
+      console.log(chalk.dim(`   Marketplace: ${source.marketplace.name}`));
+      if (metadata?.tags && metadata.tags.length > 0) {
+        console.log(chalk.dim(`   Tags: ${metadata.tags.join(', ')}`));
+      }
+      console.log();
+    }
+
+    console.log(chalk.dim(`💡 Install with: ncp photon:install <name>`));
+  });
+
+program
+  .command('photon:install')
+  .description('Install a Photon from marketplace')
+  .argument('<name>', 'Photon name')
+  .option('-m, --marketplace <name>', 'Specific marketplace to install from')
+  .action(async (name: string, options: { marketplace?: string }) => {
+    const { PhotonMarketplaceClient } = await import('../services/photon-marketplace-client.js');
+    const path = await import('path');
+    const os = await import('os');
+    const fs = await import('fs/promises');
+
+    const client = new PhotonMarketplaceClient();
+    await client.initialize();
+
+    try {
+      // Fetch the Photon
+      const result = await client.fetchMCP(name);
+
+      if (!result) {
+        console.error(chalk.red(`Photon not found: ${name}`));
+        console.log(chalk.dim('\n💡 Try searching first: ncp photon:search <query>'));
+        process.exit(1);
+      }
+
+      // Check if specific marketplace requested
+      if (options.marketplace && result.marketplace.name !== options.marketplace) {
+        console.error(chalk.red(`Photon "${name}" not found in marketplace "${options.marketplace}"`));
+        process.exit(1);
+      }
+
+      // Install to ~/.ncp/photons/
+      const photonDir = path.join(os.homedir(), '.ncp', 'photons');
+      await fs.mkdir(photonDir, { recursive: true });
+
+      const fileName = `${name}.photon.ts`;
+      const destPath = path.join(photonDir, fileName);
+
+      // Write the Photon file
+      await fs.writeFile(destPath, result.content, 'utf-8');
+
+      console.log(chalk.green(`\n✅ Installed Photon: ${name}`));
+      console.log(chalk.dim(`   Marketplace: ${result.marketplace.name}`));
+      if (result.metadata?.version) {
+        console.log(chalk.dim(`   Version: ${result.metadata.version}`));
+      }
+      console.log(chalk.dim(`   Location: ${destPath}`));
+
+      // Save installation metadata
+      if (result.metadata) {
+        const { calculateHash } = await import('../services/photon-marketplace-client.js');
+        const contentHash = calculateHash(result.content);
+        await client.savePhotonMetadata(fileName, result.marketplace, result.metadata, contentHash);
+      }
+
+      console.log(chalk.yellow('\n⚠️  Restart NCP to load the new Photon'));
+      console.log(chalk.dim(`💡 Usage: ncp run ${name}:tool_name`));
+    } catch (error: any) {
+      console.error(chalk.red(`Installation failed: ${error.message}`));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('photon:list')
+  .description('List installed Photons')
+  .action(async () => {
+    const path = await import('path');
+    const os = await import('os');
+    const fs = await import('fs/promises');
+    const { existsSync } = await import('fs');
+
+    const photonDir = path.join(os.homedir(), '.ncp', 'photons');
+
+    if (!existsSync(photonDir)) {
+      console.log(chalk.yellow('No Photons installed'));
+      console.log(chalk.dim('\n💡 Install Photons with: ncp photon:install <name>'));
+      return;
+    }
+
+    try {
+      const files = await fs.readdir(photonDir);
+      const photonFiles = files.filter(f => f.endsWith('.photon.ts'));
+
+      if (photonFiles.length === 0) {
+        console.log(chalk.yellow('No Photons installed'));
+        return;
+      }
+
+      console.log(chalk.cyan(`\n📦 Installed Photons (${photonFiles.length}):\n`));
+
+      const { PhotonMarketplaceClient } = await import('../services/photon-marketplace-client.js');
+      const client = new PhotonMarketplaceClient();
+      await client.initialize();
+
+      for (const file of photonFiles) {
+        const name = file.replace('.photon.ts', '');
+        console.log(chalk.bold(name));
+
+        // Try to get installation metadata
+        const metadata = await client.getPhotonInstallMetadata(file);
+        if (metadata) {
+          console.log(chalk.dim(`   Marketplace: ${metadata.marketplace}`));
+          console.log(chalk.dim(`   Version: ${metadata.version}`));
+          console.log(chalk.dim(`   Installed: ${new Date(metadata.installedAt).toLocaleString()}`));
+
+          // Check if modified
+          const filePath = path.join(photonDir, file);
+          const isModified = await client.isPhotonModified(filePath, file);
+          if (isModified) {
+            console.log(chalk.yellow('   ⚠️  Modified since installation'));
+          }
+        }
+        console.log();
+      }
+    } catch (error: any) {
+      console.error(chalk.red(`Error: ${error.message}`));
+      process.exit(1);
+    }
+  });
+
 program.parse();
 }
