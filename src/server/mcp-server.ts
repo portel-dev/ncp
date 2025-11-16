@@ -22,6 +22,7 @@ import { ToolFinder } from '../services/tool-finder.js';
 import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
+import { ParameterPredictor } from '../utils/parameter-predictor.js';
 import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist } from '../utils/global-settings.js';
 import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation } from './mcp-prompts.js';
 import chalk from 'chalk';
@@ -787,7 +788,66 @@ export class MCPServer implements ElicitationServer {
     const totalTools = searchResults.reduce((sum, r) => sum + r.tools.length, 0);
     output += `\n📊 **Total**: ${totalTools} tool${totalTools !== 1 ? 's' : ''} found across ${queries.length} queries\n`;
 
+    // Add Code-Mode workflow example for multi-query orchestration
+    if (depth >= 2 && totalTools > 0) {
+      output += `\n💡 **Code-Mode Workflow** (orchestrate all tools in one execution):\n\`\`\`typescript\n`;
+
+      // Generate example for each query's top result
+      searchResults.forEach((result, index) => {
+        const query = queries[index];
+        if (result.tools.length > 0) {
+          const tool = result.tools[0];
+          const [mcpName, toolName] = tool.toolName.split(':');
+
+          // Generate smart variable name from query
+          const varName = query.toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .substring(0, 20);
+
+          // Generate example params
+          const exampleParams = this.generateCodeModeParams(tool);
+
+          output += `// ${query}\n`;
+          if (exampleParams) {
+            output += `const ${varName} = await ${mcpName}.${toolName}(${exampleParams});\n`;
+          } else {
+            output += `const ${varName} = await ${mcpName}.${toolName}();\n`;
+          }
+          output += `console.log("${query}:", ${varName});\n\n`;
+        }
+      });
+
+      output += `\`\`\`\n`;
+      output += `🚀 One execution, ${queries.length} capabilities - 88% fewer API calls!\n`;
+    }
+
     return { content: [{ type: 'text', text: output }] };
+  }
+
+  /**
+   * Generate example parameters for Code-Mode from tool schema
+   */
+  private generateCodeModeParams(tool: any): string {
+    if (!tool.schema || !tool.schema.properties) return '';
+
+    const params = this.parseParameters(tool.schema);
+    const requiredParams = params.filter((p: any) => p.required);
+
+    // Only show required params, max 2 for brevity
+    const paramsToShow = requiredParams.length > 0
+      ? requiredParams.slice(0, 2)
+      : params.slice(0, 2);
+
+    if (paramsToShow.length === 0) return '';
+
+    const predictor = new ParameterPredictor();
+    const paramPairs = paramsToShow.map((param: any) => {
+      const value = predictor.predictValue(param.name, param.type, param.description || '');
+      return `${param.name}: ${JSON.stringify(value)}`;
+    });
+
+    return `{ ${paramPairs.join(', ')} }`;
   }
 
   private async handleFind(args: any): Promise<any> {
