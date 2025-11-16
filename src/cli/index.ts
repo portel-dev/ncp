@@ -3602,5 +3602,110 @@ program
     }
   });
 
+// ========== SKILLS COMMANDS ==========
+
+program
+  .command('skills')
+  .description('Show available skills commands')
+  .action(() => {
+    console.log(chalk.bold('\n📚 NCP Skills Commands\n'));
+    console.log('Skills are packaged tools from Anthropic Agent Skills');
+    console.log('Place .zip files in ~/.ncp/skills/ to load them\n');
+    console.log(chalk.cyan('  ncp skills:list') + '              List installed skills');
+    console.log(chalk.cyan('  ncp skills:install <path>') + '    Install skill from ZIP file');
+    console.log(chalk.cyan('  ncp skills:remove <name>') + '     Remove an installed skill');
+    console.log();
+  });
+
+program
+  .command('skills:list')
+  .description('List installed skills')
+  .action(async () => {
+    const { SkillsManager } = await import('../services/skills-manager.js');
+    const manager = new SkillsManager();
+    await manager.initialize();
+    await manager.loadAllSkills();
+
+    const skills = manager.listSkills();
+
+    if (skills.length === 0) {
+      console.log(chalk.yellow('\n⚠️  No skills installed'));
+      console.log(chalk.dim('   Place skill ZIP files in ~/.ncp/skills/'));
+      console.log(chalk.dim('   Or use: ncp skills:install <path-to-skill.zip>'));
+      return;
+    }
+
+    console.log(chalk.bold(`\n📚 Installed Skills (${skills.length})\n`));
+
+    for (const skill of skills) {
+      console.log(chalk.cyan(`${skill.name}`) + chalk.dim(` v${skill.version}`));
+      console.log(chalk.white(`   ${skill.description}`));
+      console.log(chalk.dim(`   Tools: ${skill.tools}`));
+      console.log();
+    }
+  });
+
+program
+  .command('skills:install')
+  .description('Install a skill from ZIP file')
+  .argument('<path>', 'Path to skill ZIP file')
+  .action(async (skillPath: string) => {
+    const path = await import('path');
+    const { existsSync } = await import('fs');
+
+    // Resolve path
+    const resolvedPath = path.resolve(skillPath);
+
+    if (!existsSync(resolvedPath)) {
+      console.error(chalk.red(`File not found: ${skillPath}`));
+      process.exit(1);
+    }
+
+    if (!resolvedPath.endsWith('.zip')) {
+      console.error(chalk.red('Skill must be a ZIP file'));
+      process.exit(1);
+    }
+
+    try {
+      const { SkillsManager } = await import('../services/skills-manager.js');
+      const manager = new SkillsManager();
+      await manager.initialize();
+
+      const skill = await manager.installSkill(resolvedPath);
+
+      console.log(chalk.green(`\n✅ Installed skill: ${skill.metadata.name}`));
+      console.log(chalk.dim(`   Version: ${skill.metadata.version}`));
+      console.log(chalk.dim(`   Description: ${skill.metadata.description}`));
+      console.log(chalk.dim(`   Tools: ${skill.metadata.tools.length}`));
+
+      console.log(chalk.yellow('\n⚠️  Restart NCP to load the skill'));
+      console.log(chalk.dim(`💡 Usage: ncp run ${skill.metadata.name}:tool_name`));
+    } catch (error: any) {
+      console.error(chalk.red(`Installation failed: ${error.message}`));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('skills:remove')
+  .description('Remove an installed skill')
+  .argument('<name>', 'Skill name to remove')
+  .action(async (skillName: string) => {
+    try {
+      const { SkillsManager } = await import('../services/skills-manager.js');
+      const manager = new SkillsManager();
+      await manager.initialize();
+      await manager.loadAllSkills();
+
+      await manager.removeSkill(skillName);
+
+      console.log(chalk.green(`\n✅ Removed skill: ${skillName}`));
+      console.log(chalk.yellow('⚠️  Restart NCP for changes to take effect'));
+    } catch (error: any) {
+      console.error(chalk.red(`Failed to remove skill: ${error.message}`));
+      process.exit(1);
+    }
+  });
+
 program.parse();
 }

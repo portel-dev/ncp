@@ -184,6 +184,7 @@ export class NCPOrchestrator {
   private newlyIndexedMCPs: Set<string> = new Set();  // Track MCPs indexed in current run
   private cliScanner: any = null; // CLIScanner instance for query-specific enhancement
   private codeExecutor: CodeExecutor;
+  private skillsManager: any = null; // SkillsManager instance for loading agent skills
 
   private forceRetry: boolean = false;
 
@@ -338,6 +339,9 @@ export class NCPOrchestrator {
 
     // Add internal MCPs immediately so they're always available
     await this.addInternalMCPsToDiscovery();
+
+    // Load skills from ~/.ncp/skills
+    await this.loadSkills();
 
     // Initialize CSV cache
     await this.csvCache.initialize();
@@ -631,8 +635,88 @@ export class NCPOrchestrator {
       this.codeExecutor.registerNamespace(namespace);
     }
 
-    const totalNamespaces = this.definitions.size + internalMCPs.length;
-    logger.info(`✅ Registered ${totalNamespaces} Code-Mode namespaces with ${this.allTools.length} tools`);
+    // Register skills as namespaces
+    let skillsCount = 0;
+    if (this.skillsManager) {
+      const skills = this.skillsManager.getLoadedSkills();
+      for (const skill of skills) {
+        const namespace: ToolNamespace = {
+          name: skill.metadata.name,
+          tools: new Map(skill.metadata.tools.map((tool: any) => [
+            tool.name,
+            {
+              name: tool.name,
+              description: tool.description,
+              inputSchema: tool.inputSchema || { type: 'object', properties: {} }
+            }
+          ])),
+          executor: async (toolName: string, params: any) => {
+            return await this.skillsManager.executeSkillTool(skill.metadata.name, toolName, params);
+          }
+        };
+
+        this.codeExecutor.registerNamespace(namespace);
+        skillsCount++;
+      }
+    }
+
+    const totalNamespaces = this.definitions.size + internalMCPs.length + skillsCount;
+    logger.info(`✅ Registered ${totalNamespaces} Code-Mode namespaces (${this.definitions.size} MCPs, ${internalMCPs.length} internal, ${skillsCount} skills) with ${this.allTools.length} tools`);
+  }
+
+  /**
+   * Load and register agent skills from ~/.ncp/skills
+   */
+  private async loadSkills(): Promise<void> {
+    try {
+      const { SkillsManager } = await import('../services/skills-manager.js');
+      this.skillsManager = new SkillsManager();
+
+      const skills = await this.skillsManager.loadAllSkills();
+
+      // Add skills to definitions (similar to internal MCPs)
+      for (const skill of skills) {
+        // Add to definitions
+        this.definitions.set(skill.metadata.name, {
+          name: skill.metadata.name,
+          config: {
+            name: skill.metadata.name,
+            command: 'skill',
+            args: []
+          },
+          tools: skill.metadata.tools.map((tool: any) => ({
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema
+          })),
+          serverInfo: {
+            name: skill.metadata.name,
+            version: skill.metadata.version,
+            description: skill.metadata.description
+          }
+        });
+
+        // Add to allTools
+        for (const tool of skill.metadata.tools) {
+          this.allTools.push({
+            name: `${skill.metadata.name}:${tool.name}`,
+            description: tool.description,
+            mcpName: skill.metadata.name
+          });
+
+          // Map tool names for lookup
+          this.toolToMCP.set(tool.name, skill.metadata.name);
+          this.toolToMCP.set(`${skill.metadata.name}:${tool.name}`, skill.metadata.name);
+        }
+      }
+
+      if (skills.length > 0) {
+        const totalTools = skills.reduce((sum: number, s: any) => sum + s.metadata.tools.length, 0);
+        logger.info(`✅ Loaded ${skills.length} skill(s) with ${totalTools} tools`);
+      }
+    } catch (error: any) {
+      logger.warn(`Failed to load skills: ${error.message}`);
+    }
   }
 
   /**
