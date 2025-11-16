@@ -500,6 +500,86 @@ export class NCPOrchestrator {
   private async registerCodeModeNamespaces(): Promise<void> {
     logger.debug('Registering Code-Mode namespaces...');
 
+    // Register NCP's own core tools for progressive disclosure
+    const ncpNamespace: ToolNamespace = {
+      name: 'ncp',
+      tools: new Map([
+        ['find', {
+          name: 'find',
+          description: 'Discover available tools by searching or listing. Use for progressive disclosure - find what you need, then use it.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              description: {
+                type: 'string',
+                description: 'Search query describing what you want to do (e.g., "send email", "read database"). Omit to list all tools.'
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum number of results (default: 5 for search, 20 for list)'
+              },
+              page: {
+                type: 'number',
+                description: 'Page number for pagination (default: 1)'
+              },
+              confidence_threshold: {
+                type: 'number',
+                description: 'Minimum confidence (0.0-1.0, default: 0.35)'
+              },
+              depth: {
+                type: 'number',
+                description: 'Detail level: 0=names only, 1=names+descriptions, 2=full details (default: 2)'
+              }
+            }
+          }
+        }],
+        ['run', {
+          name: 'run',
+          description: 'Execute a tool by its qualified name (mcp:tool). Usually you call tools directly via namespaces, but this is useful for dynamic execution.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              tool: {
+                type: 'string',
+                description: 'Tool identifier in format "mcp_name:tool_name"'
+              },
+              parameters: {
+                type: 'object',
+                description: 'Parameters to pass to the tool'
+              }
+            },
+            required: ['tool']
+          }
+        }]
+      ]),
+      executor: async (toolName: string, params: any) => {
+        if (toolName === 'find') {
+          // Use ToolFinder service for find
+          const { ToolFinder } = await import('../services/tool-finder.js');
+          const finder = new ToolFinder(this);
+          const result = await finder.find({
+            query: params.description || '',
+            page: params.page || 1,
+            limit: params.limit || (params.description ? 5 : 20),
+            depth: params.depth !== undefined ? params.depth : 2,
+            confidenceThreshold: params.confidence_threshold !== undefined ? params.confidence_threshold : 0.35
+          });
+          return result;
+        } else if (toolName === 'run') {
+          // Use orchestrator's run method
+          const result = await this.run(params.tool, params.parameters || {});
+          if (result.success) {
+            return result.content;
+          } else {
+            throw new Error(result.error || 'Tool execution failed');
+          }
+        }
+        throw new Error(`Unknown NCP tool: ${toolName}`);
+      }
+    };
+
+    this.codeExecutor.registerNamespace(ncpNamespace);
+
     // Register external MCPs
     for (const [mcpName, definition] of this.definitions.entries()) {
       const namespace: ToolNamespace = {

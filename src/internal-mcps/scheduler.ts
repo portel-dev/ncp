@@ -337,10 +337,10 @@ export class SchedulerMCP implements InternalMCP {
       if (!this.scheduler.isAvailable()) {
         return {
           success: false,
-          error: 'Scheduler not available on this platform',
+          error: 'Schedule MCP not available on this platform',
           content: [{
             type: 'text',
-            text: '❌ Scheduler not available on this platform (Windows not supported). Scheduling requires Unix/Linux/macOS with cron.'
+            text: '❌ Schedule MCP not available on this platform (Windows not supported). Scheduling requires Unix/Linux/macOS with cron.'
           }]
         };
       }
@@ -372,10 +372,10 @@ export class SchedulerMCP implements InternalMCP {
         default:
           return {
             success: false,
-            error: `Unknown scheduler tool: ${toolName}`,
+            error: `Unknown schedule tool: ${toolName}. Available: validate, create, list, get, retrieve, pause, resume, cancel, executions`,
             content: [{
               type: 'text',
-              text: `❌ Unknown scheduler tool: ${toolName}`
+              text: `❌ Unknown schedule tool: ${toolName}\n\n📋 Available tools: validate, create, list, get, retrieve, pause, resume, cancel, executions`
             }]
           };
       }

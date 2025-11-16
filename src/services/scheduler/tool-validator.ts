@@ -285,21 +285,23 @@ export class ToolValidator {
     tool: string
   ): Promise<{ schema: any } | null> {
     try {
-      // Try to find the tool using orchestrator's find method
-      const results = await orchestrator.find(tool, 5, false);
+      // Parse tool identifier (format: "mcpName:toolName")
+      const [mcpName, toolName] = tool.includes(':') ? tool.split(':') : [null, tool];
 
-      if (results.length === 0) {
+      if (!mcpName || !toolName) {
+        logger.error(`[ToolValidator] Invalid tool format: ${tool}`);
         return null;
       }
 
-      // Look for exact match (compare full mcpName:toolName format)
-      const exactMatch = results.find((r: any) => `${r.mcpName}:${r.toolName}` === tool);
-      if (exactMatch) {
-        return { schema: exactMatch.schema };
+      // Use getToolSchema for exact lookup (not semantic search)
+      const schema = orchestrator.getToolSchema(mcpName, toolName);
+
+      if (!schema) {
+        logger.debug(`[ToolValidator] Tool not found: ${tool}`);
+        return null;
       }
 
-      // If no exact match, return null (ambiguous)
-      return null;
+      return { schema };
     } catch (error) {
       logger.error(`[ToolValidator] Error finding tool: ${error instanceof Error ? error.message : String(error)}`);
       return null;

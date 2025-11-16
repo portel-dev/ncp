@@ -180,7 +180,7 @@ export class NCPLogParser {
         .filter(file => file.endsWith('.log'))
         .map(file => join(this.logsDir, file));
 
-      console.log(`📊 Parsing ${logFiles.length} log files...`);
+      console.error(`📊 Parsing ${logFiles.length} log files...`);
 
       // Calculate date range
       let fromDate: Date | undefined;
@@ -237,7 +237,7 @@ export class NCPLogParser {
           : options?.period
           ? `last ${options.period} days`
           : `${fromDate?.toLocaleDateString() || 'start'} to ${toDate?.toLocaleDateString() || 'now'}`;
-        console.log(`📅 Filtering for ${rangeDesc}: ${sessions.length} sessions`);
+        console.error(`📅 Filtering for ${rangeDesc}: ${sessions.length} sessions`);
       }
 
       return this.generateReport(sessions);

@@ -338,13 +338,13 @@ export class MCPServer implements ElicitationServer {
       },
       {
         name: 'code',
-        description: 'Execute TypeScript code with access to all MCPs and Photons as namespaces. This is UTCP Code-Mode - 60% faster execution, 68% fewer tokens, 88% fewer API round trips. All registered tools are available as namespace.tool() calls (e.g., github.get_repo()). Use __interfaces to list available tools and __getToolInterface(name) to inspect tool schemas. Console output is captured and returned.',
+        description: 'Execute TypeScript code with access to all MCPs and Photons as namespaces. UTCP Code-Mode delivers 60% faster execution, 68% fewer tokens, 88% fewer API round trips. All registered tools are available as namespace.tool() calls (e.g., github.get_repo()). PROGRESSIVE DISCLOSURE: Use ncp.find() to discover tools on-demand, then call them directly. Introspection: __interfaces lists all tools, __getToolInterface(name) shows schemas. Console output is captured and returned.',
         inputSchema: {
           type: 'object',
           properties: {
             code: {
               type: 'string',
-              description: 'TypeScript code to execute. All MCPs/Photons are available as namespaces. Example: const repo = await github.get_repo({ owner: "octocat", name: "hello-world" }); console.log(repo);'
+              description: 'TypeScript code to execute. All MCPs/Photons available as namespaces. PROGRESSIVE DISCLOSURE pattern: const tools = await ncp.find({ description: "send email" }); console.log(tools); const result = await gmail.send_email({ to: "user@example.com", subject: "Hello", body: "World" }); Multiple operations in one execution for maximum efficiency.'
             },
             timeout: {
               type: 'number',

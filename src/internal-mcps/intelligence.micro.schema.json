@@ -1,0 +1,23 @@
+[
+  {
+    "name": "execute",
+    "description": "Execute a prompt with Claude CLI using specified MCPs",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "mcps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "prompt"
+      ]
+    }
+  }
+]

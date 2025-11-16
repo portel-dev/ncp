@@ -299,7 +299,9 @@ export class NCPManagementMCP implements InternalMCP {
             success: false,
             error: `Provider "${mcpName}" not found in registry. Either:\n` +
                    `1. Use a known provider name (e.g., "canva", "github", "notion")\n` +
-                   `2. Provide manual configuration with command (for stdio) or url (for HTTP/SSE)`
+                   `2. Provide file path for MicroMCP: "${mcpName}.micro.ts" or "~/.ncp/micromcps/${mcpName}.micro.ts"\n` +
+                   `3. Provide manual configuration with command (for stdio) or url (for HTTP/SSE)\n\n` +
+                   `💡 Tip: MicroMCPs in ~/.ncp/micromcps/ are auto-discovered on NCP startup`
           };
         }
 
