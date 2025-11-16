@@ -105,3 +105,4 @@ experiment-*.js
 2025-*.txt
 test-configs/
 .claude/settings.local.json
+.claude/settings.local.json

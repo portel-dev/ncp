@@ -77,6 +77,7 @@ import { CachePatcher } from '../cache/cache-patcher.js';
 import { CSVCache, CachedTool } from '../cache/csv-cache.js';
 import { spinner } from '../utils/progress-spinner.js';
 import { MCPUpdateChecker } from '../utils/mcp-update-checker.js';
+import { CodeExecutor, type ToolNamespace } from '../code-mode/code-executor.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -145,7 +146,7 @@ interface MCPConnection {
 interface MCPDefinition {
   name: string;
   config: MCPConfig;
-  tools: Array<{name: string; description: string}>;
+  tools: Array<{name: string; description: string; inputSchema?: any}>;
   serverInfo?: {
     name: string;
     title?: string;
@@ -182,6 +183,7 @@ export class NCPOrchestrator {
   private backgroundInitPromise: Promise<void> | null = null;
   private newlyIndexedMCPs: Set<string> = new Set();  // Track MCPs indexed in current run
   private cliScanner: any = null; // CLIScanner instance for query-specific enhancement
+  private codeExecutor: CodeExecutor;
 
   private forceRetry: boolean = false;
 
@@ -206,6 +208,7 @@ export class NCPOrchestrator {
     this.showProgress = showProgress;
     this.forceRetry = forceRetry;
     this.internalMCPManager = new InternalMCPManager();
+    this.codeExecutor = new CodeExecutor();
   }
 
   private async loadProfile(): Promise<Profile | null> {
@@ -450,6 +453,9 @@ export class NCPOrchestrator {
     const loadTime = Date.now() - startTime;
     logger.info(`🚀 NCP initialized in ${loadTime}ms with ${this.allTools.length} tools from ${externalMCPs} external + ${internalMCPs} internal MCPs`);
 
+    // Register all MCPs and Photons as Code-Mode namespaces
+    await this.registerCodeModeNamespaces();
+
     // Trigger CLI auto-discovery if shell access is available
     await this.maybeAutoScanCLITools();
   }
@@ -485,6 +491,68 @@ export class NCPOrchestrator {
     this.runBackgroundCliScan().catch(err => {
       logger.warn(`CLI auto-scan failed: ${err}`);
     });
+  }
+
+  /**
+   * Register all MCPs and Photons as Code-Mode namespaces
+   * Enables AI to execute TypeScript code with tool access as namespaces
+   */
+  private async registerCodeModeNamespaces(): Promise<void> {
+    logger.debug('Registering Code-Mode namespaces...');
+
+    // Register external MCPs
+    for (const [mcpName, definition] of this.definitions.entries()) {
+      const namespace: ToolNamespace = {
+        name: mcpName,
+        tools: new Map(definition.tools.map(tool => [
+          tool.name,
+          {
+            name: tool.name,
+            description: tool.description || '',
+            inputSchema: tool.inputSchema || { type: 'object', properties: {} }
+          }
+        ])),
+        executor: async (toolName: string, params: any) => {
+          const result = await this.run(`${mcpName}:${toolName}`, params);
+          if (result.success) {
+            return result.content;
+          } else {
+            throw new Error(result.error || 'Tool execution failed');
+          }
+        }
+      };
+
+      this.codeExecutor.registerNamespace(namespace);
+    }
+
+    // Register internal MCPs
+    const internalMCPs = this.internalMCPManager.getAllEnabledInternalMCPs();
+    for (const internalMCP of internalMCPs) {
+      const namespace: ToolNamespace = {
+        name: internalMCP.name,
+        tools: new Map(internalMCP.tools.map((tool: any) => [
+          tool.name,
+          {
+            name: tool.name,
+            description: tool.description || '',
+            inputSchema: tool.inputSchema || { type: 'object', properties: {} }
+          }
+        ])),
+        executor: async (toolName: string, params: any) => {
+          const result = await this.run(`${internalMCP.name}:${toolName}`, params);
+          if (result.success) {
+            return result.content;
+          } else {
+            throw new Error(result.error || 'Tool execution failed');
+          }
+        }
+      };
+
+      this.codeExecutor.registerNamespace(namespace);
+    }
+
+    const totalNamespaces = this.definitions.size + internalMCPs.length;
+    logger.info(`✅ Registered ${totalNamespaces} Code-Mode namespaces with ${this.allTools.length} tools`);
   }
 
   /**
@@ -2595,6 +2663,26 @@ export class NCPOrchestrator {
   setClientInfo(clientInfo: { name: string; version: string }): void {
     this.clientInfo = clientInfo;
     logger.debug(`Client info updated: ${clientInfo.name} v${clientInfo.version}`);
+  }
+
+  /**
+   * Execute TypeScript code with access to all MCPs and Photons as namespaces
+   * Implements UTCP Code-Mode for 60% faster execution, 68% fewer tokens
+   */
+  async executeCode(code: string, timeout?: number): Promise<{
+    result: any;
+    logs: string[];
+    error?: string;
+  }> {
+    return await this.codeExecutor.executeCode(code, timeout);
+  }
+
+  /**
+   * Generate TypeScript interface definitions for all available tools
+   * Useful for providing type hints to AI agents
+   */
+  generateCodeModeInterfaces(): string {
+    return this.codeExecutor.generateTypeScriptInterfaces();
   }
 
   /**
