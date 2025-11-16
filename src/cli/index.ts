@@ -1365,6 +1365,11 @@ program
 
 // Helper function to format find command output with consistent color scheme
 function formatFindOutput(text: string): string {
+  // First, extract and syntax-highlight code blocks
+  text = text.replace(/```typescript\n([\s\S]*?)```/g, (match, code) => {
+    return formatTypeScriptCode(code);
+  });
+
   return text
     // Tool names in headers: # **toolname** -> bold light blue
     .replace(/^# \*\*([^*]+)\*\*/gm, (match, toolName) => chalk.bold.cyanBright(toolName))
@@ -1407,6 +1412,8 @@ function formatFindOutput(text: string): string {
     })
     // [no parameters] -> dim
     .replace(/\*\[no parameters\]\*/g, chalk.dim('[no parameters]'))
+    // Inline code: `text` -> cyan for Code-Mode examples in tips
+    .replace(/`([^`]+)`/g, (match, code) => chalk.cyan(code))
     // Italic text: *text* -> dim for tips
     .replace(/\*([^*\[]+)\*/g, (match, text) => chalk.dim(text))
     // Confidence percentages: (XX% match) -> green percentage
@@ -1417,6 +1424,51 @@ function formatFindOutput(text: string): string {
     .replace(/❌ No tools found for "([^"]+)"/g, (match, query) => `❌ No tools found for ${chalk.bold.white(`"${query}"`)}`)
     // Usage tips
     .replace(/^💡 (.+)$/gm, (match, tip) => `💡 ${chalk.white(tip)}`);
+}
+
+/**
+ * Syntax highlight TypeScript code for terminal display
+ */
+function formatTypeScriptCode(code: string): string {
+  let highlighted = code
+    // Keywords: const, let, var, await, async, return, etc.
+    .replace(/\b(const|let|var|await|async|return|if|else|for|while|function|class|interface|type|import|export|from|new)\b/g,
+      (match) => chalk.magenta(match))
+    // Strings: "..." and '...'
+    .replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, (match) => chalk.green(match))
+    // Comments: // ...
+    .replace(/\/\/.*$/gm, (match) => chalk.dim.gray(match))
+    // Numbers
+    .replace(/\b(\d+)\b/g, (match) => chalk.yellow(match))
+    // Function calls: functionName(
+    .replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g, (match, fn) => chalk.cyan(fn) + '(')
+    // Object keys in { key: value }
+    .replace(/(\w+):/g, (match, key) => chalk.blue(key) + ':')
+    // console methods
+    .replace(/\bconsole\./g, chalk.yellow('console') + '.');
+
+  // Add box around code with nice borders
+  const lines = highlighted.split('\n');
+  const maxLength = Math.max(...lines.map(l => stripAnsi(l).length));
+  const border = chalk.dim('─'.repeat(maxLength + 4));
+
+  const boxed = [
+    chalk.dim('┌') + border + chalk.dim('┐'),
+    ...lines.map(line => {
+      const padding = ' '.repeat(maxLength - stripAnsi(line).length);
+      return chalk.dim('│ ') + line + padding + ' ' + chalk.dim('│');
+    }),
+    chalk.dim('└') + border + chalk.dim('┘')
+  ].join('\n');
+
+  return boxed;
+}
+
+/**
+ * Strip ANSI color codes to get actual string length
+ */
+function stripAnsi(str: string): string {
+  return str.replace(/\u001b\[\d+m/g, '');
 }
 
 
