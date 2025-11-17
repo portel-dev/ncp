@@ -1,21 +1,16 @@
 /**
- * Code-Mode Executor
- *
- * Enables AI agents to execute TypeScript code with access to all registered
- * MCPs and Photons as namespaces. This replaces sequential tool calls with
- * single code execution, improving efficiency by 60%+ and reducing tokens by 68%.
- *
- * Features:
- * - Execute TypeScript code in isolated VM sandbox
- * - All MCPs/Photons available as namespaces (e.g., github.get_repo())
- * - Runtime introspection (__interfaces, __getToolInterface)
- * - Complete console output capture
- * - Configurable timeout protection
- * - Full error propagation with stack traces
+ * Code-Mode Executor - TypeScript code execution with tool access
+ * Based on official UTCP Code-Mode implementation pattern
  */
 
-import vm from 'vm';
+import { createContext, runInContext } from 'vm';
 import { logger } from '../utils/logger.js';
+
+export interface ToolDefinition {
+  name: string; // Format: "namespace:tool" or "namespace.tool"
+  description: string;
+  inputSchema: any;
+}
 
 export interface CodeExecutionResult {
   result: any;
@@ -23,273 +18,214 @@ export interface CodeExecutionResult {
   error?: string;
 }
 
-export interface ToolInterface {
-  name: string;
-  description: string;
-  inputSchema: any;
-}
-
-export interface ToolNamespace {
-  name: string;
-  tools: Map<string, ToolInterface>;
-  executor: (toolName: string, params: any) => Promise<any>;
-}
-
 export class CodeExecutor {
-  private namespaces = new Map<string, ToolNamespace>();
-  private logs: string[] = [];
-  private defaultTimeout = 30000; // 30 seconds
+  private toolExecutor: (toolName: string, params: any) => Promise<any>;
+  private toolsProvider: () => Promise<ToolDefinition[]>;
 
-  /**
-   * Register a tool namespace (MCP or Photon)
-   */
-  registerNamespace(namespace: ToolNamespace): void {
-    this.namespaces.set(namespace.name, namespace);
-    logger.debug(`Registered Code-Mode namespace: ${namespace.name} (${namespace.tools.size} tools)`);
+  constructor(
+    toolsProvider: () => Promise<ToolDefinition[]>,
+    toolExecutor: (toolName: string, params: any) => Promise<any>
+  ) {
+    this.toolsProvider = toolsProvider;
+    this.toolExecutor = toolExecutor;
   }
 
   /**
-   * Get all registered namespace names
+   * Execute TypeScript code with tool access
    */
-  getInterfaces(): Record<string, string[]> {
-    const interfaces: Record<string, string[]> = {};
-    for (const [name, ns] of this.namespaces) {
-      interfaces[name] = Array.from(ns.tools.keys());
+  async executeCode(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
+    const logs: string[] = [];
+
+    try {
+      // Get all available tools
+      const tools = await this.toolsProvider();
+
+      logger.info(`🔍 Executing code with ${tools.length} tools available`);
+
+      // Create execution context
+      const context = await this.createExecutionContext(tools, logs);
+      const vmContext = createContext(context);
+
+      // Wrap code in async function
+      const wrappedCode = `(async () => { ${code} })()`;
+
+      // Execute with timeout
+      const result = await this.runWithTimeout(wrappedCode, vmContext, timeout);
+
+      return { result, logs };
+    } catch (error: any) {
+      logger.error(`Code execution failed: ${error.message}`);
+      return {
+        result: null,
+        logs: [...logs, `[ERROR] ${error.message}`],
+        error: error.message
+      };
     }
-    return interfaces;
   }
 
   /**
-   * Get tool interface by fully qualified name (namespace.tool)
+   * Create VM execution context with tools organized by namespace
+   * Based on official UTCP pattern
    */
-  getToolInterface(qualifiedName: string): ToolInterface | null {
-    const [namespaceName, toolName] = qualifiedName.split('.');
-
-    if (!namespaceName || !toolName) {
-      return null;
-    }
-
-    const namespace = this.namespaces.get(namespaceName);
-    if (!namespace) {
-      return null;
-    }
-
-    return namespace.tools.get(toolName) || null;
-  }
-
-  /**
-   * Create sandbox context with all namespaces and introspection
-   */
-  private createSandboxContext(): any {
-    const context: any = {
-      console: {
-        log: (...args: any[]) => {
-          this.logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
-        },
-        error: (...args: any[]) => {
-          this.logs.push('[ERROR] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
-        },
-        warn: (...args: any[]) => {
-          this.logs.push('[WARN] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
-        },
-        info: (...args: any[]) => {
-          this.logs.push('[INFO] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
-        },
-        debug: (...args: any[]) => {
-          this.logs.push('[DEBUG] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
-        },
+  private async createExecutionContext(
+    tools: ToolDefinition[],
+    logs: string[]
+  ): Promise<Record<string, any>> {
+    // Create console for log capture
+    const consoleObj = {
+      log: (...args: any[]) => {
+        logs.push(args.map(arg =>
+          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+        ).join(' '));
       },
+      error: (...args: any[]) => {
+        logs.push('[ERROR] ' + args.map(arg =>
+          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+        ).join(' '));
+      },
+      warn: (...args: any[]) => {
+        logs.push('[WARN] ' + args.map(arg =>
+          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+        ).join(' '));
+      },
+      info: (...args: any[]) => {
+        logs.push('[INFO] ' + args.map(arg =>
+          typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+        ).join(' '));
+      }
+    };
 
-      // Introspection globals
-      __interfaces: this.getInterfaces(),
-      __getToolInterface: (name: string) => this.getToolInterface(name),
-
-      // Add common globals
-      setTimeout,
-      setInterval,
-      clearTimeout,
-      clearInterval,
-      Promise,
+    const context: Record<string, any> = {
+      // Basic utilities
+      console: consoleObj,
       JSON,
-      Math,
-      Date,
+      Promise,
       Array,
       Object,
       String,
       Number,
       Boolean,
-      Error,
+      Math,
+      Date,
+      setTimeout,
+      setInterval,
+      clearTimeout,
+      clearInterval,
+
+      // Introspection
+      __interfaces: this.generateTypeScriptInterfaces(tools),
+      __getToolInterface: (toolName: string) => {
+        const tool = tools.find(t => t.name === toolName || t.name.replace(':', '.') === toolName);
+        return tool ? this.toolToTypeScriptInterface(tool) : null;
+      }
     };
 
-    // Create namespace proxies
-    for (const [name, namespace] of this.namespaces) {
-      const namespaceProxy: any = {};
+    // Organize tools by namespace
+    // Format: "namespace:tool" → namespace.tool()
+    for (const tool of tools) {
+      // Convert "namespace:tool" to ["namespace", "tool"]
+      const parts = tool.name.includes(':') ? tool.name.split(':') : tool.name.split('.');
 
-      for (const [toolName, toolInterface] of namespace.tools) {
-        namespaceProxy[toolName] = async (params?: any) => {
-          logger.debug(`Code-Mode executing: ${name}.${toolName}`);
+      if (parts.length >= 2) {
+        const namespaceName = this.sanitizeIdentifier(parts[0]);
+        const toolName = this.sanitizeIdentifier(parts.slice(1).join('_'));
 
+        // Create namespace object if it doesn't exist
+        if (!context[namespaceName]) {
+          context[namespaceName] = {};
+        }
+
+        // Add tool function to namespace
+        context[namespaceName][toolName] = async (args?: Record<string, any>) => {
           try {
-            const result = await namespace.executor(toolName, params || {});
-            return result;
+            return await this.toolExecutor(tool.name, args || {});
           } catch (error: any) {
-            logger.error(`Code-Mode error in ${name}.${toolName}: ${error.message}`);
-            throw error;
+            throw new Error(`Error calling ${tool.name}: ${error.message}`);
+          }
+        };
+      } else {
+        // No namespace - add directly to context
+        const sanitizedName = this.sanitizeIdentifier(tool.name);
+        context[sanitizedName] = async (args?: Record<string, any>) => {
+          try {
+            return await this.toolExecutor(tool.name, args || {});
+          } catch (error: any) {
+            throw new Error(`Error calling ${tool.name}: ${error.message}`);
           }
         };
       }
-
-      context[name] = namespaceProxy;
     }
+
+    logger.info(`📦 Context created with namespaces: ${Object.keys(context).filter(k => typeof context[k] === 'object' && !k.startsWith('__')).join(', ')}`);
 
     return context;
   }
 
   /**
-   * Compile TypeScript to JavaScript
+   * Execute code with timeout
    */
-  private async compileTypeScript(code: string): Promise<string> {
-    // For now, just return the code as-is (assuming it's valid JS)
-    // In production, you'd use TypeScript compiler or esbuild
-    // Most code will be simple async/await that works in modern Node.js
-    return code;
+  private async runWithTimeout(
+    code: string,
+    context: any,
+    timeout: number
+  ): Promise<any> {
+    return await Promise.race([
+      runInContext(code, context, { timeout }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Execution timeout')), timeout)
+      )
+    ]);
   }
 
   /**
-   * Execute TypeScript code with access to all registered tools
+   * Generate TypeScript interface definitions for all tools
    */
-  async executeCode(code: string, timeout: number = this.defaultTimeout): Promise<CodeExecutionResult> {
-    this.logs = []; // Reset logs
+  private generateTypeScriptInterfaces(tools: ToolDefinition[]): string {
+    const namespaces: Record<string, string[]> = {};
 
-    try {
-      // Compile TypeScript to JavaScript
-      const jsCode = await this.compileTypeScript(code);
+    for (const tool of tools) {
+      const parts = tool.name.includes(':') ? tool.name.split(':') : tool.name.split('.');
 
-      // Create sandbox context
-      const context = this.createSandboxContext();
-      vm.createContext(context);
-
-      // Wrap code in async function
-      const wrappedCode = `
-        (async () => {
-          ${jsCode}
-        })()
-      `;
-
-      // Execute with timeout
-      const script = new vm.Script(wrappedCode);
-      const result = await Promise.race([
-        script.runInContext(context, { timeout }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Execution timeout')), timeout)
-        )
-      ]);
-
-      return {
-        result,
-        logs: this.logs,
-      };
-    } catch (error: any) {
-      logger.error(`Code-Mode execution error: ${error.message}`);
-
-      return {
-        result: null,
-        logs: this.logs,
-        error: error.message,
-      };
-    }
-  }
-
-  /**
-   * Generate TypeScript interface definitions for all registered tools
-   */
-  generateTypeScriptInterfaces(): string {
-    const lines: string[] = [];
-
-    lines.push('/**');
-    lines.push(' * Code-Mode Tool Interfaces');
-    lines.push(' * Auto-generated TypeScript definitions for all available tools');
-    lines.push(' */\n');
-
-    for (const [namespaceName, namespace] of this.namespaces) {
-      lines.push(`declare namespace ${namespaceName} {`);
-
-      for (const [toolName, tool] of namespace.tools) {
-        if (tool.description) {
-          lines.push(`  /**`);
-          lines.push(`   * ${tool.description}`);
-          lines.push(`   */`);
+      if (parts.length >= 2) {
+        const ns = parts[0];
+        const toolDef = this.toolToTypeScriptInterface(tool);
+        if (!namespaces[ns]) {
+          namespaces[ns] = [];
         }
-
-        // Generate parameter type
-        const paramType = this.schemaToTypeScript(tool.inputSchema);
-
-        lines.push(`  function ${toolName}(params${tool.inputSchema.required?.length ? '' : '?'}: ${paramType}): Promise<any>;`);
-        lines.push('');
+        namespaces[ns].push(toolDef);
       }
-
-      lines.push('}\n');
     }
 
-    // Add introspection globals
-    lines.push('/**');
-    lines.push(' * List all available tool interfaces');
-    lines.push(' */');
-    lines.push('declare const __interfaces: string[];\n');
+    let interfaces = '// Available tool namespaces:\n\n';
+    for (const [ns, tools] of Object.entries(namespaces)) {
+      interfaces += `namespace ${ns} {\n`;
+      tools.forEach(tool => {
+        interfaces += `  ${tool}\n`;
+      });
+      interfaces += `}\n\n`;
+    }
 
-    lines.push('/**');
-    lines.push(' * Get tool interface by fully qualified name');
-    lines.push(' */');
-    lines.push('declare function __getToolInterface(name: string): ToolInterface | null;\n');
-
-    return lines.join('\n');
+    return interfaces;
   }
 
   /**
-   * Convert JSON Schema to TypeScript type
+   * Convert tool to TypeScript function signature
    */
-  private schemaToTypeScript(schema: any): string {
-    if (!schema || schema.type !== 'object') {
-      return 'any';
-    }
+  private toolToTypeScriptInterface(tool: ToolDefinition): string {
+    const parts = tool.name.includes(':') ? tool.name.split(':') : tool.name.split('.');
+    const toolName = parts.length >= 2 ? this.sanitizeIdentifier(parts.slice(1).join('_')) : this.sanitizeIdentifier(tool.name);
 
-    const properties = schema.properties || {};
-    const required = new Set(schema.required || []);
+    const params = tool.inputSchema?.properties
+      ? `{ ${Object.keys(tool.inputSchema.properties).join(', ')} }`
+      : 'any';
 
-    const fields: string[] = [];
-
-    for (const [key, prop] of Object.entries(properties)) {
-      const propSchema = prop as any;
-      const optional = !required.has(key);
-      const type = this.jsonSchemaTypeToTS(propSchema);
-
-      fields.push(`${key}${optional ? '?' : ''}: ${type}`);
-    }
-
-    return `{ ${fields.join('; ')} }`;
+    return `${toolName}(params?: ${params}): Promise<any>; // ${tool.description}`;
   }
 
   /**
-   * Map JSON Schema types to TypeScript types
+   * Sanitize identifier for valid TypeScript
    */
-  private jsonSchemaTypeToTS(schema: any): string {
-    if (!schema.type) return 'any';
-
-    switch (schema.type) {
-      case 'string':
-        return 'string';
-      case 'number':
-      case 'integer':
-        return 'number';
-      case 'boolean':
-        return 'boolean';
-      case 'array':
-        const itemType = schema.items ? this.jsonSchemaTypeToTS(schema.items) : 'any';
-        return `${itemType}[]`;
-      case 'object':
-        return this.schemaToTypeScript(schema);
-      default:
-        return 'any';
-    }
+  private sanitizeIdentifier(name: string): string {
+    return name.replace(/[^a-zA-Z0-9_]/g, '_');
   }
 }
