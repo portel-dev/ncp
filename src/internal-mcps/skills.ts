@@ -49,18 +49,10 @@ export class SkillsManagementMCP implements InternalMCP {
         properties: {
           skill_name: {
             type: 'string',
-            description: 'REQUIRED. Name of the skill to remove. Use "list" method to get exact names of installed skills.'
+            description: 'REQUIRED. Name of the skill to remove.'
           }
         },
         required: ['skill_name']
-      }
-    },
-    {
-      name: 'marketplace-list',
-      description: 'List all configured skill marketplaces (including official anthropics/skills repository)',
-      inputSchema: {
-        type: 'object',
-        properties: {}
       }
     }
   ];
@@ -90,13 +82,10 @@ export class SkillsManagementMCP implements InternalMCP {
         case 'remove':
           return await this.handleRemove(client, params);
 
-        case 'marketplace-list':
-          return await this.handleMarketplaceList(client);
-
         default:
           return {
             success: false,
-            content: `Unknown skill tool: ${toolName}. Available: add, list, remove, marketplace-list`
+            content: `Unknown skill tool: ${toolName}. Available: add, list, remove`
           };
       }
     } catch (error: any) {
@@ -170,7 +159,7 @@ export class SkillsManagementMCP implements InternalMCP {
     if (!skillName) {
       return {
         success: false,
-        content: 'Missing required parameter: skill_name. Use "skills:list" to see installed skills.'
+        content: 'Missing required parameter: skill_name'
       };
     }
 
@@ -188,35 +177,5 @@ export class SkillsManagementMCP implements InternalMCP {
         content: `❌ ${result.message}`
       };
     }
-  }
-
-  private async handleMarketplaceList(client: SkillsMarketplaceClient): Promise<InternalToolResult> {
-    const marketplaces = client.getAll();
-
-    if (marketplaces.length === 0) {
-      return {
-        success: true,
-        content: 'No marketplaces configured. This is unexpected - the default anthropics/skills marketplace should be configured automatically.'
-      };
-    }
-
-    let output = `## Configured Skill Marketplaces (${marketplaces.length})\n\n`;
-
-    for (const marketplace of marketplaces) {
-      output += `### ${marketplace.name}\n`;
-      output += `**Repository:** ${marketplace.repo || 'N/A'}\n`;
-      output += `**Source:** ${marketplace.source}\n`;
-      output += `**Type:** ${marketplace.sourceType}\n`;
-      output += `**Status:** ${marketplace.enabled ? '✅ Enabled' : '❌ Disabled'}\n`;
-      if (marketplace.lastUpdated) {
-        output += `**Last Updated:** ${marketplace.lastUpdated}\n`;
-      }
-      output += '\n';
-    }
-
-    return {
-      success: true,
-      content: output
-    };
   }
 }
