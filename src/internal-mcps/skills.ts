@@ -20,27 +20,27 @@ export class SkillsManagementMCP implements InternalMCP {
 
   tools: InternalTool[] = [
     {
-      name: 'search',
-      description: 'Search for Anthropic Agent Skills across configured marketplaces. Returns skills from official anthropics/skills repository and user-added marketplaces. Use this to discover available skills before installing.',
+      name: 'find',
+      description: 'Discover available Anthropic Agent Skills in marketplaces. Dual mode: (1) NO QUERY: List all available skills from configured marketplaces (default behavior for discovery). (2) WITH QUERY: Search and filter skills by name/description. Use this before installing to see what\'s available.',
       inputSchema: {
         type: 'object',
         properties: {
           query: {
             type: 'string',
-            description: 'Optional search query to filter skills by name or description (e.g., "document", "pdf", "canvas"). Omit to list all available skills.'
+            description: 'Optional search query to filter skills by name or description (e.g., "document", "pdf", "canvas"). Omit to list ALL available skills (recommended for initial discovery).'
           }
         }
       }
     },
     {
       name: 'add',
-      description: 'Install an Anthropic Agent Skill from marketplace. Downloads SKILL.md to ~/.ncp/skills/ for auto-loading. Use "search" first to discover available skills.',
+      description: 'Install an Anthropic Agent Skill from marketplace. Downloads SKILL.md to ~/.ncp/skills/ for auto-loading. Use "find" first to discover available skills.',
       inputSchema: {
         type: 'object',
         properties: {
           skill_name: {
             type: 'string',
-            description: 'REQUIRED. Name of the skill to install (e.g., "canvas-design", "pdf", "docx"). Use "search" method to find exact names.'
+            description: 'REQUIRED. Name of the skill to install (e.g., "canvas-design", "pdf", "docx"). Use "find" method to discover available skills first.'
           }
         },
         required: ['skill_name']
@@ -48,7 +48,7 @@ export class SkillsManagementMCP implements InternalMCP {
     },
     {
       name: 'list',
-      description: 'List all installed Anthropic Agent Skills from ~/.ncp/skills/. Shows skills that are currently loaded and available for use.',
+      description: 'List installed Anthropic Agent Skills from ~/.ncp/skills/. Shows skills that are currently installed and ready for use. Use "find" to discover available skills before installing.',
       inputSchema: {
         type: 'object',
         properties: {}
@@ -94,8 +94,9 @@ export class SkillsManagementMCP implements InternalMCP {
 
     try {
       switch (toolName) {
-        case 'search':
-          return await this.handleSearch(client, params);
+        case 'find':
+        case 'search': // Backward compatibility
+          return await this.handleFind(client, params);
 
         case 'add':
           return await this.handleAdd(client, params);
@@ -112,7 +113,7 @@ export class SkillsManagementMCP implements InternalMCP {
         default:
           return {
             success: false,
-            content: `Unknown skill tool: ${toolName}. Available: search, add, list, remove, marketplace-list`
+            content: `Unknown skill tool: ${toolName}. Available: find, add, list, remove, marketplace-list`
           };
       }
     } catch (error: any) {
@@ -124,22 +125,25 @@ export class SkillsManagementMCP implements InternalMCP {
     }
   }
 
-  private async handleSearch(client: SkillsMarketplaceClient, params: any): Promise<InternalToolResult> {
+  private async handleFind(client: SkillsMarketplaceClient, params: any): Promise<InternalToolResult> {
     const query = params?.query;
+
+    // Dual mode: no query = list all, with query = search
     const skills = await client.search(query);
 
     if (skills.length === 0) {
       return {
         success: true,
         content: query
-          ? `No skills found matching "${query}". Try a different search term or omit the query to see all skills.`
-          : 'No skills available in configured marketplaces. Check marketplace configuration.'
+          ? `No skills found matching "${query}". Try a different search term or omit the query to see all available skills.`
+          : 'No skills available in configured marketplaces. Check marketplace configuration with skills:marketplace-list.'
       };
     }
 
+    // Different messaging for list vs search mode
     let output = query
-      ? `## Skills matching "${query}" (${skills.length})\n\n`
-      : `## Available Skills (${skills.length})\n\n`;
+      ? `## Skills matching "${query}" (${skills.length} found)\n\n`
+      : `## All Available Skills (${skills.length} total)\n\n`;
 
     for (const skill of skills) {
       output += `### ${skill.name}\n`;
@@ -153,7 +157,9 @@ export class SkillsManagementMCP implements InternalMCP {
       output += `**Install:** Use \`skills:add\` with \`skill_name: "${skill.name}"\`\n\n`;
     }
 
-    output += `\n💡 **Tip:** Use \`skills:add\` to install a skill, then it will be auto-loaded on next startup.`;
+    output += query
+      ? `\n💡 **Tip:** Use \`skills:add\` to install a skill. Use \`skills:find\` without query to see all available skills.`
+      : `\n💡 **Tip:** Use \`skills:add\` to install a skill, then it will be auto-loaded on next startup. Use \`skills:list\` to see installed skills.`;
 
     return {
       success: true,
@@ -167,7 +173,7 @@ export class SkillsManagementMCP implements InternalMCP {
     if (!skillName) {
       return {
         success: false,
-        content: 'Missing required parameter: skill_name. Use "skills:search" to discover available skills first.'
+        content: 'Missing required parameter: skill_name. Use "skills:find" to discover available skills first.'
       };
     }
 
@@ -182,7 +188,7 @@ export class SkillsManagementMCP implements InternalMCP {
     } else {
       return {
         success: false,
-        content: `❌ ${result.message}\n\n💡 **Tip:** Use "skills:search" to find available skills.`
+        content: `❌ ${result.message}\n\n💡 **Tip:** Use "skills:find" to discover available skills.`
       };
     }
   }
@@ -193,7 +199,7 @@ export class SkillsManagementMCP implements InternalMCP {
     if (skills.length === 0) {
       return {
         success: true,
-        content: `No skills installed yet.\n\n💡 **Tip:** Use "skills:search" to discover available skills, then "skills:add" to install them.`
+        content: `No skills installed yet.\n\n💡 **Tip:** Use "skills:find" to discover available skills, then "skills:add" to install them.`
       };
     }
 
