@@ -510,11 +510,11 @@ export class PersistentRAGEngine {
       for (const tool of tools) {
         const toolId = tool.id || `${mcpName}:${tool.name}`;
         const description = tool.description || tool.name;
-        const hash = this.hashDescription(description);
-        
+        const hash = this.hashTool(description, tool.inputSchema);
+
         const cached = this.vectorDB.get(toolId);
-        
-        // Skip if we already have this exact description
+
+        // Skip if we already have this exact tool (description + inputSchema)
         if (cached && cached.hash === hash) {
           logger.debug(`💾 Using cached embedding for ${toolId}`);
           cachedEmbeddings++;
@@ -1086,9 +1086,22 @@ export class PersistentRAGEngine {
 
   /**
    * Generate hash of tool description for change detection
+   * @deprecated Use hashTool instead to include inputSchema
    */
   private hashDescription(description: string): string {
     return crypto.createHash('md5').update(description).digest('hex');
+  }
+
+  /**
+   * Generate hash of tool for change detection (includes description + inputSchema)
+   * This ensures we regenerate embeddings and TypeScript interfaces when schemas change
+   */
+  private hashTool(description: string, inputSchema?: any): string {
+    const combined = JSON.stringify({
+      description,
+      inputSchema: inputSchema || null
+    });
+    return crypto.createHash('md5').update(combined).digest('hex');
   }
 
   /**
