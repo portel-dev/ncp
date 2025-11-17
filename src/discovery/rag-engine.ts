@@ -24,6 +24,8 @@ export interface ToolEmbedding {
   enhancedDescription?: string;
   mcpName?: string;
   mcpDomain?: string;
+  tsInterface?: string; // Cached TypeScript interface for Code-Mode
+  inputSchema?: any; // Original JSON schema for regeneration if needed
 }
 
 export interface CacheMetadata {
@@ -171,6 +173,76 @@ export class PersistentRAGEngine {
     }
 
     return enhancements.join('');
+  }
+
+  /**
+   * Generate TypeScript interface from JSON schema
+   * Converts MCP tool input schema to TypeScript type definition
+   */
+  private generateTypeScriptInterface(toolName: string, mcpName: string, description: string, inputSchema?: any): string {
+    // Sanitize identifiers
+    const sanitize = (name: string) => name.replace(/[^a-zA-Z0-9_]/g, '_');
+    const parts = toolName.includes(':') ? toolName.split(':') : toolName.split('.');
+    const methodName = parts.length >= 2 ? sanitize(parts.slice(1).join('_')) : sanitize(toolName);
+
+    // Generate parameter type
+    let paramType = 'any';
+    if (inputSchema?.properties && Object.keys(inputSchema.properties).length > 0) {
+      const props = Object.entries(inputSchema.properties).map(([key, value]: [string, any]) => {
+        const required = inputSchema.required?.includes(key);
+        const optional = required ? '' : '?';
+        const type = this.jsonSchemaTypeToTS(value);
+        const desc = value.description ? ` // ${value.description}` : '';
+        return `  ${key}${optional}: ${type};${desc}`;
+      });
+      paramType = `{\n${props.join('\n')}\n}`;
+    }
+
+    return `${methodName}(params?: ${paramType}): Promise<any>; // ${description}`;
+  }
+
+  /**
+   * Convert JSON schema type to TypeScript type
+   */
+  private jsonSchemaTypeToTS(schema: any): string {
+    if (!schema || !schema.type) return 'any';
+
+    const type = schema.type;
+
+    if (Array.isArray(type)) {
+      // Handle union types like ["string", "null"]
+      return type.map(t => this.jsonSchemaTypeToTS({ type: t })).join(' | ');
+    }
+
+    switch (type) {
+      case 'string':
+        if (schema.enum) {
+          return schema.enum.map((v: string) => `"${v}"`).join(' | ');
+        }
+        return 'string';
+      case 'number':
+      case 'integer':
+        return 'number';
+      case 'boolean':
+        return 'boolean';
+      case 'array':
+        const items = schema.items ? this.jsonSchemaTypeToTS(schema.items) : 'any';
+        return `${items}[]`;
+      case 'object':
+        if (schema.properties) {
+          const props = Object.entries(schema.properties).map(([key, value]: [string, any]) => {
+            const required = schema.required?.includes(key);
+            const optional = required ? '' : '?';
+            return `${key}${optional}: ${this.jsonSchemaTypeToTS(value)}`;
+          });
+          return `{ ${props.join('; ')} }`;
+        }
+        return 'Record<string, any>';
+      case 'null':
+        return 'null';
+      default:
+        return 'any';
+    }
   }
 
   private model: any;
@@ -459,11 +531,19 @@ export class PersistentRAGEngine {
             const toolIdentifier = `${mcpName}:${tool.name}`;
             const enhancedDescription = `${toolIdentifier} ${mcpDomain} context: ${description}${capabilityEnhancements}`;
             
-            const embedding = await this.model(enhancedDescription, { 
-              pooling: 'mean', 
-              normalize: true 
+            const embedding = await this.model(enhancedDescription, {
+              pooling: 'mean',
+              normalize: true
             });
-            
+
+            // Generate TypeScript interface
+            const tsInterface = this.generateTypeScriptInterface(
+              tool.name,
+              mcpName,
+              description,
+              tool.inputSchema
+            );
+
             this.vectorDB.set(toolId, {
               embedding: new Float32Array(embedding.data),
               hash: hash,
@@ -472,7 +552,9 @@ export class PersistentRAGEngine {
               description: description,
               enhancedDescription: enhancedDescription,
               mcpName: mcpName,
-              mcpDomain: mcpDomain
+              mcpDomain: mcpDomain,
+              tsInterface: tsInterface,
+              inputSchema: tool.inputSchema
             });
             
             newEmbeddings++;
@@ -482,6 +564,15 @@ export class PersistentRAGEngine {
         } else {
           // In fallback mode, just store tool metadata without embeddings
           const mcpDomain = this.getMCPDomain(mcpName);
+
+          // Generate TypeScript interface (even in fallback mode)
+          const tsInterface = this.generateTypeScriptInterface(
+            tool.name,
+            mcpName,
+            description,
+            tool.inputSchema
+          );
+
           this.vectorDB.set(toolId, {
             embedding: new Float32Array([]), // Empty embedding
             hash: hash,
@@ -490,7 +581,9 @@ export class PersistentRAGEngine {
             description: description,
             enhancedDescription: `${mcpDomain} context: ${description}${this.getCapabilityEnhancements(tool.name, description)}`,
             mcpName: mcpName,
-            mcpDomain: mcpDomain
+            mcpDomain: mcpDomain,
+            tsInterface: tsInterface,
+            inputSchema: tool.inputSchema
           });
           newEmbeddings++;
         }
@@ -1023,7 +1116,9 @@ export class PersistentRAGEngine {
           description: embeddingData.description,
           enhancedDescription: embeddingData.enhancedDescription,
           mcpName: embeddingData.mcpName,
-          mcpDomain: embeddingData.mcpDomain
+          mcpDomain: embeddingData.mcpDomain,
+          tsInterface: embeddingData.tsInterface,
+          inputSchema: embeddingData.inputSchema
         });
       }
 
@@ -1051,7 +1146,12 @@ export class PersistentRAGEngine {
           hash: embedding.hash,
           lastUpdated: embedding.lastUpdated,
           toolName: embedding.toolName,
-          description: embedding.description
+          description: embedding.description,
+          enhancedDescription: embedding.enhancedDescription,
+          mcpName: embedding.mcpName,
+          mcpDomain: embedding.mcpDomain,
+          tsInterface: embedding.tsInterface,
+          inputSchema: embedding.inputSchema
         };
       }
 
