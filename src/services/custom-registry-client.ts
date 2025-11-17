@@ -37,7 +37,7 @@ export interface CustomRegistryMCP {
     views: number;
     score: number;
   };
-  _meta?: any; // Metadata (e.g., MicroMCP detection)
+  _meta?: any; // Metadata (e.g., Photon detection)
 }
 
 export interface CustomRegistrySearchOptions {

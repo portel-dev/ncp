@@ -10,7 +10,7 @@ import { NCPManagementMCP } from './ncp-management.js';
 import { SchedulerMCP } from './scheduler.js';
 import { AnalyticsMCP } from './analytics.js';
 import { SkillsManagementMCP } from './skills.js';
-import { PhotonLoader } from './micro-loader.js';
+import { PhotonLoader } from './photon-loader.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';

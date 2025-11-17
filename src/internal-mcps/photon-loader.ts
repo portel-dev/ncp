@@ -12,7 +12,7 @@ import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as crypto from 'crypto';
 import { Photon } from './base-photon.js';
-import { PhotonAdapter } from './micro-adapter.js';
+import { PhotonAdapter } from './photon-adapter.js';
 import { InternalMCP } from './types.js';
 import { logger } from '../utils/logger.js';
 import { DependencyManager } from './dependency-manager.js';
@@ -57,7 +57,7 @@ export class PhotonLoader {
         return mcps;
       }
 
-      // Find all .micro.ts and .micro.js files
+      // Find all .photon.ts and .photon.js files
       const files = await this.findMCPFiles(directory);
 
       logger.debug(`Found ${files.length} MCP files in ${directory}`);
@@ -83,7 +83,7 @@ export class PhotonLoader {
   }
 
   /**
-   * Find all .micro.ts and .micro.js files in a directory
+   * Find all .photon.ts and .photon.js files in a directory
    */
   private async findMCPFiles(directory: string): Promise<string[]> {
     const files: string[] = [];
@@ -110,7 +110,7 @@ export class PhotonLoader {
    */
   private isMCPFile(filename: string): boolean {
     return filename.endsWith('.photon.ts') || filename.endsWith('.photon.js') ||
-           filename.endsWith('.micro.ts') || filename.endsWith('.micro.js'); // Backward compat during migration
+           filename.endsWith('.photon.ts') || filename.endsWith('.photon.js'); // Backward compat during migration
   }
 
   /**
@@ -151,7 +151,7 @@ export class PhotonLoader {
           logger.info(`📦 Found ${dependencies.length} dependencies in ${path.basename(filePath)}`);
 
           // Get MCP name for cache directory
-          const mcpName = path.basename(filePath, '.micro.js').replace('.micro.ts', '');
+          const mcpName = path.basename(filePath, '.photon.js').replace('.photon.ts', '');
 
           // Install dependencies
           await this.dependencyManager.ensureDependencies(mcpName, dependencies);

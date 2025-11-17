@@ -28,13 +28,13 @@ export class NCPManagementMCP implements InternalMCP {
   tools: InternalTool[] = [
     {
       name: 'add',
-      description: 'Add MCP server(s) to NCP with smart auto-detection of input type. Supports multiple modes: (1) SINGLE: Add one MCP from registry or manual config (e.g., "github", "canva"). (2) BULK: Pipe-separated names for multiple MCPs (e.g., "gmail | slack | github"). (3) FILE IMPORT: Path to config file or MicroMCP (e.g., "~/backup.json", "./calculator.micro.ts"). (4) URL: HTTP/SSE server URL (e.g., "https://mcp.example.com") or MicroMCP file URL (e.g., "https://example.com/calc.micro.ts"). (5) CLIPBOARD: Use special value "clipboard" to import from clipboard (auto-detects JSON config or TypeScript MicroMCP). For uncertain names, use "find" method first to discover available MCPs.',
+      description: 'Add MCP server(s) to NCP with smart auto-detection of input type. Supports multiple modes: (1) SINGLE: Add one MCP from registry or manual config (e.g., "github", "canva"). (2) BULK: Pipe-separated names for multiple MCPs (e.g., "gmail | slack | github"). (3) FILE IMPORT: Path to config file or Photon (e.g., "~/backup.json", "./calculator.photon.ts"). (4) URL: HTTP/SSE server URL (e.g., "https://mcp.example.com") or Photon file URL (e.g., "https://example.com/calc.photon.ts"). (5) CLIPBOARD: Use special value "clipboard" to import from clipboard (auto-detects JSON config or TypeScript Photon). For uncertain names, use "find" method first to discover available MCPs.',
       inputSchema: {
         type: 'object',
         properties: {
           mcp_name: {
             type: 'string',
-            description: 'REQUIRED. Smart parameter that auto-detects mode: (1) Single name: "github" → registry lookup or manual. (2) Pipe-separated: "gmail | slack" → bulk install from registry. (3) File path: "~/config.json" (JSON config) or "./calculator.micro.ts" (MicroMCP) → import from file. (4) URL: "https://mcp.example.com" (HTTP/SSE server) or "https://example.com/calc.micro.ts" (MicroMCP download). (5) "clipboard" → import from clipboard (auto-detects JSON or TypeScript). Pre-fill based on user intent, or use "find" method to discover MCP names first.'
+            description: 'REQUIRED. Smart parameter that auto-detects mode: (1) Single name: "github" → registry lookup or manual. (2) Pipe-separated: "gmail | slack" → bulk install from registry. (3) File path: "~/config.json" (JSON config) or "./calculator.photon.ts" (Photon) → import from file. (4) URL: "https://mcp.example.com" (HTTP/SSE server) or "https://example.com/calc.photon.ts" (Photon download). (5) "clipboard" → import from clipboard (auto-detects JSON or TypeScript). Pre-fill based on user intent, or use "find" method to discover MCP names first.'
           },
           command: {
             type: 'string',
@@ -218,8 +218,8 @@ export class NCPManagementMCP implements InternalMCP {
     }
 
     // 3. File path detection → import from file
-    // 3a. MicroMCP file (.micro.ts)
-    if (!command && !url && mcpName.endsWith('.micro.ts')) {
+    // 3a. Photon file (.photon.ts)
+    if (!command && !url && mcpName.endsWith('.photon.ts')) {
       return await this.importMicroMCPFromFile(mcpName, profile);
     }
 
@@ -238,8 +238,8 @@ export class NCPManagementMCP implements InternalMCP {
       mcpName.startsWith('http://') ||
       mcpName.startsWith('https://')
     )) {
-      // 4a. Check if it's a .micro.ts file URL → download MicroMCP
-      if (mcpName.endsWith('.micro.ts')) {
+      // 4a. Check if it's a .photon.ts file URL → download Photon
+      if (mcpName.endsWith('.photon.ts')) {
         return await this.downloadMicroMCPFromURL(mcpName, profile);
       }
 
@@ -299,13 +299,13 @@ export class NCPManagementMCP implements InternalMCP {
             success: false,
             error: `Provider "${mcpName}" not found in registry. Either:\n` +
                    `1. Use a known provider name (e.g., "canva", "github", "notion")\n` +
-                   `2. Provide file path for MicroMCP: "${mcpName}.micro.ts" or "~/.ncp/micromcps/${mcpName}.micro.ts"\n` +
+                   `2. Provide file path for Photon: "${mcpName}.photon.ts" or "~/.ncp/micromcps/${mcpName}.photon.ts"\n` +
                    `3. Provide manual configuration with command (for stdio) or url (for HTTP/SSE)\n\n` +
                    `💡 Tip: MicroMCPs in ~/.ncp/micromcps/ are auto-discovered on NCP startup`
           };
         }
 
-        // Handle MicroMCP installation (different flow)
+        // Handle Photon installation (different flow)
         if (provider._meta?.isMicroMCP && provider._meta?.sourceUrl) {
           return await this.installMicroMCP(mcpName, provider, profile);
         }
@@ -811,19 +811,19 @@ Do you want to remove this MCP?`;
       if (!clipboardContent || clipboardContent.trim().length === 0) {
         return {
           success: false,
-          error: 'Clipboard is empty. Copy a valid MCP configuration JSON or MicroMCP TypeScript code.'
+          error: 'Clipboard is empty. Copy a valid MCP configuration JSON or Photon TypeScript code.'
         };
       }
 
       const trimmed = clipboardContent.trim();
 
-      // Detect format: TypeScript (MicroMCP) vs JSON (config)
-      // TypeScript indicators: contains "export class", "implements MicroMCP", etc.
+      // Detect format: TypeScript (Photon) vs JSON (config)
+      // TypeScript indicators: contains "export class", "implements Photon", etc.
       const isMicroMCP = trimmed.includes('export class') &&
-                        (trimmed.includes('implements MicroMCP') || trimmed.includes('@tool'));
+                        (trimmed.includes('implements Photon') || trimmed.includes('@tool'));
 
       if (isMicroMCP) {
-        // Import as MicroMCP TypeScript code
+        // Import as Photon TypeScript code
         return await this.importMicroMCPFromClipboard(trimmed);
       }
 
@@ -834,7 +834,7 @@ Do you want to remove this MCP?`;
       if (!config.mcpServers || typeof config.mcpServers !== 'object') {
         return {
           success: false,
-          error: 'Invalid config format. Expected: {"mcpServers": {...}} or MicroMCP TypeScript code'
+          error: 'Invalid config format. Expected: {"mcpServers": {...}} or Photon TypeScript code'
         };
       }
 
@@ -859,7 +859,7 @@ Do you want to remove this MCP?`;
   }
 
   /**
-   * Import MicroMCP from clipboard containing TypeScript code
+   * Import Photon from clipboard containing TypeScript code
    */
   private async importMicroMCPFromClipboard(tsContent: string): Promise<InternalToolResult> {
     try {
@@ -872,7 +872,7 @@ Do you want to remove this MCP?`;
       if (!classMatch) {
         return {
           success: false,
-          error: 'Could not detect MicroMCP class name. Expected "export class <Name>MCP"'
+          error: 'Could not detect Photon class name. Expected "export class <Name>MCP"'
         };
       }
 
@@ -887,28 +887,28 @@ Do you want to remove this MCP?`;
       const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
       await fs.mkdir(microDir, { recursive: true });
 
-      const destFile = path.join(microDir, `${baseName}.micro.ts`);
+      const destFile = path.join(microDir, `${baseName}.photon.ts`);
 
       // Write TypeScript code to file
       await fs.writeFile(destFile, tsContent, 'utf8');
-      logger.info(`Saved MicroMCP from clipboard: ${baseName}.micro.ts`);
+      logger.info(`Saved Photon from clipboard: ${baseName}.photon.ts`);
 
       return {
         success: true,
         content: [
-          { type: 'text', text: `✅ MicroMCP "${baseName}" imported from clipboard!\n\n` +
+          { type: 'text', text: `✅ Photon "${baseName}" imported from clipboard!\n\n` +
             `📍 Location: ${destFile}\n` +
             `📝 Class: ${className}\n` +
             `\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'` +
             `\n🔍 Discover tools: ncp find ${baseName}` +
-            `\n\n⚠️  Restart NCP to load the new MicroMCP` }
+            `\n\n⚠️  Restart NCP to load the new Photon` }
         ]
       };
     } catch (error: any) {
-      logger.error(`Failed to import MicroMCP from clipboard: ${error.message}`);
+      logger.error(`Failed to import Photon from clipboard: ${error.message}`);
       return {
         success: false,
-        error: `Failed to import MicroMCP from clipboard: ${error.message}`
+        error: `Failed to import Photon from clipboard: ${error.message}`
       };
     }
   }
@@ -993,7 +993,7 @@ Do you want to remove this MCP?`;
           const isMicroMCP = c._meta?.isMicroMCP;
           const transportBadge = isMicroMCP ? '📦' : (c.transport === 'stdio' ? '💻' : '🌐');
           const envInfo = c.envVars?.length ? ` (${c.envVars.length} env vars)` : '';
-          const transportInfo = isMicroMCP ? ' [MicroMCP]' : (c.transport !== 'stdio' ? ` [${c.transport.toUpperCase()}]` : '');
+          const transportInfo = isMicroMCP ? ' [Photon]' : (c.transport !== 'stdio' ? ` [${c.transport.toUpperCase()}]` : '');
 
           return {
             value: c.name,
@@ -1013,7 +1013,7 @@ Do you want to remove this MCP?`;
                      `Only select MCPs from sources you trust.\n\n`;
         }
 
-        message += `Badges: ✓=Trusted 💻=stdio 🌐=HTTP/SSE 📦=MicroMCP`;
+        message += `Badges: ✓=Trusted 💻=stdio 🌐=HTTP/SSE 📦=Photon`;
 
         const selected = await elicitMultiSelect(
           this.elicitationServer,
@@ -1057,13 +1057,13 @@ Do you want to remove this MCP?`;
           // Get detailed info including env vars
           const details = await registryClient.getDetailedInfo(candidate.name);
 
-          // Check if this is a MicroMCP (different installation flow)
+          // Check if this is a Photon (different installation flow)
           if (details._meta?.isMicroMCP && details._meta?.sourceUrl) {
             const result = await this.installMicroMCP(candidate.name, details, 'all');
             if (result.success) {
               imported++;
               importedNames.push(candidate.displayName);
-              logger.info(`Installed MicroMCP ${candidate.displayName} from registry`);
+              logger.info(`Installed Photon ${candidate.displayName} from registry`);
             } else {
               errors.push(`${candidate.displayName}: ${result.error}`);
             }
@@ -1616,8 +1616,8 @@ Do you want to remove this MCP?`;
   }
 
   /**
-   * Install MicroMCP from registry
-   * Downloads .micro.ts file and optional schema, saves to ~/.ncp/micromcps/
+   * Install Photon from registry
+   * Downloads .photon.ts file and optional schema, saves to ~/.ncp/micromcps/
    */
   private async installMicroMCP(name: string, provider: any, profile: string): Promise<InternalToolResult> {
     try {
@@ -1629,15 +1629,15 @@ Do you want to remove this MCP?`;
       const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
       await fs.mkdir(microDir, { recursive: true });
 
-      const microFile = path.join(microDir, `${name}.micro.ts`);
+      const microFile = path.join(microDir, `${name}.photon.ts`);
       const schemaFile = path.join(microDir, `${name}.micro.schema.json`);
 
-      logger.info(`Installing MicroMCP "${name}" from ${provider._meta.sourceUrl}`);
+      logger.info(`Installing Photon "${name}" from ${provider._meta.sourceUrl}`);
 
-      // Download .micro.ts file
+      // Download .photon.ts file
       const sourceResponse = await fetch(provider._meta.sourceUrl);
       if (!sourceResponse.ok) {
-        throw new Error(`Failed to download MicroMCP source: ${sourceResponse.statusText}`);
+        throw new Error(`Failed to download Photon source: ${sourceResponse.statusText}`);
       }
       const sourceContent = await sourceResponse.text();
       await fs.writeFile(microFile, sourceContent, 'utf8');
@@ -1664,7 +1664,7 @@ Do you want to remove this MCP?`;
       return {
         success: true,
         content: [
-          { type: 'text', text: `✅ MicroMCP "${name}" installed successfully!\n\n` +
+          { type: 'text', text: `✅ Photon "${name}" installed successfully!\n\n` +
             `📍 Location: ${microFile}\n` +
             (schemaDownloaded ? `📋 Schema: ${schemaFile}\n` : '') +
             `\n💡 Usage: ncp run ${name}:tool_name --params '{"param":"value"}'` +
@@ -1672,16 +1672,16 @@ Do you want to remove this MCP?`;
         ]
       };
     } catch (error: any) {
-      logger.error(`Failed to install MicroMCP: ${error.message}`);
+      logger.error(`Failed to install Photon: ${error.message}`);
       return {
         success: false,
-        error: `Failed to install MicroMCP: ${error.message}`
+        error: `Failed to install Photon: ${error.message}`
       };
     }
   }
 
   /**
-   * Import MicroMCP from a local .micro.ts file
+   * Import Photon from a local .photon.ts file
    * Copies the file (and optional schema) to ~/.ncp/micromcps/
    */
   private async importMicroMCPFromFile(filePath: string, profile: string): Promise<InternalToolResult> {
@@ -1708,15 +1708,15 @@ Do you want to remove this MCP?`;
         };
       }
 
-      // Extract base name from filename (e.g., "calculator.micro.ts" → "calculator")
+      // Extract base name from filename (e.g., "calculator.photon.ts" → "calculator")
       const fileName = path.basename(resolvedPath);
-      if (!fileName.endsWith('.micro.ts')) {
+      if (!fileName.endsWith('.photon.ts')) {
         return {
           success: false,
-          error: `Invalid MicroMCP file. Expected .micro.ts extension, got: ${fileName}`
+          error: `Invalid Photon file. Expected .photon.ts extension, got: ${fileName}`
         };
       }
-      const baseName = fileName.replace('.micro.ts', '');
+      const baseName = fileName.replace('.photon.ts', '');
 
       // Create destination directory
       const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
@@ -1725,9 +1725,9 @@ Do you want to remove this MCP?`;
       const destFile = path.join(microDir, fileName);
       const destSchema = path.join(microDir, `${baseName}.micro.schema.json`);
 
-      // Copy .micro.ts file
+      // Copy .photon.ts file
       await fs.copyFile(resolvedPath, destFile);
-      logger.info(`Copied MicroMCP file: ${fileName}`);
+      logger.info(`Copied Photon file: ${fileName}`);
 
       // Check for optional schema file in same directory
       let schemaImported = false;
@@ -1747,26 +1747,26 @@ Do you want to remove this MCP?`;
       return {
         success: true,
         content: [
-          { type: 'text', text: `✅ MicroMCP "${baseName}" imported successfully!\n\n` +
+          { type: 'text', text: `✅ Photon "${baseName}" imported successfully!\n\n` +
             `📍 Location: ${destFile}\n` +
             (schemaImported ? `📋 Schema: ${destSchema}\n` : '') +
             `\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'` +
             `\n🔍 Discover tools: ncp find ${baseName}` +
-            `\n\n⚠️  Restart NCP to load the new MicroMCP` }
+            `\n\n⚠️  Restart NCP to load the new Photon` }
         ]
       };
     } catch (error: any) {
-      logger.error(`Failed to import MicroMCP from file: ${error.message}`);
+      logger.error(`Failed to import Photon from file: ${error.message}`);
       return {
         success: false,
-        error: `Failed to import MicroMCP: ${error.message}`
+        error: `Failed to import Photon: ${error.message}`
       };
     }
   }
 
   /**
-   * Download MicroMCP from a URL
-   * Downloads .micro.ts file and optional schema from HTTP(S) URL
+   * Download Photon from a URL
+   * Downloads .photon.ts file and optional schema from HTTP(S) URL
    */
   private async downloadMicroMCPFromURL(fileUrl: string, profile: string): Promise<InternalToolResult> {
     try {
@@ -1774,9 +1774,9 @@ Do you want to remove this MCP?`;
       const path = await import('path');
       const os = await import('os');
 
-      logger.info(`Downloading MicroMCP from URL: ${fileUrl}`);
+      logger.info(`Downloading Photon from URL: ${fileUrl}`);
 
-      // Download .micro.ts file
+      // Download .photon.ts file
       const response = await fetch(fileUrl);
       if (!response.ok) {
         throw new Error(`Failed to download: ${response.statusText}`);
@@ -1786,7 +1786,7 @@ Do you want to remove this MCP?`;
       // Extract filename from URL
       const urlPath = new URL(fileUrl).pathname;
       const fileName = path.basename(urlPath);
-      const baseName = fileName.replace('.micro.ts', '');
+      const baseName = fileName.replace('.photon.ts', '');
 
       // Create destination directory
       const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
@@ -1795,13 +1795,13 @@ Do you want to remove this MCP?`;
       const destFile = path.join(microDir, fileName);
       const destSchema = path.join(microDir, `${baseName}.micro.schema.json`);
 
-      // Save the .micro.ts file
+      // Save the .photon.ts file
       await fs.writeFile(destFile, tsContent, 'utf8');
-      logger.info(`Saved MicroMCP: ${fileName}`);
+      logger.info(`Saved Photon: ${fileName}`);
 
       // Try to download optional schema file
       let schemaDownloaded = false;
-      const schemaUrl = fileUrl.replace('.micro.ts', '.micro.schema.json');
+      const schemaUrl = fileUrl.replace('.photon.ts', '.micro.schema.json');
       try {
         const schemaResponse = await fetch(schemaUrl);
         if (schemaResponse.ok) {
@@ -1817,7 +1817,7 @@ Do you want to remove this MCP?`;
       return {
         success: true,
         content: [
-          { type: 'text', text: `✅ MicroMCP "${baseName}" downloaded successfully!\n\n` +
+          { type: 'text', text: `✅ Photon "${baseName}" downloaded successfully!\n\n` +
             `📍 Location: ${destFile}\n` +
             (schemaDownloaded ? `📋 Schema: ${destSchema}\n` : '') +
             `\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'` +
@@ -1825,10 +1825,10 @@ Do you want to remove this MCP?`;
         ]
       };
     } catch (error: any) {
-      logger.error(`Failed to download MicroMCP from URL: ${error.message}`);
+      logger.error(`Failed to download Photon from URL: ${error.message}`);
       return {
         success: false,
-        error: `Failed to download MicroMCP: ${error.message}`
+        error: `Failed to download Photon: ${error.message}`
       };
     }
   }

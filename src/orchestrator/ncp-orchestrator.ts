@@ -210,7 +210,7 @@ export class NCPOrchestrator {
     this.forceRetry = forceRetry;
     this.internalMCPManager = new InternalMCPManager();
 
-    // Initialize CodeExecutor with tools provider and executor
+    // Initialize CodeExecutor with tools provider, executor, and Photon instances
     this.codeExecutor = new CodeExecutor(
       // Tools provider - returns all available tools
       async () => {
@@ -320,6 +320,25 @@ export class NCPOrchestrator {
         } else {
           throw new Error(result.error || 'Tool execution failed');
         }
+      },
+      // Photon instances provider - provides direct access to Photon class instances
+      async () => {
+        const photons: any[] = [];
+        const internalMCPs = this.internalMCPManager.getAllEnabledInternalMCPs();
+
+        for (const internalMCP of internalMCPs) {
+          // Check if this is a Photon (has instance property)
+          if ('instance' in internalMCP && internalMCP.instance) {
+            const methods = internalMCP.tools.map(tool => tool.name);
+            photons.push({
+              name: internalMCP.name,
+              instance: internalMCP.instance,
+              methods
+            });
+          }
+        }
+
+        return photons;
       }
     );
   }

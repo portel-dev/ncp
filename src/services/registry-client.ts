@@ -46,7 +46,7 @@ export interface RegistryServer {
       publishedAt?: string;
       updatedAt?: string;
     };
-    // MicroMCP metadata
+    // Photon metadata
     isMicroMCP?: boolean;
     sourceUrl?: string;
     schemaUrl?: string;
@@ -79,7 +79,7 @@ export interface ServerSearchResult {
       publishedAt?: string;
       updatedAt?: string;
     };
-    // MicroMCP metadata
+    // Photon metadata
     isMicroMCP?: boolean;
     sourceUrl?: string;
     schemaUrl?: string;
@@ -118,7 +118,7 @@ export interface RegistryMCPCandidate {
   publishedAt?: string;
   isTrusted?: boolean;
   qualityScore?: number; // For debugging/transparency
-  _meta?: any; // Metadata from registry (e.g., MicroMCP detection)
+  _meta?: any; // Metadata from registry (e.g., Photon detection)
 }
 
 export interface RegistrySearchOptions {
@@ -454,7 +454,7 @@ export class RegistryClient {
       isSecret?: boolean;
       default?: string;
     }>;
-    _meta?: any; // Metadata from registry (e.g., MicroMCP detection)
+    _meta?: any; // Metadata from registry (e.g., Photon detection)
   }> {
     const server = await this.getServer(serverName);
     const pkg = server.server.packages?.[0];

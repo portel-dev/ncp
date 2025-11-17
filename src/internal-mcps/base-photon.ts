@@ -1,12 +1,18 @@
 /**
  * Photon Base Class
  *
- * Optional base class for creating Photons.
- * You don't need to extend this - any class with async methods works!
+ * Optional base class for creating Photons. You don't need to extend this - any class with async methods works!
+ *
+ * Photons are single-file TypeScript classes with pure business logic.
+ * NCP converts them to MCP servers, CLI tools, and exposes them in Code-Mode.
  *
  * Usage:
  * ```typescript
- * export default class Calculator extends Photon {
+ * class Calculator extends Photon {
+ *   // Method name becomes tool name
+ *   // JSDoc becomes tool description
+ *   // TypeScript types become schema
+ *
  *   /**
  *    * Add two numbers together
  *    * @param a First number
@@ -14,6 +20,13 @@
  *    *\/
  *   async add(params: { a: number; b: number }) {
  *     return params.a + params.b;
+ *   }
+ *
+ *   /**
+ *    * Multiply two numbers
+ *    *\/
+ *   async multiply(params: { a: number; b: number }) {
+ *     return params.a * params.b;
  *   }
  * }
  * ```
@@ -26,6 +39,12 @@
  *   }
  * }
  * ```
+ *
+ * Convention:
+ * - Class name → MCP name (PascalCase → kebab-case)
+ * - Public async methods → Tools
+ * - Methods starting with _ → Private (not exposed)
+ * - onInitialize() / onShutdown() → Lifecycle hooks
  */
 
 import { logger } from '../utils/logger.js';
@@ -33,7 +52,7 @@ import { logger } from '../utils/logger.js';
 /**
  * Simple base class for creating Photons
  *
- * - Class name = Photon name
+ * - Class name = MCP name
  * - Public async methods = Tools
  * - Return value = Tool result
  */

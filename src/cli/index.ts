@@ -974,9 +974,9 @@ program
 
     // Smart detection: Check if this is a URL
     if ((providerName.startsWith('http://') || providerName.startsWith('https://')) && !command) {
-      // Check if it's a .micro.ts file URL
-      if (providerName.endsWith('.micro.ts')) {
-        console.log(chalk.blue(`\n📥 Downloading MicroMCP from URL: ${providerName}`));
+      // Check if it's a .photon.ts file URL
+      if (providerName.endsWith('.photon.ts')) {
+        console.log(chalk.blue(`\n📥 Downloading Photon from URL: ${providerName}`));
         try {
           const fs = await import('fs/promises');
           const path = await import('path');
@@ -992,7 +992,7 @@ program
           // Extract filename from URL
           const urlPath = new URL(providerName).pathname;
           const fileName = path.basename(urlPath);
-          const baseName = fileName.replace('.micro.ts', '');
+          const baseName = fileName.replace('.photon.ts', '');
 
           // Create destination directory
           const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
@@ -1005,7 +1005,7 @@ program
 
           // Try to download optional schema file
           let schemaImported = false;
-          const schemaUrl = providerName.replace('.micro.ts', '.micro.schema.json');
+          const schemaUrl = providerName.replace('.photon.ts', '.micro.schema.json');
           try {
             const schemaResponse = await fetch(schemaUrl);
             if (schemaResponse.ok) {
@@ -1019,14 +1019,14 @@ program
             // Schema is optional
           }
 
-          console.log(chalk.green(`\n✅ MicroMCP "${baseName}" downloaded successfully!`));
+          console.log(chalk.green(`\n✅ Photon "${baseName}" downloaded successfully!`));
           console.log(chalk.dim(`📍 Location: ${destFile}`));
           if (schemaImported) {
             console.log(chalk.dim(`📋 Schema: ${path.join(microDir, `${baseName}.micro.schema.json`)}`));
           }
           console.log(chalk.blue(`\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'`));
           console.log(chalk.blue(`🔍 Discover tools: ncp find ${baseName}`));
-          console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new MicroMCP`));
+          console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new Photon`));
           return;
         } catch (error: any) {
           console.log(chalk.red(`\n✗ Download failed: ${error.message}`));

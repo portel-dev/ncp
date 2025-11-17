@@ -197,7 +197,7 @@ export class UnifiedRegistryClient {
       isSecret?: boolean;
       default?: string;
     }>;
-    _meta?: any; // Metadata from registry (e.g., MicroMCP detection)
+    _meta?: any; // Metadata from registry (e.g., Photon detection)
   }> {
     try {
       logger.debug(`Getting details from custom registry for: ${serverName}`);
@@ -212,7 +212,7 @@ export class UnifiedRegistryClient {
         command: this.extractCommand(customMCP.installCommand),
         args: this.extractArgs(customMCP.installCommand),
         envVars: [], // Custom registry doesn't have env vars yet
-        _meta: customMCP._meta // Preserve metadata (for MicroMCP detection)
+        _meta: customMCP._meta // Preserve metadata (for Photon detection)
       };
     } catch (error: any) {
       logger.warn(`Custom registry getDetailedInfo failed: ${error.message}, trying official`);

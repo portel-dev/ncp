@@ -20,7 +20,7 @@ export interface ExtractedSchema {
 }
 
 /**
- * Extract schemas from a MicroMCP class file
+ * Extract schemas from a Photon class file
  */
 export class SchemaExtractor {
   /**

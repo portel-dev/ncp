@@ -12,6 +12,12 @@ export interface ToolDefinition {
   inputSchema: any;
 }
 
+export interface PhotonInstance {
+  name: string;
+  instance: any; // The actual Photon class instance
+  methods: string[]; // Available method names
+}
+
 export interface CodeExecutionResult {
   result: any;
   logs: string[];
@@ -21,13 +27,16 @@ export interface CodeExecutionResult {
 export class CodeExecutor {
   private toolExecutor: (toolName: string, params: any) => Promise<any>;
   private toolsProvider: () => Promise<ToolDefinition[]>;
+  private photonInstancesProvider?: () => Promise<PhotonInstance[]>;
 
   constructor(
     toolsProvider: () => Promise<ToolDefinition[]>,
-    toolExecutor: (toolName: string, params: any) => Promise<any>
+    toolExecutor: (toolName: string, params: any) => Promise<any>,
+    photonInstancesProvider?: () => Promise<PhotonInstance[]>
   ) {
     this.toolsProvider = toolsProvider;
     this.toolExecutor = toolExecutor;
+    this.photonInstancesProvider = photonInstancesProvider;
   }
 
   /**
@@ -153,6 +162,41 @@ export class CodeExecutor {
             throw new Error(`Error calling ${tool.name}: ${error.message}`);
           }
         };
+      }
+    }
+
+    // Add direct Photon instance access (zero MCP overhead)
+    if (this.photonInstancesProvider) {
+      const photons = await this.photonInstancesProvider();
+
+      for (const photon of photons) {
+        const photonNamespace = this.sanitizeIdentifier(photon.name);
+
+        // Create namespace object if it doesn't exist
+        if (!context[photonNamespace]) {
+          context[photonNamespace] = {};
+        }
+
+        // Expose each method as a direct call to the instance
+        for (const methodName of photon.methods) {
+          const sanitizedMethodName = this.sanitizeIdentifier(methodName);
+
+          context[photonNamespace][sanitizedMethodName] = async (params?: any) => {
+            try {
+              const method = photon.instance[methodName];
+              if (!method || typeof method !== 'function') {
+                throw new Error(`Method ${methodName} not found on ${photon.name}`);
+              }
+
+              // Call method directly on instance (zero overhead!)
+              return await method.call(photon.instance, params);
+            } catch (error: any) {
+              throw new Error(`Error calling ${photon.name}.${methodName}: ${error.message}`);
+            }
+          };
+        }
+
+        logger.info(`📦 Added direct Photon access: ${photonNamespace} with ${photon.methods.length} methods`);
       }
     }
 

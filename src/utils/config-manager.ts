@@ -200,11 +200,11 @@ export class ConfigManager {
       throw new Error(`Configuration file not found at: ${filePath}\n\nPlease check that the file exists and the path is correct.`);
     }
 
-    // Check if this is a MicroMCP file
-    if (expandedPath.endsWith('.micro.ts')) {
+    // Check if this is a Photon file
+    if (expandedPath.endsWith('.photon.ts')) {
       try {
         const fileName = basename(expandedPath);
-        const baseName = fileName.replace('.micro.ts', '');
+        const baseName = fileName.replace('.photon.ts', '');
 
         // Create micromcps directory
         const microDir = join(homedir(), '.ncp', 'micromcps');
@@ -214,13 +214,13 @@ export class ConfigManager {
         const destSchema = join(microDir, `${baseName}.micro.schema.json`);
 
         if (dryRun) {
-          console.log(chalk.blue('\n📋 Dry-run mode: Would import MicroMCP:'));
+          console.log(chalk.blue('\n📋 Dry-run mode: Would import Photon:'));
           console.log(chalk.dim(`   Source: ${expandedPath}`));
           console.log(chalk.dim(`   Destination: ${destFile}`));
           return;
         }
 
-        // Copy .micro.ts file
+        // Copy .photon.ts file
         await copyFile(expandedPath, destFile);
         console.log(chalk.green(`✅ Copied ${fileName}`));
 
@@ -238,17 +238,17 @@ export class ConfigManager {
           // Schema is optional
         }
 
-        console.log(chalk.green(`\n✅ MicroMCP "${baseName}" imported successfully!`));
+        console.log(chalk.green(`\n✅ Photon "${baseName}" imported successfully!`));
         console.log(chalk.dim(`📍 Location: ${destFile}`));
         if (schemaImported) {
           console.log(chalk.dim(`📋 Schema: ${destSchema}`));
         }
         console.log(chalk.blue(`\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'`));
         console.log(chalk.blue(`🔍 Discover tools: ncp find ${baseName}`));
-        console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new MicroMCP`));
+        console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new Photon`));
         return;
       } catch (error: any) {
-        const errorResult = ErrorHandler.handle(error, ErrorHandler.fileOperation('import MicroMCP', filePath));
+        const errorResult = ErrorHandler.handle(error, ErrorHandler.fileOperation('import Photon', filePath));
         console.log(ErrorHandler.formatForConsole(errorResult));
         return;
       }
@@ -300,13 +300,13 @@ export class ConfigManager {
         return;
       }
 
-      // Detect format: TypeScript (MicroMCP) vs JSON (config)
+      // Detect format: TypeScript (Photon) vs JSON (config)
       const trimmed = clipboardContent.trim();
       const isMicroMCP = trimmed.includes('export class') &&
-                        (trimmed.includes('implements MicroMCP') || trimmed.includes('@tool'));
+                        (trimmed.includes('implements Photon') || trimmed.includes('@tool'));
 
       if (isMicroMCP) {
-        // Handle MicroMCP TypeScript code
+        // Handle Photon TypeScript code
         await this.importMicroMCPFromClipboard(trimmed);
         return;
       }
@@ -322,7 +322,7 @@ export class ConfigManager {
         parsedData = JSON.parse(clipboardContent);
       } catch (jsonError) {
         console.log(chalk.red('❌ Invalid JSON format in clipboard'));
-        console.log(chalk.yellow('💡 Please ensure your clipboard contains valid JSON or MicroMCP TypeScript code'));
+        console.log(chalk.yellow('💡 Please ensure your clipboard contains valid JSON or Photon TypeScript code'));
         return;
       }
 
@@ -418,7 +418,7 @@ export class ConfigManager {
   }
 
   /**
-   * Import MicroMCP from clipboard containing TypeScript code
+   * Import Photon from clipboard containing TypeScript code
    */
   private async importMicroMCPFromClipboard(tsContent: string): Promise<void> {
     const { basename, join } = await import('path');
@@ -428,7 +428,7 @@ export class ConfigManager {
     // Extract class name from: export class CalculatorMCP
     const classMatch = tsContent.match(/export\s+class\s+(\w+)/);
     if (!classMatch) {
-      console.log(chalk.red('❌ Could not detect MicroMCP class name'));
+      console.log(chalk.red('❌ Could not detect Photon class name'));
       console.log(chalk.yellow('💡 Expected "export class <Name>MCP" in clipboard'));
       return;
     }
@@ -444,17 +444,17 @@ export class ConfigManager {
     const microDir = join(homedir(), '.ncp', 'micromcps');
     await mkdir(microDir, { recursive: true });
 
-    const destFile = join(microDir, `${baseName}.micro.ts`);
+    const destFile = join(microDir, `${baseName}.photon.ts`);
 
     // Write TypeScript code to file
     await writeFile(destFile, tsContent, 'utf8');
 
-    console.log(chalk.green(`\n✅ MicroMCP "${baseName}" imported from clipboard!`));
+    console.log(chalk.green(`\n✅ Photon "${baseName}" imported from clipboard!`));
     console.log(chalk.dim(`📍 Location: ${destFile}`));
     console.log(chalk.dim(`📝 Class: ${className}`));
     console.log(chalk.blue(`\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'`));
     console.log(chalk.blue(`🔍 Discover tools: ncp find ${baseName}`));
-    console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new MicroMCP`));
+    console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new Photon`));
   }
 
   /**
