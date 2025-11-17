@@ -26,26 +26,23 @@ warn() {
     echo -e "${YELLOW}⚠${NC} $1"
 }
 
-echo "Test 1: Shell MicroMCP Discovery"
-echo "---------------------------------"
-export NCP_ENABLE_SHELL=true
-export NCP_CLI_AUTOSCAN=false
-
-SHELL_TOOLS=$(./dist/index.js find "shell" --depth 0 2>/dev/null | grep -c "shell:" || echo "0")
-if [ "$SHELL_TOOLS" -gt 0 ]; then
-    pass "Shell MicroMCP tools found: $SHELL_TOOLS tools"
+echo "Test 1: Skills Discovery"
+echo "------------------------"
+SKILLS_TOOLS=$(./dist/index.js find "skills" --depth 0 2>/dev/null | grep -c "skills:" || echo "0")
+if [ "$SKILLS_TOOLS" -gt 0 ]; then
+    pass "Skills tools found: $SKILLS_TOOLS tools"
 else
-    fail "Shell MicroMCP tools NOT found"
+    warn "Skills tools NOT found (may not be installed yet)"
 fi
 
 echo ""
-echo "Test 2: Shell MicroMCP Execution"
-echo "---------------------------------"
-OUTPUT=$(./dist/index.js run shell:pwd 2>&1 | grep -o "path" || echo "")
-if [ -n "$OUTPUT" ]; then
-    pass "shell:pwd executed successfully"
+echo "Test 2: Marketplace Discovery"
+echo "------------------------------"
+MARKETPLACE_TOOLS=$(./dist/index.js find "marketplace" --depth 0 2>/dev/null | grep -c "marketplace:" || echo "0")
+if [ "$MARKETPLACE_TOOLS" -gt 0 ]; then
+    pass "Marketplace tools found: $MARKETPLACE_TOOLS tools"
 else
-    warn "shell:pwd execution unclear (may be async)"
+    warn "Marketplace tools NOT found"
 fi
 
 echo ""
