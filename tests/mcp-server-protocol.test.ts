@@ -18,6 +18,7 @@ describe('MCP Server Protocol Integration', () => {
 
   afterEach(async () => {
     if (server) {
+      await server.waitForInitialization();
       await server.cleanup?.();
     }
   });
