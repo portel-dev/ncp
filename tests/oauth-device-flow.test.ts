@@ -23,7 +23,6 @@ jest.mock('../src/utils/logger.js', () => ({
 describe('OAuth Device Flow', () => {
   let authenticator: DeviceFlowAuthenticator;
   let mockConfig: OAuthConfig;
-  let originalStdin: any;
   let mockStdin: any;
 
   beforeEach(() => {
@@ -35,10 +34,6 @@ describe('OAuth Device Flow', () => {
       scopes: ['read', 'write']
     };
 
-    authenticator = new DeviceFlowAuthenticator(mockConfig);
-
-    // Mock stdin
-    originalStdin = process.stdin;
     mockStdin = {
       isTTY: true,
       isRaw: false,
@@ -50,23 +45,12 @@ describe('OAuth Device Flow', () => {
       removeListener: jest.fn()
     };
 
-    // Override process.stdin
-    Object.defineProperty(process, 'stdin', {
-      value: mockStdin,
-      writable: true,
-      configurable: true
-    });
+    authenticator = new DeviceFlowAuthenticator(mockConfig, mockStdin as any);
 
     jest.clearAllMocks();
   });
 
   afterEach(() => {
-    // Restore original stdin
-    Object.defineProperty(process, 'stdin', {
-      value: originalStdin,
-      writable: true,
-      configurable: true
-    });
     jest.clearAllMocks();
   });
 
