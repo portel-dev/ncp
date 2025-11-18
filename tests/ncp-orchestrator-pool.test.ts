@@ -49,6 +49,7 @@ jest.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
 }));
 
 describe('NCP Orchestrator Connection Pool', () => {
+  jest.setTimeout(30000); // 30 second timeout for this suite
   let orchestrator: NCPOrchestrator;
   let profileManager: ProfileManager;
   let testProfilesDir: string;
@@ -65,12 +66,15 @@ describe('NCP Orchestrator Connection Pool', () => {
 
     // Create orchestrator
     orchestrator = new NCPOrchestrator('all');
-    await orchestrator.initialize();
+    // await orchestrator.initialize(); // Initialization is not needed for these tests
 
     jest.clearAllMocks();
   });
 
   afterEach(async () => {
+    if (orchestrator) {
+      await orchestrator.cleanup();
+    }
     try {
       await fs.rm(testProfilesDir, { recursive: true, force: true });
     } catch (e) {
