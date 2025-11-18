@@ -21,6 +21,7 @@ describe('MCP Timeout Prevention Tests', () => {
     timeoutIds = [];
 
     if (server) {
+      await server.waitForInitialization();
       await server.cleanup?.();
     }
   });
