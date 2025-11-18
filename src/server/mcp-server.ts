@@ -1034,70 +1034,84 @@ export class MCPServer implements ElicitationServer {
 
     // Format output based on depth and mode
     if (depth === 0) {
-      // Depth 0: Tool names only
+      // Depth 0: Tool names only, with Code-Mode compatibility
       results.forEach((tool) => {
-        if (isListing) {
-          output += `# **${tool.toolName}**\n`;
-        } else {
-          const confidence = Math.round(tool.confidence * 100);
-          output += `# **${tool.toolName}** (${confidence}% match)\n`;
-        }
+        const [mcpName, toolName] = tool.toolName.split(':');
+        const confidence = Math.round(tool.confidence * 100);
+        const matchText = isListing ? '' : ` (${confidence}% match)`;
+
+        output += `// ${tool.description || tool.toolName}${matchText}\n`;
+        output += `await ${mcpName}.${toolName}();\n\n`;
       });
     } else if (depth === 1) {
-      // Depth 1: Tool name + description only
+      // Depth 1: Tool name + description + Code-Mode example
       results.forEach((tool, toolIndex) => {
-        if (toolIndex > 0) output += '---\n';
+        if (toolIndex > 0) output += '// ---\n';
 
-        if (isListing) {
-          output += `# **${tool.toolName}**\n`;
-        } else {
-          const confidence = Math.round(tool.confidence * 100);
-          output += `# **${tool.toolName}** (${confidence}% match)\n`;
-        }
+        const confidence = Math.round(tool.confidence * 100);
+        const matchText = isListing ? '' : ` (${confidence}% match)`;
+        output += `// Tool: ${tool.toolName}${matchText}\n`;
 
         if (tool.description) {
-          const cleanDescription = tool.description
-            .replace(/^[^:]+:\s*/, '') // Remove MCP prefix
-            .replace(/\s+/g, ' ') // Normalize whitespace
-            .trim();
-          output += `${cleanDescription}\n`;
+          const cleanDescription = tool.description.replace(/^[^:]+:\s*/, '').replace(/\s+/g, ' ').trim();
+          output += `// Description: ${cleanDescription}\n`;
         }
+
+        // Add Code-Mode example
+        const [mcpName, toolName] = tool.toolName.split(':');
+        const exampleParams = this.generateCodeModeParams(tool);
+        output += `\n\`\`\`typescript\n`;
+        if (exampleParams) {
+          output += `const result = await ${mcpName}.${toolName}(${exampleParams});\n`;
+        } else {
+          output += `const result = await ${mcpName}.${toolName}();\n`;
+        }
+        output += `console.log(result);\n`;
+        output += `\`\`\`\n`;
       });
     } else {
-      // Depth 2: Full details with parameters
+      // Depth 2: Full details with parameters and Code-Mode example
       results.forEach((tool, toolIndex) => {
-        if (toolIndex > 0) output += '---\n';
+        if (toolIndex > 0) output += '// ---\n';
 
-        if (isListing) {
-          output += `# **${tool.toolName}**\n`;
-        } else {
-          const confidence = Math.round(tool.confidence * 100);
-          output += `# **${tool.toolName}** (${confidence}% match)\n`;
-        }
+        const confidence = Math.round(tool.confidence * 100);
+        const matchText = isListing ? '' : ` (${confidence}% match)`;
+        output += `// Tool: ${tool.toolName}${matchText}\n`;
 
         if (tool.description) {
-          const cleanDescription = tool.description
-            .replace(/^[^:]+:\s*/, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-          output += `${cleanDescription}\n`;
+          const cleanDescription = tool.description.replace(/^[^:]+:\s*/, '').replace(/\s+/g, ' ').trim();
+          output += `// Description: ${cleanDescription}\n`;
         }
 
         // Parameters with descriptions
         if (tool.schema) {
           const params = this.parseParameters(tool.schema);
           if (params.length > 0) {
+            output += `// Parameters:\n`;
             params.forEach(param => {
               const optionalText = param.required ? '' : ' *(optional)*';
               const descText = param.description ? ` - ${param.description}` : '';
-              output += `### ${param.name}: ${param.type}${optionalText}${descText}\n`;
+              output += `// * ${param.name}: \`${param.type}\`${optionalText}${descText}\n`;
             });
           } else {
-            output += `*[no parameters]*\n`;
+            output += `// *No parameters*\n`;
           }
         } else {
-          output += `*[no parameters]*\n`;
+          output += `// *No parameters*\n`;
         }
+
+        // Add Code-Mode example
+        const [mcpName, toolName] = tool.toolName.split(':');
+        const exampleParams = this.generateCodeModeParams(tool);
+        output += `\n**Code-Mode Example:**\n`;
+        output += `\`\`\`typescript\n`;
+        if (exampleParams) {
+          output += `const result = await ${mcpName}.${toolName}(${exampleParams});\n`;
+        } else {
+          output += `const result = await ${mcpName}.${toolName}();\n`;
+        }
+        output += `console.log(result);\n`;
+        output += `\`\`\`\n`;
       });
     }
 
