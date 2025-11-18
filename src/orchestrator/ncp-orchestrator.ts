@@ -296,14 +296,80 @@ export class NCPOrchestrator {
         // Handle NCP core tools specially
         if (toolName === 'ncp:find') {
           const { ToolFinder } = await import('../services/tool-finder.js');
+          const { ToolSchemaParser } = await import('../services/tool-schema-parser.js');
+          const findResultTypes = await import('../types/find-result.js');
+
           const finder = new ToolFinder(this);
-          return await finder.find({
+          const findResult = await finder.find({
             query: params.description || '',
             page: params.page || 1,
             limit: params.limit || (params.description ? 5 : 20),
             depth: params.depth !== undefined ? params.depth : 2,
             confidenceThreshold: params.confidence_threshold !== undefined ? params.confidence_threshold : 0.35
           });
+
+          // Convert to structured format for Code-Mode
+          const healthStatus = this.getMCPHealthStatus();
+          const indexingProgress = this.getIndexingProgress();
+
+          // Convert tools to structured format
+          const structuredTools = findResult.tools.map(tool => {
+            const [mcpName, ...toolParts] = tool.toolName.split(':');
+            const toolName = toolParts.join(':');
+
+            // Parse parameters from schema
+            let parameters: any[] = [];
+            if (tool.schema) {
+              const parsedParams = ToolSchemaParser.parseParameters(tool.schema);
+              parameters = parsedParams.map(p => ({
+                name: p.name,
+                type: p.type,
+                description: p.description,
+                required: p.required
+              }));
+            }
+
+            return {
+              name: tool.toolName,
+              mcp: mcpName,
+              tool: toolName,
+              description: tool.description || '',
+              confidence: tool.confidence || 1.0,
+              parameters,
+              schema: tool.schema,
+              healthy: tool.healthy !== false
+            };
+          });
+
+          const structured = {
+            tools: structuredTools,
+            pagination: {
+              page: findResult.pagination.page,
+              totalPages: findResult.pagination.totalPages,
+              totalResults: findResult.pagination.totalResults,
+              resultsInPage: findResult.pagination.resultsInPage
+            },
+            health: {
+              total: healthStatus.total,
+              healthy: healthStatus.healthy,
+              unhealthy: healthStatus.unhealthy,
+              mcps: healthStatus.mcps.map(mcp => ({
+                name: mcp.name,
+                healthy: mcp.healthy
+              }))
+            },
+            indexing: indexingProgress ? {
+              current: indexingProgress.current,
+              total: indexingProgress.total,
+              currentMCP: indexingProgress.currentMCP,
+              estimatedTimeRemaining: indexingProgress.estimatedTimeRemaining
+            } : undefined,
+            mcpFilter: findResult.mcpFilter || undefined,
+            query: params.description || undefined,
+            isListing: findResult.isListing
+          };
+
+          return structured;
         } else if (toolName === 'ncp:run') {
           const result = await this.run(params.tool, params.parameters || {});
           if (result.success) {

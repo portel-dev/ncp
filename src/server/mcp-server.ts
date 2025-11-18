@@ -32,6 +32,8 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { SessionNotificationManager } from '../utils/session-notifications.js';
+import { FindResultStructured, MultiQueryResult, ToolResult, ToolParameter } from '../types/find-result.js';
+import { FindResultRenderer } from '../services/find-result-renderer.js';
 
 // Get the directory of the current file
 const __filename = fileURLToPath(import.meta.url);
@@ -711,8 +713,125 @@ export class MCPServer implements ElicitationServer {
     };
   }
 
+  /**
+   * Convert raw tool result to structured ToolResult
+   */
+  private convertToStructuredTool(tool: any): ToolResult {
+    const [mcpName, ...toolParts] = tool.toolName.split(':');
+    const toolName = toolParts.join(':');
+
+    // Parse parameters from schema
+    let parameters: ToolParameter[] = [];
+    if (tool.schema) {
+      const parsedParams = this.parseParameters(tool.schema);
+      parameters = parsedParams.map(p => ({
+        name: p.name,
+        type: p.type,
+        description: p.description,
+        required: p.required
+      }));
+    }
+
+    return {
+      name: tool.toolName,
+      mcp: mcpName,
+      tool: toolName,
+      description: tool.description || '',
+      confidence: tool.confidence || 1.0,
+      parameters,
+      schema: tool.schema,
+      healthy: tool.healthy !== false
+    };
+  }
+
+  /**
+   * Build structured find result
+   */
+  private async buildStructuredFindResult(
+    tools: any[],
+    pagination: any,
+    healthStatus: any,
+    indexingProgress: any,
+    mcpFilter: string | null,
+    query: string,
+    isListing: boolean
+  ): Promise<FindResultStructured> {
+    // Convert tools to structured format
+    const structuredTools: ToolResult[] = tools.map(tool => this.convertToStructuredTool(tool));
+
+    return {
+      tools: structuredTools,
+      pagination: {
+        page: pagination.page,
+        totalPages: pagination.totalPages,
+        totalResults: pagination.totalResults,
+        resultsInPage: pagination.resultsInPage
+      },
+      health: {
+        total: healthStatus.total,
+        healthy: healthStatus.healthy,
+        unhealthy: healthStatus.unhealthy,
+        mcps: healthStatus.mcps.map((mcp: any) => ({
+          name: mcp.name,
+          healthy: mcp.healthy
+        }))
+      },
+      indexing: indexingProgress ? {
+        current: indexingProgress.current,
+        total: indexingProgress.total,
+        currentMCP: indexingProgress.currentMCP,
+        estimatedTimeRemaining: indexingProgress.estimatedTimeRemaining
+      } : undefined,
+      mcpFilter: mcpFilter || undefined,
+      query: query || undefined,
+      isListing
+    };
+  }
+
+  /**
+   * Build structured multi-query result
+   */
+  private async buildStructuredMultiQueryResult(
+    queries: string[],
+    searchResults: any[],
+    healthStatus: any,
+    indexingProgress: any
+  ): Promise<MultiQueryResult> {
+    const queryResults = queries.map((query, index) => {
+      const results = searchResults[index].tools || [];
+      const structuredTools = results.map((tool: any) => this.convertToStructuredTool(tool));
+
+      return {
+        query,
+        tools: structuredTools
+      };
+    });
+
+    const totalTools = queryResults.reduce((sum, r) => sum + r.tools.length, 0);
+
+    return {
+      queries: queryResults,
+      totalTools,
+      health: {
+        total: healthStatus.total,
+        healthy: healthStatus.healthy,
+        unhealthy: healthStatus.unhealthy,
+        mcps: healthStatus.mcps.map((mcp: any) => ({
+          name: mcp.name,
+          healthy: mcp.healthy
+        }))
+      },
+      indexing: indexingProgress ? {
+        current: indexingProgress.current,
+        total: indexingProgress.total,
+        currentMCP: indexingProgress.currentMCP,
+        estimatedTimeRemaining: indexingProgress.estimatedTimeRemaining
+      } : undefined
+    };
+  }
+
   private async handleMultiQuery(queries: string[], options: any): Promise<any> {
-    const { limit, depth, confidenceThreshold, isStillIndexing } = options;
+    const { limit, depth, confidenceThreshold, isStillIndexing, returnStructured } = options;
     const finder = new ToolFinder(this.orchestrator);
 
     // Execute parallel searches for all queries
@@ -733,6 +852,21 @@ export class MCPServer implements ElicitationServer {
 
     // Get health status
     const healthStatus = this.orchestrator.getMCPHealthStatus();
+
+    // Return structured object for Code-Mode
+    if (returnStructured) {
+      const structured = await this.buildStructuredMultiQueryResult(
+        queries,
+        searchResults,
+        healthStatus,
+        progress
+      );
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
+        _structured: structured  // Include structured data in response
+      };
+    }
 
     // Format multi-query results
     let output = `\n🔍 Found tools for ${queries.length} queries:\n\n`;
@@ -861,6 +995,9 @@ export class MCPServer implements ElicitationServer {
     const depth = args?.depth !== undefined ? Math.max(0, Math.min(2, args.depth)) : 2;
     const confidenceThreshold = args?.confidence_threshold !== undefined ? args.confidence_threshold : 0.35;
 
+    // Check if caller wants structured object format (for Code-Mode)
+    const returnStructured = args?._format === 'object';
+
     // Check for pipe-delimited multi-query
     const queries = description.includes('|')
       ? description.split('|').map((q: string) => q.trim()).filter((q: string) => q.length > 0)
@@ -868,7 +1005,7 @@ export class MCPServer implements ElicitationServer {
 
     // Handle multi-query case
     if (queries && queries.length > 1) {
-      return this.handleMultiQuery(queries, { page, limit, depth, confidenceThreshold, isStillIndexing });
+      return this.handleMultiQuery(queries, { page, limit, depth, confidenceThreshold, isStillIndexing, returnStructured });
     }
 
     // Use ToolFinder service for single-query search logic
@@ -886,6 +1023,27 @@ export class MCPServer implements ElicitationServer {
     // Get indexing progress if still indexing
     const progress = isStillIndexing ? this.orchestrator.getIndexingProgress() : null;
 
+    // Get health status
+    const healthStatus = this.orchestrator.getMCPHealthStatus();
+
+    // Return structured object for Code-Mode
+    if (returnStructured) {
+      const structured = await this.buildStructuredFindResult(
+        results,
+        pagination,
+        healthStatus,
+        progress,
+        mcpFilter,
+        description,
+        isListing
+      );
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
+        _structured: structured  // Include structured data in response
+      };
+    }
+
     const filterText = mcpFilter ? ` (filtered to ${mcpFilter})` : '';
 
     // Enhanced pagination display
@@ -902,7 +1060,6 @@ export class MCPServer implements ElicitationServer {
     }
 
     // Add MCP health status summary
-    const healthStatus = this.orchestrator.getMCPHealthStatus();
     if (healthStatus.total > 0) {
       const healthIcon = healthStatus.unhealthy > 0 ? '⚠️' : '✅';
       output += `${healthIcon} **MCPs**: ${healthStatus.healthy}/${healthStatus.total} healthy`;
