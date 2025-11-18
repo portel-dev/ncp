@@ -34,7 +34,11 @@ export interface OAuthConfig {
 }
 
 export class DeviceFlowAuthenticator {
-  constructor(private config: OAuthConfig) {}
+  private stdin: NodeJS.ReadStream;
+
+  constructor(private config: OAuthConfig, stdin: NodeJS.ReadStream = process.stdin) {
+    this.stdin = stdin;
+  }
 
   /**
    * Complete OAuth Device Flow authentication
@@ -120,7 +124,7 @@ export class DeviceFlowAuthenticator {
     let cancelled = false;
 
     // Track stdin state for safe cleanup
-    const stdin = process.stdin;
+    const stdin = this.stdin;
     const wasRaw = stdin.isRaw;
     let listenerAttached = false;
     let stdinModified = false;
