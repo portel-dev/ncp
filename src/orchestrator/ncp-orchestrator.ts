@@ -340,11 +340,10 @@ export class NCPOrchestrator {
 
         return photons;
       }
-    );
-  }
-
-  private async loadProfile(): Promise<Profile | null> {
-    try {
+                );
+            }
+          
+            private async loadProfile(): Promise<Profile | null> {    try {
       // Create and store ProfileManager instance (reused for auto-import)
       if (!this.profileManager) {
         this.profileManager = new ProfileManager();
