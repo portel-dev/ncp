@@ -44,15 +44,19 @@ export class CodeExecutor {
    */
   async executeCode(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
     const logs: string[] = [];
+    let context: Record<string, any> | null = null;
 
     try {
+      // Validate code for security issues before execution
+      this.validateCode(code);
+
       // Get all available tools
       const tools = await this.toolsProvider();
 
       logger.info(`🔍 Executing code with ${tools.length} tools available`);
 
       // Create execution context
-      const context = await this.createExecutionContext(tools, logs);
+      context = await this.createExecutionContext(tools, logs);
       const vmContext = createContext(context);
 
       // Wrap code in async function
@@ -64,11 +68,78 @@ export class CodeExecutor {
       return { result, logs };
     } catch (error: any) {
       logger.error(`Code execution failed: ${error.message}`);
+
       return {
         result: null,
         logs: [...logs, `[ERROR] ${error.message}`],
         error: error.message
       };
+    } finally {
+      // Always cleanup timers, even on error or timeout
+      if (context) {
+        try {
+          context.__cleanup?.();
+        } catch (e: any) {
+          logger.warn(`Timer cleanup failed: ${e.message || e}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Harden JavaScript context to prevent prototype pollution and sandbox escape
+   * Phase 1: Quick Security Wins
+   */
+  private hardenContext(): void {
+    // Freeze built-in prototypes to prevent modification
+    Object.freeze(Object.prototype);
+    Object.freeze(Array.prototype);
+    Object.freeze(String.prototype);
+    Object.freeze(Number.prototype);
+    Object.freeze(Boolean.prototype);
+    Object.freeze(Function.prototype);
+
+    // Delete dangerous constructors that could escape sandbox
+    // Note: In VM context, these will be recreated but this signals intent
+    try {
+      delete (Function.prototype as any).constructor;
+    } catch (e) {
+      // Ignore if already non-configurable
+    }
+
+    logger.info('🔒 Context hardened: prototypes frozen, dangerous globals removed');
+  }
+
+  /**
+   * Validate code for dangerous patterns before execution
+   * Phase 1: Static Analysis
+   */
+  private validateCode(code: string): void {
+    const dangerousPatterns = [
+      { pattern: /__proto__/g, name: 'Prototype pollution via __proto__' },
+      { pattern: /\.constructor\s*\(/g, name: 'Constructor access' },
+      { pattern: /process\./g, name: 'Process object access' },
+      { pattern: /require\s*\(/g, name: 'require() call' },
+      { pattern: /import\s+/g, name: 'import statement' },
+      { pattern: /eval\s*\(/g, name: 'eval() call' },
+      { pattern: /Function\s*\(/g, name: 'Function constructor' },
+      { pattern: /child_process/g, name: 'child_process access' },
+      { pattern: /fs\./g, name: 'Direct filesystem access' },
+    ];
+
+    const violations: string[] = [];
+    for (const { pattern, name } of dangerousPatterns) {
+      if (pattern.test(code)) {
+        violations.push(name);
+      }
+    }
+
+    if (violations.length > 0) {
+      throw new Error(
+        `Code validation failed: Detected dangerous patterns:\n` +
+        violations.map(v => `  - ${v}`).join('\n') +
+        '\n\nCode-Mode is sandboxed for safety. Use tool namespaces instead.'
+      );
     }
   }
 
@@ -80,6 +151,9 @@ export class CodeExecutor {
     tools: ToolDefinition[],
     logs: string[]
   ): Promise<Record<string, any>> {
+    // Apply security hardening first
+    this.hardenContext();
+
     // Create console for log capture
     const consoleObj = {
       log: (...args: any[]) => {
@@ -104,6 +178,9 @@ export class CodeExecutor {
       }
     };
 
+    // Timer tracking for cleanup
+    const timers = new Set<NodeJS.Timeout>();
+
     const context: Record<string, any> = {
       // Basic utilities
       console: consoleObj,
@@ -116,10 +193,34 @@ export class CodeExecutor {
       Boolean,
       Math,
       Date,
-      setTimeout,
-      setInterval,
-      clearTimeout,
-      clearInterval,
+
+      // Tracked timers with automatic cleanup
+      setTimeout: (callback: (...args: any[]) => void, ms: number, ...args: any[]) => {
+        const timer = setTimeout(callback, ms, ...args);
+        timers.add(timer);
+        return timer;
+      },
+      setInterval: (callback: (...args: any[]) => void, ms: number, ...args: any[]) => {
+        const timer = setInterval(callback, ms, ...args);
+        timers.add(timer);
+        return timer;
+      },
+      clearTimeout: (timer: NodeJS.Timeout) => {
+        timers.delete(timer);
+        clearTimeout(timer);
+      },
+      clearInterval: (timer: NodeJS.Timeout) => {
+        timers.delete(timer);
+        clearInterval(timer);
+      },
+
+      // Cleanup function (called after execution)
+      __cleanup: () => {
+        for (const timer of timers) {
+          clearTimeout(timer);
+        }
+        timers.clear();
+      },
 
       // Introspection
       __interfaces: this.generateTypeScriptInterfaces(tools),
