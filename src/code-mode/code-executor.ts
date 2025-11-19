@@ -14,6 +14,7 @@ import { dirname, join } from 'path';
 import { logger } from '../utils/logger.js';
 import { BindingsManager } from './bindings-manager.js';
 import { NetworkPolicyManager, SECURE_NETWORK_POLICY } from './network-policy.js';
+import { getAuditLogger } from './audit-logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -69,16 +70,44 @@ export class CodeExecutor {
   /**
    * Execute TypeScript code with tool access
    * Phase 2: Uses Worker Threads for true isolation with resource limits
+   * Phase 5: Audit logging for security monitoring
    */
   async executeCode(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
+    const startTime = Date.now();
+    const auditLogger = getAuditLogger();
+
+    // Phase 5: Log code execution start
+    await auditLogger.logCodeExecutionStart(code, { mcpName: 'code-mode' });
+
     // Try Worker Thread execution first (Phase 2 - secure)
     try {
-      return await this.executeWithWorkerThread(code, timeout);
+      const result = await this.executeWithWorkerThread(code, timeout);
+
+      // Phase 5: Log success
+      const duration = Date.now() - startTime;
+      await auditLogger.logCodeExecutionSuccess(code, result.result, duration, { mcpName: 'code-mode' });
+
+      return result;
     } catch (error: any) {
       logger.warn(`Worker Thread execution failed: ${error.message}, falling back to vm module`);
 
       // Fallback to vm module (Phase 1 - less secure but stable)
-      return await this.executeWithVM(code, timeout);
+      try {
+        const result = await this.executeWithVM(code, timeout);
+
+        // Phase 5: Log success (with fallback note)
+        const duration = Date.now() - startTime;
+        await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
+          mcpName: 'code-mode',
+          userId: 'vm-fallback'
+        });
+
+        return result;
+      } catch (vmError: any) {
+        // Phase 5: Log error
+        await auditLogger.logCodeExecutionError(code, vmError.message, { mcpName: 'code-mode' });
+        throw vmError;
+      }
     }
   }
 

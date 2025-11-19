@@ -12,6 +12,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { getAuditLogger } from './audit-logger.js';
 
 /**
  * Elicitation function signature
@@ -252,6 +253,14 @@ export class NetworkPolicyManager {
       const approved = response === 'Allow Once' || response === 'Allow Always';
       const permanent = response === 'Allow Always';
 
+      // Phase 5: Audit log permission decision
+      const auditLogger = getAuditLogger();
+      if (approved) {
+        await auditLogger.logNetworkPermissionGranted(url, permanent, context);
+      } else {
+        await auditLogger.logNetworkPermissionDenied(url, context);
+      }
+
       // Cache the decision
       this.permissionCache.set(url, {
         url,
@@ -284,11 +293,18 @@ export class NetworkPolicyManager {
     request: NetworkRequest,
     context?: { mcpName?: string; bindingName?: string }
   ): Promise<NetworkResponse> {
+    const auditLogger = getAuditLogger();
+
     // Validate URL with elicitations
     const urlCheck = await this.isUrlAllowedAsync(request.url, context);
     if (!urlCheck.allowed) {
+      // Phase 5: Log denied request
+      await auditLogger.logNetworkRequestDenied(request.url, urlCheck.reason || 'Policy violation', context);
       throw new Error(`Network request blocked: ${urlCheck.reason}`);
     }
+
+    // Phase 5: Log allowed request
+    await auditLogger.logNetworkRequestAllowed(request.url, request.method, context);
 
     // Validate request size
     if (request.body) {
