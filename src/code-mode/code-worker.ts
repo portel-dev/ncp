@@ -2,6 +2,7 @@
  * Worker Thread for isolated code execution
  * Phase 2: True process isolation with resource limits
  * Phase 3: Bindings for credential isolation
+ * Phase 4: Network isolation
  */
 
 import { parentPort, workerData } from 'worker_threads';
@@ -31,8 +32,27 @@ interface BindingCallResponse {
   error?: string;
 }
 
+interface NetworkCallRequest {
+  id: string;
+  url: string;
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  headers?: Record<string, string>;
+  body?: any;
+}
+
+interface NetworkCallResponse {
+  id: string;
+  result?: {
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    body: any;
+  };
+  error?: string;
+}
+
 interface WorkerMessage {
-  type: 'tool_call' | 'binding_call' | 'log' | 'result' | 'error';
+  type: 'tool_call' | 'binding_call' | 'network_call' | 'log' | 'result' | 'error';
   data: any;
 }
 
@@ -103,8 +123,15 @@ const pendingBindingCalls = new Map<string, {
   reject: (error: Error) => void;
 }>();
 
+// Network call tracking (Phase 4: network isolation)
+const pendingNetworkCalls = new Map<string, {
+  resolve: (value: any) => void;
+  reject: (error: Error) => void;
+}>();
+
 let toolCallCounter = 0;
 let bindingCallCounter = 0;
+let networkCallCounter = 0;
 
 // Execute tool via message passing to main thread
 async function executeTool(toolName: string, params: any): Promise<any> {
@@ -151,6 +178,39 @@ async function executeBinding(bindingName: string, method: string, args: any[]):
   });
 }
 
+// Execute network request via main thread (Phase 4: network isolation)
+// All network requests go through main thread with policy enforcement
+async function executeNetworkRequest(
+  url: string,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' = 'GET',
+  options?: { headers?: Record<string, string>; body?: any }
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const callId = `network_${++networkCallCounter}`;
+
+    pendingNetworkCalls.set(callId, { resolve, reject });
+
+    parentPort!.postMessage({
+      type: 'network_call',
+      data: {
+        id: callId,
+        url,
+        method,
+        headers: options?.headers,
+        body: options?.body
+      }
+    } as WorkerMessage);
+
+    // Timeout after 30 seconds
+    setTimeout(() => {
+      if (pendingNetworkCalls.has(callId)) {
+        pendingNetworkCalls.delete(callId);
+        reject(new Error(`Network request timeout: ${method} ${url}`));
+      }
+    }, 30000);
+  });
+}
+
 // Listen for responses from main thread
 parentPort.on('message', (message: { type: string; data: any }) => {
   if (message.type === 'tool_response') {
@@ -172,6 +232,19 @@ parentPort.on('message', (message: { type: string; data: any }) => {
 
     if (pending) {
       pendingBindingCalls.delete(id);
+
+      if (error) {
+        pending.reject(new Error(error));
+      } else {
+        pending.resolve(result);
+      }
+    }
+  } else if (message.type === 'network_response') {
+    const { id, result, error } = message.data;
+    const pending = pendingNetworkCalls.get(id);
+
+    if (pending) {
+      pendingNetworkCalls.delete(id);
 
       if (error) {
         pending.reject(new Error(error));
@@ -252,6 +325,20 @@ function createContext(tools: any[], bindings: any[], logs: string[]): Record<st
     clearInterval: (timer: NodeJS.Timeout) => {
       timers.delete(timer);
       clearInterval(timer);
+    },
+
+    // Phase 4: Controlled network access (NO direct fetch/XMLHttpRequest)
+    // All network requests go through main thread with policy enforcement
+    fetch: async (url: string, options?: {
+      method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+      headers?: Record<string, string>;
+      body?: any;
+    }) => {
+      return executeNetworkRequest(
+        url,
+        options?.method || 'GET',
+        { headers: options?.headers, body: options?.body }
+      );
     }
   };
 
@@ -308,6 +395,12 @@ function cleanup(): void {
     pending.reject(new Error('Worker terminated'));
   }
   pendingBindingCalls.clear();
+
+  // Clear any pending network calls
+  for (const [id, pending] of pendingNetworkCalls) {
+    pending.reject(new Error('Worker terminated'));
+  }
+  pendingNetworkCalls.clear();
 }
 
 // Main execution

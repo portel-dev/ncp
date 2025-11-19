@@ -4,6 +4,7 @@
  *
  * Phase 2: Uses Worker Threads for true process isolation with resource limits
  * Phase 3: Bindings for credential isolation
+ * Phase 4: Network isolation
  */
 
 import { Worker } from 'worker_threads';
@@ -12,6 +13,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { logger } from '../utils/logger.js';
 import { BindingsManager } from './bindings-manager.js';
+import { NetworkPolicyManager, SECURE_NETWORK_POLICY } from './network-policy.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -39,17 +41,20 @@ export class CodeExecutor {
   private toolsProvider: () => Promise<ToolDefinition[]>;
   private photonInstancesProvider?: () => Promise<PhotonInstance[]>;
   private bindingsManager: BindingsManager;
+  private networkPolicyManager: NetworkPolicyManager;
 
   constructor(
     toolsProvider: () => Promise<ToolDefinition[]>,
     toolExecutor: (toolName: string, params: any) => Promise<any>,
     photonInstancesProvider?: () => Promise<PhotonInstance[]>,
-    bindingsManager?: BindingsManager
+    bindingsManager?: BindingsManager,
+    networkPolicyManager?: NetworkPolicyManager
   ) {
     this.toolsProvider = toolsProvider;
     this.toolExecutor = toolExecutor;
     this.photonInstancesProvider = photonInstancesProvider;
     this.bindingsManager = bindingsManager || new BindingsManager();
+    this.networkPolicyManager = networkPolicyManager || new NetworkPolicyManager(SECURE_NETWORK_POLICY);
   }
 
   /**
@@ -152,6 +157,26 @@ export class CodeExecutor {
                   worker?.postMessage({
                     type: 'binding_response',
                     data: { id: bindingId, error: error.message }
+                  });
+                });
+              break;
+
+            case 'network_call':
+              // Phase 4: Worker needs to make a network request
+              // Network policy enforced in main thread - worker cannot bypass!
+              const { id: networkId, url, method: httpMethod, headers, body } = message.data;
+
+              this.networkPolicyManager.executeRequest({ url, method: httpMethod, headers, body })
+                .then(result => {
+                  worker?.postMessage({
+                    type: 'network_response',
+                    data: { id: networkId, result }
+                  });
+                })
+                .catch(error => {
+                  worker?.postMessage({
+                    type: 'network_response',
+                    data: { id: networkId, error: error.message }
                   });
                 });
               break;
