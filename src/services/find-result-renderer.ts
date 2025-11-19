@@ -62,7 +62,10 @@ export class FindResultRenderer {
 
     // Handle no results case
     if (tools.length === 0) {
-      output += `❌ No tools found${query ? ` for "${query}"` : ''}\n`;
+      // Don't add "No tools found" if we're still indexing - the indexing message already explains it
+      if (!indexing || indexing.total === 0) {
+        output += `❌ No tools found${query ? ` for "${query}"` : ''}\n`;
+      }
       return output;
     }
 

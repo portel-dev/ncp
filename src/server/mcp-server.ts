@@ -831,7 +831,7 @@ export class MCPServer implements ElicitationServer {
   }
 
   private async handleMultiQuery(queries: string[], options: any): Promise<any> {
-    const { limit, depth, confidenceThreshold, isStillIndexing } = options;
+    const { limit, depth, confidenceThreshold } = options;
     const finder = new ToolFinder(this.orchestrator);
 
     // Execute parallel searches for all queries
@@ -847,8 +847,8 @@ export class MCPServer implements ElicitationServer {
       )
     );
 
-    // Get indexing progress if still indexing
-    const progress = isStillIndexing ? this.orchestrator.getIndexingProgress() : null;
+    // Always get indexing progress - will be null if indexing complete
+    const progress = this.orchestrator.getIndexingProgress();
 
     // Get health status
     const healthStatus = this.orchestrator.getMCPHealthStatus();
@@ -870,8 +870,6 @@ export class MCPServer implements ElicitationServer {
   }
 
   private async handleFind(args: any): Promise<any> {
-    const isStillIndexing = !this.isInitialized && this.initializationPromise;
-
     const description = args?.description || '';
     const page = Math.max(1, args?.page || 1);
     const limit = args?.limit || (description ? 5 : 20);
@@ -885,7 +883,7 @@ export class MCPServer implements ElicitationServer {
 
     // Handle multi-query case
     if (queries && queries.length > 1) {
-      return this.handleMultiQuery(queries, { page, limit, depth, confidenceThreshold, isStillIndexing });
+      return this.handleMultiQuery(queries, { page, limit, depth, confidenceThreshold });
     }
 
     // Use ToolFinder service for single-query search logic
@@ -900,8 +898,8 @@ export class MCPServer implements ElicitationServer {
 
     const { tools: results, pagination, mcpFilter, isListing } = findResult;
 
-    // Get indexing progress if still indexing
-    const progress = isStillIndexing ? this.orchestrator.getIndexingProgress() : null;
+    // Always get indexing progress - will be null if indexing complete
+    const progress = this.orchestrator.getIndexingProgress();
 
     // Get health status
     const healthStatus = this.orchestrator.getMCPHealthStatus();
