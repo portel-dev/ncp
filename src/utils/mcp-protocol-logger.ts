@@ -10,8 +10,7 @@
  * - Auto-rotates by trimming top lines (default: 2000 lines = 1000 request/response pairs)
  */
 
-import { promises as fs, mkdirSync } from 'fs';
-import { existsSync } from 'fs';
+import { promises as fs } from 'fs';
 import { join } from 'path';
 import { getNcpBaseDirectory } from './ncp-paths.js';
 import { loadGlobalSettings } from './global-settings.js';
@@ -34,15 +33,11 @@ export class MCPProtocolLogger {
       this.protocolLogPath = join(logsDir, 'mcp-protocol.jsonl');
       this.errorLogPath = join(logsDir, 'mcp-errors.jsonl');
 
-      // Ensure logs directory exists
-      try {
-        if (!existsSync(logsDir)) {
-          mkdirSync(logsDir, { recursive: true });
-        }
-      } catch (error) {
+      // Ensure logs directory exists (async)
+      fs.mkdir(logsDir, { recursive: true }).catch(error => {
         // Silent fail - don't break initialization
         console.error(`[MCP Protocol Logger] Failed to create logs directory: ${error}`);
-      }
+      });
 
       // Load settings asynchronously
       this.settingsLoaded = this.loadSettings();
@@ -171,9 +166,12 @@ export class MCPProtocolLogger {
       try {
         // Read current content if file exists
         let lines: string[] = [];
-        if (existsSync(logPath)) {
+        try {
           const content = await fs.readFile(logPath, 'utf-8');
           lines = content.split('\n').filter(l => l.trim().length > 0);
+        } catch (err: any) {
+          // File doesn't exist yet - that's ok, lines array is empty
+          if (err.code !== 'ENOENT') throw err;
         }
 
         // Add new line
@@ -202,12 +200,13 @@ export class MCPProtocolLogger {
     if (!this.enabled) return;
 
     try {
-      if (existsSync(this.protocolLogPath)) {
-        await fs.unlink(this.protocolLogPath);
-      }
-      if (existsSync(this.errorLogPath)) {
-        await fs.unlink(this.errorLogPath);
-      }
+      // Try to delete both files - ignore ENOENT if they don't exist
+      await fs.unlink(this.protocolLogPath).catch(err => {
+        if (err.code !== 'ENOENT') throw err;
+      });
+      await fs.unlink(this.errorLogPath).catch(err => {
+        if (err.code !== 'ENOENT') throw err;
+      });
     } catch (error: any) {
       console.error(`[MCP Protocol Logger] Failed to clear: ${error.message}`);
     }
@@ -218,9 +217,7 @@ export class MCPProtocolLogger {
    * @param count Number of request/response pairs to return (default: 100)
    */
   async readRecent(count: number = 100): Promise<string> {
-    if (!this.enabled || !existsSync(this.protocolLogPath)) {
-      return '';
-    }
+    if (!this.enabled) return '';
 
     try {
       const content = await fs.readFile(this.protocolLogPath, 'utf-8');

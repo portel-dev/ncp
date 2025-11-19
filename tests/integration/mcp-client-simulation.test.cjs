@@ -236,7 +236,15 @@ async function test2_ToolsListDuringIndexing() {
   const client = new MCPClientSimulator();
   await client.start();
 
-  // Call tools/list immediately (during indexing)
+  // Send initialize first (required by MCP protocol)
+  const initId = client.sendRequest('initialize', {
+    protocolVersion: '2024-11-05',
+    capabilities: {},
+    clientInfo: { name: 'test-client', version: '1.0.0' }
+  });
+  await client.waitForResponse(initId);
+
+  // Call tools/list immediately after initialize (during indexing)
   const startTime = Date.now();
   const id = client.sendRequest('tools/list');
 

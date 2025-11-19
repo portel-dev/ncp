@@ -164,11 +164,15 @@ export class MCPServer implements ElicitationServer {
   private setupHandlers(): void {
     // Handle tools/list
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      await mcpProtocolLogger.logRequest('tools/list', {});
+      // Log request (non-blocking - don't await)
+      mcpProtocolLogger.logRequest('tools/list', {}).catch(() => {});
+
       const result = {
         tools: this.getToolDefinitions(),
       };
-      await mcpProtocolLogger.logResponse('tools/list', result);
+
+      // Log response (non-blocking - don't await)
+      mcpProtocolLogger.logResponse('tools/list', result).catch(() => {});
       return result;
     });
 
@@ -176,8 +180,8 @@ export class MCPServer implements ElicitationServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
-      // Log request
-      await mcpProtocolLogger.logRequest('tools/call', { name, arguments: args });
+      // Log request (non-blocking - don't await)
+      mcpProtocolLogger.logRequest('tools/call', { name, arguments: args }).catch(() => {});
 
       try {
         let result;
@@ -217,13 +221,13 @@ export class MCPServer implements ElicitationServer {
           }
         }
 
-        // Log successful response
-        await mcpProtocolLogger.logResponse('tools/call', result);
+        // Log successful response (non-blocking - don't await)
+        mcpProtocolLogger.logResponse('tools/call', result).catch(() => {});
         return result;
       } catch (error: any) {
         logger.error(`Tool execution failed: ${name} - ${error.message}`);
 
-        // Log to error log
+        // Log to error log (non-blocking)
         mcpProtocolLogger.logError(error, `tools/call:${name}`).catch(() => {});
 
         const errorResult = {
@@ -234,11 +238,11 @@ export class MCPServer implements ElicitationServer {
           isError: true,
         };
 
-        // Log error response
-        await mcpProtocolLogger.logResponse('tools/call', null, {
+        // Log error response (non-blocking - don't await)
+        mcpProtocolLogger.logResponse('tools/call', null, {
           code: 'TOOL_EXECUTION_FAILED',
           message: error.message
-        });
+        }).catch(() => {});
 
         return errorResult;
       }
@@ -274,22 +278,25 @@ export class MCPServer implements ElicitationServer {
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const { uri } = request.params;
 
-      await mcpProtocolLogger.logRequest('resources/read', { uri });
+      // Log request (non-blocking - don't await)
+      mcpProtocolLogger.logRequest('resources/read', { uri }).catch(() => {});
 
       try {
         const result = await this.handleReadResource(uri);
-        await mcpProtocolLogger.logResponse('resources/read', result);
+        // Log response (non-blocking - don't await)
+        mcpProtocolLogger.logResponse('resources/read', result).catch(() => {});
         return result;
       } catch (error: any) {
         logger.error(`Resource read failed: ${uri} - ${error.message}`);
 
-        // Log to error log
+        // Log to error log (non-blocking)
         mcpProtocolLogger.logError(error, `resources/read:${uri}`).catch(() => {});
 
-        await mcpProtocolLogger.logResponse('resources/read', null, {
+        // Log error response (non-blocking - don't await)
+        mcpProtocolLogger.logResponse('resources/read', null, {
           code: 'RESOURCE_READ_FAILED',
           message: error.message
-        });
+        }).catch(() => {});
         throw error;
       }
     });

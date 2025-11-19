@@ -1051,6 +1051,7 @@ export class NCPOrchestrator {
       const skills = await this.skillsManager.loadAllSkills();
 
       // Add each skill to discovery (like internal MCPs/Photons)
+      const skillTools = [];
       for (const skill of skills) {
         // Store full skill object for execution
         this.skillPrompts.set(skill.metadata.name, skill);
@@ -1064,6 +1065,12 @@ export class NCPOrchestrator {
           mcpName: '__skills__',  // Special namespace like internal MCPs
         });
 
+        // Collect for indexing (use unprefixed name - indexMCPTools will add prefix)
+        skillTools.push({
+          name: skill.metadata.name,
+          description: skill.metadata.description || 'Anthropic Agent Skill'
+        });
+
         // Map both skill:name and skill.name for lookup (support both notations)
         this.toolToMCP.set(skillToolName, '__skills__');
         this.toolToMCP.set(`skill.${skill.metadata.name}`, '__skills__');
@@ -1073,6 +1080,14 @@ export class NCPOrchestrator {
       }
 
       if (skills.length > 0) {
+        // Index skills for semantic search (use correct ID format: skill:name)
+        for (const tool of skillTools) {
+          await this.discovery.indexTool({
+            id: `skill:${tool.name}`,
+            name: tool.name,
+            description: tool.description
+          });
+        }
         logger.info(`📚 Loaded ${skills.length} skill(s) into discovery`);
       }
     } catch (error: any) {
@@ -1833,20 +1848,23 @@ export class NCPOrchestrator {
       const parsedResults = adjustedResults.map(result => {
         // Parse tool format: "mcp:tool" or just "tool"
         const parts = result.name.includes(':') ? result.name.split(':', 2) : [this.toolToMCP.get(result.name) || 'unknown', result.name];
-        const mcpName = parts[0];
+        let mcpName = parts[0];
         const toolName = parts[1] || result.name;
+
+        // Special case: skills use "skill:" prefix but are stored under "__skills__" mcpName
+        const actualMcpName = mcpName === 'skill' ? '__skills__' : mcpName;
 
         // Find the tool - it should be stored with prefixed name
         const prefixedToolName = `${mcpName}:${toolName}`;
         const fullTool = this.allTools.find(t =>
-          (t.name === prefixedToolName || t.name === toolName) && t.mcpName === mcpName
+          (t.name === prefixedToolName || t.name === toolName) && t.mcpName === actualMcpName
         );
         return {
           toolName: fullTool?.name || prefixedToolName, // Return the stored (prefixed) name
-          mcpName,
+          mcpName: actualMcpName,  // Use actualMcpName for health filtering
           confidence: result.confidence,
           description: detailed ? fullTool?.description : undefined,
-          schema: detailed ? this.getToolSchema(mcpName, toolName) : undefined
+          schema: detailed ? this.getToolSchema(actualMcpName, toolName) : undefined
         };
       });
 
@@ -2242,7 +2260,11 @@ export class NCPOrchestrator {
       logger.info(`✅ Using valid cache (${Object.keys(toolMetadataCache.mcps).length} MCPs, hash: ${currentProfileHash.substring(0, 8)}...)`);
 
       // 4. Load MCPs and tools from cache directly (no re-indexing)
-      this.allTools = [];
+      // IMPORTANT: Preserve skills and internal MCPs that were loaded before cache
+      const skillsAndInternalTools = this.allTools.filter(tool =>
+        tool.mcpName === '__skills__' || tool.mcpName === '__internal__'
+      );
+      this.allTools = [...skillsAndInternalTools];
       let loadedMCPCount = 0;
       let loadedToolCount = 0;
 

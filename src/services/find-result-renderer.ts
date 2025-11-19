@@ -45,13 +45,20 @@ export class FindResultRenderer {
     }
 
     // Add indexing progress if still indexing
-    if (indexing && indexing.total > 0) {
-      const percentComplete = Math.round((indexing.current / indexing.total) * 100);
-      const remainingTime = indexing.estimatedTimeRemaining ?
-        ` (~${Math.ceil(indexing.estimatedTimeRemaining / 1000)}s remaining)` : '';
+    if (indexing) {
+      // Show indexing message even if total is 0 (initialization phase)
+      if (indexing.total > 0) {
+        const percentComplete = Math.round((indexing.current / indexing.total) * 100);
+        const remainingTime = indexing.estimatedTimeRemaining ?
+          ` (~${Math.ceil(indexing.estimatedTimeRemaining / 1000)}s remaining)` : '';
 
-      output += `⏳ **Indexing in progress**: ${indexing.current}/${indexing.total} MCPs (${percentComplete}%)${remainingTime}\n`;
-      output += `   Currently indexing: ${indexing.currentMCP || 'initializing...'}\n\n`;
+        output += `⏳ **Indexing in progress**: ${indexing.current}/${indexing.total} MCPs (${percentComplete}%)${remainingTime}\n`;
+        output += `   Currently indexing: ${indexing.currentMCP || 'initializing...'}\n\n`;
+      } else {
+        // total === 0 means initialization phase (haven't determined total MCPs yet)
+        output += `⏳ **Indexing in progress**: Initializing...\n`;
+        output += `   Currently indexing: ${indexing.currentMCP || 'initializing...'}\n\n`;
+      }
 
       if (tools.length > 0) {
         output += `📋 **Showing partial results** - more tools will become available as indexing completes.\n\n`;
