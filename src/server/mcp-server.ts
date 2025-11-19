@@ -831,7 +831,7 @@ export class MCPServer implements ElicitationServer {
   }
 
   private async handleMultiQuery(queries: string[], options: any): Promise<any> {
-    const { limit, depth, confidenceThreshold, isStillIndexing, returnStructured } = options;
+    const { limit, depth, confidenceThreshold, isStillIndexing } = options;
     const finder = new ToolFinder(this.orchestrator);
 
     // Execute parallel searches for all queries
@@ -853,137 +853,20 @@ export class MCPServer implements ElicitationServer {
     // Get health status
     const healthStatus = this.orchestrator.getMCPHealthStatus();
 
-    // Return structured object for Code-Mode
-    if (returnStructured) {
-      const structured = await this.buildStructuredMultiQueryResult(
-        queries,
-        searchResults,
-        healthStatus,
-        progress
-      );
+    // ALWAYS build structured data first (single source of truth)
+    const structured = await this.buildStructuredMultiQueryResult(
+      queries,
+      searchResults,
+      healthStatus,
+      progress
+    );
 
-      return {
-        content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
-        _structured: structured  // Include structured data in response
-      };
-    }
+    // Render structured data to markdown for MCP response
+    const text = FindResultRenderer.renderMultiQuery(structured);
 
-    // Format multi-query results
-    let output = `\n🔍 Found tools for ${queries.length} queries:\n\n`;
-
-    // Add MCP health status summary
-    if (healthStatus.total > 0) {
-      const healthIcon = healthStatus.unhealthy > 0 ? '⚠️' : '✅';
-      output += `${healthIcon} **MCPs**: ${healthStatus.healthy}/${healthStatus.total} healthy`;
-
-      if (healthStatus.unhealthy > 0) {
-        const unhealthyNames = healthStatus.mcps
-          .filter(mcp => !mcp.healthy)
-          .map(mcp => mcp.name)
-          .join(', ');
-        output += ` (${unhealthyNames} unavailable)`;
-      }
-      output += '\n\n';
-    }
-
-    // Add indexing progress if still indexing
-    if (progress && progress.total > 0) {
-      const percentComplete = Math.round((progress.current / progress.total) * 100);
-      const remainingTime = progress.estimatedTimeRemaining ?
-        ` (~${Math.ceil(progress.estimatedTimeRemaining / 1000)}s remaining)` : '';
-
-      output += `⏳ **Indexing in progress**: ${progress.current}/${progress.total} MCPs (${percentComplete}%)${remainingTime}\n`;
-      output += `   Currently indexing: ${progress.currentMCP || 'initializing...'}\n\n`;
-    }
-
-    // Display results for each query
-    searchResults.forEach((result, index) => {
-      const query = queries[index];
-      const { tools: results } = result;
-
-      output += `**Query ${index + 1}:** ${chalk.inverse(` ${query} `)}\n`;
-
-      if (results.length === 0) {
-        output += `   ❌ No tools found\n\n`;
-      } else {
-        output += `   Found ${results.length} tool${results.length > 1 ? 's' : ''}:\n`;
-        results.forEach((tool: any) => {
-          const healthIcon = tool.healthy !== false ? '✅' : '❌';
-          const description = depth >= 1 ? tool.description : '';
-          output += `   ${healthIcon} ${chalk.bold(tool.name)}`;
-          if (description && depth >= 1) {
-            output += ` - ${description}`;
-          }
-          output += '\n';
-        });
-        output += '\n';
-      }
-    });
-
-    // Add total tools found summary
-    const totalTools = searchResults.reduce((sum, r) => sum + r.tools.length, 0);
-    output += `\n📊 **Total**: ${totalTools} tool${totalTools !== 1 ? 's' : ''} found across ${queries.length} queries\n`;
-
-    // Add Code-Mode workflow example for multi-query orchestration
-    if (depth >= 2 && totalTools > 0) {
-      output += `\n💡 **Code-Mode Workflow** (orchestrate all tools in one execution):\n\`\`\`typescript\n`;
-
-      // Generate example for each query's top result
-      searchResults.forEach((result, index) => {
-        const query = queries[index];
-        if (result.tools.length > 0) {
-          const tool = result.tools[0];
-          const [mcpName, toolName] = tool.toolName.split(':');
-
-          // Generate smart variable name from query
-          const varName = query.toLowerCase()
-            .replace(/[^a-z0-9]+/g, '_')
-            .replace(/^_+|_+$/g, '')
-            .substring(0, 20);
-
-          // Generate example params
-          const exampleParams = this.generateCodeModeParams(tool);
-
-          output += `// ${query}\n`;
-          if (exampleParams) {
-            output += `const ${varName} = await ${mcpName}.${toolName}(${exampleParams});\n`;
-          } else {
-            output += `const ${varName} = await ${mcpName}.${toolName}();\n`;
-          }
-          output += `console.log("${query}:", ${varName});\n\n`;
-        }
-      });
-
-      output += `\`\`\`\n`;
-      output += `🚀 One execution, ${queries.length} capabilities - 88% fewer API calls!\n`;
-    }
-
-    return { content: [{ type: 'text', text: output }] };
-  }
-
-  /**
-   * Generate example parameters for Code-Mode from tool schema
-   */
-  private generateCodeModeParams(tool: any): string {
-    if (!tool.schema || !tool.schema.properties) return '';
-
-    const params = this.parseParameters(tool.schema);
-    const requiredParams = params.filter((p: any) => p.required);
-
-    // Only show required params, max 2 for brevity
-    const paramsToShow = requiredParams.length > 0
-      ? requiredParams.slice(0, 2)
-      : params.slice(0, 2);
-
-    if (paramsToShow.length === 0) return '';
-
-    const predictor = new ParameterPredictor();
-    const paramPairs = paramsToShow.map((param: any) => {
-      const value = predictor.predictValue(param.name, param.type, param.description || '');
-      return `${param.name}: ${JSON.stringify(value)}`;
-    });
-
-    return `{ ${paramPairs.join(', ')} }`;
+    return {
+      content: [{ type: 'text', text }]
+    };
   }
 
   private async handleFind(args: any): Promise<any> {
@@ -995,9 +878,6 @@ export class MCPServer implements ElicitationServer {
     const depth = args?.depth !== undefined ? Math.max(0, Math.min(2, args.depth)) : 2;
     const confidenceThreshold = args?.confidence_threshold !== undefined ? args.confidence_threshold : 0.35;
 
-    // Check if caller wants structured object format (for Code-Mode)
-    const returnStructured = args?._format === 'object';
-
     // Check for pipe-delimited multi-query
     const queries = description.includes('|')
       ? description.split('|').map((q: string) => q.trim()).filter((q: string) => q.length > 0)
@@ -1005,7 +885,7 @@ export class MCPServer implements ElicitationServer {
 
     // Handle multi-query case
     if (queries && queries.length > 1) {
-      return this.handleMultiQuery(queries, { page, limit, depth, confidenceThreshold, isStillIndexing, returnStructured });
+      return this.handleMultiQuery(queries, { page, limit, depth, confidenceThreshold, isStillIndexing });
     }
 
     // Use ToolFinder service for single-query search logic
@@ -1026,269 +906,26 @@ export class MCPServer implements ElicitationServer {
     // Get health status
     const healthStatus = this.orchestrator.getMCPHealthStatus();
 
-    // Return structured object for Code-Mode
-    if (returnStructured) {
-      const structured = await this.buildStructuredFindResult(
-        results,
-        pagination,
-        healthStatus,
-        progress,
-        mcpFilter,
-        description,
-        isListing
-      );
-
-      return {
-        content: [{ type: 'text', text: JSON.stringify(structured, null, 2) }],
-        _structured: structured  // Include structured data in response
-      };
-    }
-
-    const filterText = mcpFilter ? ` (filtered to ${mcpFilter})` : '';
-
-    // Enhanced pagination display
-    const paginationInfo = pagination.totalPages > 1 ?
-      ` | Page ${pagination.page} of ${pagination.totalPages} (showing ${pagination.resultsInPage} of ${pagination.totalResults} results)` :
-      ` (${pagination.totalResults} results)`;
-
-    let output: string;
-    if (description) {
-      const highlightedQuery = chalk.inverse(` ${description} `);
-      output = `\n🔍 Found tools for ${highlightedQuery}${filterText}${paginationInfo}:\n\n`;
-    } else {
-      output = `\n🔍 Available tools${filterText}${paginationInfo}:\n\n`;
-    }
-
-    // Add MCP health status summary
-    if (healthStatus.total > 0) {
-      const healthIcon = healthStatus.unhealthy > 0 ? '⚠️' : '✅';
-      output += `${healthIcon} **MCPs**: ${healthStatus.healthy}/${healthStatus.total} healthy`;
-
-      if (healthStatus.unhealthy > 0) {
-        const unhealthyNames = healthStatus.mcps
-          .filter(mcp => !mcp.healthy)
-          .map(mcp => mcp.name)
-          .join(', ');
-        output += ` (${unhealthyNames} unavailable)`;
-      }
-      output += '\n\n';
-    }
-
-    // Add indexing progress if still indexing
-    if (progress && progress.total > 0) {
-      const percentComplete = Math.round((progress.current / progress.total) * 100);
-      const remainingTime = progress.estimatedTimeRemaining ?
-        ` (~${Math.ceil(progress.estimatedTimeRemaining / 1000)}s remaining)` : '';
-
-      output += `⏳ **Indexing in progress**: ${progress.current}/${progress.total} MCPs (${percentComplete}%)${remainingTime}\n`;
-      output += `   Currently indexing: ${progress.currentMCP || 'initializing...'}\n\n`;
-
-      if (results.length > 0) {
-        output += `📋 **Showing partial results** - more tools will become available as indexing completes.\n\n`;
-      } else {
-        output += `📋 **No tools available yet** - please try again in a moment as indexing progresses.\n\n`;
-      }
-    }
-
-    // Handle no results case
-    if (results.length === 0 && !progress && description) {
-      output += `❌ No tools found for "${description}"\n\n`;
-
-      // Intelligent fallback: Search MCP registry
-      try {
-        logger.debug(`Searching registry for: ${description}`);
-        const registryClient = new UnifiedRegistryClient();
-        const registryCandidates = await registryClient.searchForSelection(description);
-
-        if (registryCandidates.length > 0) {
-          output += `💡 **I don't have this capability yet, but found ${registryCandidates.length} MCP${registryCandidates.length > 1 ? 's' : ''} in the registry:**\n\n`;
-
-          const topCandidates = registryCandidates.slice(0, 5);
-          topCandidates.forEach(candidate => {
-            const statusBadge = candidate.status === 'active' ? '⭐' : '📦';
-            const envInfo = candidate.envVars?.length ? ` ⚠️ Requires ${candidate.envVars.length} env var${candidate.envVars.length > 1 ? 's' : ''}` : '';
-            output += `${candidate.number}. ${statusBadge} **${candidate.displayName}**${envInfo}\n`;
-            output += `   ${candidate.description}\n`;
-            output += `   Version: ${candidate.version}\n\n`;
-          });
-
-          output += `\n🚀 **To install:**\n\n`;
-
-          // Check if query is a simple MCP name (single word, likely a direct MCP name)
-          const isMicroMCPName = description.trim().split(/\s+/).length === 1;
-
-          if (isMicroMCPName) {
-            // For simple queries like "canva", prioritize direct add
-            output += `**Option 1: Try direct add (recommended for exact names):**\n`;
-            output += `\`\`\`\nrun("ncp:add", {\n`;
-            output += `  mcp_name: "${description}"\n`;
-            output += `})\n\`\`\`\n\n`;
-
-            output += `**Option 2: Install from registry results:**\n`;
-            output += `\`\`\`\nrun("ncp:import", {\n`;
-            output += `  from: "discovery",\n`;
-            output += `  source: "${description}",\n`;
-            output += `  selection: "1"  // or "1,3,5" for multiple\n`;
-            output += `})\n\`\`\`\n\n`;
-          } else {
-            // For descriptive queries, prioritize registry search
-            output += `**Option 1: Install from registry (recommended):**\n`;
-            output += `\`\`\`\nrun("ncp:import", {\n`;
-            output += `  from: "discovery",\n`;
-            output += `  source: "${description}",\n`;
-            output += `  selection: "1"  // or "1,3,5" for multiple, or "*" for all\n`;
-            output += `})\n\`\`\`\n\n`;
-
-            output += `**Option 2: If you know the exact MCP name:**\n`;
-            output += `\`\`\`\nrun("ncp:add", {\n`;
-            output += `  mcp_name: "<exact-mcp-name>"\n`;
-            output += `})\n\`\`\`\n\n`;
-          }
-
-          output += `💡 *MCPs will be available after NCP restarts.*`;
-
-          return {
-            content: [{ type: 'text', text: output }]
-          };
-        }
-      } catch (error: any) {
-        logger.warn(`Registry search failed: ${error.message}`);
-      }
-
-      // Fallback: No registry results, suggest direct add or show samples
-      const isMicroMCPName = description.trim().split(/\s+/).length === 1;
-
-      if (isMicroMCPName) {
-        // For simple queries, suggest trying direct add first
-        output += `💡 **Try adding directly:**\n\n`;
-        output += `\`\`\`\nrun("ncp:add", {\n`;
-        output += `  mcp_name: "${description}"\n`;
-        output += `})\n\`\`\`\n\n`;
-        output += `This will search for an MCP named "${description}" and guide you through installation.\n\n`;
-      }
-
-      const samples = await finder.getSampleTools(8);
-
-      if (samples.length > 0) {
-        output += `📝 **Or explore these available MCPs:**\n`;
-        samples.forEach(sample => {
-          output += `📁 **${sample.mcpName}** - ${sample.description}\n`;
-        });
-        output += `\n💡 *Try broader search terms or browse registry at https://smithery.ai*`;
-      }
-
-      return {
-        content: [{ type: 'text', text: output }]
-      };
-    }
-
-    // If no results but still indexing, return progress message
-    if (results.length === 0 && progress) {
-      return {
-        content: [{ type: 'text', text: output }]
-      };
-    }
-
-    // Format output based on depth and mode
-    if (depth === 0) {
-      // Depth 0: Tool names only, with Code-Mode compatibility
-      results.forEach((tool) => {
-        const [mcpName, toolName] = tool.toolName.split(':');
-        const confidence = Math.round(tool.confidence * 100);
-        const matchText = isListing ? '' : ` (${confidence}% match)`;
-
-        output += `// ${tool.description || tool.toolName}${matchText}\n`;
-        output += `await ${mcpName}.${toolName}();\n\n`;
-      });
-    } else if (depth === 1) {
-      // Depth 1: Tool name + description + Code-Mode example
-      results.forEach((tool, toolIndex) => {
-        if (toolIndex > 0) output += '// ---\n';
-
-        const confidence = Math.round(tool.confidence * 100);
-        const matchText = isListing ? '' : ` (${confidence}% match)`;
-        output += `// Tool: ${tool.toolName}${matchText}\n`;
-
-        if (tool.description) {
-          const cleanDescription = tool.description.replace(/^[^:]+:\s*/, '').replace(/\s+/g, ' ').trim();
-          output += `// Description: ${cleanDescription}\n`;
-        }
-
-        // Add Code-Mode example
-        const [mcpName, toolName] = tool.toolName.split(':');
-        const exampleParams = this.generateCodeModeParams(tool);
-        output += `\n\`\`\`typescript\n`;
-        if (exampleParams) {
-          output += `const result = await ${mcpName}.${toolName}(${exampleParams});\n`;
-        } else {
-          output += `const result = await ${mcpName}.${toolName}();\n`;
-        }
-        output += `console.log(result);\n`;
-        output += `\`\`\`\n`;
-      });
-    } else {
-      // Depth 2: Full details with parameters and Code-Mode example
-      results.forEach((tool, toolIndex) => {
-        if (toolIndex > 0) output += '// ---\n';
-
-        const confidence = Math.round(tool.confidence * 100);
-        const matchText = isListing ? '' : ` (${confidence}% match)`;
-        output += `// Tool: ${tool.toolName}${matchText}\n`;
-
-        if (tool.description) {
-          const cleanDescription = tool.description.replace(/^[^:]+:\s*/, '').replace(/\s+/g, ' ').trim();
-          output += `// Description: ${cleanDescription}\n`;
-        }
-
-        // Parameters with descriptions
-        if (tool.schema) {
-          const params = this.parseParameters(tool.schema);
-          if (params.length > 0) {
-            output += `// Parameters:\n`;
-            params.forEach(param => {
-              const optionalText = param.required ? '' : ' *(optional)*';
-              const descText = param.description ? ` - ${param.description}` : '';
-              output += `// * ${param.name}: \`${param.type}\`${optionalText}${descText}\n`;
-            });
-          } else {
-            output += `// *No parameters*\n`;
-          }
-        } else {
-          output += `// *No parameters*\n`;
-        }
-
-        // Add Code-Mode example
-        const [mcpName, toolName] = tool.toolName.split(':');
-        const exampleParams = this.generateCodeModeParams(tool);
-        output += `\n**Code-Mode Example:**\n`;
-        output += `\`\`\`typescript\n`;
-        if (exampleParams) {
-          output += `const result = await ${mcpName}.${toolName}(${exampleParams});\n`;
-        } else {
-          output += `const result = await ${mcpName}.${toolName}();\n`;
-        }
-        output += `console.log(result);\n`;
-        output += `\`\`\`\n`;
-      });
-    }
-
-    // Add usage guidance
-    output += await UsageTipsGenerator.generate({
-      depth,
-      page: pagination.page,
-      totalPages: pagination.totalPages,
-      limit,
-      totalResults: pagination.totalResults,
-      description,
+    // ALWAYS build structured data first (single source of truth)
+    const structured = await this.buildStructuredFindResult(
+      results,
+      pagination,
+      healthStatus,
+      progress,
       mcpFilter,
-      results
-    });
+      description,
+      isListing
+    );
+
+    // Render structured data to markdown for MCP response
+    const text = FindResultRenderer.render(structured);
 
     return {
-      content: [{ type: 'text', text: output }]
+      content: [{ type: 'text', text }]
     };
   }
 
+  // OLD RENDERING CODE BELOW - WILL DELETE AFTER TESTING
   private async handleRun(args: any): Promise<any> {
     // Check if indexing is still in progress
     if (!this.isInitialized && this.initializationPromise) {
