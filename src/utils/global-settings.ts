@@ -21,9 +21,18 @@ export interface LogRotationSettings {
   maxProtocolLines: number;
 }
 
+/**
+ * Workflow mode determines how Claude interacts with NCP tools
+ * - find-and-run: Traditional MCP (Claude uses find tool, then run tool)
+ * - find-and-code: Hybrid (Claude uses find for discovery, Code-Mode for execution)
+ * - code-only: Pure Code-Mode (Claude uses internal ncp.find() in TypeScript)
+ */
+export type WorkflowMode = 'find-and-run' | 'find-and-code' | 'code-only';
+
 export interface GlobalSettings {
   confirmBeforeRun: ConfirmBeforeRunSettings;
   logRotation: LogRotationSettings;
+  workflowMode: WorkflowMode;
 }
 
 /**
@@ -63,7 +72,8 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
     // Maximum number of protocol log lines to keep (request+response pairs)
     // 2000 lines = 1000 request/response pairs
     maxProtocolLines: 2000
-  }
+  },
+  workflowMode: 'find-and-run' // Default to traditional MCP mode for backward compatibility
 };
 
 /**
@@ -99,7 +109,8 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
         logRotation: {
           ...DEFAULT_SETTINGS.logRotation,
           ...(fileSettings.logRotation || {})
-        }
+        },
+        workflowMode: fileSettings.workflowMode || DEFAULT_SETTINGS.workflowMode
       };
     } catch (error) {
       console.warn('Failed to load settings, using defaults:', error);
@@ -116,6 +127,14 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
   if (process.env.NCP_ENABLE_LOG_ROTATION !== undefined) {
     const envValue = process.env.NCP_ENABLE_LOG_ROTATION;
     settings.logRotation.enabled = envValue === 'true';
+  }
+
+  // Override workflow mode with environment variable from extension UI
+  if (process.env.NCP_WORKFLOW_MODE !== undefined) {
+    const envValue = process.env.NCP_WORKFLOW_MODE as WorkflowMode;
+    if (['find-and-run', 'find-and-code', 'code-only'].includes(envValue)) {
+      settings.workflowMode = envValue;
+    }
   }
 
   return settings;
