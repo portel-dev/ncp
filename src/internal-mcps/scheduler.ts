@@ -66,73 +66,65 @@ export class SchedulerMCP implements InternalMCP {
     },
     {
       name: 'create',
-      description: 'Create a new scheduled job. Uses same parameters as run, plus schedule and active flag.',
+      description: 'Create scheduled job with cron/natural language timing.',
       inputSchema: {
         type: 'object',
         properties: {
           // SAME AS RUN
           tool: {
             type: 'string',
-            description: 'MCP tool in format "mcp:tool" (e.g., "filesystem:read_file")'
+            description: 'MCP tool (format: mcp:tool)'
           },
           parameters: {
             type: 'object',
-            description: 'Tool parameters (same as you would pass to run)'
+            description: 'Tool parameters'
           },
 
           // SCHEDULER-SPECIFIC
           name: {
             type: 'string',
-            description: 'Human-readable job name (e.g., "Daily Backup")'
+            description: 'Job name'
           },
           schedule: {
             type: 'string',
-            description: 'Schedule in one of these formats:\n' +
-              '1. Relative time: "in 5 minutes", "in 2 hours", "in 3 days" (one-time execution)\n' +
-              '2. One-time: RFC 3339 datetime with timezone (e.g., "2025-12-25T15:00:00-05:00" or "2025-12-25T20:00:00Z")\n' +
-              '3. Recurring: Cron expression (e.g., "0 14 * * *") - uses timezone parameter\n' +
-              '4. Natural language: "every day at 2pm", "every monday at 9am", "every 5 minutes" - uses timezone parameter\n' +
-              `System timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}\n` +
-              `Current server time: ${new Date().toISOString()}`
+            description: 'Schedule: "in 5min", "every day at 9am", cron (0 9 * * *), or RFC 3339'
           },
           timezone: {
             type: 'string',
-            description: 'IANA timezone for recurring schedules (e.g., "America/New_York", "Europe/London", "UTC"). ' +
-              `Defaults to system timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}. ` +
-              'Ignored if schedule is RFC 3339 datetime (timezone is in the datetime string).'
+            description: `IANA timezone (default: ${Intl.DateTimeFormat().resolvedOptions().timeZone}). Ignored for RFC 3339.`
           },
           active: {
             type: 'boolean',
-            description: 'Start active (true, default) or paused (false). Create paused to test manually first.',
+            description: 'Start active (default: true) or paused',
             default: true
           },
 
           // OPTIONAL
           description: {
             type: 'string',
-            description: 'Optional description of what this job does'
+            description: 'Job description'
           },
           fireOnce: {
             type: 'boolean',
-            description: 'Execute only once then stop (default: false for recurring)',
+            description: 'Execute once then stop (default: false)',
             default: false
           },
           maxExecutions: {
             type: 'number',
-            description: 'Maximum number of executions before stopping'
+            description: 'Max executions before stopping'
           },
           endDate: {
             type: 'string',
-            description: 'Stop executing after this date (ISO 8601: "2025-12-31T23:59:59Z")'
+            description: 'Stop after this date (ISO 8601)'
           },
           testRun: {
             type: 'boolean',
-            description: 'Execute tool once as test before scheduling',
+            description: 'Test execute before scheduling',
             default: false
           },
           skipValidation: {
             type: 'boolean',
-            description: 'Skip parameter validation (not recommended)',
+            description: 'Skip validation (not recommended)',
             default: false
           }
         },
@@ -141,42 +133,42 @@ export class SchedulerMCP implements InternalMCP {
     },
     {
       name: 'retrieve',
-      description: 'Get scheduled jobs and/or execution history with search and filtering',
+      description: 'Get jobs and/or executions with search and filtering.',
       inputSchema: {
         type: 'object',
         properties: {
           include: {
             type: 'string',
             enum: ['jobs', 'executions', 'both'],
-            description: 'What to return: jobs (schedules), executions (history), or both',
+            description: 'What to return: jobs, executions, or both',
             default: 'jobs'
           },
           query: {
             type: 'string',
-            description: 'Search term to filter results (optional - omit to list all)'
+            description: 'Search term (omit for all)'
           },
           job_id: {
             type: 'string',
-            description: 'Filter to specific job by ID or name (optional)'
+            description: 'Filter by job ID or name'
           },
           execution_id: {
             type: 'string',
-            description: 'Get specific execution details (optional)'
+            description: 'Get specific execution'
           },
           status: {
             type: 'string',
             enum: ['active', 'paused', 'completed', 'error', 'all', 'success', 'failure', 'timeout'],
-            description: 'Filter by status (for jobs: active/paused/completed/error, for executions: success/failure/timeout)',
+            description: 'Filter by status',
             default: 'all'
           },
           page: {
             type: 'number',
-            description: 'Page number for pagination',
+            description: 'Page number',
             default: 1
           },
           limit: {
             type: 'number',
-            description: 'Maximum results per page',
+            description: 'Max results per page',
             default: 50
           }
         }
@@ -184,35 +176,35 @@ export class SchedulerMCP implements InternalMCP {
     },
     {
       name: 'update',
-      description: 'Update scheduled job (can change timing, parameters, or active state for pause/resume)',
+      description: 'Update job timing, parameters, or active state.',
       inputSchema: {
         type: 'object',
         properties: {
           job_id: {
             type: 'string',
-            description: 'Job ID or name to update'
+            description: 'Job ID or name'
           },
 
           // Can update any of these
           name: {
             type: 'string',
-            description: 'New job name'
+            description: 'New name'
           },
           schedule: {
             type: 'string',
-            description: 'New schedule (natural language or cron)'
+            description: 'New schedule'
           },
           tool: {
             type: 'string',
-            description: 'New tool to execute'
+            description: 'New tool'
           },
           parameters: {
             type: 'object',
-            description: 'New tool parameters'
+            description: 'New parameters'
           },
           active: {
             type: 'boolean',
-            description: 'Activate (true) or pause (false) the job'
+            description: 'Activate or pause'
           },
           description: {
             type: 'string',
@@ -220,11 +212,11 @@ export class SchedulerMCP implements InternalMCP {
           },
           fireOnce: {
             type: 'boolean',
-            description: 'New fireOnce setting'
+            description: 'New fireOnce'
           },
           maxExecutions: {
             type: 'number',
-            description: 'New maxExecutions limit'
+            description: 'New max executions'
           },
           endDate: {
             type: 'string',
@@ -236,13 +228,13 @@ export class SchedulerMCP implements InternalMCP {
     },
     {
       name: 'delete',
-      description: 'Permanently delete a scheduled job',
+      description: 'Delete scheduled job.',
       inputSchema: {
         type: 'object',
         properties: {
           job_id: {
             type: 'string',
-            description: 'Job ID or name to delete'
+            description: 'Job ID or name'
           }
         },
         required: ['job_id']
@@ -250,14 +242,14 @@ export class SchedulerMCP implements InternalMCP {
     },
     {
       name: 'list',
-      description: 'List all scheduled jobs (simpler alternative to retrieve). Matches CLI: ncp schedule list',
+      description: 'List all scheduled jobs.',
       inputSchema: {
         type: 'object',
         properties: {
           status: {
             type: 'string',
             enum: ['active', 'paused', 'completed', 'error', 'all'],
-            description: 'Filter by job status',
+            description: 'Filter by status',
             default: 'all'
           }
         }
@@ -265,13 +257,13 @@ export class SchedulerMCP implements InternalMCP {
     },
     {
       name: 'get',
-      description: 'Get details for a specific scheduled job (simpler alternative to retrieve). Matches CLI: ncp schedule get <id>',
+      description: 'Get job details.',
       inputSchema: {
         type: 'object',
         properties: {
           job_id: {
             type: 'string',
-            description: 'Job ID or name to retrieve'
+            description: 'Job ID or name'
           }
         },
         required: ['job_id']
@@ -279,13 +271,13 @@ export class SchedulerMCP implements InternalMCP {
     },
     {
       name: 'pause',
-      description: 'Pause a scheduled job (stops future executions). Matches CLI: ncp schedule pause <id>',
+      description: 'Pause job (stops future executions).',
       inputSchema: {
         type: 'object',
         properties: {
           job_id: {
             type: 'string',
-            description: 'Job ID or name to pause'
+            description: 'Job ID or name'
           }
         },
         required: ['job_id']
@@ -293,13 +285,13 @@ export class SchedulerMCP implements InternalMCP {
     },
     {
       name: 'resume',
-      description: 'Resume a paused job (re-enables future executions). Matches CLI: ncp schedule resume <id>',
+      description: 'Resume paused job.',
       inputSchema: {
         type: 'object',
         properties: {
           job_id: {
             type: 'string',
-            description: 'Job ID or name to resume'
+            description: 'Job ID or name'
           }
         },
         required: ['job_id']
@@ -307,23 +299,23 @@ export class SchedulerMCP implements InternalMCP {
     },
     {
       name: 'executions',
-      description: 'View execution history for all jobs or specific job. Matches CLI: ncp schedule executions',
+      description: 'View execution history.',
       inputSchema: {
         type: 'object',
         properties: {
           job_id: {
             type: 'string',
-            description: 'Filter to specific job by ID or name (optional - omit for all jobs)'
+            description: 'Filter by job ID or name (omit for all)'
           },
           status: {
             type: 'string',
             enum: ['success', 'failure', 'timeout', 'all'],
-            description: 'Filter by execution status',
+            description: 'Filter by status',
             default: 'all'
           },
           limit: {
             type: 'number',
-            description: 'Maximum results to return',
+            description: 'Max results',
             default: 50
           }
         }

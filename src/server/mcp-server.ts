@@ -289,29 +289,29 @@ export class MCPServer implements ElicitationServer {
     const coreTools: Tool[] = [
       {
         name: 'find',
-        description: 'Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task or capability: "save file", "analyze logs", "send email". For multiple capabilities at once, use pipe separator: "read gmail | send slack | create issue". (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools with depth control (0=tool names only, 1=tool names + descriptions, 2=full details with parameters).',
+        description: 'Search or list tools. With description: vector search ("send email"). Without: browse all. Pipe-separated for multi-query ("gmail | slack").',
         inputSchema: {
           type: 'object',
           properties: {
             description: {
               type: 'string',
-              description: 'SEARCH MODE: Search query describing what you want to do ("save file", "read database", "send message") or MCP name to filter results. For multiple queries, use pipe separator: "read gmail | send slack". LISTING MODE: Omit this parameter entirely to browse all available MCPs and tools with pagination.'
+              description: 'Search query or MCP filter. Omit to list all. Pipe-separated for multiple queries.'
             },
             limit: {
               type: 'number',
-              description: 'Maximum number of tools to return per page (default: 5 for search, 20 for list). Use higher values to see more results at once.'
+              description: 'Max results per page (default: 5 search, 20 list)'
             },
             page: {
               type: 'number',
-              description: 'Page number for pagination (default: 1). Increment to see more results when total results exceed limit.'
+              description: 'Page number (default: 1)'
             },
             confidence_threshold: {
               type: 'number',
-              description: 'Minimum confidence level for search results (0.0-1.0, default: 0.35). Examples: 0.1=show all, 0.35=balanced, 0.5=strict, 0.7=very precise. Lower values show more loosely related tools, higher values show only close matches.'
+              description: 'Min confidence 0.0-1.0 (default: 0.35). Lower=more results, higher=precise.'
             },
             depth: {
               type: 'number',
-              description: 'Information depth level: 0=Tool names only, 1=Tool names + descriptions, 2=Full details with parameters (default, recommended). Higher depth shows more complete information.',
+              description: 'Detail level: 0=names, 1=+descriptions, 2=+parameters (default: 2)',
               enum: [0, 1, 2],
             }
           }
@@ -319,21 +319,21 @@ export class MCPServer implements ElicitationServer {
       },
       {
         name: 'run',
-        description: 'Execute tools from managed MCP servers. Requires exact format "mcp_name:tool_name" with required parameters. System provides suggestions if tool not found and automatic fallbacks when tools fail.',
+        description: 'Execute MCP tool (format: mcp:tool). Provides suggestions if not found.',
         inputSchema: {
           type: 'object',
           properties: {
             tool: {
               type: 'string',
-              description: 'Tool to execute. Format: "mcp_name:tool_name"'
+              description: 'Tool to execute (format: mcp:tool)'
             },
             parameters: {
               type: 'object',
-              description: 'Parameters to pass to the tool'
+              description: 'Tool parameters'
             },
             dry_run: {
               type: 'boolean',
-              description: 'Preview what the tool will do without actually executing it (default: false)'
+              description: 'Preview without executing (default: false)'
             }
           },
           required: ['tool']
@@ -341,17 +341,17 @@ export class MCPServer implements ElicitationServer {
       },
       {
         name: 'code',
-        description: 'Execute TypeScript code with access to all MCPs and Photons as namespaces. UTCP Code-Mode delivers 60% faster execution, 68% fewer tokens, 88% fewer API round trips. All registered tools are available as namespace.tool() calls (e.g., github.get_repo()). PROGRESSIVE DISCLOSURE: Use ncp.find() to discover tools on-demand, then call them directly. Introspection: __interfaces lists all tools, __getToolInterface(name) shows schemas. Console output is captured and returned.',
+        description: 'Execute TypeScript with MCPs as namespaces (e.g., github.get_repo()). Use ncp.find() for discovery. Console captured.',
         inputSchema: {
           type: 'object',
           properties: {
             code: {
               type: 'string',
-              description: 'TypeScript code to execute. All MCPs/Photons available as namespaces. PROGRESSIVE DISCLOSURE pattern: const tools = await ncp.find({ description: "send email" }); console.log(tools); const result = await gmail.send_email({ to: "user@example.com", subject: "Hello", body: "World" }); Multiple operations in one execution for maximum efficiency.'
+              description: 'TypeScript code. MCPs available as namespaces. Example: await gmail.send_email({to, subject, body})'
             },
             timeout: {
               type: 'number',
-              description: 'Execution timeout in milliseconds (default: 30000, max: 300000)'
+              description: 'Timeout in ms (default: 30000, max: 300000)'
             }
           },
           required: ['code']

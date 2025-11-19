@@ -219,29 +219,29 @@ export class NCPOrchestrator {
         // Add NCP core tools for progressive disclosure
         tools.push({
           name: 'ncp:find',
-          description: 'Discover available tools by searching or listing. Use for progressive disclosure - find what you need, then use it.',
+          description: 'Search or list tools. Progressive disclosure pattern.',
           inputSchema: {
             type: 'object',
             properties: {
               description: {
                 type: 'string',
-                description: 'Search query describing what you want to do (e.g., "send email", "read database"). Omit to list all tools.'
+                description: 'Search query or MCP filter. Omit to list all.'
               },
               limit: {
                 type: 'number',
-                description: 'Maximum number of results (default: 5 for search, 20 for list)'
+                description: 'Max results (default: 5 search, 20 list)'
               },
               page: {
                 type: 'number',
-                description: 'Page number for pagination (default: 1)'
+                description: 'Page number (default: 1)'
               },
               confidence_threshold: {
                 type: 'number',
-                description: 'Minimum confidence (0.0-1.0, default: 0.35)'
+                description: 'Min confidence 0.0-1.0 (default: 0.35)'
               },
               depth: {
                 type: 'number',
-                description: 'Detail level: 0=names only, 1=names+descriptions, 2=full details (default: 2)'
+                description: 'Detail: 0=names, 1=+desc, 2=+params (default: 2)'
               }
             }
           }
@@ -249,17 +249,17 @@ export class NCPOrchestrator {
 
         tools.push({
           name: 'ncp:run',
-          description: 'Execute a tool by its qualified name (mcp:tool). Usually you call tools directly via namespaces, but this is useful for dynamic execution.',
+          description: 'Execute tool by name (mcp:tool). Use for dynamic execution.',
           inputSchema: {
             type: 'object',
             properties: {
               tool: {
                 type: 'string',
-                description: 'Tool identifier in format "mcp_name:tool_name"'
+                description: 'Tool (format: mcp:tool)'
               },
               parameters: {
                 type: 'object',
-                description: 'Parameters to pass to the tool'
+                description: 'Tool parameters'
               }
             },
             required: ['tool']
