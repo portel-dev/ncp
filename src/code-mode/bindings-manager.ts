@@ -1,23 +1,27 @@
 /**
  * Bindings Manager - Credential Isolation for Code-Mode
  * Phase 3: Hide API keys from sandboxed code
+ * Phase 4 Enhancement: Per-binding network policies
  *
  * Implements Cloudflare Workers-style bindings pattern:
  * - Credentials stored securely in main thread only
  * - Worker receives pre-authenticated clients (bindings)
  * - Worker calls methods on bindings, never sees raw keys
  * - Main thread executes actual API calls with credentials
+ * - Each binding can have custom network access rules
  */
 
 import { logger } from '../utils/logger.js';
+import type { NetworkPolicy } from './network-policy.js';
 
 /**
  * Binding definition - what the worker sees
  */
 export interface Binding {
-  name: string;           // e.g., "github", "stripe", "openai"
-  type: 'http' | 'sdk' | 'database' | 'custom';
+  name: string;           // e.g., "github", "stripe", "lg-remote"
+  type: 'http' | 'sdk' | 'database' | 'custom' | 'local-network';
   methods: string[];      // Available methods on this binding
+  networkPolicy?: Partial<NetworkPolicy>;  // Custom network access for this binding
 }
 
 /**
@@ -51,6 +55,7 @@ export class BindingsManager {
   private credentials: Map<string, Credential> = new Map();
   private bindings: Map<string, Binding> = new Map();
   private authenticatedClients: Map<string, any> = new Map();
+  private bindingNetworkPolicies: Map<string, Partial<NetworkPolicy>> = new Map();
 
   /**
    * Register a credential for an MCP
@@ -68,18 +73,35 @@ export class BindingsManager {
   createBinding(
     mcpName: string,
     type: Binding['type'],
-    methods: string[]
+    methods: string[],
+    networkPolicy?: Partial<NetworkPolicy>
   ): Binding {
     const binding: Binding = {
       name: mcpName,
       type,
-      methods
+      methods,
+      networkPolicy
     };
 
     this.bindings.set(mcpName, binding);
-    logger.info(`🔗 Created binding for MCP: ${mcpName} with ${methods.length} methods`);
+
+    // Store network policy separately for easy lookup
+    if (networkPolicy) {
+      this.bindingNetworkPolicies.set(mcpName, networkPolicy);
+      logger.info(`🔗 Created binding for MCP: ${mcpName} with ${methods.length} methods and custom network policy`);
+    } else {
+      logger.info(`🔗 Created binding for MCP: ${mcpName} with ${methods.length} methods`);
+    }
 
     return binding;
+  }
+
+  /**
+   * Get network policy for a specific binding
+   * Returns undefined if binding has no custom policy (use default)
+   */
+  getBindingNetworkPolicy(bindingName: string): Partial<NetworkPolicy> | undefined {
+    return this.bindingNetworkPolicies.get(bindingName);
   }
 
   /**
