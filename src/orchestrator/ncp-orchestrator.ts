@@ -187,7 +187,7 @@ export class NCPOrchestrator {
   private cliScanner: any = null; // CLIScanner instance for query-specific enhancement
   private codeExecutor: CodeExecutor;
   private skillsManager: any = null; // SkillsManager instance for loading agent skills
-  private skillPrompts: Map<string, string> = new Map(); // Store skill content for Code-Mode context
+  private skillPrompts: Map<string, any> = new Map(); // Store loaded skill objects
 
   private forceRetry: boolean = false;
 
@@ -1040,9 +1040,8 @@ export class NCPOrchestrator {
   /**
    * Load and register agent skills from ~/.ncp/skills
    *
-   * Note: Anthropic Agent Skills are prompts/documentation that enhance Claude's capabilities,
-   * not executable MCP tools. They are loaded for reference and can be injected into Code-Mode
-   * context when needed.
+   * Skills are discoverable via find (like internal MCPs) with skill: prefix
+   * Each skill is ONE discoverable entity with progressive disclosure via depth parameter
    */
   private async loadSkills(): Promise<void> {
     try {
@@ -1051,23 +1050,165 @@ export class NCPOrchestrator {
 
       const skills = await this.skillsManager.loadAllSkills();
 
-      // Store skill content for future reference
-      // Skills are prompts/instructions, not executable tools
-      // They can be injected into Code-Mode context or system prompts when needed
+      // Add each skill to discovery (like internal MCPs/Photons)
       for (const skill of skills) {
-        // Store skill metadata for potential future use
-        // (e.g., injecting skill content into Code-Mode prompts)
-        this.skillPrompts.set(skill.metadata.name, skill.content);
+        // Store full skill object for execution
+        this.skillPrompts.set(skill.metadata.name, skill);
 
-        logger.debug(`  ✓ ${skill.metadata.name}${skill.metadata.description ? ': ' + skill.metadata.description : ''}`);
+        // Add to discovery with skill: prefix (like mcp-name:tool)
+        const skillToolName = `skill:${skill.metadata.name}`;
+
+        this.allTools.push({
+          name: skillToolName,
+          description: skill.metadata.description || 'Anthropic Agent Skill',
+          mcpName: '__skills__',  // Special namespace like internal MCPs
+        });
+
+        // Map both skill:name and skill.name for lookup (support both notations)
+        this.toolToMCP.set(skillToolName, '__skills__');
+        this.toolToMCP.set(`skill.${skill.metadata.name}`, '__skills__');
+        this.toolToMCP.set(skill.metadata.name, '__skills__');
+
+        logger.debug(`  ✓ skill:${skill.metadata.name}${skill.metadata.description ? ': ' + skill.metadata.description : ''}`);
       }
 
       if (skills.length > 0) {
-        logger.info(`📚 Loaded ${skills.length} Anthropic Agent Skill(s) (available as context for Code-Mode)`);
+        logger.info(`📚 Loaded ${skills.length} skill(s) into discovery`);
       }
     } catch (error: any) {
       logger.warn(`Failed to load skills: ${error.message}`);
     }
+  }
+
+  /**
+   * Execute a skill with progressive disclosure
+   * Skills return content based on depth parameter:
+   * - depth=1: Metadata only
+   * - depth=2: + Full SKILL.md content (default)
+   * - depth=3: + File tree listing
+   */
+  private async executeSkill(skillName: string, parameters: any): Promise<ExecutionResult> {
+    // Remove skill: or skill. prefix if present
+    const cleanSkillName = skillName.replace(/^skill[.:]/, '');
+
+    const skill = this.skillPrompts.get(cleanSkillName);
+    if (!skill) {
+      return {
+        success: false,
+        error: `Skill not found: ${cleanSkillName}. Use 'ncp find skill' to see available skills.`
+      };
+    }
+
+    const depth = parameters?.depth ?? 2;  // Default to level 2 (learn)
+
+    try {
+      // Build response based on depth
+      let output = `## 📚 ${skill.metadata.name}\n\n`;
+      output += `**Description:** ${skill.metadata.description || '(no description)'}\n\n`;
+
+      // Level 1: Metadata (always included)
+      if (skill.metadata.version) {
+        output += `**Version:** ${skill.metadata.version}\n`;
+      }
+      if (skill.metadata.author) {
+        output += `**Author:** ${skill.metadata.author}\n`;
+      }
+      if (skill.metadata.tools && skill.metadata.tools.length > 0) {
+        output += `**Tools:** ${skill.metadata.tools.join(', ')}\n`;
+      }
+
+      // Level 2: Full SKILL.md content (AI learns the skill!)
+      if (depth >= 2) {
+        output += `\n**Full Content:**\n\n`;
+        output += '```markdown\n';
+        output += skill.content;
+        output += '\n```\n';
+      }
+
+      // Level 3: File tree listing
+      if (depth >= 3) {
+        const fileTree = await this.getSkillFileTree(skill.directory);
+        if (fileTree.length > 0) {
+          output += `\n**Available Files:**\n`;
+          for (const file of fileTree) {
+            output += `- ${file}\n`;
+          }
+          output += `\n💡 Use \`skills:read_resource\` to read specific files.\n`;
+        }
+      }
+
+      return {
+        success: true,
+        content: output
+      };
+    } catch (error: any) {
+      logger.error(`Skill execution failed for ${cleanSkillName}:`, error);
+      return {
+        success: false,
+        error: error.message || 'Skill execution failed'
+      };
+    }
+  }
+
+  /**
+   * Get file tree for a skill directory
+   */
+  private async getSkillFileTree(skillDir: string): Promise<string[]> {
+    const files: string[] = [];
+
+    try {
+      const { readdir } = await import('fs/promises');
+      const entries = await readdir(skillDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (entry.name === 'SKILL.md') continue; // Already shown in content
+
+        if (entry.isDirectory()) {
+          // Recursively list directory contents
+          const subFiles = await this.listSkillDirectoryRecursive(
+            join(skillDir, entry.name),
+            entry.name
+          );
+          files.push(...subFiles);
+        } else {
+          files.push(entry.name);
+        }
+      }
+    } catch (error: any) {
+      logger.debug(`Failed to list skill files: ${error.message}`);
+    }
+
+    return files.sort();
+  }
+
+  /**
+   * Recursively list directory contents for skills
+   */
+  private async listSkillDirectoryRecursive(dirPath: string, prefix: string): Promise<string[]> {
+    const files: string[] = [];
+
+    try {
+      const { readdir } = await import('fs/promises');
+      const entries = await readdir(dirPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const relativePath = `${prefix}/${entry.name}`;
+
+        if (entry.isDirectory()) {
+          const subFiles = await this.listSkillDirectoryRecursive(
+            join(dirPath, entry.name),
+            relativePath
+          );
+          files.push(...subFiles);
+        } else {
+          files.push(relativePath);
+        }
+      }
+    } catch (error: any) {
+      logger.debug(`Failed to list directory: ${error.message}`);
+    }
+
+    return files;
   }
 
   /**
@@ -1872,6 +2013,11 @@ export class NCPOrchestrator {
         success: false,
         error: errorMessage
       };
+    }
+
+    // Check if this is a skill execution (skill:name or skill.name)
+    if (mcpName === '__skills__' || toolName.startsWith('skill:') || toolName.startsWith('skill.')) {
+      return await this.executeSkill(actualToolName, parameters);
     }
 
     // Check if this is an internal MCP
