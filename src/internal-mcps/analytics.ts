@@ -8,6 +8,7 @@
 import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
 import { NCPLogParser, AnalyticsReport } from '../analytics/log-parser.js';
 import { VisualAnalyticsFormatter } from '../analytics/visual-formatter.js';
+import { TokenMetricsTracker } from '../analytics/token-metrics.js';
 import { logger } from '../utils/logger.js';
 
 export class AnalyticsMCP implements InternalMCP {
@@ -15,9 +16,11 @@ export class AnalyticsMCP implements InternalMCP {
   description = 'View NCP usage analytics, token savings, and performance metrics';
 
   private parser: NCPLogParser;
+  private tokenTracker: TokenMetricsTracker;
 
   constructor() {
     this.parser = new NCPLogParser();
+    this.tokenTracker = new TokenMetricsTracker();
   }
 
   tools: InternalTool[] = [
@@ -71,12 +74,31 @@ export class AnalyticsMCP implements InternalMCP {
           }
         }
       }
+    },
+    {
+      name: 'tokens',
+      description: 'Token usage and savings from Code-Mode vs find+run. Shows efficiency gains.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          period: {
+            type: 'number',
+            description: 'Days to analyze (default: 7)'
+          }
+        }
+      }
     }
   ];
 
   async executeTool(toolName: string, args: any): Promise<InternalToolResult> {
     try {
-      // Parse time range options
+      // Handle token analytics separately (uses different data source)
+      if (toolName === 'tokens') {
+        const period = args.period || 7;
+        return await this.formatTokenMetrics(period);
+      }
+
+      // Parse time range options for MCP log-based analytics
       const parseOptions: any = {};
       if (args.today) {
         parseOptions.today = true;
@@ -254,5 +276,66 @@ export class AnalyticsMCP implements InternalMCP {
     );
 
     return `${peak[0]}:00 (${peak[1]} sessions)`;
+  }
+
+  /**
+   * Format token metrics and savings report
+   */
+  private async formatTokenMetrics(daysBack: number): Promise<InternalToolResult> {
+    const report = await this.tokenTracker.generateReport(daysBack);
+
+    if (report.totalExecutions === 0) {
+      return {
+        success: true,
+        content: [{
+          type: 'text',
+          text: '📊 No token usage data available.\n\n' +
+                'Token tracking starts after you use find, run, or code tools.'
+        }]
+      };
+    }
+
+    let output = `## 🎯 Token Usage & Savings Report (Last ${daysBack} days)\n\n`;
+
+    // Summary stats
+    output += `### Summary\n\n`;
+    output += `- **Total Executions**: ${report.totalExecutions}\n`;
+    output += `  - find: ${report.breakdown.find}\n`;
+    output += `  - run: ${report.breakdown.run}\n`;
+    output += `  - code: ${report.breakdown.code}\n`;
+    output += `- **Total Tokens Used**: ${report.totalTokensUsed.toLocaleString()}\n`;
+    output += `- **Total Tokens Saved**: ${report.totalTokensSaved.toLocaleString()} (via Code-Mode)\n\n`;
+
+    // Code-Mode efficiency
+    if (report.codeModeEfficiency.executions > 0) {
+      output += `### ⚡ Code-Mode Efficiency\n\n`;
+      output += `- **Executions**: ${report.codeModeEfficiency.executions}\n`;
+      output += `- **Avg Tools per Execution**: ${report.codeModeEfficiency.avgToolsPerExecution.toFixed(1)}\n`;
+      output += `- **Avg Tokens per Execution**: ${Math.round(report.codeModeEfficiency.avgTokensPerExecution)}\n`;
+      output += `- **Total Savings**: ${report.codeModeEfficiency.totalSavings.toLocaleString()} tokens\n`;
+      output += `- **Savings Rate**: ${report.codeModeEfficiency.percentSavings.toFixed(1)}%\n\n`;
+
+      // Explain the savings
+      output += `*Code-Mode executes multiple tools in one call, saving token overhead from repeated find+run cycles.*\n\n`;
+    }
+
+    // Average tokens per execution type
+    output += `### 📊 Average Tokens per Execution\n\n`;
+    output += `| Type | Avg Tokens |\n`;
+    output += `|------|------------|\n`;
+    output += `| find | ${Math.round(report.avgTokensPerExecution.find)} |\n`;
+    output += `| run  | ${Math.round(report.avgTokensPerExecution.run)} |\n`;
+    output += `| code | ${Math.round(report.avgTokensPerExecution.code)} |\n\n`;
+
+    // Time range
+    output += `*Data from ${new Date(report.timeRange.start).toLocaleDateString()} to ${new Date(report.timeRange.end).toLocaleDateString()}*\n`;
+
+    return {
+      success: true,
+      content: [{
+        type: 'text',
+        text: output
+      }]
+    };
   }
 }

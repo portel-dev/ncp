@@ -34,6 +34,7 @@ import { dirname, join } from 'path';
 import { SessionNotificationManager } from '../utils/session-notifications.js';
 import { FindResultStructured, MultiQueryResult, ToolResult, ToolParameter } from '../types/find-result.js';
 import { FindResultRenderer } from '../services/find-result-renderer.js';
+import { TokenMetricsTracker } from '../analytics/token-metrics.js';
 
 // Get the directory of the current file
 const __filename = fileURLToPath(import.meta.url);
@@ -60,6 +61,7 @@ export class MCPServer implements ElicitationServer {
   private initializationError: Error | null = null;
   private notifications: SessionNotificationManager;
   private elicitationSupported: boolean | null = null; // null = unknown, true = supported, false = not supported
+  private tokenTracker: TokenMetricsTracker;
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
     // Initialize session-scoped notification manager
@@ -87,6 +89,9 @@ export class MCPServer implements ElicitationServer {
 
     // Profile-aware orchestrator using real MCP connections
     this.orchestrator = new NCPOrchestrator(profileName, showProgress, forceRetry);
+
+    // Initialize token metrics tracker
+    this.tokenTracker = new TokenMetricsTracker();
 
     // Set up callback to capture clientInfo from actual client (e.g., Claude Desktop, Cursor)
     // This enables protocol transparency - passing through actual client identity to downstream MCPs
@@ -924,6 +929,11 @@ export class MCPServer implements ElicitationServer {
     // Render structured data to markdown for MCP response
     const text = FindResultRenderer.render(structured);
 
+    // Track token usage for analytics
+    this.tokenTracker.trackFind(text, structured.tools.length, description).catch(() => {
+      // Ignore tracking errors - don't fail the request
+    });
+
     return {
       content: [{ type: 'text', text }]
     };
@@ -1232,17 +1242,31 @@ This operation may modify data or have side effects.`;
     const result = await this.orchestrator.run(toolIdentifier, parameters);
 
     if (result.success) {
+      const responseText = typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2);
+
+      // Track token usage for analytics
+      this.tokenTracker.trackRun(responseText, toolIdentifier).catch(() => {
+        // Ignore tracking errors - don't fail the request
+      });
+
       return {
         content: [{
           type: 'text',
-          text: typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2)
+          text: responseText
         }]
       };
     } else {
+      const errorText = result.error || 'Tool execution failed';
+
+      // Track token usage for analytics (even for errors)
+      this.tokenTracker.trackRun(errorText, toolIdentifier).catch(() => {
+        // Ignore tracking errors - don't fail the request
+      });
+
       return {
         content: [{
           type: 'text',
-          text: result.error || 'Tool execution failed'
+          text: errorText
         }],
         isError: true,
       };
@@ -1314,11 +1338,24 @@ This operation may modify data or have side effects.`;
       // Add error if any
       if (result.error) {
         output += '\n\n**Error:**\n```\n' + result.error + '\n```';
+
+        // Track token usage for analytics (estimate tool count from code)
+        const toolCount = this.estimateToolCallsInCode(code);
+        this.tokenTracker.trackCode(output, code, toolCount).catch(() => {
+          // Ignore tracking errors - don't fail the request
+        });
+
         return {
           content: [{ type: 'text', text: output }],
           isError: true
         };
       }
+
+      // Track token usage for analytics (estimate tool count from code)
+      const toolCount = this.estimateToolCallsInCode(code);
+      this.tokenTracker.trackCode(output, code, toolCount).catch(() => {
+        // Ignore tracking errors - don't fail the request
+      });
 
       return {
         content: [{ type: 'text', text: output }]
@@ -1326,10 +1363,18 @@ This operation may modify data or have side effects.`;
     } catch (error: any) {
       logger.error(`Code-Mode execution failed: ${error.message}`);
 
+      const errorOutput = `❌ **Code-Mode Execution Failed**\n\n**Error:**\n${error.message}`;
+
+      // Track token usage for analytics (estimate tool count from code)
+      const toolCount = this.estimateToolCallsInCode(code);
+      this.tokenTracker.trackCode(errorOutput, code, toolCount).catch(() => {
+        // Ignore tracking errors - don't fail the request
+      });
+
       return {
         content: [{
           type: 'text',
-          text: `❌ **Code-Mode Execution Failed**\n\n**Error:**\n${error.message}`
+          text: errorOutput
         }],
         isError: true
       };
@@ -1347,6 +1392,19 @@ This operation may modify data or have side effects.`;
       return optionLower.includes(inputLower) || inputLower.includes(optionLower) ||
              this.levenshteinDistance(inputLower, optionLower) <= 2;
     });
+  }
+
+  /**
+   * Estimate number of tool calls in code by counting await statements
+   * This is a rough estimate - counts lines with "await namespace.method(" pattern
+   */
+  private estimateToolCallsInCode(code: string): number {
+    // Match patterns like: await namespace.tool(...) or await ncp.find(...)
+    const toolCallPattern = /await\s+(\w+)\.(\w+)\s*\(/g;
+    const matches = code.match(toolCallPattern);
+
+    // Return count, minimum 1 if there were any await calls
+    return matches ? matches.length : 1;
   }
 
   private levenshteinDistance(str1: string, str2: string): number {
