@@ -147,46 +147,18 @@ export class SkillsManager {
 
       // Simple YAML parser (handles key: value pairs and arrays)
       const lines = frontmatter.split('\n');
-      let currentKey: string | null = null;
-      let currentArray: string[] = [];
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-
-        // Handle array items (- value)
-        const arrayItemMatch = line.match(/^\s+- (.+)$/);
-        if (arrayItemMatch && currentKey) {
-          currentArray.push(arrayItemMatch[1].trim());
-          continue;
-        }
-
-        // If we were building an array, save it
-        if (currentKey && currentArray.length > 0) {
-          (metadata as any)[currentKey] = currentArray;
-          currentArray = [];
-          currentKey = null;
-        }
-
-        // Handle key: value or key:
-        const keyValueMatch = line.match(/^([a-zA-Z0-9_-]+):\s*(.*)$/);
-        if (keyValueMatch) {
-          const [, key, value] = keyValueMatch;
+      for (const line of lines) {
+        // Handle key: value
+        const match = line.match(/^([a-zA-Z0-9_-]+):\s*(.+)$/);
+        if (match) {
+          const [, key, value] = match;
           const trimmedValue = value.trim();
 
-          if (trimmedValue === '') {
-            // Key with no value - might be an array
-            currentKey = key;
-          } else {
-            // Key with value on same line
-            const unquotedValue = trimmedValue.replace(/^["']|["']$/g, '');
-            (metadata as any)[key] = unquotedValue;
-          }
-        }
-      }
+          // Remove quotes if present
+          const unquotedValue = trimmedValue.replace(/^["']|["']$/g, '');
 
-      // Save any remaining array
-      if (currentKey && currentArray.length > 0) {
-        (metadata as any)[currentKey] = currentArray;
+          (metadata as any)[key] = unquotedValue;
+        }
       }
 
       // Use directory name if no name in metadata

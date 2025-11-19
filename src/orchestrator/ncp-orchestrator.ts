@@ -187,6 +187,7 @@ export class NCPOrchestrator {
   private cliScanner: any = null; // CLIScanner instance for query-specific enhancement
   private codeExecutor: CodeExecutor;
   private skillsManager: any = null; // SkillsManager instance for loading agent skills
+  private skillPrompts: Map<string, string> = new Map(); // Store skill content for Code-Mode context
 
   private forceRetry: boolean = false;
 
@@ -1038,6 +1039,10 @@ export class NCPOrchestrator {
 
   /**
    * Load and register agent skills from ~/.ncp/skills
+   *
+   * Note: Anthropic Agent Skills are prompts/documentation that enhance Claude's capabilities,
+   * not executable MCP tools. They are loaded for reference and can be injected into Code-Mode
+   * context when needed.
    */
   private async loadSkills(): Promise<void> {
     try {
@@ -1046,45 +1051,19 @@ export class NCPOrchestrator {
 
       const skills = await this.skillsManager.loadAllSkills();
 
-      // Add skills to definitions (similar to internal MCPs)
+      // Store skill content for future reference
+      // Skills are prompts/instructions, not executable tools
+      // They can be injected into Code-Mode context or system prompts when needed
       for (const skill of skills) {
-        // Add to definitions
-        this.definitions.set(skill.metadata.name, {
-          name: skill.metadata.name,
-          config: {
-            name: skill.metadata.name,
-            command: 'skill',
-            args: []
-          },
-          tools: skill.metadata.tools.map((tool: any) => ({
-            name: tool.name,
-            description: tool.description,
-            inputSchema: tool.inputSchema
-          })),
-          serverInfo: {
-            name: skill.metadata.name,
-            version: skill.metadata.version,
-            description: skill.metadata.description
-          }
-        });
+        // Store skill metadata for potential future use
+        // (e.g., injecting skill content into Code-Mode prompts)
+        this.skillPrompts.set(skill.metadata.name, skill.content);
 
-        // Add to allTools
-        for (const tool of skill.metadata.tools) {
-          this.allTools.push({
-            name: `${skill.metadata.name}:${tool.name}`,
-            description: tool.description,
-            mcpName: skill.metadata.name
-          });
-
-          // Map tool names for lookup
-          this.toolToMCP.set(tool.name, skill.metadata.name);
-          this.toolToMCP.set(`${skill.metadata.name}:${tool.name}`, skill.metadata.name);
-        }
+        logger.debug(`  ✓ ${skill.metadata.name}${skill.metadata.description ? ': ' + skill.metadata.description : ''}`);
       }
 
       if (skills.length > 0) {
-        const totalTools = skills.reduce((sum: number, s: any) => sum + s.metadata.tools.length, 0);
-        logger.info(`✅ Loaded ${skills.length} skill(s) with ${totalTools} tools`);
+        logger.info(`📚 Loaded ${skills.length} Anthropic Agent Skill(s) (available as context for Code-Mode)`);
       }
     } catch (error: any) {
       logger.warn(`Failed to load skills: ${error.message}`);
