@@ -23,7 +23,7 @@ import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { ParameterPredictor } from '../utils/parameter-predictor.js';
-import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist } from '../utils/global-settings.js';
+import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist, type WorkflowMode } from '../utils/global-settings.js';
 import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation } from './mcp-prompts.js';
 import chalk from 'chalk';
 import type { ElicitationServer } from '../utils/elicitation-helper.js';
@@ -62,6 +62,7 @@ export class MCPServer implements ElicitationServer {
   private notifications: SessionNotificationManager;
   private elicitationSupported: boolean | null = null; // null = unknown, true = supported, false = not supported
   private tokenTracker: TokenMetricsTracker;
+  private workflowMode: WorkflowMode = 'find-and-run'; // Default to traditional progressive disclosure
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
     // Initialize session-scoped notification manager
@@ -295,88 +296,128 @@ export class MCPServer implements ElicitationServer {
   }
 
   private getToolDefinitions(): Tool[] {
-    // Start with core NCP tools
-    const coreTools: Tool[] = [
-      {
-        name: 'find',
-        description: 'Search or list tools. With description: vector search ("send email"). Without: browse all. Pipe-separated for multi-query ("gmail | slack").',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-              description: 'Search query or MCP filter. Omit to list all. Pipe-separated for multiple queries.'
-            },
-            limit: {
-              type: 'number',
-              description: 'Max results per page (default: 5 search, 20 list)'
-            },
-            page: {
-              type: 'number',
-              description: 'Page number (default: 1)'
-            },
-            confidence_threshold: {
-              type: 'number',
-              description: 'Min confidence 0.0-1.0 (default: 0.35). Lower=more results, higher=precise.'
-            },
-            depth: {
-              type: 'number',
-              description: 'Detail level: 0=names, 1=+descriptions, 2=+parameters (default: 2)',
-              enum: [0, 1, 2],
-            }
+    // Define all core NCP tools
+    const findTool: Tool = {
+      name: 'find',
+      description: 'Search or list tools. With description: vector search ("send email"). Without: browse all. Pipe-separated for multi-query ("gmail | slack").',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          description: {
+            type: 'string',
+            description: 'Search query or MCP filter. Omit to list all. Pipe-separated for multiple queries.'
+          },
+          limit: {
+            type: 'number',
+            description: 'Max results per page (default: 5 search, 20 list)'
+          },
+          page: {
+            type: 'number',
+            description: 'Page number (default: 1)'
+          },
+          confidence_threshold: {
+            type: 'number',
+            description: 'Min confidence 0.0-1.0 (default: 0.35). Lower=more results, higher=precise.'
+          },
+          depth: {
+            type: 'number',
+            description: 'Detail level: 0=names, 1=+descriptions, 2=+parameters (default: 2)',
+            enum: [0, 1, 2],
           }
         }
-      },
-      {
-        name: 'run',
-        description: 'Execute MCP tool (format: mcp:tool). Provides suggestions if not found.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            tool: {
-              type: 'string',
-              description: 'Tool to execute (format: mcp:tool)'
-            },
-            parameters: {
-              type: 'object',
-              description: 'Tool parameters'
-            },
-            dry_run: {
-              type: 'boolean',
-              description: 'Preview without executing (default: false)'
-            }
-          },
-          required: ['tool']
-        }
-      },
-      {
-        name: 'code',
-        description: 'Execute TypeScript with MCPs as namespaces (e.g., github.get_repo()). Use ncp.find() for discovery. Console captured.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            code: {
-              type: 'string',
-              description: 'TypeScript code. MCPs available as namespaces. Example: await gmail.send_email({to, subject, body})'
-            },
-            timeout: {
-              type: 'number',
-              description: 'Timeout in ms (default: 30000, max: 300000)'
-            }
-          },
-          required: ['code']
-        }
       }
-    ];
+    };
+
+    const runTool: Tool = {
+      name: 'run',
+      description: 'Execute MCP tool (format: mcp:tool). Provides suggestions if not found.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tool: {
+            type: 'string',
+            description: 'Tool to execute (format: mcp:tool)'
+          },
+          parameters: {
+            type: 'object',
+            description: 'Tool parameters'
+          },
+          dry_run: {
+            type: 'boolean',
+            description: 'Preview without executing (default: false)'
+          }
+        },
+        required: ['tool']
+      }
+    };
+
+    const codeTool: Tool = {
+      name: 'code',
+      description: 'Execute TypeScript with MCPs as namespaces (e.g., github.get_repo()). Use ncp.find() for discovery. Console captured.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          code: {
+            type: 'string',
+            description: 'TypeScript code. MCPs available as namespaces. Example: await gmail.send_email({to, subject, body})'
+          },
+          timeout: {
+            type: 'number',
+            description: 'Timeout in ms (default: 30000, max: 300000)'
+          }
+        },
+        required: ['code']
+      }
+    };
+
+    // Filter tools based on workflow mode
+    let coreTools: Tool[];
+
+    switch (this.workflowMode) {
+      case 'find-and-run':
+        // Progressive disclosure (proven pattern): find → run
+        // AI uses find tool for discovery, run tool for execution
+        coreTools = [findTool, runTool];
+        logger.debug('Tool exposure: find-and-run (progressive disclosure)');
+        break;
+
+      case 'find-and-code':
+        // Hybrid mode: find for discovery, code for complex workflows
+        // WARNING: AI may bypass find and call ncp.find() from code
+        coreTools = [findTool, codeTool];
+        logger.debug('Tool exposure: find-and-code (hybrid mode)');
+        break;
+
+      case 'code-only':
+        // Advanced mode: code only (find/run available internally)
+        // For power users who need maximum flexibility
+        coreTools = [codeTool];
+        logger.debug('Tool exposure: code-only (advanced mode)');
+        break;
+
+      default:
+        // Fallback to progressive disclosure if unknown mode
+        logger.warn(`Unknown workflow mode: ${this.workflowMode}, falling back to find-and-run`);
+        coreTools = [findTool, runTool];
+        break;
+    }
 
     // Internal MCPs are indexed and accessible via find/run, not exposed as direct tools
-    // This keeps the tool list minimal (only 3 tools) to avoid overwhelming AI
+    // This keeps the tool list minimal to avoid overwhelming AI
 
     return coreTools;
   }
 
   async initialize(): Promise<void> {
     logger.info('Starting NCP MCP server (SDK-based)');
+
+    // Load workflow mode setting (async, but don't block initialization)
+    loadGlobalSettings().then(settings => {
+      this.workflowMode = settings.workflowMode;
+      logger.info(`Workflow mode: ${this.workflowMode}`);
+    }).catch(error => {
+      logger.warn(`Failed to load workflow mode, using default: ${error.message}`);
+    });
 
     // Start initialization in the background, don't await it
     this.initializationPromise = this.orchestrator.initialize().then(() => {
