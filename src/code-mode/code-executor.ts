@@ -1,10 +1,18 @@
 /**
  * Code-Mode Executor - TypeScript code execution with tool access
  * Based on official UTCP Code-Mode implementation pattern
+ *
+ * Phase 2: Uses Worker Threads for true process isolation with resource limits
  */
 
+import { Worker } from 'worker_threads';
 import { createContext, runInContext } from 'vm';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { logger } from '../utils/logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export interface ToolDefinition {
   name: string; // Format: "namespace:tool" or "namespace.tool"
@@ -41,8 +49,134 @@ export class CodeExecutor {
 
   /**
    * Execute TypeScript code with tool access
+   * Phase 2: Uses Worker Threads for true isolation with resource limits
    */
   async executeCode(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
+    // Try Worker Thread execution first (Phase 2 - secure)
+    try {
+      return await this.executeWithWorkerThread(code, timeout);
+    } catch (error: any) {
+      logger.warn(`Worker Thread execution failed: ${error.message}, falling back to vm module`);
+
+      // Fallback to vm module (Phase 1 - less secure but stable)
+      return await this.executeWithVM(code, timeout);
+    }
+  }
+
+  /**
+   * Execute code in Worker Thread with resource limits
+   * Phase 2: True process isolation
+   */
+  private async executeWithWorkerThread(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
+    // Validate code for security issues before execution
+    this.validateCode(code);
+
+    // Get all available tools
+    const tools = await this.toolsProvider();
+
+    logger.info(`🔍 Executing code in Worker Thread with ${tools.length} tools (isolated process)`);
+
+    return new Promise((resolve, reject) => {
+      const logs: string[] = [];
+      let worker: Worker | null = null;
+
+      try {
+        // Create worker with resource limits
+        const workerPath = join(__dirname, 'code-worker.js');
+
+        worker = new Worker(workerPath, {
+          workerData: { code, tools },
+          resourceLimits: {
+            maxOldGenerationSizeMb: 128,  // 128MB memory limit
+            maxYoungGenerationSizeMb: 32,  // 32MB for young generation
+            codeRangeSizeMb: 16            // 16MB for code
+          }
+        });
+
+        // Timeout handling
+        const timeoutHandle = setTimeout(() => {
+          if (worker) {
+            worker.terminate();
+            reject(new Error(`Execution timeout after ${timeout}ms`));
+          }
+        }, timeout);
+
+        // Handle messages from worker
+        worker.on('message', (message: { type: string; data: any }) => {
+          switch (message.type) {
+            case 'log':
+              logs.push(message.data);
+              break;
+
+            case 'tool_call':
+              // Worker needs to execute a tool
+              const { id, toolName, params } = message.data;
+
+              this.toolExecutor(toolName, params)
+                .then(result => {
+                  worker?.postMessage({
+                    type: 'tool_response',
+                    data: { id, result }
+                  });
+                })
+                .catch(error => {
+                  worker?.postMessage({
+                    type: 'tool_response',
+                    data: { id, error: error.message }
+                  });
+                });
+              break;
+
+            case 'result':
+              clearTimeout(timeoutHandle);
+              worker?.terminate();
+              resolve({
+                result: message.data.result,
+                logs: message.data.logs
+              });
+              break;
+
+            case 'error':
+              clearTimeout(timeoutHandle);
+              worker?.terminate();
+              resolve({
+                result: null,
+                logs: message.data.logs,
+                error: message.data.error
+              });
+              break;
+          }
+        });
+
+        // Handle worker errors
+        worker.on('error', (error) => {
+          clearTimeout(timeoutHandle);
+          reject(error);
+        });
+
+        // Handle worker exit
+        worker.on('exit', (code) => {
+          clearTimeout(timeoutHandle);
+
+          if (code !== 0) {
+            reject(new Error(`Worker stopped with exit code ${code}`));
+          }
+        });
+
+      } catch (error: any) {
+        if (worker) {
+          worker.terminate();
+        }
+        reject(error);
+      }
+    });
+  }
+
+  /**
+   * Execute code in VM context (fallback)
+   * Phase 1: Basic security with frozen prototypes
+   */
+  private async executeWithVM(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
     const logs: string[] = [];
     let context: Record<string, any> | null = null;
 
@@ -53,7 +187,7 @@ export class CodeExecutor {
       // Get all available tools
       const tools = await this.toolsProvider();
 
-      logger.info(`🔍 Executing code with ${tools.length} tools available`);
+      logger.info(`🔍 Executing code with ${tools.length} tools available (vm fallback)`);
 
       // Create execution context
       context = await this.createExecutionContext(tools, logs);
