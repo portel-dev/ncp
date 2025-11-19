@@ -1080,14 +1080,21 @@ export class NCPOrchestrator {
       }
 
       if (skills.length > 0) {
-        // Index skills for semantic search (use correct ID format: skill:name)
-        for (const tool of skillTools) {
-          await this.discovery.indexTool({
-            id: `skill:${tool.name}`,
-            name: tool.name,
-            description: tool.description
-          });
-        }
+        // Index skills for semantic search
+        // We need special handling because skills use 'skill:name' format but are stored under '__skills__'
+        // Add id property to tools so RAG engine uses correct IDs
+        const skillToolsWithIds = skillTools.map(tool => ({
+          ...tool,
+          id: `skill:${tool.name}`  // Ensure RAG uses 'skill:' prefix, not '__skills__:'
+        }));
+
+        // Debug: Log what we're indexing
+        logger.debug(`[SKILLS DEBUG] Indexing ${skillToolsWithIds.length} skills:`);
+        skillToolsWithIds.forEach(t => logger.debug(`  - id: ${t.id}, name: ${t.name}`));
+
+        // Index using discovery engine (handles both fallback and RAG indexing)
+        await this.discovery.indexMCPTools('skill', skillToolsWithIds);
+
         logger.info(`📚 Loaded ${skills.length} skill(s) into discovery`);
       }
     } catch (error: any) {
