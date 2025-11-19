@@ -3,6 +3,7 @@
  * Based on official UTCP Code-Mode implementation pattern
  *
  * Phase 2: Uses Worker Threads for true process isolation with resource limits
+ * Phase 3: Bindings for credential isolation
  */
 
 import { Worker } from 'worker_threads';
@@ -10,6 +11,7 @@ import { createContext, runInContext } from 'vm';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { logger } from '../utils/logger.js';
+import { BindingsManager } from './bindings-manager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -36,15 +38,18 @@ export class CodeExecutor {
   private toolExecutor: (toolName: string, params: any) => Promise<any>;
   private toolsProvider: () => Promise<ToolDefinition[]>;
   private photonInstancesProvider?: () => Promise<PhotonInstance[]>;
+  private bindingsManager: BindingsManager;
 
   constructor(
     toolsProvider: () => Promise<ToolDefinition[]>,
     toolExecutor: (toolName: string, params: any) => Promise<any>,
-    photonInstancesProvider?: () => Promise<PhotonInstance[]>
+    photonInstancesProvider?: () => Promise<PhotonInstance[]>,
+    bindingsManager?: BindingsManager
   ) {
     this.toolsProvider = toolsProvider;
     this.toolExecutor = toolExecutor;
     this.photonInstancesProvider = photonInstancesProvider;
+    this.bindingsManager = bindingsManager || new BindingsManager();
   }
 
   /**
@@ -66,6 +71,7 @@ export class CodeExecutor {
   /**
    * Execute code in Worker Thread with resource limits
    * Phase 2: True process isolation
+   * Phase 3: Bindings for credential isolation
    */
   private async executeWithWorkerThread(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
     // Validate code for security issues before execution
@@ -74,7 +80,10 @@ export class CodeExecutor {
     // Get all available tools
     const tools = await this.toolsProvider();
 
-    logger.info(`🔍 Executing code in Worker Thread with ${tools.length} tools (isolated process)`);
+    // Get bindings (Phase 3: credentials stay in main thread)
+    const bindings = this.bindingsManager.getBindingsForWorker();
+
+    logger.info(`🔍 Executing code in Worker Thread with ${tools.length} tools, ${bindings.length} bindings (isolated process)`);
 
     return new Promise((resolve, reject) => {
       const logs: string[] = [];
@@ -85,7 +94,7 @@ export class CodeExecutor {
         const workerPath = join(__dirname, 'code-worker.js');
 
         worker = new Worker(workerPath, {
-          workerData: { code, tools },
+          workerData: { code, tools, bindings },  // Phase 3: pass bindings (no credentials!)
           resourceLimits: {
             maxOldGenerationSizeMb: 128,  // 128MB memory limit
             maxYoungGenerationSizeMb: 32,  // 32MB for young generation
@@ -123,6 +132,26 @@ export class CodeExecutor {
                   worker?.postMessage({
                     type: 'tool_response',
                     data: { id, error: error.message }
+                  });
+                });
+              break;
+
+            case 'binding_call':
+              // Phase 3: Worker needs to execute a binding method
+              // Credentials stay in main thread - worker never sees them!
+              const { id: bindingId, bindingName, method, args } = message.data;
+
+              this.bindingsManager.executeBinding({ bindingName, method, args })
+                .then(result => {
+                  worker?.postMessage({
+                    type: 'binding_response',
+                    data: { id: bindingId, result }
+                  });
+                })
+                .catch(error => {
+                  worker?.postMessage({
+                    type: 'binding_response',
+                    data: { id: bindingId, error: error.message }
                   });
                 });
               break;

@@ -1,6 +1,7 @@
 /**
  * Worker Thread for isolated code execution
  * Phase 2: True process isolation with resource limits
+ * Phase 3: Bindings for credential isolation
  */
 
 import { parentPort, workerData } from 'worker_threads';
@@ -17,8 +18,21 @@ interface ToolCallResponse {
   error?: string;
 }
 
+interface BindingCallRequest {
+  id: string;
+  bindingName: string;
+  method: string;
+  args: any[];
+}
+
+interface BindingCallResponse {
+  id: string;
+  result?: any;
+  error?: string;
+}
+
 interface WorkerMessage {
-  type: 'tool_call' | 'log' | 'result' | 'error';
+  type: 'tool_call' | 'binding_call' | 'log' | 'result' | 'error';
   data: any;
 }
 
@@ -83,7 +97,14 @@ const pendingToolCalls = new Map<string, {
   reject: (error: Error) => void;
 }>();
 
+// Binding call tracking (Phase 3: credential isolation)
+const pendingBindingCalls = new Map<string, {
+  resolve: (value: any) => void;
+  reject: (error: Error) => void;
+}>();
+
 let toolCallCounter = 0;
+let bindingCallCounter = 0;
 
 // Execute tool via message passing to main thread
 async function executeTool(toolName: string, params: any): Promise<any> {
@@ -107,8 +128,31 @@ async function executeTool(toolName: string, params: any): Promise<any> {
   });
 }
 
-// Listen for tool call responses from main thread
-parentPort.on('message', (message: { type: string; data: ToolCallResponse }) => {
+// Execute binding via message passing to main thread (Phase 3)
+// Bindings are pre-authenticated clients - worker never sees credentials
+async function executeBinding(bindingName: string, method: string, args: any[]): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const callId = `binding_${++bindingCallCounter}`;
+
+    pendingBindingCalls.set(callId, { resolve, reject });
+
+    parentPort!.postMessage({
+      type: 'binding_call',
+      data: { id: callId, bindingName, method, args }
+    } as WorkerMessage);
+
+    // Timeout after 30 seconds
+    setTimeout(() => {
+      if (pendingBindingCalls.has(callId)) {
+        pendingBindingCalls.delete(callId);
+        reject(new Error(`Binding call timeout: ${bindingName}.${method}()`));
+      }
+    }, 30000);
+  });
+}
+
+// Listen for responses from main thread
+parentPort.on('message', (message: { type: string; data: any }) => {
   if (message.type === 'tool_response') {
     const { id, result, error } = message.data;
     const pending = pendingToolCalls.get(id);
@@ -122,11 +166,24 @@ parentPort.on('message', (message: { type: string; data: ToolCallResponse }) => 
         pending.resolve(result);
       }
     }
+  } else if (message.type === 'binding_response') {
+    const { id, result, error } = message.data;
+    const pending = pendingBindingCalls.get(id);
+
+    if (pending) {
+      pendingBindingCalls.delete(id);
+
+      if (error) {
+        pending.reject(new Error(error));
+      } else {
+        pending.resolve(result);
+      }
+    }
   }
 });
 
-// Create execution context
-function createContext(tools: any[], logs: string[]): Record<string, any> {
+// Create execution context with tools and bindings
+function createContext(tools: any[], bindings: any[], logs: string[]): Record<string, any> {
   const consoleObj = {
     log: (...args: any[]) => {
       const message = args.map(arg =>
@@ -198,7 +255,7 @@ function createContext(tools: any[], logs: string[]): Record<string, any> {
     }
   };
 
-  // Organize tools by namespace
+  // Organize tools by namespace (Phase 2: backward compatible)
   for (const tool of tools) {
     const [namespace, toolName] = tool.name.includes(':')
       ? tool.name.split(':')
@@ -212,6 +269,22 @@ function createContext(tools: any[], logs: string[]): Record<string, any> {
     context[namespace][toolName] = async (params?: any) => {
       return executeTool(tool.name, params || {});
     };
+  }
+
+  // Inject bindings (Phase 3: credential isolation)
+  // Bindings are pre-authenticated clients - NO CREDENTIALS IN WORKER!
+  for (const binding of bindings) {
+    const bindingObj: Record<string, any> = {};
+
+    // Create methods for this binding
+    for (const method of binding.methods) {
+      bindingObj[method] = async (...args: any[]) => {
+        return executeBinding(binding.name, method, args);
+      };
+    }
+
+    // Attach binding to context
+    context[binding.name] = bindingObj;
   }
 
   return context;
@@ -229,6 +302,12 @@ function cleanup(): void {
     pending.reject(new Error('Worker terminated'));
   }
   pendingToolCalls.clear();
+
+  // Clear any pending binding calls
+  for (const [id, pending] of pendingBindingCalls) {
+    pending.reject(new Error('Worker terminated'));
+  }
+  pendingBindingCalls.clear();
 }
 
 // Main execution
@@ -239,13 +318,13 @@ function cleanup(): void {
     // Apply security hardening
     hardenContext();
 
-    const { code, tools } = workerData;
+    const { code, tools, bindings } = workerData;
 
     // Validate code
     validateCode(code);
 
-    // Create context
-    const context = createContext(tools, logs);
+    // Create context with tools and bindings
+    const context = createContext(tools || [], bindings || [], logs);
 
     // Execute code
     const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
