@@ -379,6 +379,292 @@ export class NCPOrchestrator {
           }
         }
 
+        // Handle scheduler tools specially in Code-Mode - return structured objects
+        if (toolName.startsWith('schedule:')) {
+          const schedulerTool = toolName.replace('schedule:', '');
+          const schedulerMCP = this.internalMCPManager.getAllEnabledInternalMCPs().find(mcp => mcp.name === 'schedule');
+
+          if (!schedulerMCP || !('scheduler' in schedulerMCP)) {
+            throw new Error('Scheduler MCP not available');
+          }
+
+          const scheduler = (schedulerMCP as any).scheduler;
+
+          // Handle each scheduler tool with structured responses
+          switch (schedulerTool) {
+            case 'create': {
+              const task = await scheduler.createTask({
+                name: params.name,
+                schedule: params.schedule,
+                timezone: params.timezone,
+                tool: params.tool,
+                parameters: params.parameters,
+                description: params.description,
+                fireOnce: params.fireOnce,
+                maxExecutions: params.maxExecutions,
+                endDate: params.endDate,
+                testRun: params.testRun,
+                skipValidation: params.skipValidation
+              });
+
+              // If created as paused, pause it immediately
+              if (params.active === false) {
+                scheduler.pauseTask(task.id);
+              }
+
+              return {
+                success: true,
+                task: {
+                  id: task.id,
+                  name: task.name,
+                  tool: task.tool,
+                  schedule: task.cronExpression,
+                  timezone: task.timezone,
+                  status: params.active === false ? 'paused' : task.status,
+                  fireOnce: task.fireOnce,
+                  description: task.description,
+                  maxExecutions: task.maxExecutions,
+                  endDate: task.endDate,
+                  createdAt: task.createdAt,
+                  executionCount: task.executionCount
+                }
+              };
+            }
+
+            case 'list': {
+              const statusFilter = params.status === 'all' ? undefined : params.status;
+              const tasks = scheduler.listTasks(statusFilter);
+              const stats = scheduler.getTaskStatistics();
+
+              return {
+                success: true,
+                tasks: tasks.map((task: any) => ({
+                  id: task.id,
+                  name: task.name,
+                  tool: task.tool,
+                  schedule: task.cronExpression,
+                  timezone: task.timezone,
+                  status: task.status,
+                  executionCount: task.executionCount,
+                  lastExecutionAt: task.lastExecutionAt,
+                  createdAt: task.createdAt
+                })),
+                statistics: {
+                  total: stats.totalTasks,
+                  active: stats.activeTasks,
+                  paused: stats.pausedTasks,
+                  completed: stats.completedTasks,
+                  error: stats.errorTasks
+                }
+              };
+            }
+
+            case 'get': {
+              let task = scheduler.getTask(params.job_id);
+              if (!task) {
+                task = scheduler.getTaskByName(params.job_id);
+              }
+
+              if (!task) {
+                throw new Error(`Task not found: ${params.job_id}`);
+              }
+
+              const execStats = scheduler.getExecutionStatistics(task.id);
+
+              return {
+                success: true,
+                task: {
+                  id: task.id,
+                  name: task.name,
+                  tool: task.tool,
+                  parameters: task.parameters,
+                  schedule: task.cronExpression,
+                  timezone: task.timezone,
+                  status: task.status,
+                  fireOnce: task.fireOnce,
+                  description: task.description,
+                  maxExecutions: task.maxExecutions,
+                  endDate: task.endDate,
+                  createdAt: task.createdAt,
+                  executionCount: task.executionCount,
+                  lastExecutionAt: task.lastExecutionAt,
+                  lastExecutionId: task.lastExecutionId
+                },
+                statistics: {
+                  total: execStats.total,
+                  success: execStats.success,
+                  failure: execStats.failure,
+                  timeout: execStats.timeout,
+                  avgDuration: execStats.avgDuration
+                }
+              };
+            }
+
+            case 'update': {
+              const updatedTask = await scheduler.updateTask(params.job_id, {
+                name: params.name,
+                schedule: params.schedule,
+                timezone: params.timezone,
+                tool: params.tool,
+                parameters: params.parameters,
+                description: params.description,
+                fireOnce: params.fireOnce,
+                maxExecutions: params.maxExecutions,
+                endDate: params.endDate
+              });
+
+              // Handle active state change separately
+              if (params.active !== undefined) {
+                if (params.active) {
+                  scheduler.resumeTask(params.job_id);
+                } else {
+                  scheduler.pauseTask(params.job_id);
+                }
+              }
+
+              // Get fresh task after status change
+              const task = scheduler.getTask(updatedTask.id);
+
+              return {
+                success: true,
+                task: {
+                  id: task.id,
+                  name: task.name,
+                  tool: task.tool,
+                  schedule: task.cronExpression,
+                  timezone: task.timezone,
+                  status: task.status,
+                  fireOnce: task.fireOnce,
+                  description: task.description,
+                  createdAt: task.createdAt,
+                  executionCount: task.executionCount
+                }
+              };
+            }
+
+            case 'delete': {
+              let task = scheduler.getTask(params.job_id);
+              if (!task) {
+                task = scheduler.getTaskByName(params.job_id);
+              }
+
+              if (!task) {
+                throw new Error(`Task not found: ${params.job_id}`);
+              }
+
+              scheduler.deleteTask(task.id);
+
+              return {
+                success: true,
+                deleted: {
+                  id: task.id,
+                  name: task.name
+                }
+              };
+            }
+
+            case 'pause': {
+              let task = scheduler.getTask(params.job_id);
+              if (!task) {
+                task = scheduler.getTaskByName(params.job_id);
+              }
+
+              if (!task) {
+                throw new Error(`Task not found: ${params.job_id}`);
+              }
+
+              scheduler.pauseTask(task.id);
+
+              return {
+                success: true,
+                task: {
+                  id: task.id,
+                  name: task.name,
+                  status: 'paused'
+                }
+              };
+            }
+
+            case 'resume': {
+              let task = scheduler.getTask(params.job_id);
+              if (!task) {
+                task = scheduler.getTaskByName(params.job_id);
+              }
+
+              if (!task) {
+                throw new Error(`Task not found: ${params.job_id}`);
+              }
+
+              scheduler.resumeTask(task.id);
+
+              return {
+                success: true,
+                task: {
+                  id: task.id,
+                  name: task.name,
+                  status: 'active'
+                }
+              };
+            }
+
+            case 'executions': {
+              const executions = scheduler.queryExecutions({
+                jobId: params.job_id,
+                status: params.status === 'all' ? undefined : params.status
+              });
+
+              const limited = executions.slice(0, params.limit || 50);
+
+              return {
+                success: true,
+                executions: limited.map((exec: any) => ({
+                  executionId: exec.executionId,
+                  taskId: exec.taskId || exec.jobId,
+                  taskName: exec.taskName || exec.jobName,
+                  tool: exec.tool,
+                  status: exec.status,
+                  startedAt: exec.startedAt,
+                  duration: exec.duration,
+                  errorMessage: exec.errorMessage
+                })),
+                total: limited.length
+              };
+            }
+
+            case 'validate': {
+              const { ToolValidator } = await import('../services/scheduler/tool-validator.js');
+              const validator = new ToolValidator(this);
+
+              const result = await validator.validateTool(params.tool, params.parameters);
+
+              // Validate schedule if provided
+              if (params.schedule) {
+                const { NaturalLanguageParser } = await import('../services/scheduler/natural-language-parser.js');
+                const scheduleResult = NaturalLanguageParser.parseSchedule(params.schedule);
+
+                if (!scheduleResult.success) {
+                  result.valid = false;
+                  result.errors.push(`Invalid schedule: ${scheduleResult.error}`);
+                }
+              }
+
+              return {
+                success: true,
+                validation: {
+                  valid: result.valid,
+                  errors: result.errors,
+                  warnings: result.warnings,
+                  validationMethod: result.validationMethod,
+                  schema: result.schema
+                }
+              };
+            }
+
+            default:
+              throw new Error(`Unknown scheduler tool: ${schedulerTool}`);
+          }
+        }
+
         // Handle regular tools
         const result = await this.run(toolName, params);
         if (result.success) {
