@@ -163,10 +163,13 @@ export class CodeExecutor {
 
             case 'network_call':
               // Phase 4: Worker needs to make a network request
-              // Network policy enforced in main thread - worker cannot bypass!
+              // Phase 4.1: With runtime permission prompts (elicitations)
               const { id: networkId, url, method: httpMethod, headers, body } = message.data;
 
-              this.networkPolicyManager.executeRequest({ url, method: httpMethod, headers, body })
+              this.networkPolicyManager.executeRequest(
+                { url, method: httpMethod, headers, body },
+                { mcpName: 'Worker Code' }  // Context for elicitation
+              )
                 .then(result => {
                   worker?.postMessage({
                     type: 'network_response',

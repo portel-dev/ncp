@@ -1,15 +1,27 @@
 /**
  * Network Policy Manager - Network Isolation for Code-Mode
  * Phase 4: Prevent data exfiltration via network
+ * Phase 4.1: Runtime permissions via elicitations
  *
  * Security Model:
  * - Worker threads have NO direct network access
  * - All network requests go through main thread
  * - Whitelist-based URL filtering
- * - Blocks common exfiltration vectors
+ * - Runtime permission prompts for restricted access (elicitations)
+ * - User consent required for private IPs and localhost
  */
 
 import { logger } from '../utils/logger.js';
+
+/**
+ * Elicitation function signature
+ * Returns user's decision (approve/deny)
+ */
+export type ElicitationFunction = (params: {
+  message: string;
+  title?: string;
+  options?: string[];
+}) => Promise<string | undefined>;
 
 /**
  * Network policy definition
@@ -45,12 +57,29 @@ export interface NetworkResponse {
 }
 
 /**
+ * Network permission cache entry
+ */
+interface NetworkPermission {
+  url: string;
+  hostname: string;
+  approved: boolean;
+  timestamp: number;
+  expiresAt?: number;
+}
+
+/**
  * Manages network access policies and controlled requests
  */
 export class NetworkPolicyManager {
   private policy: NetworkPolicy;
+  private elicitationFunction?: ElicitationFunction;
+  private permissionCache: Map<string, NetworkPermission> = new Map();
+  private enableElicitations: boolean = false;
 
-  constructor(policy?: Partial<NetworkPolicy>) {
+  constructor(
+    policy?: Partial<NetworkPolicy>,
+    elicitationFunction?: ElicitationFunction
+  ) {
     this.policy = {
       allowedDomains: policy?.allowedDomains || [],
       blockedDomains: policy?.blockedDomains || [],
@@ -61,11 +90,62 @@ export class NetworkPolicyManager {
       timeout: policy?.timeout || 30000  // 30s default
     };
 
-    logger.info(`🌐 Network policy initialized: ${this.policy.allowedDomains.length} allowed domains`);
+    this.elicitationFunction = elicitationFunction;
+    this.enableElicitations = !!elicitationFunction;
+
+    logger.info(
+      `🌐 Network policy initialized: ${this.policy.allowedDomains.length} allowed domains` +
+      (this.enableElicitations ? ' (with runtime permissions)' : '')
+    );
   }
 
   /**
-   * Check if a URL is allowed by policy
+   * Check if a URL is allowed by policy (with runtime permissions)
+   */
+  async isUrlAllowedAsync(
+    url: string,
+    context?: { mcpName?: string; bindingName?: string }
+  ): Promise<{ allowed: boolean; reason?: string }> {
+    // First check static policy
+    const staticCheck = this.isUrlAllowed(url);
+
+    // If statically allowed, no need for elicitation
+    if (staticCheck.allowed) {
+      return staticCheck;
+    }
+
+    // If explicitly blocked, don't elicit
+    const urlObj = new URL(url);
+    if (this.isHostnameBlocked(urlObj.hostname)) {
+      return staticCheck;
+    }
+
+    // Check if elicitations are enabled
+    if (!this.enableElicitations || !this.elicitationFunction) {
+      return staticCheck;
+    }
+
+    // Check permission cache
+    const cached = this.permissionCache.get(url);
+    if (cached) {
+      // Check expiration
+      if (!cached.expiresAt || cached.expiresAt > Date.now()) {
+        return {
+          allowed: cached.approved,
+          reason: cached.approved ? undefined : 'User denied permission'
+        };
+      } else {
+        // Permission expired, remove from cache
+        this.permissionCache.delete(url);
+      }
+    }
+
+    // Request permission from user
+    return await this.requestNetworkPermission(url, context);
+  }
+
+  /**
+   * Check if a URL is allowed by policy (sync, no elicitations)
    */
   isUrlAllowed(url: string): { allowed: boolean; reason?: string } {
     try {
@@ -131,11 +211,81 @@ export class NetworkPolicyManager {
   }
 
   /**
+   * Request network permission from user via elicitation
+   */
+  private async requestNetworkPermission(
+    url: string,
+    context?: { mcpName?: string; bindingName?: string }
+  ): Promise<{ allowed: boolean; reason?: string }> {
+    if (!this.elicitationFunction) {
+      return { allowed: false, reason: 'Elicitations not available' };
+    }
+
+    try {
+      const urlObj = new URL(url);
+      const hostname = urlObj.hostname;
+
+      // Determine access type
+      let accessType = 'external domain';
+      if (this.isLocalhost(hostname)) {
+        accessType = 'localhost';
+      } else if (this.isPrivateIP(hostname)) {
+        accessType = 'local network (private IP)';
+      }
+
+      // Determine who is requesting
+      const requester = context?.bindingName || context?.mcpName || 'Code execution';
+
+      // Build elicitation message
+      const message = `${requester} wants to access ${accessType}:\n\n${url}\n\nAllow this network access?`;
+
+      logger.info(`🔐 Requesting network permission: ${url}`);
+
+      // Show elicitation
+      const response = await this.elicitationFunction({
+        title: 'Network Access Permission',
+        message,
+        options: ['Allow Once', 'Allow Always', 'Deny']
+      });
+
+      // Parse response
+      const approved = response === 'Allow Once' || response === 'Allow Always';
+      const permanent = response === 'Allow Always';
+
+      // Cache the decision
+      this.permissionCache.set(url, {
+        url,
+        hostname,
+        approved,
+        timestamp: Date.now(),
+        expiresAt: permanent ? undefined : Date.now() + 3600000  // 1 hour for "once"
+      });
+
+      logger.info(
+        `🔐 User ${approved ? 'approved' : 'denied'} network access to ${url}` +
+        (permanent ? ' (permanent)' : ' (this session)')
+      );
+
+      return {
+        allowed: approved,
+        reason: approved ? undefined : 'User denied network permission'
+      };
+
+    } catch (error: any) {
+      logger.error(`Failed to elicit network permission: ${error.message}`);
+      return { allowed: false, reason: 'Permission request failed' };
+    }
+  }
+
+  /**
    * Execute a controlled network request
    */
-  async executeRequest(request: NetworkRequest): Promise<NetworkResponse> {
-    // Validate URL
-    const urlCheck = this.isUrlAllowed(request.url);
+  async executeRequest(
+    request: NetworkRequest,
+    context?: { mcpName?: string; bindingName?: string }
+  ): Promise<NetworkResponse> {
+    // Validate URL with elicitations
+    const urlCheck = await this.isUrlAllowedAsync(request.url, context);
     if (!urlCheck.allowed) {
       throw new Error(`Network request blocked: ${urlCheck.reason}`);
     }
@@ -237,6 +387,36 @@ export class NetworkPolicyManager {
       this.policy.blockedDomains.push(domain);
       logger.info(`🌐 Added blocked domain: ${domain}`);
     }
+  }
+
+  /**
+   * Clear all cached permissions
+   */
+  clearPermissions(): void {
+    this.permissionCache.clear();
+    logger.info('🔐 Cleared all cached network permissions');
+  }
+
+  /**
+   * Revoke permission for a specific URL
+   */
+  revokePermission(url: string): boolean {
+    const deleted = this.permissionCache.delete(url);
+    if (deleted) {
+      logger.info(`🔐 Revoked permission for ${url}`);
+    }
+    return deleted;
+  }
+
+  /**
+   * Get all cached permissions (for debugging/management)
+   */
+  getPermissions(): Array<{ url: string; approved: boolean; permanent: boolean }> {
+    return Array.from(this.permissionCache.values()).map(p => ({
+      url: p.url,
+      approved: p.approved,
+      permanent: !p.expiresAt
+    }));
   }
 
   /**
