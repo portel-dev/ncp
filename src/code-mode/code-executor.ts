@@ -58,6 +58,15 @@ export class CodeExecutor {
   }
 
   /**
+   * Update network policy manager (for runtime elicitation setup)
+   * Called from orchestrator after construction to wire up elicitation function
+   */
+  setNetworkPolicyManager(networkPolicyManager: NetworkPolicyManager): void {
+    this.networkPolicyManager = networkPolicyManager;
+    logger.info('🌐 Updated NetworkPolicyManager with elicitation support');
+  }
+
+  /**
    * Execute TypeScript code with tool access
    * Phase 2: Uses Worker Threads for true isolation with resource limits
    */

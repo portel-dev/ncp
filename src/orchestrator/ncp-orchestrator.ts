@@ -78,6 +78,8 @@ import { CSVCache, CachedTool } from '../cache/csv-cache.js';
 import { spinner } from '../utils/progress-spinner.js';
 import { MCPUpdateChecker } from '../utils/mcp-update-checker.js';
 import { CodeExecutor } from '../code-mode/code-executor.js';
+import { NetworkPolicyManager, SECURE_NETWORK_POLICY, type ElicitationFunction } from '../code-mode/network-policy.js';
+import type { ElicitationServer } from '../utils/elicitation-helper.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -944,6 +946,60 @@ export class NCPOrchestrator {
 
     // Trigger CLI auto-discovery if shell access is available
     await this.maybeAutoScanCLITools();
+  }
+
+  /**
+   * Set elicitation server for runtime network permissions
+   * Creates adapter to convert ElicitationServer format to NetworkPolicy format
+   * Called from MCPServer after construction to wire up elicitation support
+   */
+  setElicitationServer(elicitationServer: ElicitationServer): void {
+    logger.info('🔐 Wiring up elicitation function for runtime network permissions');
+
+    // Create adapter function that converts ElicitationServer.elicitInput
+    // to NetworkPolicy's ElicitationFunction format
+    const elicitationAdapter: ElicitationFunction = async (params) => {
+      try {
+        // Call elicitInput with our schema format
+        const result = await elicitationServer.elicitInput({
+          message: params.message,
+          requestedSchema: {
+            type: 'object',
+            properties: {
+              choice: {
+                type: 'string',
+                enum: params.options || ['Allow Once', 'Allow Always', 'Deny'],
+                description: params.title || 'Network Access Permission'
+              }
+            },
+            required: ['choice']
+          }
+        });
+
+        // Convert result to string format expected by NetworkPolicyManager
+        if (result.action === 'accept' && result.content && result.content.choice) {
+          return result.content.choice;
+        }
+
+        // User declined or cancelled - treat as Deny
+        return 'Deny';
+      } catch (error: any) {
+        logger.warn(`Elicitation failed: ${error.message}`);
+        // If elicitation fails, deny access (fail-safe)
+        return 'Deny';
+      }
+    };
+
+    // Create NetworkPolicyManager with elicitation support
+    const networkPolicy = new NetworkPolicyManager(
+      SECURE_NETWORK_POLICY,
+      elicitationAdapter
+    );
+
+    // Update CodeExecutor with new NetworkPolicyManager
+    this.codeExecutor.setNetworkPolicyManager(networkPolicy);
+
+    logger.info('✅ Runtime network permissions enabled via elicitations');
   }
 
   /**

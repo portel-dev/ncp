@@ -151,6 +151,11 @@ export class MCPServer implements ElicitationServer {
       logger.info('Elicitation enabled for internal MCPs (clipboard-based credential collection)');
     }
 
+    // Wire up elicitation server to orchestrator for runtime network permissions
+    // This enables Code-Mode to show permission dialogs for local network access
+    this.orchestrator.setElicitationServer(this);
+    logger.info('Elicitation enabled for Code-Mode runtime network permissions');
+
     // Set up request handlers
     this.setupHandlers();
   }
