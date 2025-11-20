@@ -6,8 +6,7 @@
  */
 
 import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
-import { Photon } from './base-photon.js';
-import { SchemaExtractor } from './schema-extractor.js';
+import { PhotonMCP, SchemaExtractor } from '@portel/photon-core';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
 
@@ -19,13 +18,13 @@ export class PhotonAdapter implements InternalMCP {
   public readonly description: string;
   public tools: InternalTool[];
 
-  private instance: Photon;
-  private mcpClass: typeof Photon;
+  private instance: PhotonMCP;
+  private mcpClass: typeof PhotonMCP;
   private sourceFilePath?: string;
 
   private constructor(
-    mcpClass: typeof Photon,
-    instance: Photon,
+    mcpClass: typeof PhotonMCP,
+    instance: PhotonMCP,
     sourceFilePath?: string
   ) {
     this.mcpClass = mcpClass;
@@ -64,8 +63,8 @@ export class PhotonAdapter implements InternalMCP {
    * Create and initialize a PhotonAdapter
    */
   static async create(
-    mcpClass: typeof Photon,
-    instance: Photon,
+    mcpClass: typeof PhotonMCP,
+    instance: PhotonMCP,
     sourceFilePath?: string
   ): Promise<PhotonAdapter> {
     const adapter = new PhotonAdapter(mcpClass, instance, sourceFilePath);
