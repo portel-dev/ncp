@@ -357,11 +357,14 @@ export class SkillsManagementMCP implements InternalMCP {
     const fullPath = path.join(skill.directory, filePath);
 
     try {
-      // Check if file exists and is within skill directory
+      // Check if file exists and is within skill directory (path traversal protection)
       const realPath = await fs.realpath(fullPath);
       const realSkillDir = await fs.realpath(skill.directory);
 
-      if (!realPath.startsWith(realSkillDir)) {
+      // Use path.relative to check if file is within skill directory
+      // If relative path starts with '..', it's outside the directory
+      const relativePath = path.relative(realSkillDir, realPath);
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
         return {
           success: false,
           content: 'Invalid file_path: must be within skill directory'

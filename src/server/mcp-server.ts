@@ -1098,7 +1098,6 @@ export class MCPServer implements ElicitationServer {
     };
   }
 
-  // OLD RENDERING CODE BELOW - WILL DELETE AFTER TESTING
   private async handleRun(args: any): Promise<any> {
     // Check if indexing is still in progress
     if (!this.isInitialized && this.initializationPromise) {

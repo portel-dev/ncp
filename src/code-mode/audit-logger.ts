@@ -10,7 +10,7 @@
  * For enterprise compliance and security monitoring.
  */
 
-import { writeFile, appendFile, mkdir } from 'fs/promises';
+import { appendFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
@@ -153,8 +153,8 @@ export class AuditLogger {
       const line = JSON.stringify(event) + '\n';
       await appendFile(this.currentFile, line, 'utf-8');
 
-      // Check file rotation
-      await this.checkRotation();
+      // Note: File rotation happens automatically via daily date-stamped filenames
+      // See getAuditFileName() which includes date in format: audit-YYYY-MM-DD.jsonl
     } catch (error: any) {
       logger.error(`Failed to write audit log: ${error.message}`);
     }
@@ -404,14 +404,6 @@ export class AuditLogger {
   private getDateString(): string {
     const now = new Date();
     return now.toISOString().split('T')[0]; // YYYY-MM-DD
-  }
-
-  /**
-   * Check if audit file needs rotation
-   */
-  private async checkRotation(): Promise<void> {
-    // TODO: Implement file size check and rotation
-    // For now, rotate daily (file name includes date)
   }
 }
 
