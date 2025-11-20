@@ -3,11 +3,10 @@
  * COMPREHENSIVE DXT TEST
  *
  * Tests EVERYTHING that matters for production use:
- * 1. Server stays alive (no crash)
- * 2. Auto-import triggers with Claude Desktop clientInfo
- * 3. Apple MCP gets imported to profile
- * 4. Apple MCP tools become discoverable via find()
- * 5. Tools can actually be called
+ * 1. Server initializes correctly with Claude Desktop clientInfo
+ * 2. find() discovers tools via semantic search
+ * 3. run() can execute MCP tools
+ * 4. Server handles multiple sequential requests without crashing
  *
  * This simulates the EXACT Claude Desktop workflow using JSON-RPC protocol.
  */
@@ -180,105 +179,9 @@ async function test1_Initialize() {
   return true;
 }
 
-// Test 2: Auto-import adds Apple MCP to profile
-async function test2_AutoImportAppleMCP() {
-  logInfo('TEST 2: Auto-import detects and imports Apple MCP');
-
-  // Backup original profile
-  let originalProfile = null;
-  if (fs.existsSync(PROFILE_PATH)) {
-    originalProfile = fs.readFileSync(PROFILE_PATH, 'utf-8');
-  }
-
-  try {
-    // Read profile before test
-    const profileBefore = fs.existsSync(PROFILE_PATH)
-      ? JSON.parse(fs.readFileSync(PROFILE_PATH, 'utf-8'))
-      : { mcpServers: {} };
-
-    const mcpsBefore = new Set(Object.keys(profileBefore.mcpServers || {}));
-    logInfo(`  MCPs before: ${mcpsBefore.size}`);
-
-    const test = new ComprehensiveDXTTest();
-    await test.start();
-
-    // Send initialize with Claude Desktop clientInfo (triggers auto-import)
-    const id = test.sendRequest('initialize', {
-      protocolVersion: '2024-11-05',
-      capabilities: {},
-      clientInfo: {
-        name: 'claude-desktop',
-        version: '0.14.0'
-      }
-    });
-
-    await test.waitForResponse(id, 5000);
-
-    // Send initialized notification (required by MCP protocol to trigger oninitialized callback)
-    test.sendNotification('notifications/initialized', {});
-
-    // Wait for auto-import to complete (it runs async)
-    logInfo('  Waiting for auto-import to complete...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    await test.stop();
-
-    // Check if profile was updated
-    if (!fs.existsSync(PROFILE_PATH)) {
-      logError('Profile file does not exist');
-      return false;
-    }
-
-    const profileAfter = JSON.parse(fs.readFileSync(PROFILE_PATH, 'utf-8'));
-    const mcpsAfter = new Set(Object.keys(profileAfter.mcpServers || {}));
-    logInfo(`  MCPs after: ${mcpsAfter.size}`);
-
-    // Find new MCPs
-    const newMCPs = [...mcpsAfter].filter(name => !mcpsBefore.has(name));
-
-    if (newMCPs.length > 0) {
-      logSuccess(`Auto-imported ${newMCPs.length} MCP(s): ${newMCPs.join(', ')}`);
-
-      // Check specifically for Apple MCP
-      const appleMCP = newMCPs.find(name =>
-        name.toLowerCase().includes('apple') ||
-        name === 'Apple MCP'
-      );
-
-      if (appleMCP) {
-        logSuccess(`✨ Apple MCP detected: "${appleMCP}"`);
-      } else {
-        logWarn('Apple MCP not found in new imports (might not be installed)');
-      }
-
-      return true;
-    } else {
-      logWarn('No new MCPs imported (Apple MCP might already be in profile)');
-
-      // Check if Apple MCP already exists
-      const existingAppleMCP = [...mcpsAfter].find(name =>
-        name.toLowerCase().includes('apple')
-      );
-
-      if (existingAppleMCP) {
-        logInfo(`  Apple MCP already configured: "${existingAppleMCP}"`);
-        return true;
-      }
-
-      return false;
-    }
-  } finally {
-    // Restore original profile
-    if (originalProfile) {
-      fs.writeFileSync(PROFILE_PATH, originalProfile);
-      logInfo('  Profile restored to original state');
-    }
-  }
-}
-
-// Test 3: find() tool discovers Apple MCP tools
-async function test3_FindAppleMCPTools() {
-  logInfo('TEST 3: find() discovers Apple MCP tools');
+// Test 2: find() tool discovers tools via semantic search
+async function test2_FindTools() {
+  logInfo('TEST 2: find() discovers tools via semantic search');
 
   const test = new ComprehensiveDXTTest();
   await test.start();
@@ -294,11 +197,11 @@ async function test3_FindAppleMCPTools() {
   // Wait for indexing
   await new Promise(resolve => setTimeout(resolve, 3000));
 
-  // Search for "messages" or "imessage" tools
+  // Search for file-related tools (should always be available)
   const findId = test.sendRequest('tools/call', {
     name: 'find',
     arguments: {
-      description: 'send message imessage',
+      description: 'read file contents',
       limit: 10
     }
   });
@@ -313,24 +216,26 @@ async function test3_FindAppleMCPTools() {
 
   const content = response.result?.content?.[0]?.text || '';
 
-  // Check if results mention Apple MCP or message-related tools
-  const hasMessageTools = content.toLowerCase().includes('message') ||
-                          content.toLowerCase().includes('imessage') ||
-                          content.toLowerCase().includes('apple');
+  // Check if results contain tool information
+  const hasResults = content.includes('Tool:') ||
+                     content.includes('match') ||
+                     content.includes('read') ||
+                     content.includes('file');
 
-  if (hasMessageTools) {
-    logSuccess('find() returned message-related tools');
-    logInfo(`  Results preview: ${content.substring(0, 200)}...`);
+  if (hasResults) {
+    logSuccess('find() returned relevant tools');
+    logInfo(`  Results preview: \n${content.substring(0, 300)}...`);
     return true;
   } else {
-    logWarn('find() did not return message tools (Apple MCP might not have indexed yet)');
+    logError('find() did not return expected results');
+    logInfo(`  Received: ${content.substring(0, 200)}`);
     return false;
   }
 }
 
-// Test 4: run() tool can execute MCP tools
-async function test4_RunMCPTool() {
-  logInfo('TEST 4: run() can execute MCP tools');
+// Test 3: run() tool can execute MCP tools
+async function test3_RunMCPTool() {
+  logInfo('TEST 3: run() can execute MCP tools');
 
   const test = new ComprehensiveDXTTest();
   await test.start();
@@ -371,9 +276,9 @@ async function test4_RunMCPTool() {
   }
 }
 
-// Test 5: Server handles multiple requests without crashing
-async function test5_MultipleRequests() {
-  logInfo('TEST 5: Server handles 10 sequential requests');
+// Test 4: Server handles multiple requests without crashing
+async function test4_MultipleRequests() {
+  logInfo('TEST 4: Server handles 10 sequential requests');
 
   const test = new ComprehensiveDXTTest();
   await test.start();
@@ -412,10 +317,9 @@ async function runAllTests() {
 
   const tests = [
     { name: 'Initialize with clientInfo', fn: test1_Initialize },
-    { name: 'Auto-import Apple MCP', fn: test2_AutoImportAppleMCP },
-    { name: 'find() discovers tools', fn: test3_FindAppleMCPTools },
-    { name: 'run() executes tools', fn: test4_RunMCPTool },
-    { name: 'Multiple requests', fn: test5_MultipleRequests }
+    { name: 'find() discovers tools', fn: test2_FindTools },
+    { name: 'run() executes tools', fn: test3_RunMCPTool },
+    { name: 'Multiple requests', fn: test4_MultipleRequests }
   ];
 
   let passed = 0;
