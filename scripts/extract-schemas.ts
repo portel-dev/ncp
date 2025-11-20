@@ -4,7 +4,7 @@
  * Run this during build to preserve parameter information in packaged DXT
  */
 
-import { SchemaExtractor } from '../src/internal-mcps/schema-extractor.js';
+import { SchemaExtractor } from '@portel/photon-core';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
