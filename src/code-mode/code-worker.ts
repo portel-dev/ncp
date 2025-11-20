@@ -431,19 +431,19 @@ function cleanup(): void {
   timers.clear();
 
   // Clear any pending tool calls
-  for (const [id, pending] of pendingToolCalls) {
+  for (const pending of pendingToolCalls.values()) {
     pending.reject(new Error('Worker terminated'));
   }
   pendingToolCalls.clear();
 
   // Clear any pending binding calls
-  for (const [id, pending] of pendingBindingCalls) {
+  for (const pending of pendingBindingCalls.values()) {
     pending.reject(new Error('Worker terminated'));
   }
   pendingBindingCalls.clear();
 
   // Clear any pending network calls
-  for (const [id, pending] of pendingNetworkCalls) {
+  for (const pending of pendingNetworkCalls.values()) {
     pending.reject(new Error('Worker terminated'));
   }
   pendingNetworkCalls.clear();

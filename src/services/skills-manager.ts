@@ -12,6 +12,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { existsSync } from 'fs';
+import * as yaml from 'js-yaml';
 import { logger } from '../utils/logger.js';
 import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
 
@@ -127,12 +128,15 @@ export class SkillsManager {
   }
 
   /**
-   * Parse SKILL.md YAML frontmatter
+   * Parse SKILL.md YAML frontmatter using js-yaml library
    * Format:
    * ---
    * name: skill-name
    * description: Description text
    * version: 1.0.0
+   * tags:
+   *   - tag1
+   *   - tag2
    * ---
    */
   private parseSkillMetadata(content: string, fallbackName: string): SkillMetadata | null {
@@ -148,58 +152,16 @@ export class SkillsManager {
       }
 
       const frontmatter = frontmatterMatch[1];
-      const metadata: Partial<SkillMetadata> = {};
 
-      // Simple YAML parser (handles key: value pairs and arrays)
-      const lines = frontmatter.split('\n');
-      let currentKey: string | null = null;
-      let currentArray: string[] = [];
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-
-        // Handle array items (- value)
-        const arrayItemMatch = line.match(/^\s+- (.+)$/);
-        if (arrayItemMatch && currentKey) {
-          currentArray.push(arrayItemMatch[1].trim());
-          continue;
-        }
-
-        // If we were building an array, save it
-        if (currentKey && currentArray.length > 0) {
-          (metadata as any)[currentKey] = currentArray;
-          currentArray = [];
-          currentKey = null;
-        }
-
-        // Handle key: value or key:
-        const keyValueMatch = line.match(/^([a-zA-Z0-9_-]+):\s*(.*)$/);
-        if (keyValueMatch) {
-          const [, key, value] = keyValueMatch;
-          const trimmedValue = value.trim();
-
-          if (trimmedValue === '') {
-            // Key with no value - might be an array
-            currentKey = key;
-          } else {
-            // Key with value on same line
-            const unquotedValue = trimmedValue.replace(/^["']|["']$/g, '');
-            (metadata as any)[key] = unquotedValue;
-          }
-        }
-      }
-
-      // Save any remaining array
-      if (currentKey && currentArray.length > 0) {
-        (metadata as any)[currentKey] = currentArray;
-      }
+      // Use js-yaml for robust YAML parsing (handles arrays, multi-line values, etc.)
+      const parsed = yaml.load(frontmatter) as Partial<SkillMetadata>;
 
       // Use directory name if no name in metadata
-      if (!metadata.name) {
-        metadata.name = fallbackName;
+      if (!parsed.name) {
+        parsed.name = fallbackName;
       }
 
-      return metadata as SkillMetadata;
+      return parsed as SkillMetadata;
     } catch (error: any) {
       logger.error(`Failed to parse skill metadata: ${error.message}`);
       return null;

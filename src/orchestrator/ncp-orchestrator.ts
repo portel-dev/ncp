@@ -1185,10 +1185,6 @@ export class NCPOrchestrator {
           id: `skill:${tool.name}`  // Ensure RAG uses 'skill:' prefix, not '__skills__:'
         }));
 
-        // Debug: Log what we're indexing
-        logger.debug(`[SKILLS DEBUG] Indexing ${skillToolsWithIds.length} skills:`);
-        skillToolsWithIds.forEach(t => logger.debug(`  - id: ${t.id}, name: ${t.name}`));
-
         // Index using discovery engine (handles both fallback and RAG indexing)
         await this.discovery.indexMCPTools('skill', skillToolsWithIds);
 
