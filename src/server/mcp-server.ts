@@ -339,17 +339,37 @@ export class MCPServer implements ElicitationServer {
       },
       {
         name: 'code',
-        description: 'Execute TypeScript code with access to all MCPs and Photons as namespaces. UTCP Code-Mode delivers 60% faster execution, 68% fewer tokens, 88% fewer API round trips. All registered tools are available as namespace.tool() calls (e.g., github.get_repo()). PROGRESSIVE DISCLOSURE: Use ncp.find() to discover tools on-demand, then call them directly. Introspection: __interfaces lists all tools, __getToolInterface(name) shows schemas. Console output is captured and returned.',
+        description: `Execute TypeScript code with access to all MCPs as namespaces.
+
+**Available in context:**
+- All MCPs as namespaces: github.create_issue(), filesystem.read_file(), etc.
+- ncp.find(query): Discover tools via semantic search
+- ncp.run(tool, params): Dynamic tool execution
+
+**ncp.find(query) returns Tool[] where each tool has:**
+- toolName: string     // "github:create_issue"
+- mcpName: string      // "github"
+- description: string  // What it does
+- schema: object       // { properties: {...}, required: [...] }
+- confidence: number   // 0-1 match score
+
+**Example - discover and execute in one call:**
+const tools = await ncp.find("send email | file ops");
+const gmailTool = tools.find(t => t.mcpName === "gmail");
+if (gmailTool) {
+  const result = await gmail.send_email({ to: "x@y.com", subject: "Hi" });
+  return result;
+}`,
         inputSchema: {
           type: 'object',
           properties: {
             code: {
               type: 'string',
-              description: 'TypeScript code to execute. All MCPs/Photons available as namespaces. PROGRESSIVE DISCLOSURE pattern: const tools = await ncp.find({ description: "send email" }); console.log(tools); const result = await gmail.send_email({ to: "user@example.com", subject: "Hello", body: "World" }); Multiple operations in one execution for maximum efficiency.'
+              description: 'TypeScript code. Use ncp.find("query") to discover tools, then call via namespace.tool().'
             },
             timeout: {
               type: 'number',
-              description: 'Execution timeout in milliseconds (default: 30000, max: 300000)'
+              description: 'Timeout in ms (default: 30000, max: 300000)'
             }
           },
           required: ['code']
