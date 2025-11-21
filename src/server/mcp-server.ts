@@ -339,33 +339,33 @@ export class MCPServer implements ElicitationServer {
       },
       {
         name: 'code',
-        description: `Execute TypeScript code with access to all MCPs as namespaces.
+        description: `Execute TypeScript code with automatic tool discovery and parameter mapping.
 
-**Available in context:**
-- All MCPs as namespaces: github.create_issue(), filesystem.read_file(), etc.
-- ncp.find(query): Discover tools via semantic search
-- ncp.run(tool, params): Dynamic tool execution
+**PRIMARY METHOD - ncp.do(intent, params):**
+Single-call execution with embedding-based param matching.
+No need to know exact tool names or param schemas!
 
-**ncp.find(query) returns Tool[] where each tool has:**
-- toolName: string     // "github:create_issue"
-- mcpName: string      // "github"
-- description: string  // What it does
-- schema: object       // { properties: {...}, required: [...] }
-- confidence: number   // 0-1 match score
+ncp.do("email.send", {
+  recipient: "john@example.com",  // Auto-maps to "to"
+  title: "Meeting",               // Auto-maps to "subject"
+  message: "Let's meet"           // Auto-maps to "body"
+})
 
-**Example - discover and execute in one call:**
-const tools = await ncp.find("send email | file ops");
-const gmailTool = tools.find(t => t.mcpName === "gmail");
-if (gmailTool) {
-  const result = await gmail.send_email({ to: "x@y.com", subject: "Hi" });
-  return result;
-}`,
+**Returns on success:** { success: true, tool, result, paramMappings }
+**Returns on failure:** { success: false, tool, schema, hint }
+  - schema shows actual params needed
+  - hint suggests corrections
+  - Retry with correct params!
+
+**FALLBACK - Direct namespace calls (when you know exact tools):**
+- ncp.find("query"): Returns Tool[] with { toolName, schema, confidence }
+- namespace.tool(): Direct call e.g., gmail.send_email({ to, subject, body })`,
         inputSchema: {
           type: 'object',
           properties: {
             code: {
               type: 'string',
-              description: 'TypeScript code. Use ncp.find("query") to discover tools, then call via namespace.tool().'
+              description: 'TypeScript code. Use ncp.do("intent", { params }) for automatic tool discovery and param mapping.'
             },
             timeout: {
               type: 'number',
