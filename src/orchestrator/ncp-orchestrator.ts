@@ -219,29 +219,34 @@ export class NCPOrchestrator {
         // Add NCP core tools for progressive disclosure
         tools.push({
           name: 'ncp:find',
-          description: 'Discover available tools by searching or listing. Use for progressive disclosure - find what you need, then use it.',
+          description: `Discover available tools via semantic search. Returns array of matching tools.
+
+**Usage:** ncp.find("query") or ncp.find("q1 | q2 | q3") for multi-search
+
+**Returns:** Tool[] where each tool has:
+- toolName: string     // e.g., "github:create_issue"
+- mcpName: string      // e.g., "github"
+- description: string  // What the tool does
+- schema: object       // Input parameters schema { properties, required }
+- confidence: number   // Match confidence 0-1
+
+**Example:**
+const tools = await ncp.find("send email | create issue");
+const emailTool = tools.find(t => t.mcpName === "gmail");
+if (emailTool) {
+  console.log(emailTool.schema.properties); // See required params
+  await gmail.send_email({ to: "...", subject: "..." });
+}`,
           inputSchema: {
             type: 'object',
             properties: {
               description: {
                 type: 'string',
-                description: 'Search query describing what you want to do (e.g., "send email", "read database"). Omit to list all tools.'
+                description: 'Search query (pipe-separated for multiple). Omit to list all tools.'
               },
               limit: {
                 type: 'number',
-                description: 'Maximum number of results (default: 5 for search, 20 for list)'
-              },
-              page: {
-                type: 'number',
-                description: 'Page number for pagination (default: 1)'
-              },
-              confidence_threshold: {
-                type: 'number',
-                description: 'Minimum confidence (0.0-1.0, default: 0.35)'
-              },
-              depth: {
-                type: 'number',
-                description: 'Detail level: 0=names only, 1=names+descriptions, 2=full details (default: 2)'
+                description: 'Max results (default: 5 for search, 20 for list)'
               }
             }
           }
