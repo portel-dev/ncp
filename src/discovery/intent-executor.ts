@@ -18,13 +18,29 @@ export interface ParamMapping {
   userValue: any;
 }
 
+export interface UnmappedParam {
+  userParam: string;
+  userValue: any;
+  bestMatch?: string;
+  bestScore?: number;
+  suggestion?: string;
+}
+
 export interface IntentResult {
   success: boolean;
   tool?: string;
+  toolDescription?: string;
   mappedParams?: Record<string, any>;
   paramMappings?: ParamMapping[];
+  unmappedParams?: UnmappedParam[];
+  missingRequired?: string[];
+  schema?: {
+    properties: Record<string, { type: string; description?: string }>;
+    required: string[];
+  };
   result?: any;
   error?: string;
+  hint?: string;
 }
 
 export interface SchemaProperty {
@@ -98,8 +114,16 @@ export class IntentExecutor {
         };
       }
 
+      // Build schema info for feedback
+      const schemaInfo = {
+        properties: Object.fromEntries(
+          schemaProps.map(p => [p.name, { type: p.type, description: p.description }])
+        ),
+        required: schemaProps.filter(p => p.required).map(p => p.name)
+      };
+
       // Step 3: Map user params to schema params via embedding similarity
-      const mappings = await this.mapParameters(context, schemaProps);
+      const { mappings, unmapped } = await this.mapParameters(context, schemaProps);
 
       // Build final params object
       const mappedParams: Record<string, any> = {};
@@ -112,12 +136,31 @@ export class IntentExecutor {
         .filter(p => p.required && !mappedParams[p.name])
         .map(p => p.name);
 
-      if (missingRequired.length > 0) {
+      // If there are unmapped params or missing required, return helpful feedback
+      if (unmapped.length > 0 || missingRequired.length > 0) {
+        const hints: string[] = [];
+
+        if (unmapped.length > 0) {
+          hints.push(`Unmapped params: ${unmapped.map(u => `"${u.userParam}"${u.suggestion ? ` (${u.suggestion})` : ''}`).join(', ')}`);
+        }
+        if (missingRequired.length > 0) {
+          hints.push(`Missing required: ${missingRequired.join(', ')}`);
+        }
+        hints.push(`Available params: ${schemaProps.map(p => `${p.name}${p.required ? '*' : ''}`).join(', ')}`);
+
         return {
           success: false,
           tool: toolName,
+          toolDescription: tool.description,
+          schema: schemaInfo,
+          mappedParams,
           paramMappings: mappings,
-          error: `Missing required parameters: ${missingRequired.join(', ')}`
+          unmappedParams: unmapped,
+          missingRequired: missingRequired.length > 0 ? missingRequired : undefined,
+          error: missingRequired.length > 0
+            ? `Missing required parameters: ${missingRequired.join(', ')}`
+            : `Could not map parameters: ${unmapped.map(u => u.userParam).join(', ')}`,
+          hint: hints.join('. ')
         };
       }
 
@@ -133,6 +176,7 @@ export class IntentExecutor {
       return {
         success: true,
         tool: toolName,
+        toolDescription: tool.description,
         mappedParams,
         paramMappings: mappings,
         result
@@ -173,12 +217,14 @@ export class IntentExecutor {
 
   /**
    * Map user-provided params to schema params via embedding similarity
+   * Returns both successful mappings and unmapped params with suggestions
    */
   private async mapParameters(
     userParams: Record<string, any>,
     schemaProps: SchemaProperty[]
-  ): Promise<ParamMapping[]> {
+  ): Promise<{ mappings: ParamMapping[]; unmapped: UnmappedParam[] }> {
     const mappings: ParamMapping[] = [];
+    const unmapped: UnmappedParam[] = [];
     const usedSchemaParams = new Set<string>();
 
     for (const [userParam, userValue] of Object.entries(userParams)) {
@@ -215,11 +261,19 @@ export class IntentExecutor {
         });
         usedSchemaParams.add(bestMatch.prop.name);
       } else {
+        // Track unmapped param with best suggestion
+        unmapped.push({
+          userParam,
+          userValue,
+          bestMatch: bestMatch?.prop.name,
+          bestScore: bestMatch?.score,
+          suggestion: bestMatch ? `Try "${bestMatch.prop.name}" instead of "${userParam}"` : undefined
+        });
         logger.warn(`Could not map param "${userParam}" (best score: ${bestMatch?.score.toFixed(2) || 'none'})`);
       }
     }
 
-    return mappings;
+    return { mappings, unmapped };
   }
 
   /**
