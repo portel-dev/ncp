@@ -254,6 +254,13 @@ export class PersistentRAGEngine {
   private isIndexing = false;
   private semanticEnhancementEngine: SemanticEnhancementEngine;
 
+  /**
+   * Get the embedding model for external use (e.g., IntentExecutor)
+   */
+  getModel(): any {
+    return this.model;
+  }
+
   constructor() {
     const ncpDir = getNcpBaseDirectory();
 

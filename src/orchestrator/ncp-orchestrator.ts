@@ -271,6 +271,43 @@ if (emailTool) {
           }
         });
 
+        tools.push({
+          name: 'ncp:do',
+          description: `Execute intent with automatic tool discovery and parameter mapping.
+
+**Single-call discovery + execution via embedding-based param matching.**
+
+Usage: ncp.do("intent", { param1: value1, param2: value2 })
+
+The system will:
+1. Find the best matching tool for your intent
+2. Map your params to the tool's schema via semantic similarity
+3. Execute and return the result
+
+**Example:**
+ncp.do("send email", {
+  recipient: "john@example.com",  // Maps to "to" param
+  title: "Meeting",               // Maps to "subject" param
+  message: "Let's meet at 3pm"    // Maps to "body" param
+})
+
+Returns: { success, tool, mappedParams, paramMappings, result, error }`,
+          inputSchema: {
+            type: 'object',
+            properties: {
+              intent: {
+                type: 'string',
+                description: 'What you want to do (e.g., "send email", "read file", "create issue")'
+              },
+              context: {
+                type: 'object',
+                description: 'Parameters with any names - will be mapped to tool schema via embedding similarity'
+              }
+            },
+            required: ['intent']
+          }
+        });
+
         // Add all tools from definitions (external MCPs)
         for (const [mcpName, definition] of this.definitions.entries()) {
           for (const tool of definition.tools) {
@@ -319,6 +356,42 @@ if (emailTool) {
           } else {
             throw new Error(result.error || 'Tool execution failed');
           }
+        } else if (toolName === 'ncp:do') {
+          // Intent-based execution with embedding-based param matching
+          const { IntentExecutor } = await import('../discovery/intent-executor.js');
+          const { ToolFinder } = await import('../services/tool-finder.js');
+
+          const finder = new ToolFinder(this);
+          const intentExecutor = new IntentExecutor(
+            // Tool finder function
+            async (query: string, limit: number) => {
+              const result = await finder.find({ query, limit, depth: 2 });
+              return result.tools;
+            },
+            // Tool executor function
+            async (tool: string, toolParams: any) => {
+              const result = await this.run(tool, toolParams);
+              if (result.success) {
+                return result.content;
+              }
+              throw new Error(result.error || 'Tool execution failed');
+            }
+          );
+
+          // Initialize with embedding model from discovery engine
+          const model = this.discovery.getEmbeddingModel();
+          if (model) {
+            await intentExecutor.initialize(model);
+          }
+
+          // Execute intent
+          const intent = params.intent || params;
+          const context = params.context || {};
+
+          // If intent is a string, use it directly; if object, extract
+          const intentStr = typeof intent === 'string' ? intent : String(intent);
+
+          return await intentExecutor.execute(intentStr, context);
         }
 
         // Handle regular tools

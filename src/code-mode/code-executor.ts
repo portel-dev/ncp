@@ -216,6 +216,14 @@ export class CodeExecutor {
       };
     }
 
+    // Special handling for ncp.do() to accept (intent, context) directly
+    // Allows: ncp.do("email.send", { recipient: "...", title: "..." })
+    if (context['ncp'] && context['ncp']['do']) {
+      const originalDo = context['ncp']['do'];
+      context['ncp']['do'] = async (intent: string, ctx?: Record<string, any>) => {
+        return originalDo({ intent, context: ctx || {} });
+      };
+    }
 
     return context;
   }
