@@ -297,13 +297,16 @@ export class NCPOrchestrator {
         if (toolName === 'ncp:find') {
           const { ToolFinder } = await import('../services/tool-finder.js');
           const finder = new ToolFinder(this);
-          return await finder.find({
+          const result = await finder.find({
             query: params.description || '',
             page: params.page || 1,
             limit: params.limit || (params.description ? 5 : 20),
             depth: params.depth !== undefined ? params.depth : 2,
             confidenceThreshold: params.confidence_threshold !== undefined ? params.confidence_threshold : 0.35
           });
+          // Return just the tools array for easy iteration in code mode
+          // Each tool has: { toolName, mcpName, description, schema, confidence }
+          return result.tools;
         } else if (toolName === 'ncp:run') {
           const result = await this.run(params.tool, params.parameters || {});
           if (result.success) {
