@@ -378,11 +378,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
             }
           );
 
-          // Initialize with embedding model from discovery engine
+          // Initialize with embedding model from discovery engine (or null for string-based fallback)
           const model = this.discovery.getEmbeddingModel();
-          if (model) {
-            await intentExecutor.initialize(model);
-          }
+          await intentExecutor.initialize(model); // Works with null model (uses string-based fallback)
 
           // Execute intent
           const intent = params.intent || params;

@@ -53,6 +53,7 @@ export interface SchemaProperty {
 export class IntentExecutor {
   private model: any = null;
   private isInitialized: boolean = false;
+  private useEmbeddings: boolean = false;
   private paramEmbeddingCache: Map<string, Float32Array> = new Map();
 
   constructor(
@@ -62,21 +63,27 @@ export class IntentExecutor {
 
   /**
    * Initialize with the embedding model from RAG engine
+   * If model is null, falls back to string-based matching
    */
   async initialize(model: any): Promise<void> {
     this.model = model;
+    this.useEmbeddings = model !== null;
     this.isInitialized = true;
-    logger.info('IntentExecutor initialized with embedding model');
+    if (this.useEmbeddings) {
+      logger.info('IntentExecutor initialized with embedding model');
+    } else {
+      logger.info('IntentExecutor initialized with string-based fallback (no embedding model)');
+    }
   }
 
   /**
    * Execute intent with automatic tool discovery and parameter mapping
    */
   async execute(intent: string, context: Record<string, any>): Promise<IntentResult> {
-    if (!this.isInitialized || !this.model) {
+    if (!this.isInitialized) {
       return {
         success: false,
-        error: 'IntentExecutor not initialized. Embedding model required.'
+        error: 'IntentExecutor not initialized. Call initialize() first.'
       };
     }
 
@@ -216,7 +223,7 @@ export class IntentExecutor {
   }
 
   /**
-   * Map user-provided params to schema params via embedding similarity
+   * Map user-provided params to schema params via embedding or string similarity
    * Returns both successful mappings and unmapped params with suggestions
    */
   private async mapParameters(
@@ -228,23 +235,26 @@ export class IntentExecutor {
     const usedSchemaParams = new Set<string>();
 
     for (const [userParam, userValue] of Object.entries(userParams)) {
-      // Generate embedding for user param name
-      const userEmbedding = await this.getParamEmbedding(userParam);
-
       let bestMatch: { prop: SchemaProperty; score: number } | null = null;
 
       for (const schemaProp of schemaProps) {
         // Skip already mapped schema params
         if (usedSchemaParams.has(schemaProp.name)) continue;
 
-        // Generate embedding for schema param (name + description)
-        const schemaText = schemaProp.description
-          ? `${schemaProp.name}: ${schemaProp.description}`
-          : schemaProp.name;
-        const schemaEmbedding = await this.getParamEmbedding(schemaText);
+        let score: number;
 
-        // Calculate similarity
-        const score = this.cosineSimilarity(userEmbedding, schemaEmbedding);
+        if (this.useEmbeddings) {
+          // Use embedding-based similarity
+          const userEmbedding = await this.getParamEmbedding(userParam);
+          const schemaText = schemaProp.description
+            ? `${schemaProp.name}: ${schemaProp.description}`
+            : schemaProp.name;
+          const schemaEmbedding = await this.getParamEmbedding(schemaText);
+          score = this.cosineSimilarity(userEmbedding, schemaEmbedding);
+        } else {
+          // Use string-based similarity as fallback
+          score = this.stringSimilarity(userParam, schemaProp);
+        }
 
         if (!bestMatch || score > bestMatch.score) {
           bestMatch = { prop: schemaProp, score };
@@ -252,7 +262,8 @@ export class IntentExecutor {
       }
 
       // Only map if similarity is above threshold
-      if (bestMatch && bestMatch.score > 0.5) {
+      const threshold = this.useEmbeddings ? 0.5 : 0.4;
+      if (bestMatch && bestMatch.score > threshold) {
         mappings.push({
           userParam,
           schemaParam: bestMatch.prop.name,
@@ -274,6 +285,96 @@ export class IntentExecutor {
     }
 
     return { mappings, unmapped };
+  }
+
+  /**
+   * String-based similarity for param matching (fallback when no embedding model)
+   * Uses multiple heuristics: exact match, substring, common synonyms, Levenshtein
+   */
+  private stringSimilarity(userParam: string, schemaProp: SchemaProperty): number {
+    const user = userParam.toLowerCase();
+    const schema = schemaProp.name.toLowerCase();
+    const desc = (schemaProp.description || '').toLowerCase();
+
+    // 1. Exact match
+    if (user === schema) return 1.0;
+
+    // 2. Case-insensitive exact match (already done above, but explicit)
+    if (user === schema) return 0.95;
+
+    // 3. One contains the other
+    if (schema.includes(user) || user.includes(schema)) return 0.85;
+
+    // 4. Description contains user param
+    if (desc.includes(user)) return 0.75;
+
+    // 5. Common param name synonyms
+    const synonyms: Record<string, string[]> = {
+      'path': ['filepath', 'file_path', 'filename', 'file', 'location', 'dir', 'directory', 'folder'],
+      'content': ['text', 'body', 'data', 'message', 'contents'],
+      'name': ['title', 'label', 'id', 'identifier'],
+      'to': ['recipient', 'target', 'destination', 'dest'],
+      'from': ['source', 'sender', 'origin', 'src'],
+      'subject': ['title', 'heading', 'topic'],
+      'message': ['body', 'content', 'text', 'msg'],
+      'url': ['link', 'uri', 'href', 'address'],
+      'query': ['search', 'q', 'term', 'keyword'],
+      'limit': ['count', 'max', 'size', 'num'],
+      'offset': ['skip', 'start', 'page'],
+    };
+
+    for (const [canonical, syns] of Object.entries(synonyms)) {
+      const allTerms = [canonical, ...syns];
+      const userMatches = allTerms.some(t => user.includes(t) || t.includes(user));
+      const schemaMatches = allTerms.some(t => schema.includes(t) || t.includes(schema));
+      if (userMatches && schemaMatches) return 0.8;
+    }
+
+    // 6. Levenshtein distance based similarity
+    const editDistance = this.levenshteinDistance(user, schema);
+    const maxLen = Math.max(user.length, schema.length);
+    const levSimilarity = 1 - (editDistance / maxLen);
+    if (levSimilarity > 0.6) return levSimilarity * 0.7; // Scale down a bit
+
+    // 7. Word overlap (for multi-word params like file_path)
+    const userWords = user.split(/[_\-\s]+/);
+    const schemaWords = schema.split(/[_\-\s]+/);
+    const overlap = userWords.filter(w => schemaWords.includes(w)).length;
+    if (overlap > 0) {
+      return 0.5 + (overlap / Math.max(userWords.length, schemaWords.length)) * 0.3;
+    }
+
+    return 0.2; // Base low similarity
+  }
+
+  /**
+   * Calculate Levenshtein edit distance between two strings
+   */
+  private levenshteinDistance(a: string, b: string): number {
+    const matrix: number[][] = [];
+
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b[i - 1] === a[j - 1]) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1, // substitution
+            matrix[i][j - 1] + 1,     // insertion
+            matrix[i - 1][j] + 1      // deletion
+          );
+        }
+      }
+    }
+
+    return matrix[b.length][a.length];
   }
 
   /**
