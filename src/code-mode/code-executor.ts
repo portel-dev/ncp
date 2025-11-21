@@ -202,6 +202,21 @@ export class CodeExecutor {
 
     logger.info(`📦 Context created with namespaces: ${Object.keys(context).filter(k => typeof context[k] === 'object' && !k.startsWith('__')).join(', ')}`);
 
+    // Special handling for ncp.find() to accept string directly
+    // Allows: ncp.find("query") or ncp.find("q1 | q2 | q3") instead of ncp.find({ description: "..." })
+    if (context['ncp'] && context['ncp']['find']) {
+      const originalFind = context['ncp']['find'];
+      context['ncp']['find'] = async (arg?: string | Record<string, any>) => {
+        // If arg is a string, convert to object format
+        if (typeof arg === 'string') {
+          return originalFind({ description: arg });
+        }
+        // Otherwise pass through as-is
+        return originalFind(arg);
+      };
+    }
+
+
     return context;
   }
 
