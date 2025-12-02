@@ -418,13 +418,16 @@ export class MCPServer implements ElicitationServer {
   async initialize(): Promise<void> {
     logger.info('Starting NCP MCP server (SDK-based)');
 
-    // Load workflow mode setting (async, but don't block initialization)
-    loadGlobalSettings().then(settings => {
+    // Load workflow mode setting BEFORE exposing tools
+    // This ensures tool list respects the configured workflow mode
+    try {
+      const settings = await loadGlobalSettings();
       this.workflowMode = settings.workflowMode;
       logger.info(`Workflow mode: ${this.workflowMode}`);
-    }).catch(error => {
+    } catch (error: any) {
       logger.warn(`Failed to load workflow mode, using default: ${error.message}`);
-    });
+      // Continue with default workflow mode (find-and-run)
+    }
 
     // Start initialization in the background, don't await it
     this.initializationPromise = this.orchestrator.initialize().then(() => {
