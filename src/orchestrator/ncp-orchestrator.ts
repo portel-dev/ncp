@@ -726,6 +726,13 @@ export class NCPOrchestrator {
           logger.info('[NCPOrchestrator] Injecting orchestrator into IntelligenceMCP');
           (intelligenceMCP as any).setOrchestrator(this);
         }
+
+        // Inject orchestrator into CodeMCP
+        const codeMCP = allInternalMCPs.find(mcp => mcp.name === 'ncp');
+        if (codeMCP && 'setOrchestratorOnCodeMCP' in this.internalMCPManager) {
+          logger.info('[NCPOrchestrator] Injecting orchestrator into CodeMCP');
+          this.internalMCPManager.setOrchestratorOnCodeMCP(this);
+        }
       }
 
       const profile = await this.profileManager.getProfile(this.profileName);
@@ -807,9 +814,6 @@ export class NCPOrchestrator {
     if (ragEngine) {
       this.internalMCPManager.setRAGEngine(ragEngine);
     }
-
-    // Connect orchestrator to code execution MCP
-    this.internalMCPManager.setOrchestratorOnCodeMCP(this);
 
     // Check environment variables and disable internal MCPs if requested
     const enableScheduleMCP = process.env.NCP_ENABLE_SCHEDULE_MCP !== 'false';
