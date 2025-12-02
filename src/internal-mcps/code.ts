@@ -1,0 +1,133 @@
+/**
+ * Code Execution Internal MCP
+ *
+ * Exposes the ncp:code tool for executing TypeScript code
+ * with access to all other MCPs as namespaces.
+ *
+ * This enables the automation powerhouse:
+ * - Schedule CODE that orchestrates multiple MCPs
+ * - Code can access any MCP in the system
+ * - Supports complex workflows in single execution
+ */
+
+import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
+import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
+
+export class CodeMCP implements InternalMCP {
+  name = 'ncp';
+  description = 'Execute TypeScript code with access to all MCPs';
+
+  private orchestrator: NCPOrchestrator | null = null;
+
+  tools: InternalTool[] = [
+    {
+      name: 'code',
+      description: `Execute TypeScript code with access to all MCPs as namespaces.
+
+ORCHESTRATION POWERHOUSE - Schedule code that calls multiple MCPs!
+
+EXAMPLES:
+  // Single MCP call
+  const result = await gmail.list_messages({ query: "is:unread" });
+
+  // Orchestrate multiple MCPs
+  const emails = await gmail.list_messages({ ... });
+  const contacts = await gmail.get_contacts({});
+  await slack.send_message({
+    channel: "alerts",
+    text: \`Found \${emails.length} emails from \${contacts.length} contacts\`
+  });
+
+  // Schedule code execution
+  await schedule.create({
+    name: "daily-automation",
+    schedule: "0 6 * * *",
+    tool: "ncp:code",
+    parameters: {
+      code: "... your code here ..."
+    }
+  });
+
+All MCPs available as namespaces: gmail, github, slack, stripe, schedule, analytics, mcp, etc.`,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          code: {
+            type: 'string',
+            description: 'TypeScript code. Access MCPs as namespaces (e.g., await gmail.send_email({...})). Last expression or return value is result.'
+          },
+          timeout: {
+            type: 'number',
+            description: 'Timeout in ms (default: 30000, max: 300000)'
+          }
+        },
+        required: ['code']
+      }
+    }
+  ];
+
+  constructor() {
+    // Orchestrator is set later via setOrchestrator()
+  }
+
+  /**
+   * Set the orchestrator instance (called after construction)
+   */
+  setOrchestrator(orchestrator: NCPOrchestrator): void {
+    this.orchestrator = orchestrator;
+  }
+
+  /**
+   * Execute code with MCP access
+   */
+  async executeTool(toolName: string, parameters: any): Promise<InternalToolResult> {
+    if (toolName !== 'code') {
+      return {
+        success: false,
+        error: `Unknown tool: ${toolName}`
+      };
+    }
+
+    if (!this.orchestrator) {
+      return {
+        success: false,
+        error: 'Code execution not yet initialized'
+      };
+    }
+
+    const { code, timeout } = parameters;
+
+    if (!code || typeof code !== 'string') {
+      return {
+        success: false,
+        error: 'code parameter is required and must be a string'
+      };
+    }
+
+    try {
+      const result = await this.orchestrator.executeCode(code, timeout || 30000);
+
+      if (result.error) {
+        return {
+          success: false,
+          error: result.error,
+          content: result.logs ? `Logs:\n${result.logs.join('\n')}` : undefined
+        };
+      }
+
+      return {
+        success: true,
+        content: JSON.stringify({
+          result: result.result,
+          logs: result.logs
+        }, null, 2)
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message,
+        content: error.stack
+      };
+    }
+  }
+}

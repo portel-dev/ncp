@@ -11,6 +11,7 @@ import { SchedulerMCP } from './scheduler.js';
 import { AnalyticsMCP } from './analytics.js';
 import { SkillsManagementMCP } from './skills.js';
 import { MarketplaceMCP } from './marketplace.js';
+import { CodeMCP } from './code.js';
 import { PhotonLoader } from './photon-loader.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
@@ -26,6 +27,7 @@ export class InternalMCPManager {
   private disabledInternalMCPs: Set<string> = new Set();
   private ragEngine: any = null; // PersistentRAGEngine instance (set via setRAGEngine)
   private simpleMCPLoader: PhotonLoader;
+  private codeMCP: CodeMCP; // Keep reference for setting orchestrator later
 
   constructor() {
     this.simpleMCPLoader = new PhotonLoader();
@@ -36,6 +38,11 @@ export class InternalMCPManager {
     this.registerInternalMCP(new AnalyticsMCP());
     this.registerInternalMCP(new SkillsManagementMCP());
     this.registerInternalMCP(new MarketplaceMCP());
+
+    // Register code execution MCP
+    this.codeMCP = new CodeMCP();
+    this.registerInternalMCP(this.codeMCP);
+
     // Note: CLI discovery is internal to orchestrator, not exposed as tools
   }
 
@@ -193,6 +200,15 @@ export class InternalMCPManager {
   setRAGEngine(ragEngine: any): void {
     this.ragEngine = ragEngine;
     logger.debug('RAG engine connected to InternalMCPManager');
+  }
+
+  /**
+   * Set orchestrator on code execution MCP
+   * Called after orchestrator is initialized
+   */
+  setOrchestratorOnCodeMCP(orchestrator: any): void {
+    this.codeMCP.setOrchestrator(orchestrator);
+    logger.debug('Orchestrator connected to CodeMCP');
   }
 
   /**

@@ -808,6 +808,9 @@ export class NCPOrchestrator {
       this.internalMCPManager.setRAGEngine(ragEngine);
     }
 
+    // Connect orchestrator to code execution MCP
+    this.internalMCPManager.setOrchestratorOnCodeMCP(this);
+
     // Check environment variables and disable internal MCPs if requested
     const enableScheduleMCP = process.env.NCP_ENABLE_SCHEDULE_MCP !== 'false';
     const enableMcpManagement = process.env.NCP_ENABLE_MCP_MANAGEMENT !== 'false';
