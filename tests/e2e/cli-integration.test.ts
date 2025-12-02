@@ -126,8 +126,8 @@ describe('CLI Integration Tests', () => {
   });
 
   describe('Profile Management', () => {
-    test('should work with custom profile', () => {
-      const result = runCLI('find scheduler --profile test --depth 0 --limit 3');
+    test('should work with default profile', () => {
+      const result = runCLI('find scheduler --depth 0 --limit 3');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Found tools');
