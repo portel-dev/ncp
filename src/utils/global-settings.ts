@@ -85,6 +85,12 @@ function getSettingsPath(): string {
 export async function loadGlobalSettings(): Promise<GlobalSettings> {
   const settingsPath = getSettingsPath();
 
+  // ALWAYS log settings path and existence for debugging DXT issues
+  console.error(`[NCP SETTINGS] Settings path: ${settingsPath}`);
+  console.error(`[NCP SETTINGS] File exists: ${existsSync(settingsPath)}`);
+  console.error(`[NCP SETTINGS] Working directory: ${process.cwd()}`);
+  console.error(`[NCP SETTINGS] ENV NCP_ENABLE_CODE_MODE: ${process.env.NCP_ENABLE_CODE_MODE || 'not set'}`);
+
   // Debug logging
   if (process.env.NCP_DEBUG === 'true') {
     console.error(`[DEBUG SETTINGS] Loading from: ${settingsPath}`);
@@ -99,6 +105,8 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
     try {
       const content = await fs.readFile(settingsPath, 'utf-8');
       const fileSettings = JSON.parse(content);
+
+      console.error(`[NCP SETTINGS] Loaded from file: enableCodeMode=${fileSettings.enableCodeMode}, enableSkills=${fileSettings.enableSkills}`);
 
       if (process.env.NCP_DEBUG === 'true') {
         console.error(`[DEBUG SETTINGS] Loaded from file: enableCodeMode=${fileSettings.enableCodeMode}`);
