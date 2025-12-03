@@ -112,74 +112,40 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
     }
   }
 
-  // IMPORTANT: Only apply env var overrides if they differ from manifest defaults
+  // IMPORTANT: Saved settings file is the source of truth
   //
-  // Problem: When DXT is installed/updated, Claude Desktop sets env vars to manifest defaults.
-  // If we blindly apply these, we overwrite user's saved preferences.
+  // User's expectation: Once settings are saved to .ncp/settings.json, they should
+  // always be respected, regardless of what env vars Claude Desktop sets on reinstall.
   //
-  // Solution: Only apply env var overrides when they differ from manifest defaults,
-  // meaning the user explicitly changed them in the UI (not just a DXT reinstall).
+  // Logic:
+  // - If settings file exists: Use saved settings, ignore all env vars
+  // - If settings file doesn't exist (first install): Use env vars or defaults, then save
   //
-  // Manifest defaults (from manifest.json):
-  const MANIFEST_DEFAULTS = {
-    enableCodeMode: false,
-    enableSkills: true,
-    confirmBeforeRun: true,
-    logRotation: true
-  };
+  // This ensures user preferences persist across DXT updates/reinstalls.
 
-  // Override confirmBeforeRun only if env var differs from manifest default
-  if (process.env.NCP_CONFIRM_BEFORE_RUN !== undefined) {
-    const envValue = process.env.NCP_CONFIRM_BEFORE_RUN === 'true';
-    if (envValue !== MANIFEST_DEFAULTS.confirmBeforeRun) {
-      settings.confirmBeforeRun.enabled = envValue;
+  if (!existsSync(settingsPath)) {
+    // First install - no saved settings yet
+    // Apply env vars from Claude Desktop UI (if any)
+    if (process.env.NCP_CONFIRM_BEFORE_RUN !== undefined) {
+      settings.confirmBeforeRun.enabled = process.env.NCP_CONFIRM_BEFORE_RUN === 'true';
     }
-  }
 
-  // Override log rotation only if env var differs from manifest default
-  if (process.env.NCP_ENABLE_LOG_ROTATION !== undefined) {
-    const envValue = process.env.NCP_ENABLE_LOG_ROTATION === 'true';
-    if (envValue !== MANIFEST_DEFAULTS.logRotation) {
-      settings.logRotation.enabled = envValue;
+    if (process.env.NCP_ENABLE_LOG_ROTATION !== undefined) {
+      settings.logRotation.enabled = process.env.NCP_ENABLE_LOG_ROTATION === 'true';
     }
-  }
 
-  // Override code mode only if env var differs from manifest default
-  if (process.env.NCP_ENABLE_CODE_MODE !== undefined) {
-    const envValue = process.env.NCP_ENABLE_CODE_MODE === 'true';
-    if (envValue !== MANIFEST_DEFAULTS.enableCodeMode) {
-      settings.enableCodeMode = envValue;
+    if (process.env.NCP_ENABLE_CODE_MODE !== undefined) {
+      settings.enableCodeMode = process.env.NCP_ENABLE_CODE_MODE === 'true';
     }
-  }
 
-  // Override skills only if env var differs from manifest default
-  if (process.env.NCP_ENABLE_SKILLS !== undefined) {
-    const envValue = process.env.NCP_ENABLE_SKILLS === 'true';
-    if (envValue !== MANIFEST_DEFAULTS.enableSkills) {
-      settings.enableSkills = envValue;
+    if (process.env.NCP_ENABLE_SKILLS !== undefined) {
+      settings.enableSkills = process.env.NCP_ENABLE_SKILLS === 'true';
     }
-  }
 
-  // Persist settings if they changed
-  // Since we only apply env var overrides when they differ from manifest defaults,
-  // any difference between current settings and file settings means user explicitly changed them
-  if (existsSync(settingsPath)) {
-    const fileSettings = JSON.parse(await fs.readFile(settingsPath, 'utf-8'));
-
-    const needsSave = (
-      settings.enableCodeMode !== fileSettings.enableCodeMode ||
-      settings.enableSkills !== fileSettings.enableSkills ||
-      settings.confirmBeforeRun.enabled !== fileSettings.confirmBeforeRun?.enabled ||
-      settings.logRotation.enabled !== fileSettings.logRotation?.enabled
-    );
-
-    if (needsSave) {
-      await saveGlobalSettings(settings);
-    }
-  } else {
-    // First install - save initial settings (from env vars or defaults)
+    // Save initial settings for persistence
     await saveGlobalSettings(settings);
   }
+  // else: Settings file exists - use saved settings, ignore env vars completely
 
   return settings;
 }
