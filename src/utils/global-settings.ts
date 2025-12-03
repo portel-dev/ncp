@@ -125,6 +125,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
   }
 
   // Override code mode with environment variable from extension UI toggle
+  // This respects Claude Desktop's user settings while preserving user choices across updates
   if (process.env.NCP_ENABLE_CODE_MODE !== undefined) {
     const envValue = process.env.NCP_ENABLE_CODE_MODE;
     settings.enableCodeMode = envValue === 'true';
@@ -134,6 +135,29 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
   if (process.env.NCP_ENABLE_SKILLS !== undefined) {
     const envValue = process.env.NCP_ENABLE_SKILLS;
     settings.enableSkills = envValue === 'true';
+  }
+
+  // IMPORTANT: Sync environment-based overrides back to disk for persistence
+  // This ensures user preferences survive across NCP updates and Claude restarts
+  // Only save if there are differences from the default file settings
+  if (existsSync(settingsPath)) {
+    const fileSettings = JSON.parse(await fs.readFile(settingsPath, 'utf-8'));
+    const needsSave =
+      settings.enableCodeMode !== fileSettings.enableCodeMode ||
+      settings.enableSkills !== fileSettings.enableSkills ||
+      settings.confirmBeforeRun.enabled !== fileSettings.confirmBeforeRun?.enabled ||
+      settings.logRotation.enabled !== fileSettings.logRotation?.enabled;
+
+    if (needsSave) {
+      await saveGlobalSettings(settings);
+    }
+  } else if (process.env.NCP_ENABLE_CODE_MODE !== undefined ||
+             process.env.NCP_ENABLE_SKILLS !== undefined ||
+             process.env.NCP_CONFIRM_BEFORE_RUN !== undefined ||
+             process.env.NCP_ENABLE_LOG_ROTATION !== undefined) {
+    // If settings file doesn't exist but we have environment overrides,
+    // save them so they persist for next startup
+    await saveGlobalSettings(settings);
   }
 
   return settings;
