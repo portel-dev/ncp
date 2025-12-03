@@ -380,20 +380,21 @@ export class MCPServer implements ElicitationServer {
     // Filter tools based on code mode setting
     let coreTools: Tool[];
 
-    console.error(`[NCP TOOLS] getToolDefinitions called, this.enableCodeMode=${this.enableCodeMode}`);
-
     if (this.enableCodeMode) {
       // Code mode ON: expose find-and-code
       // AI uses find tool for discovery, code tool for execution
       coreTools = [findTool, codeTool];
       logger.debug('Tool exposure: find-and-code (code mode enabled)');
-      console.error('[NCP TOOLS] Exposing: find, code');
     } else {
       // Code mode OFF: expose find-and-run (progressive disclosure)
       // AI uses find tool for discovery, run tool for execution
       coreTools = [findTool, runTool];
       logger.debug('Tool exposure: find-and-run (code mode disabled)');
-      console.error('[NCP TOOLS] Exposing: find, run');
+    }
+
+    if (process.env.NCP_DEBUG === 'true') {
+      console.error(`[DEBUG] getToolDefinitions: this.enableCodeMode=${this.enableCodeMode}`);
+      console.error(`[DEBUG] Exposing tools: ${coreTools.map(t => t.name).join(', ')}`);
     }
 
     // Internal MCPs are indexed and accessible via find/run, not exposed as direct tools
@@ -408,17 +409,18 @@ export class MCPServer implements ElicitationServer {
     // Load code mode setting BEFORE exposing tools
     // This determines whether to expose find-and-code or find-and-run mode
     try {
-      console.error('[NCP INIT] Loading global settings...');
       const settings = await loadGlobalSettings();
-      console.error(`[NCP INIT] Settings loaded: enableCodeMode=${settings.enableCodeMode}, enableSkills=${settings.enableSkills}`);
       this.enableCodeMode = settings.enableCodeMode;
       const mode = settings.enableCodeMode ? 'find-and-code' : 'find-and-run';
       logger.info(`Execution mode: ${mode}`);
-      console.error(`[NCP INIT] this.enableCodeMode set to: ${this.enableCodeMode}`);
+
+      if (process.env.NCP_DEBUG === 'true') {
+        console.error(`[DEBUG] Settings loaded: enableCodeMode=${settings.enableCodeMode}, enableSkills=${settings.enableSkills}`);
+        console.error(`[DEBUG] this.enableCodeMode set to: ${this.enableCodeMode}`);
+      }
     } catch (error: any) {
-      console.error(`[NCP INIT ERROR] Failed to load execution mode: ${error.message}`);
-      console.error(`[NCP INIT ERROR] Stack: ${error.stack}`);
-      logger.warn(`Failed to load execution mode, using default find-and-run: ${error.message}`);
+      logger.error(`Failed to load execution mode: ${error.message}`);
+      logger.warn(`Using default find-and-run mode`);
       // Continue with default mode (find-and-run)
     }
 
