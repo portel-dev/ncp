@@ -137,16 +137,42 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
     settings.enableSkills = envValue === 'true';
   }
 
-  // IMPORTANT: Sync environment-based overrides back to disk for persistence
-  // This ensures user preferences survive across NCP updates and Claude restarts
-  // Only save if there are differences from the default file settings
+  // IMPORTANT: Persist user preferences, but DON'T overwrite with manifest defaults
+  //
+  // Problem: When DXT is installed/updated, Claude Desktop sets env vars to manifest defaults,
+  // which would overwrite user's saved preferences if we blindly persist them.
+  //
+  // Solution: Only persist env var changes if they differ from manifest defaults,
+  // meaning the user explicitly changed them in the UI (not just reinstalled DXT).
+  //
+  // Manifest defaults (from manifest.json):
+  const MANIFEST_DEFAULTS = {
+    enableCodeMode: false,
+    enableSkills: true,
+    confirmBeforeRun: true,
+    logRotation: true
+  };
+
   if (existsSync(settingsPath)) {
     const fileSettings = JSON.parse(await fs.readFile(settingsPath, 'utf-8'));
-    const needsSave =
-      settings.enableCodeMode !== fileSettings.enableCodeMode ||
-      settings.enableSkills !== fileSettings.enableSkills ||
-      settings.confirmBeforeRun.enabled !== fileSettings.confirmBeforeRun?.enabled ||
-      settings.logRotation.enabled !== fileSettings.logRotation?.enabled;
+
+    // Only save if env vars differ from BOTH file settings AND manifest defaults
+    // This means user explicitly changed them in UI, not just a DXT reinstall
+    const envCodeModeChanged = process.env.NCP_ENABLE_CODE_MODE !== undefined &&
+                                settings.enableCodeMode !== MANIFEST_DEFAULTS.enableCodeMode;
+    const envSkillsChanged = process.env.NCP_ENABLE_SKILLS !== undefined &&
+                             settings.enableSkills !== MANIFEST_DEFAULTS.enableSkills;
+    const envConfirmChanged = process.env.NCP_CONFIRM_BEFORE_RUN !== undefined &&
+                              settings.confirmBeforeRun.enabled !== MANIFEST_DEFAULTS.confirmBeforeRun;
+    const envLogRotationChanged = process.env.NCP_ENABLE_LOG_ROTATION !== undefined &&
+                                  settings.logRotation.enabled !== MANIFEST_DEFAULTS.logRotation;
+
+    const needsSave = (
+      (envCodeModeChanged && settings.enableCodeMode !== fileSettings.enableCodeMode) ||
+      (envSkillsChanged && settings.enableSkills !== fileSettings.enableSkills) ||
+      (envConfirmChanged && settings.confirmBeforeRun.enabled !== fileSettings.confirmBeforeRun?.enabled) ||
+      (envLogRotationChanged && settings.logRotation.enabled !== fileSettings.logRotation?.enabled)
+    );
 
     if (needsSave) {
       await saveGlobalSettings(settings);
@@ -156,7 +182,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
              process.env.NCP_CONFIRM_BEFORE_RUN !== undefined ||
              process.env.NCP_ENABLE_LOG_ROTATION !== undefined) {
     // If settings file doesn't exist but we have environment overrides,
-    // save them so they persist for next startup
+    // save them so they persist for next startup (first-time setup)
     await saveGlobalSettings(settings);
   }
 
