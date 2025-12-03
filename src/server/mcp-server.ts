@@ -538,6 +538,27 @@ export class MCPServer implements ElicitationServer {
       const toolName = request.params?.name;
       const args = request.params?.arguments || {};
 
+      // Detailed diagnostic logging for code tool
+      if (toolName === 'code') {
+        console.error('[MCP-SERVER] tools/call received for code tool');
+        console.error('[MCP-SERVER] toolName:', toolName);
+        console.error('[MCP-SERVER] arguments type:', typeof args);
+        console.error('[MCP-SERVER] arguments is null:', args === null);
+        console.error('[MCP-SERVER] arguments is undefined:', args === undefined);
+        console.error('[MCP-SERVER] arguments keys:', Object.keys(args || {}));
+        console.error('[MCP-SERVER] arguments.code type:', typeof args?.code);
+        console.error('[MCP-SERVER] arguments.code length:', args?.code?.length);
+        if (args?.code) {
+          console.error('[MCP-SERVER] arguments.code first 200 chars:', args.code.substring(0, 200));
+          console.error('[MCP-SERVER] arguments.code char codes at boundaries:', {
+            first: args.code.charCodeAt(0),
+            second: args.code.charCodeAt(1),
+            last: args.code.charCodeAt(args.code.length - 1),
+            secondLast: args.code.charCodeAt(args.code.length - 2)
+          });
+        }
+      }
+
       try {
         const result = await this.callTool(toolName, args);
 
@@ -547,6 +568,10 @@ export class MCPServer implements ElicitationServer {
           result
         };
       } catch (error: any) {
+        if (toolName === 'code') {
+          console.error('[MCP-SERVER] code tool execution error:', error.message);
+          console.error('[MCP-SERVER] error stack:', error.stack);
+        }
         return {
           jsonrpc: '2.0',
           id: request.id,
