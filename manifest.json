@@ -23,73 +23,73 @@
       "description": "Which NCP profile to use (e.g., 'all', 'development', 'minimal'). Auto-imported MCPs from your MCP client will be added to this profile.",
       "default": "all"
     },
-    "config_path": {
+    "configPath": {
       "type": "string",
       "title": "Configuration Path",
       "description": "Where to store NCP configurations. Use '~/.ncp' for global (shared across projects), '.ncp' for local (per-project), or specify custom path.",
       "default": "~/.ncp"
     },
-    "enable_code_mode": {
+    "enableCodeMode": {
       "type": "boolean",
       "title": "Enable Code Mode",
       "description": "Toggle between find-and-code (ON) and find-and-run (OFF) execution modes. The code tool is always available internally for schedulers and automation.",
       "default": false
     },
-    "enable_global_cli": {
+    "enableGlobalCli": {
       "type": "boolean",
       "title": "Enable Global CLI Access",
       "description": "Create a global 'ncp' command for terminal usage. Allows running NCP from command line anywhere on your system.",
       "default": false
     },
-    "auto_import_client_mcps": {
+    "autoImportClientMcps": {
       "type": "boolean",
       "title": "Auto-import Client MCPs",
       "description": "Automatically import all MCPs from your MCP client (Claude Desktop, Perplexity, Cursor, etc.) on startup. Syncs both config files and extensions.",
       "default": true
     },
-    "enable_debug_logging": {
+    "enableDebugLogging": {
       "type": "boolean",
       "title": "Enable Debug Logging",
       "description": "Show detailed logs for troubleshooting (runtime detection, MCP loading, etc.)",
       "default": false
     },
-    "confirm_before_run": {
+    "confirmBeforeRun": {
       "type": "boolean",
       "title": "Confirm Modifications Before Run",
       "description": "Show confirmation dialog before executing modification operations (adding/removing MCPs, file changes, deletions, etc.). Protects against unintended changes by requiring explicit user approval.",
       "default": true
     },
-    "enable_log_rotation": {
+    "enableLogRotation": {
       "type": "boolean",
       "title": "Enable Log Rotation",
       "description": "Auto-rotate debug and protocol logs to prevent disk space issues. Advanced settings (maxDebugFiles, maxProtocolLines) can be edited in settings.json.",
       "default": true
     },
-    "enable_schedule_mcp": {
+    "enableScheduleMcp": {
       "type": "boolean",
       "title": "Enable Scheduler (Built-in)",
       "description": "Schedule tool executions with cron. Provides 5 tools: create, retrieve, update, delete, validate.",
       "default": true
     },
-    "enable_mcp_management": {
+    "enableMcpManagement": {
       "type": "boolean",
       "title": "Enable MCP Management (Built-in)",
       "description": "Add, remove, and manage MCPs in your configuration. Provides 5 tools: add, remove, list, update, search.",
       "default": true
     },
-    "enable_photon_runtime": {
+    "enablePhotonRuntime": {
       "type": "boolean",
       "title": "Enable Photon Runtime (Built-in)",
       "description": "Enable Photon runtime to load custom .photon files from ~/.ncp/photons/ or .ncp/photons/ directory. Photons are lightweight TypeScript-based MCPs that extend NCP capabilities.",
       "default": true
     },
-    "enable_cli_discovery": {
+    "enableCliDiscovery": {
       "type": "boolean",
       "title": "Enable CLI Discovery (Built-in)",
       "description": "Automatically discover and index CLI tools installed on your system (ffmpeg, git, jq, etc.). Enhances shell command searchability with ~150+ curated tools.",
       "default": false
     },
-    "enable_skills": {
+    "enableSkills": {
       "type": "boolean",
       "title": "Enable Skills (Built-in)",
       "description": "Enable Anthropic Agent Skills: discover, install, and use reusable skills. Provides skills:find, skills:install, and other tools. Skills are stored in ~/.ncp/skills/ and auto-loaded on startup.",
@@ -104,22 +104,22 @@
       "args": [
         "${__dirname}/dist/index-mcp.js",
         "--profile=${user_config.profile}",
-        "--config-path=${user_config.config_path}"
+        "--config-path=${user_config.configPath}"
       ],
       "env": {
         "NCP_PROFILE": "${user_config.profile}",
-        "NCP_CONFIG_PATH": "${user_config.config_path}",
-        "NCP_ENABLE_CODE_MODE": "${user_config.enable_code_mode}",
-        "NCP_ENABLE_GLOBAL_CLI": "${user_config.enable_global_cli}",
-        "NCP_AUTO_IMPORT": "${user_config.auto_import_client_mcps}",
-        "NCP_DEBUG": "${user_config.enable_debug_logging}",
-        "NCP_CONFIRM_BEFORE_RUN": "${user_config.confirm_before_run}",
-        "NCP_ENABLE_LOG_ROTATION": "${user_config.enable_log_rotation}",
-        "NCP_ENABLE_SCHEDULE_MCP": "${user_config.enable_schedule_mcp}",
-        "NCP_ENABLE_MCP_MANAGEMENT": "${user_config.enable_mcp_management}",
-        "NCP_ENABLE_SKILLS": "${user_config.enable_skills}",
-        "NCP_ENABLE_PHOTON_RUNTIME": "${user_config.enable_photon_runtime}",
-        "NCP_CLI_AUTOSCAN": "${user_config.enable_cli_discovery}",
+        "NCP_CONFIG_PATH": "${user_config.configPath}",
+        "NCP_ENABLE_CODE_MODE": "${user_config.enableCodeMode}",
+        "NCP_ENABLE_GLOBAL_CLI": "${user_config.enableGlobalCli}",
+        "NCP_AUTO_IMPORT": "${user_config.autoImportClientMcps}",
+        "NCP_DEBUG": "${user_config.enableDebugLogging}",
+        "NCP_CONFIRM_BEFORE_RUN": "${user_config.confirmBeforeRun}",
+        "NCP_ENABLE_LOG_ROTATION": "${user_config.enableLogRotation}",
+        "NCP_ENABLE_SCHEDULE_MCP": "${user_config.enableScheduleMcp}",
+        "NCP_ENABLE_MCP_MANAGEMENT": "${user_config.enableMcpManagement}",
+        "NCP_ENABLE_SKILLS": "${user_config.enableSkills}",
+        "NCP_ENABLE_PHOTON_RUNTIME": "${user_config.enablePhotonRuntime}",
+        "NCP_CLI_AUTOSCAN": "${user_config.enableCliDiscovery}",
         "NCP_MODE": "extension"
       }
     }

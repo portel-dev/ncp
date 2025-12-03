@@ -121,7 +121,38 @@ Before committing ANY changes to server code, verify ALL of these:
 - **Test with JSON-RPC directly**: Don't involve AI in tests - use direct JSON-RPC communication
 - **Verify auto-import**: Check that profile file is updated with new MCPs after initialization
 
-## Code Quality
+## Code Quality & Naming Conventions
+
+### TypeScript/JavaScript Naming Standards
+
+**Best Practice: Use camelCase consistently throughout the entire codebase** (code AND configuration files)
+
+- **Variables, functions, methods**: `camelCase` (e.g., `enableCodeMode`, `autoImport`, `maxDebugFiles`)
+- **Classes, interfaces, types**: `PascalCase` (e.g., `GlobalSettings`, `MCPServer`, `InternalMCP`)
+- **Constants**: `UPPER_CASE` (e.g., `DEFAULT_SETTINGS`, `MAX_RETRIES`)
+- **JSON configuration**: `camelCase` for consistency with TypeScript (e.g., manifest.json, settings.json)
+
+**Key Principle**: NEVER mix camelCase and snake_case in the same codebase. Consistency prevents confusion and makes code maintainable. JavaScript/TypeScript systems standardize on camelCase (even for JSON configuration files).
+
+**Application to NCP**:
+- manifest.json: Use camelCase for all config keys
+  - ✅ `enableCodeMode` (not `enable_code_mode`)
+  - ✅ `enableSkills` (not `enable_skills`)
+  - ✅ `enableScheduleMcp` (not `enable_schedule_mcp`)
+  - ✅ `enablePhotonRuntime` (not `enable_photon_runtime`)
+- Environment variables: Use UPPER_SNAKE_CASE (follows convention for env vars)
+  - `NCP_ENABLE_CODE_MODE`, `NCP_ENABLE_SKILLS`, etc.
+- TypeScript interfaces/code: Use camelCase
+  - GlobalSettings.enableCodeMode
+  - GlobalSettings.enableSkills
+
+**References**:
+- [TypeScript ESLint Naming Convention Rule](https://typescript-eslint.io/rules/naming-convention/)
+- [TypeScript Deep Dive Style Guide](https://basarat.gitbook.io/typescript/styleguide)
+- [JSON Naming Conventions Stack Overflow](https://stackoverflow.com/questions/5543490/json-naming-convention-snake-case-camelcase-or-pascalcase)
+- [JSON Best Practices Blog](https://blog.liquid-technologies.com/json-best-practices-and-conventions-part-2-of-4)
+
+### General Code Quality
 
 - **Complete the root cause fix**: Don't just fix symptoms, understand and fix the underlying issue
 - **Verify incremental changes work**: When optimizing caching, test that partial updates work correctly
