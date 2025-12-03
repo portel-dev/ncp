@@ -86,9 +86,8 @@
     "workflow_mode": {
       "type": "string",
       "title": "Execution Mode",
-      "description": "Choose how Claude interacts with NCP tools. Find-and-run: traditional MCP (Claude uses find, then run). Find-and-code: hybrid (Claude uses find for discovery, code-mode for execution). Code-only: pure code-mode (Claude uses ncp.find() internally in TypeScript).",
-      "default": "find-and-run",
-      "enum": ["find-and-run", "find-and-code", "code-only"]
+      "description": "Choose how Claude interacts with NCP tools: 'find-and-run' (traditional MCP), 'find-and-code' (hybrid), or 'code-only' (pure code-mode).",
+      "default": "find-and-run"
     }
   },
   "server": {
