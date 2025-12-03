@@ -95,12 +95,28 @@ All MCPs available as namespaces: gmail, github, slack, stripe, schedule, analyt
       };
     }
 
+    // Diagnostic logging to help debug parameter issues
+    console.error('[ncp:code] Tool called with parameters:', {
+      rawType: typeof parameters,
+      isNull: parameters === null,
+      isUndefined: parameters === undefined,
+      keys: parameters ? Object.keys(parameters) : [],
+      codeType: typeof parameters?.code,
+      codeLength: parameters?.code?.length,
+      codePreview: parameters?.code ? parameters.code.substring(0, 100) : 'N/A'
+    });
+
     const { code, timeout } = parameters;
 
     if (!code || typeof code !== 'string') {
+      console.error('[ncp:code] Validation failed:', {
+        code,
+        codeType: typeof code,
+        allParams: JSON.stringify(parameters)
+      });
       return {
         success: false,
-        error: 'code parameter is required and must be a string'
+        error: `code parameter is required and must be a string. Received: ${typeof code}`
       };
     }
 

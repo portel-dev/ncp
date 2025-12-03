@@ -2566,7 +2566,17 @@ export class NCPOrchestrator {
     }
 
     if (missingParams.length > 0) {
-      return `Missing required parameters: ${missingParams.join(', ')}. Use 'ncp find "${mcpName}:${toolName}" --depth 2' to see parameter details.`;
+      // Enhanced error message with diagnostic information
+      const receivedKeys = parameters ? Object.keys(parameters) : [];
+      const diagnostics = [
+        `Missing required parameters: ${missingParams.join(', ')}`,
+        `Received parameters: ${receivedKeys.length > 0 ? receivedKeys.join(', ') : '(none)'}`,
+        `Parameter types: ${JSON.stringify(
+          receivedKeys.reduce((acc, key) => ({ ...acc, [key]: typeof parameters[key] }), {})
+        )}`,
+        `Use 'ncp find "${mcpName}:${toolName}" --depth 2' to see parameter details.`
+      ];
+      return diagnostics.join('\n');
     }
 
     return null; // Validation passed
