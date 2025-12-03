@@ -306,13 +306,13 @@ export class MCPServer implements ElicitationServer {
     // Define all core NCP tools
     const findTool: Tool = {
       name: 'find',
-      description: 'Search or list tools. With description: vector search ("send email"). Without: browse all. Pipe-separated for multi-query ("gmail | slack").',
+      description: 'Search or list MCP tools. Call as find() - no prefix needed. With description param: vector search tools by capability. Without description: list all available tools. Use pipe separator for multi-query ("gmail | slack").',
       inputSchema: {
         type: 'object',
         properties: {
           description: {
             type: 'string',
-            description: 'Search query or MCP filter. Omit to list all. Pipe-separated for multiple queries.'
+            description: 'Search query describing capability you need (e.g. "send email", "read file"). OMIT this parameter entirely to list all tools (do not pass "list all" or empty string). Use pipe separator for multi-query ("gmail | slack").'
           },
           limit: {
             type: 'number',
