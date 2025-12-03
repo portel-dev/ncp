@@ -114,7 +114,13 @@ export class ConfigurationManager {
     const codeModeStatus = codeModeEnabled ? chalk.green('[✓]') : chalk.gray('[✗]');
     const modeLabel = codeModeEnabled ? 'find-and-code' : 'find-and-run';
     console.log(`\n${codeModeStatus} ${chalk.bold('Code Mode')}`);
-    console.log(`  ${chalk.dim(`Current mode: ${chalk.white(modeLabel)} (code tool always available internally)`)}\n`);
+    console.log(`  ${chalk.dim(`Current mode: ${chalk.white(modeLabel)} (code tool always available internally)`)}`);
+
+    // Skills Marketplace
+    const skillsEnabled = globalSettings.enableSkillsMarketplace;
+    const skillsStatus = skillsEnabled ? chalk.green('[✓]') : chalk.gray('[✗]');
+    console.log(`\n${skillsStatus} ${chalk.bold('Skills Marketplace (Built-in)')}`);
+    console.log(`  ${chalk.dim('Discover and install Anthropic Agent Skills from marketplace')}\n`);
   }
 
   /**
@@ -177,6 +183,9 @@ export class ConfigurationManager {
     // Enable Code Mode
     const codeMode = await this.askYesNo('Enable Code Mode (find-and-code vs find-and-run)', globalSettings.enableCodeMode);
 
+    // Enable Skills Marketplace
+    const skillsMarketplace = await this.askYesNo('Enable Skills Marketplace (Built-in)', globalSettings.enableSkillsMarketplace);
+
     // Save configuration
     if (autoImport) {
       delete process.env.NCP_SKIP_AUTO_IMPORT;
@@ -193,6 +202,7 @@ export class ConfigurationManager {
     globalSettings.confirmBeforeRun.enabled = confirmModifications;
     globalSettings.logRotation.enabled = logRotation;
     globalSettings.enableCodeMode = codeMode;
+    globalSettings.enableSkillsMarketplace = skillsMarketplace;
 
     // Save global settings
     await saveGlobalSettings(globalSettings);

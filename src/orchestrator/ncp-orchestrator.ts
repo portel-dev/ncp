@@ -818,6 +818,7 @@ export class NCPOrchestrator {
     // Check environment variables and disable internal MCPs if requested
     const enableScheduleMCP = process.env.NCP_ENABLE_SCHEDULE_MCP !== 'false';
     const enableMcpManagement = process.env.NCP_ENABLE_MCP_MANAGEMENT !== 'false';
+    const enableSkillsMarketplace = process.env.NCP_ENABLE_SKILLS_MARKETPLACE !== 'false';
 
     if (!enableScheduleMCP) {
       logger.info('Schedule MCP disabled via configuration');
@@ -833,7 +834,11 @@ export class NCPOrchestrator {
     await this.addInternalMCPsToDiscovery();
 
     // Load skills from ~/.ncp/skills
-    await this.loadSkills();
+    if (enableSkillsMarketplace) {
+      await this.loadSkills();
+    } else {
+      logger.info('Skills Marketplace disabled via configuration');
+    }
 
     // Initialize CSV cache
     await this.csvCache.initialize();
