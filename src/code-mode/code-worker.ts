@@ -419,16 +419,19 @@ function cleanup(): void {
     // Create context with tools and bindings
     const context = createContext(tools || [], bindings || [], logs);
 
-    // Execute code
+    // Execute code using a wrapper function instead of spreading parameters
+    // This avoids "Arg string terminates parameters early" error from Function constructor
+    // when there are many context keys (tools, bindings, skills)
     const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-    const fn = new AsyncFunction(...Object.keys(context), `
+    const fn = new AsyncFunction('__context__', `
       'use strict';
+      const {${Object.keys(context).join(',')}} = __context__;
       return (async () => {
         ${code}
       })();
     `);
 
-    const result = await fn(...Object.values(context));
+    const result = await fn(context);
 
     // Send result
     parentPort!.postMessage({
