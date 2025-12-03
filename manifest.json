@@ -71,10 +71,10 @@
       "description": "Add, remove, and manage MCPs in your configuration. Provides 5 tools: add, remove, list, update, search.",
       "default": true
     },
-    "enable_shell_micromcp": {
+    "enable_shell_photon": {
       "type": "boolean",
-      "title": "Enable Shell MicroMCP (Built-in)",
-      "description": "Enable command-line execution capabilities. Provides 8 tools: execute, run, which, getEnv, ls, pwd, cd, shouldLoad. Opt-in for security.",
+      "title": "Enable Shell Photon (Built-in)",
+      "description": "Enable command-line execution capabilities via Photon-based shell integration. Provides tools for command execution, environment access, and file navigation. Opt-in for security.",
       "default": false
     },
     "enable_cli_discovery": {
@@ -82,6 +82,13 @@
       "title": "Enable CLI Discovery (Built-in)",
       "description": "Automatically discover and index CLI tools installed on your system (ffmpeg, git, jq, etc.). Enhances shell command searchability with ~150+ curated tools.",
       "default": false
+    },
+    "workflow_mode": {
+      "type": "string",
+      "title": "Execution Mode",
+      "description": "Choose how Claude interacts with NCP tools. Find-and-run: traditional MCP (Claude uses find, then run). Find-and-code: hybrid (Claude uses find for discovery, code-mode for execution). Code-only: pure code-mode (Claude uses ncp.find() internally in TypeScript).",
+      "default": "find-and-run",
+      "enum": ["find-and-run", "find-and-code", "code-only"]
     }
   },
   "server": {
@@ -104,8 +111,9 @@
         "NCP_ENABLE_LOG_ROTATION": "${user_config.enable_log_rotation}",
         "NCP_ENABLE_SCHEDULE_MCP": "${user_config.enable_schedule_mcp}",
         "NCP_ENABLE_MCP_MANAGEMENT": "${user_config.enable_mcp_management}",
-        "NCP_ENABLE_SHELL": "${user_config.enable_shell_micromcp}",
+        "NCP_ENABLE_SHELL": "${user_config.enable_shell_photon}",
         "NCP_CLI_AUTOSCAN": "${user_config.enable_cli_discovery}",
+        "NCP_WORKFLOW_MODE": "${user_config.workflow_mode}",
         "NCP_MODE": "extension"
       }
     }
