@@ -66,7 +66,7 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
     // 2000 lines = 1000 request/response pairs
     maxProtocolLines: 2000
   },
-  enableCodeMode: true, // ON by default - code mode enables powerful orchestration
+  enableCodeMode: true, // ON by default - DXT: edit ~/.ncp/settings.json, NPM: set NCP_ENABLE_CODE_MODE env var
   enableSkills: true // ON by default - skills provide valuable tools
 };
 
@@ -126,15 +126,26 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
     }
   }
 
-  // Settings file persistence
-  // - If no file exists (first install): Save defaults to create the file
-  // - If file exists: Already loaded above, just use it
+  // Handle environment variable overrides (for NPM installations)
+  // DXT installations: No env vars set → use settings file
+  // NPM installations: Env vars set in claude_desktop_config.json → use env vars
   //
-  // NOTE: Code mode is managed entirely through settings file, not env vars
-  // This allows users to toggle it by editing ~/.ncp/settings.json
+  // Logic: If env var is set, prefer it over settings file
+  // This allows NPM users to configure via claude_desktop_config.json
 
-  if (!existsSync(settingsPath)) {
-    // First install - save defaults to create settings file
+  if (process.env.NCP_ENABLE_CODE_MODE !== undefined) {
+    const envValue = process.env.NCP_ENABLE_CODE_MODE === 'true';
+    if (settings.enableCodeMode !== envValue) {
+      settings.enableCodeMode = envValue;
+      // Save to file so it persists if env var is later removed
+      await saveGlobalSettings(settings);
+
+      if (process.env.NCP_DEBUG === 'true') {
+        console.error(`[DEBUG SETTINGS] Applied env var: enableCodeMode=${envValue}`);
+      }
+    }
+  } else if (!existsSync(settingsPath)) {
+    // No env var and no settings file - save defaults
     await saveGlobalSettings(settings);
 
     if (process.env.NCP_DEBUG === 'true') {
