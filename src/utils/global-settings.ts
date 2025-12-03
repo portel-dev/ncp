@@ -25,7 +25,7 @@ export interface GlobalSettings {
   confirmBeforeRun: ConfirmBeforeRunSettings;
   logRotation: LogRotationSettings;
   enableCodeMode: boolean;
-  enableSkillsMarketplace: boolean;
+  enableSkills: boolean;
 }
 
 /**
@@ -67,7 +67,7 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
     maxProtocolLines: 2000
   },
   enableCodeMode: false, // Default to find-and-run mode for backward compatibility
-  enableSkillsMarketplace: true // ON by default - skills marketplace provides valuable tools
+  enableSkills: true // ON by default - skills provide valuable tools
 };
 
 /**
@@ -105,7 +105,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
           ...(fileSettings.logRotation || {})
         },
         enableCodeMode: fileSettings.enableCodeMode !== undefined ? fileSettings.enableCodeMode : DEFAULT_SETTINGS.enableCodeMode,
-        enableSkillsMarketplace: fileSettings.enableSkillsMarketplace !== undefined ? fileSettings.enableSkillsMarketplace : DEFAULT_SETTINGS.enableSkillsMarketplace
+        enableSkills: fileSettings.enableSkills !== undefined ? fileSettings.enableSkills : DEFAULT_SETTINGS.enableSkills
       };
     } catch (error) {
       console.warn('Failed to load settings, using defaults:', error);
@@ -130,10 +130,10 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
     settings.enableCodeMode = envValue === 'true';
   }
 
-  // Override skills marketplace with environment variable from extension UI toggle
-  if (process.env.NCP_ENABLE_SKILLS_MARKETPLACE !== undefined) {
-    const envValue = process.env.NCP_ENABLE_SKILLS_MARKETPLACE;
-    settings.enableSkillsMarketplace = envValue === 'true';
+  // Override skills with environment variable from extension UI toggle
+  if (process.env.NCP_ENABLE_SKILLS !== undefined) {
+    const envValue = process.env.NCP_ENABLE_SKILLS;
+    settings.enableSkills = envValue === 'true';
   }
 
   return settings;

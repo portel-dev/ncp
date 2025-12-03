@@ -89,10 +89,10 @@
       "description": "Automatically discover and index CLI tools installed on your system (ffmpeg, git, jq, etc.). Enhances shell command searchability with ~150+ curated tools.",
       "default": false
     },
-    "enable_skills_marketplace": {
+    "enable_skills": {
       "type": "boolean",
-      "title": "Enable Skills Marketplace (Built-in)",
-      "description": "Access Anthropic Agent Skills marketplace to discover and install reusable skills. Skills are stored in ~/.ncp/skills/ and auto-loaded on startup.",
+      "title": "Enable Skills (Built-in)",
+      "description": "Enable Anthropic Agent Skills: discover, install, and use reusable skills. Provides skills:find, skills:install, and other tools. Skills are stored in ~/.ncp/skills/ and auto-loaded on startup.",
       "default": true
     }
   },
@@ -117,7 +117,7 @@
         "NCP_ENABLE_LOG_ROTATION": "${user_config.enable_log_rotation}",
         "NCP_ENABLE_SCHEDULE_MCP": "${user_config.enable_schedule_mcp}",
         "NCP_ENABLE_MCP_MANAGEMENT": "${user_config.enable_mcp_management}",
-        "NCP_ENABLE_SKILLS_MARKETPLACE": "${user_config.enable_skills_marketplace}",
+        "NCP_ENABLE_SKILLS": "${user_config.enable_skills}",
         "NCP_ENABLE_PHOTON_RUNTIME": "${user_config.enable_photon_runtime}",
         "NCP_CLI_AUTOSCAN": "${user_config.enable_cli_discovery}",
         "NCP_MODE": "extension"

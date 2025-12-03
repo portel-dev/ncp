@@ -116,11 +116,11 @@ export class ConfigurationManager {
     console.log(`\n${codeModeStatus} ${chalk.bold('Code Mode')}`);
     console.log(`  ${chalk.dim(`Current mode: ${chalk.white(modeLabel)} (code tool always available internally)`)}`);
 
-    // Skills Marketplace
-    const skillsEnabled = globalSettings.enableSkillsMarketplace;
+    // Skills
+    const skillsEnabled = globalSettings.enableSkills;
     const skillsStatus = skillsEnabled ? chalk.green('[✓]') : chalk.gray('[✗]');
-    console.log(`\n${skillsStatus} ${chalk.bold('Skills Marketplace (Built-in)')}`);
-    console.log(`  ${chalk.dim('Discover and install Anthropic Agent Skills from marketplace')}\n`);
+    console.log(`\n${skillsStatus} ${chalk.bold('Skills (Built-in)')}`);
+    console.log(`  ${chalk.dim('Discover, install, and use Anthropic Agent Skills')}\n`);
   }
 
   /**
@@ -183,8 +183,8 @@ export class ConfigurationManager {
     // Enable Code Mode
     const codeMode = await this.askYesNo('Enable Code Mode (find-and-code vs find-and-run)', globalSettings.enableCodeMode);
 
-    // Enable Skills Marketplace
-    const skillsMarketplace = await this.askYesNo('Enable Skills Marketplace (Built-in)', globalSettings.enableSkillsMarketplace);
+    // Enable Skills
+    const enableSkills = await this.askYesNo('Enable Skills (Built-in)', globalSettings.enableSkills);
 
     // Save configuration
     if (autoImport) {
@@ -202,7 +202,7 @@ export class ConfigurationManager {
     globalSettings.confirmBeforeRun.enabled = confirmModifications;
     globalSettings.logRotation.enabled = logRotation;
     globalSettings.enableCodeMode = codeMode;
-    globalSettings.enableSkillsMarketplace = skillsMarketplace;
+    globalSettings.enableSkills = enableSkills;
 
     // Save global settings
     await saveGlobalSettings(globalSettings);
