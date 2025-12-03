@@ -343,11 +343,11 @@ async function test4_RunMCPTool() {
   });
   await test.waitForResponse(initId);
 
-  // Try to call a safe built-in tool (ncp:list)
+  // Try to call a safe built-in tool (mcp:list)
   const runId = test.sendRequest('tools/call', {
     name: 'run',
     arguments: {
-      tool: 'ncp:list',
+      tool: 'mcp:list',
       parameters: {}
     }
   });
