@@ -344,9 +344,16 @@ function createContext(tools: any[], bindings: any[], logs: string[]): Record<st
 
   // Organize tools by namespace (Phase 2: backward compatible)
   for (const tool of tools) {
-    const [namespace, toolName] = tool.name.includes(':')
-      ? tool.name.split(':')
-      : ['default', tool.name];
+    let namespace = tool.name.includes(':')
+      ? tool.name.split(':')[0]
+      : 'default';
+    const toolName = tool.name.includes(':')
+      ? tool.name.split(':')[1]
+      : tool.name;
+
+    // Normalize namespace to valid JavaScript identifier
+    // Replace hyphens and other invalid characters with underscores
+    namespace = namespace.replace(/[^a-zA-Z0-9_$]/g, '_');
 
     if (!context[namespace]) {
       context[namespace] = {};
@@ -370,8 +377,11 @@ function createContext(tools: any[], bindings: any[], logs: string[]): Record<st
       };
     }
 
+    // Normalize binding name to valid JavaScript identifier
+    const validBindingName = binding.name.replace(/[^a-zA-Z0-9_$]/g, '_');
+
     // Attach binding to context
-    context[binding.name] = bindingObj;
+    context[validBindingName] = bindingObj;
   }
 
   return context;
