@@ -71,11 +71,11 @@
       "description": "Add, remove, and manage MCPs in your configuration. Provides 5 tools: add, remove, list, update, search.",
       "default": true
     },
-    "enable_shell_photon": {
+    "enable_photon_runtime": {
       "type": "boolean",
-      "title": "Enable Shell Photon (Built-in)",
-      "description": "Enable command-line execution capabilities via Photon-based shell integration. Provides tools for command execution, environment access, and file navigation. Opt-in for security.",
-      "default": false
+      "title": "Enable Photon Runtime (Built-in)",
+      "description": "Enable Photon runtime to load custom .photon files from ~/.ncp/photons/ or .ncp/photons/ directory. Photons are lightweight TypeScript-based MCPs that extend NCP capabilities.",
+      "default": true
     },
     "enable_cli_discovery": {
       "type": "boolean",
@@ -110,7 +110,7 @@
         "NCP_ENABLE_LOG_ROTATION": "${user_config.enable_log_rotation}",
         "NCP_ENABLE_SCHEDULE_MCP": "${user_config.enable_schedule_mcp}",
         "NCP_ENABLE_MCP_MANAGEMENT": "${user_config.enable_mcp_management}",
-        "NCP_ENABLE_SHELL": "${user_config.enable_shell_photon}",
+        "NCP_ENABLE_PHOTON_RUNTIME": "${user_config.enable_photon_runtime}",
         "NCP_CLI_AUTOSCAN": "${user_config.enable_cli_discovery}",
         "NCP_WORKFLOW_MODE": "${user_config.workflow_mode}",
         "NCP_MODE": "extension"
