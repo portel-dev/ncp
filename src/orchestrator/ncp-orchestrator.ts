@@ -292,6 +292,27 @@ export class NCPOrchestrator {
           }
         }
 
+        // Add individual skill tools (Agent Skills from ~/.ncp/skills)
+        // Note: SkillsManagementMCP provides skills:find/list/add/remove for managing skills
+        // Individual loaded skills are exposed as skill:skillName tools (singular)
+        for (const [skillName, skill] of this.skillPrompts.entries()) {
+          tools.push({
+            name: `skill:${skillName}`,
+            description: skill.metadata.description || 'Anthropic Agent Skill',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                depth: {
+                  type: 'number',
+                  enum: [1, 2, 3],
+                  default: 2,
+                  description: 'Progressive disclosure level: 1=metadata, 2=+content, 3=+files'
+                }
+              }
+            }
+          });
+        }
+
         return tools;
       },
       // Tool executor - executes a tool by name
