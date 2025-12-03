@@ -66,7 +66,7 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
     // 2000 lines = 1000 request/response pairs
     maxProtocolLines: 2000
   },
-  enableCodeMode: false, // Default to find-and-run mode for backward compatibility
+  enableCodeMode: true, // ON by default - code mode enables powerful orchestration
   enableSkills: true // ON by default - skills provide valuable tools
 };
 
@@ -126,40 +126,21 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
     }
   }
 
-  // IMPORTANT: Saved settings file is the source of truth
+  // Settings file persistence
+  // - If no file exists (first install): Save defaults to create the file
+  // - If file exists: Already loaded above, just use it
   //
-  // User's expectation: Once settings are saved to .ncp/settings.json, they should
-  // always be respected, regardless of what env vars Claude Desktop sets on reinstall.
-  //
-  // Logic:
-  // - If settings file exists: Use saved settings, ignore all env vars
-  // - If settings file doesn't exist (first install): Use env vars or defaults, then save
-  //
-  // This ensures user preferences persist across DXT updates/reinstalls.
+  // NOTE: Code mode is managed entirely through settings file, not env vars
+  // This allows users to toggle it by editing ~/.ncp/settings.json
 
   if (!existsSync(settingsPath)) {
-    // First install - no saved settings yet
-    // Apply env vars from Claude Desktop UI (if any)
-    if (process.env.NCP_CONFIRM_BEFORE_RUN !== undefined) {
-      settings.confirmBeforeRun.enabled = process.env.NCP_CONFIRM_BEFORE_RUN === 'true';
-    }
-
-    if (process.env.NCP_ENABLE_LOG_ROTATION !== undefined) {
-      settings.logRotation.enabled = process.env.NCP_ENABLE_LOG_ROTATION === 'true';
-    }
-
-    if (process.env.NCP_ENABLE_CODE_MODE !== undefined) {
-      settings.enableCodeMode = process.env.NCP_ENABLE_CODE_MODE === 'true';
-    }
-
-    if (process.env.NCP_ENABLE_SKILLS !== undefined) {
-      settings.enableSkills = process.env.NCP_ENABLE_SKILLS === 'true';
-    }
-
-    // Save initial settings for persistence
+    // First install - save defaults to create settings file
     await saveGlobalSettings(settings);
+
+    if (process.env.NCP_DEBUG === 'true') {
+      console.error('[DEBUG SETTINGS] Created new settings file with defaults');
+    }
   }
-  // else: Settings file exists - use saved settings, ignore env vars completely
 
   // Debug logging for final settings
   if (process.env.NCP_DEBUG === 'true') {

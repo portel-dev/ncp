@@ -29,12 +29,6 @@
       "description": "Where to store NCP configurations. Use '~/.ncp' for global (shared across projects), '.ncp' for local (per-project), or specify custom path.",
       "default": "~/.ncp"
     },
-    "enableCodeMode": {
-      "type": "boolean",
-      "title": "Enable Code Mode",
-      "description": "Toggle between find-and-code (ON) and find-and-run (OFF) execution modes. The code tool is always available internally for schedulers and automation.",
-      "default": false
-    },
     "enableGlobalCli": {
       "type": "boolean",
       "title": "Enable Global CLI Access",
@@ -109,7 +103,6 @@
       "env": {
         "NCP_PROFILE": "${user_config.profile}",
         "NCP_CONFIG_PATH": "${user_config.configPath}",
-        "NCP_ENABLE_CODE_MODE": "${user_config.enableCodeMode}",
         "NCP_ENABLE_GLOBAL_CLI": "${user_config.enableGlobalCli}",
         "NCP_AUTO_IMPORT": "${user_config.autoImportClientMcps}",
         "NCP_DEBUG": "${user_config.enableDebugLogging}",
