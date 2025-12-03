@@ -85,6 +85,12 @@ function getSettingsPath(): string {
 export async function loadGlobalSettings(): Promise<GlobalSettings> {
   const settingsPath = getSettingsPath();
 
+  // Debug logging
+  if (process.env.NCP_DEBUG === 'true') {
+    console.error(`[DEBUG SETTINGS] Loading from: ${settingsPath}`);
+    console.error(`[DEBUG SETTINGS] File exists: ${existsSync(settingsPath)}`);
+  }
+
   // Start with defaults
   let settings: GlobalSettings = { ...DEFAULT_SETTINGS };
 
@@ -93,6 +99,10 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
     try {
       const content = await fs.readFile(settingsPath, 'utf-8');
       const fileSettings = JSON.parse(content);
+
+      if (process.env.NCP_DEBUG === 'true') {
+        console.error(`[DEBUG SETTINGS] Loaded from file: enableCodeMode=${fileSettings.enableCodeMode}`);
+      }
 
       // Merge with defaults to ensure all fields exist
       settings = {
@@ -109,6 +119,10 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
       };
     } catch (error) {
       console.warn('Failed to load settings, using defaults:', error);
+    }
+  } else {
+    if (process.env.NCP_DEBUG === 'true') {
+      console.error(`[DEBUG SETTINGS] No settings file found, using defaults + env vars`);
     }
   }
 
@@ -146,6 +160,11 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
     await saveGlobalSettings(settings);
   }
   // else: Settings file exists - use saved settings, ignore env vars completely
+
+  // Debug logging for final settings
+  if (process.env.NCP_DEBUG === 'true') {
+    console.error(`[DEBUG SETTINGS] Final settings: enableCodeMode=${settings.enableCodeMode}, enableSkills=${settings.enableSkills}`);
+  }
 
   return settings;
 }
