@@ -123,8 +123,12 @@
       "description": "Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task or capability: \"save file\", \"analyze logs\", \"send email\". For multiple capabilities at once, use pipe separator: \"read gmail | send slack | create issue\". (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools."
     },
     {
+      "name": "code",
+      "description": "Execute TypeScript with MCPs as namespaces (e.g., github.get_repo()). Use ncp.find() for discovery. Console captured. Available when code mode is enabled (default: ON)."
+    },
+    {
       "name": "run",
-      "description": "Execute tools from managed MCP servers. Requires exact format 'mcp_name:tool_name' with required parameters. System provides suggestions if tool not found and automatic fallbacks when tools fail."
+      "description": "Execute tools from managed MCP servers. Requires exact format 'mcp_name:tool_name' with required parameters. System provides suggestions if tool not found and automatic fallbacks when tools fail. Available when code mode is disabled."
     }
   ],
   "keywords": ["mcp", "model-context-protocol", "ai-orchestration", "tool-discovery", "multi-mcp", "claude", "ai-gateway", "auto-import"],
