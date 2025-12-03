@@ -83,11 +83,11 @@
       "description": "Automatically discover and index CLI tools installed on your system (ffmpeg, git, jq, etc.). Enhances shell command searchability with ~150+ curated tools.",
       "default": false
     },
-    "workflow_mode": {
-      "type": "string",
-      "title": "Execution Mode",
-      "description": "Choose how Claude interacts with NCP tools: 'find-and-run' (traditional MCP), 'find-and-code' (hybrid), or 'code-only' (pure code-mode).",
-      "default": "find-and-run"
+    "enable_code_mode": {
+      "type": "boolean",
+      "title": "Enable Code Mode",
+      "description": "Toggle between find-and-code (ON) and find-and-run (OFF) execution modes. The code tool is always available internally for schedulers and automation.",
+      "default": false
     }
   },
   "server": {
@@ -112,7 +112,7 @@
         "NCP_ENABLE_MCP_MANAGEMENT": "${user_config.enable_mcp_management}",
         "NCP_ENABLE_PHOTON_RUNTIME": "${user_config.enable_photon_runtime}",
         "NCP_CLI_AUTOSCAN": "${user_config.enable_cli_discovery}",
-        "NCP_WORKFLOW_MODE": "${user_config.workflow_mode}",
+        "NCP_ENABLE_CODE_MODE": "${user_config.enable_code_mode}",
         "NCP_MODE": "extension"
       }
     }

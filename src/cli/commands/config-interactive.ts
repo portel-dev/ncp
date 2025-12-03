@@ -109,10 +109,12 @@ export class ConfigurationManager {
     console.log(`  ${chalk.dim('Auto-rotate debug and protocol logs to prevent disk space issues')}`);
     console.log(`  ${chalk.dim(`Advanced: Edit maxDebugFiles (${globalSettings.logRotation.maxDebugFiles}) and maxProtocolLines (${globalSettings.logRotation.maxProtocolLines}) in settings.json`)}`);
 
-    // Execution Mode (Workflow Mode)
-    console.log(`\n${chalk.cyan('⚙')} ${chalk.bold('Execution Mode')}`);
-    console.log(`  ${chalk.dim('Current: ' + chalk.white(globalSettings.workflowMode))}`);
-    console.log(`  ${chalk.dim('Options: find-and-run (traditional), find-and-code (hybrid), code-only (pure code-mode)')}\n`);
+    // Code Mode
+    const codeModeEnabled = globalSettings.enableCodeMode;
+    const codeModeStatus = codeModeEnabled ? chalk.green('[✓]') : chalk.gray('[✗]');
+    const modeLabel = codeModeEnabled ? 'find-and-code' : 'find-and-run';
+    console.log(`\n${codeModeStatus} ${chalk.bold('Code Mode')}`);
+    console.log(`  ${chalk.dim(`Current mode: ${chalk.white(modeLabel)} (code tool always available internally)`)}\n`);
   }
 
   /**
@@ -172,24 +174,8 @@ export class ConfigurationManager {
     // Enable Log Rotation
     const logRotation = await this.askYesNo('Enable Log Rotation', globalSettings.logRotation.enabled);
 
-    // Execution Mode (Workflow Mode)
-    console.log(chalk.cyan('\nExecution Mode options:'));
-    console.log(chalk.dim('  1. find-and-run (traditional MCP - Claude uses find then run)'));
-    console.log(chalk.dim('  2. find-and-code (hybrid - Claude uses find for discovery, code-mode for execution)'));
-    console.log(chalk.dim('  3. code-only (pure code-mode - Claude uses ncp.find() internally)'));
-
-    const workflowChoice = await new Promise<string>((resolve) => {
-      this.readline.question(
-        chalk.cyan(`\nChoose execution mode [1-3] (current: ${globalSettings.workflowMode}): `),
-        (answer: string) => {
-          const choice = answer.trim();
-          if (choice === '1') resolve('find-and-run');
-          else if (choice === '2') resolve('find-and-code');
-          else if (choice === '3') resolve('code-only');
-          else resolve(globalSettings.workflowMode); // Keep current if invalid input
-        }
-      );
-    });
+    // Enable Code Mode
+    const codeMode = await this.askYesNo('Enable Code Mode (find-and-code vs find-and-run)', globalSettings.enableCodeMode);
 
     // Save configuration
     if (autoImport) {
@@ -206,7 +192,7 @@ export class ConfigurationManager {
 
     globalSettings.confirmBeforeRun.enabled = confirmModifications;
     globalSettings.logRotation.enabled = logRotation;
-    globalSettings.workflowMode = workflowChoice as any;
+    globalSettings.enableCodeMode = codeMode;
 
     // Save global settings
     await saveGlobalSettings(globalSettings);

@@ -23,7 +23,7 @@ import { UsageTipsGenerator } from '../services/usage-tips-generator.js';
 import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { ParameterPredictor } from '../utils/parameter-predictor.js';
-import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist, type WorkflowMode } from '../utils/global-settings.js';
+import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist } from '../utils/global-settings.js';
 import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation } from './mcp-prompts.js';
 import chalk from 'chalk';
 import type { ElicitationServer } from '../utils/elicitation-helper.js';
@@ -62,7 +62,7 @@ export class MCPServer implements ElicitationServer {
   private notifications: SessionNotificationManager;
   private elicitationSupported: boolean | null = null; // null = unknown, true = supported, false = not supported
   private tokenTracker: TokenMetricsTracker;
-  private workflowMode: WorkflowMode = 'find-and-run'; // Default to traditional progressive disclosure
+  private enableCodeMode: boolean = false; // false = find-and-run, true = find-and-code
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
     // Initialize session-scoped notification manager
@@ -377,36 +377,19 @@ export class MCPServer implements ElicitationServer {
       }
     };
 
-    // Filter tools based on workflow mode
+    // Filter tools based on code mode setting
     let coreTools: Tool[];
 
-    switch (this.workflowMode) {
-      case 'find-and-run':
-        // Progressive disclosure (proven pattern): find → run
-        // AI uses find tool for discovery, run tool for execution
-        coreTools = [findTool, runTool];
-        logger.debug('Tool exposure: find-and-run (progressive disclosure)');
-        break;
-
-      case 'find-and-code':
-        // Hybrid mode: find for discovery, code for complex workflows
-        // WARNING: AI may bypass find and call ncp.find() from code
-        coreTools = [findTool, codeTool];
-        logger.debug('Tool exposure: find-and-code (hybrid mode)');
-        break;
-
-      case 'code-only':
-        // Advanced mode: code only (find/run available internally)
-        // For power users who need maximum flexibility
-        coreTools = [codeTool];
-        logger.debug('Tool exposure: code-only (advanced mode)');
-        break;
-
-      default:
-        // Fallback to progressive disclosure if unknown mode
-        logger.warn(`Unknown workflow mode: ${this.workflowMode}, falling back to find-and-run`);
-        coreTools = [findTool, runTool];
-        break;
+    if (this.enableCodeMode) {
+      // Code mode ON: expose find-and-code
+      // AI uses find tool for discovery, code tool for execution
+      coreTools = [findTool, codeTool];
+      logger.debug('Tool exposure: find-and-code (code mode enabled)');
+    } else {
+      // Code mode OFF: expose find-and-run (progressive disclosure)
+      // AI uses find tool for discovery, run tool for execution
+      coreTools = [findTool, runTool];
+      logger.debug('Tool exposure: find-and-run (code mode disabled)');
     }
 
     // Internal MCPs are indexed and accessible via find/run, not exposed as direct tools
@@ -418,15 +401,16 @@ export class MCPServer implements ElicitationServer {
   async initialize(): Promise<void> {
     logger.info('Starting NCP MCP server (SDK-based)');
 
-    // Load workflow mode setting BEFORE exposing tools
-    // This ensures tool list respects the configured workflow mode
+    // Load code mode setting BEFORE exposing tools
+    // This determines whether to expose find-and-code or find-and-run mode
     try {
       const settings = await loadGlobalSettings();
-      this.workflowMode = settings.workflowMode;
-      logger.info(`Workflow mode: ${this.workflowMode}`);
+      this.enableCodeMode = settings.enableCodeMode;
+      const mode = settings.enableCodeMode ? 'find-and-code' : 'find-and-run';
+      logger.info(`Execution mode: ${mode}`);
     } catch (error: any) {
-      logger.warn(`Failed to load workflow mode, using default: ${error.message}`);
-      // Continue with default workflow mode (find-and-run)
+      logger.warn(`Failed to load execution mode, using default find-and-run: ${error.message}`);
+      // Continue with default mode (find-and-run)
     }
 
     // Start initialization in the background, don't await it

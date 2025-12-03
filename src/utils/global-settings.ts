@@ -21,18 +21,10 @@ export interface LogRotationSettings {
   maxProtocolLines: number;
 }
 
-/**
- * Workflow mode determines how Claude interacts with NCP tools
- * - find-and-run: Traditional MCP (Claude uses find tool, then run tool)
- * - find-and-code: Hybrid (Claude uses find for discovery, Code-Mode for execution)
- * - code-only: Pure Code-Mode (Claude uses internal ncp.find() in TypeScript)
- */
-export type WorkflowMode = 'find-and-run' | 'find-and-code' | 'code-only';
-
 export interface GlobalSettings {
   confirmBeforeRun: ConfirmBeforeRunSettings;
   logRotation: LogRotationSettings;
-  workflowMode: WorkflowMode;
+  enableCodeMode: boolean;
 }
 
 /**
@@ -73,7 +65,7 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
     // 2000 lines = 1000 request/response pairs
     maxProtocolLines: 2000
   },
-  workflowMode: 'find-and-run' // Default to traditional MCP mode for backward compatibility
+  enableCodeMode: false // Default to find-and-run mode for backward compatibility
 };
 
 /**
@@ -110,7 +102,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
           ...DEFAULT_SETTINGS.logRotation,
           ...(fileSettings.logRotation || {})
         },
-        workflowMode: fileSettings.workflowMode || DEFAULT_SETTINGS.workflowMode
+        enableCodeMode: fileSettings.enableCodeMode !== undefined ? fileSettings.enableCodeMode : DEFAULT_SETTINGS.enableCodeMode
       };
     } catch (error) {
       console.warn('Failed to load settings, using defaults:', error);
@@ -129,12 +121,10 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
     settings.logRotation.enabled = envValue === 'true';
   }
 
-  // Override workflow mode with environment variable from extension UI
-  if (process.env.NCP_WORKFLOW_MODE !== undefined) {
-    const envValue = process.env.NCP_WORKFLOW_MODE as WorkflowMode;
-    if (['find-and-run', 'find-and-code', 'code-only'].includes(envValue)) {
-      settings.workflowMode = envValue;
-    }
+  // Override code mode with environment variable from extension UI toggle
+  if (process.env.NCP_ENABLE_CODE_MODE !== undefined) {
+    const envValue = process.env.NCP_ENABLE_CODE_MODE;
+    settings.enableCodeMode = envValue === 'true';
   }
 
   return settings;
