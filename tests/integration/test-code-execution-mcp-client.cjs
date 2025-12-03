@@ -93,8 +93,11 @@ async function testCodeExecution() {
     // Check for success
     if (codeResult.content && codeResult.content[0]) {
       const text = codeResult.content[0].text;
-      if (text.includes('Hello from MCP Client')) {
-        console.log('✅ SUCCESS: Code executed correctly!');
+      if (text.includes('Unexpected token') || text.includes('Arg string terminates')) {
+        console.log('❌ FAILED: Got parameter parsing error');
+        console.log('Error text:', text);
+      } else if (text.includes('"test"')) {
+        console.log('✅ SUCCESS: Code executed correctly and returned "test"!');
         console.log('');
 
         // Test more complex code
@@ -121,11 +124,9 @@ return result;
         } else {
           console.log('❌ FAILED: Complex code did not execute correctly');
         }
-      } else if (text.includes('Unexpected token') || text.includes('Arg string terminates')) {
-        console.log('❌ FAILED: Got parameter parsing error');
-        console.log('Error text:', text);
       } else {
         console.log('⚠️  UNEXPECTED: Got response but not the expected result');
+        console.log('Response text:', text);
       }
     } else if (codeResult.isError) {
       console.log('❌ FAILED: Code execution returned error');
