@@ -23,7 +23,7 @@
 await schedule.create({
   name: "daily-data-pipeline",
   schedule: "0 2 * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Fetch data from multiple sources
@@ -56,7 +56,7 @@ await schedule.create({
 await schedule.create({
   name: "system-health-check",
   schedule: "*/5 * * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       const os = require('os');
@@ -87,7 +87,7 @@ await schedule.create({
 await schedule.create({
   name: "weekly-report",
   schedule: "0 9 * * 1",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       const fs = require('fs').promises;
@@ -126,7 +126,7 @@ await schedule.create({
 await schedule.create({
   name: "api-sync",
   schedule: "0 * * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Fetch from external API
@@ -162,7 +162,7 @@ await schedule.create({
 await schedule.create({
   name: "cleanup-old-files",
   schedule: "0 0 * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       const fs = require('fs').promises;
@@ -200,7 +200,7 @@ await schedule.create({
 await schedule.create({
   name: "etl-pipeline",
   schedule: "0 3 * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       const fs = require('fs').promises;
@@ -259,7 +259,7 @@ await schedule.create({
 await schedule.create({
   name: "ecommerce-automation",
   schedule: "0 */2 * * *", // Every 2 hours
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Check inventory levels
@@ -297,7 +297,7 @@ await schedule.create({
 await schedule.create({
   name: "deployment-monitor",
   schedule: "*/10 * * * *", // Every 10 minutes
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       const { execSync } = require('child_process');
@@ -333,7 +333,7 @@ await schedule.create({
 await schedule.create({
   name: "model-retraining",
   schedule: "0 4 * * *", // 4 AM daily
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       const fs = require('fs').promises;
@@ -391,7 +391,7 @@ await schedule.create({
 await schedule.create({
   name: "conditional-workflow",
   schedule: "0 * * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Check condition first
@@ -416,7 +416,7 @@ await schedule.create({
 await schedule.create({
   name: "resilient-task",
   schedule: "0 */6 * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       async function withRetry(fn, maxRetries = 3) {
@@ -448,7 +448,7 @@ await schedule.create({
 await schedule.create({
   name: "adaptive-monitor",
   schedule: "*/5 * * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       const metrics = await checkSystemMetrics();

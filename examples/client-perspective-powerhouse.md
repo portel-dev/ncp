@@ -16,7 +16,7 @@
 │  • Acts as MCP SERVER for clients                          │
 │  • Acts as MCP CLIENT for backend MCPs                     │
 │  • Exposes schedule:create tool                            │
-│  • Exposes ncp:code tool                                   │
+│  • Exposes code:run tool                                   │
 └─────────────────────────┬───────────────────────────────────┘
                           │ Connects to backend MCPs
                           ↓
@@ -59,7 +59,7 @@ NCP returns:
   - schedule:create
   - schedule:list
   - schedule:update
-  - ncp:code
+  - code:run
   - (all other tools from backend MCPs)
 ```
 
@@ -72,7 +72,7 @@ Claude calls: schedule:create
 {
   "name": "daily-system-report",
   "schedule": "0 9 * * *",
-  "tool": "ncp:code",
+  "tool": "code:run",
   "parameters": {
     "code": `
       // This code runs on NCP's scheduler
@@ -146,7 +146,7 @@ NCP returns:
 await schedule.create({
   name: "auto-support",
   schedule: "*/15 * * * *",  // Every 15 minutes
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Check inbox (gmail MCP)
@@ -195,7 +195,7 @@ await schedule.create({
 await schedule.create({
   name: "ci-monitor",
   schedule: "*/5 * * * *",  // Every 5 minutes
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Check CI status (github MCP)
@@ -250,7 +250,7 @@ await schedule.create({
 await schedule.create({
   name: "pr-reviewer",
   schedule: "0 */2 * * *",  // Every 2 hours
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Get open PRs (github MCP)
@@ -317,7 +317,7 @@ Result: Manual, repetitive, limited
 
 ### With NCP
 ```
-Claude Desktop → NCP → schedule:create + ncp:code
+Claude Desktop → NCP → schedule:create + code:run
   ✅ Can access ALL MCPs through NCP
   ✅ CAN schedule via NCP
   ✅ Code runs on NCP (always online)
@@ -373,7 +373,7 @@ Claude: Calls tools/list on NCP
 
 Shows:
   - schedule:create (schedule any task)
-  - ncp:code (execute code with MCP access)
+  - code:run (execute code with MCP access)
   - Plus all backend MCPs available through NCP
 ```
 
@@ -411,7 +411,7 @@ When a client (Claude, Claude Code, etc.) connects to NCP:
 await tools.call("schedule:create", {
   name: "my-automation",
   schedule: "0 9 * * *",
-  tool: "ncp:code",  // ← This is the key!
+  tool: "code:run",  // ← This is the key!
   parameters: {
     code: `
       // This code runs on NCP
@@ -560,7 +560,7 @@ When user requests automation:
 1. Call `tools/list` to see available MCPs
 2. Design orchestration code using those MCPs
 3. Call `schedule:create` with:
-   - `tool: "ncp:code"`
+   - `tool: "code:run"`
    - `parameters: { code: "your orchestration code" }`
 4. Confirm with user that automation is active
 

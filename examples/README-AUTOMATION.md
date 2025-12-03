@@ -73,7 +73,7 @@ Schedule code once, run it forever automatically:
 await schedule.create({
   name: "etl-pipeline",
   schedule: "0 3 * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       const data = await fetch('api.com/data').then(r => r.json());
@@ -92,7 +92,7 @@ await schedule.create({
 await schedule.create({
   name: "health-check",
   schedule: "*/5 * * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       const services = await checkAllServices();
@@ -113,7 +113,7 @@ await schedule.create({
 await schedule.create({
   name: "weekly-report",
   schedule: "0 9 * * 1",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       const stats = await aggregateWeeklyStats();
@@ -132,7 +132,7 @@ await schedule.create({
 await schedule.create({
   name: "deployment-monitor",
   schedule: "*/10 * * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       const health = await checkDeployments();

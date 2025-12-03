@@ -39,7 +39,7 @@
 │  │ schedule.create({                        │                  │
 │  │   name: "health-check",                  │                  │
 │  │   schedule: "* * * * *",                 │  → 1500 tokens   │
-│  │   tool: "ncp:code",                      │     (one-time)   │
+│  │   tool: "code:run",                      │     (one-time)   │
 │  │   parameters: { code: "..." }            │                  │
 │  │ })                                       │                  │
 │  └──────────────────────────────────────────┘                  │
@@ -349,7 +349,7 @@ return { checked: logs.count, alerted: logs.hasErrors };
 await schedule.create({
   name: "log-monitoring",
   schedule: "*/5 * * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: { code: "..." }
 });
 

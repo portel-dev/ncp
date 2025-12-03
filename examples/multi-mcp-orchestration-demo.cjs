@@ -135,7 +135,7 @@ for (const file of files) {
 await mcp.call('schedule:create', {
   name: 'next-backup',
   schedule: 'in 24 hours',
-  tool: 'ncp:code',
+  tool: 'code:run',
   parameters: { code: '...' }
 });
 
@@ -264,7 +264,7 @@ console.log('```javascript');
 console.log('await schedule.create({');
 console.log('  name: "multi-mcp-report",');
 console.log('  schedule: "0 9 * * *",  // Daily at 9 AM');
-console.log('  tool: "ncp:code",');
+console.log('  tool: "code:run",');
 console.log('  parameters: {');
 console.log('    code: `');
 console.log('      // Orchestrate multiple MCPs here!');

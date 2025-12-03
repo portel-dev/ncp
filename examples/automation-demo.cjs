@@ -327,7 +327,7 @@ async function runDemo() {
   const createExample = `await schedule.create({
   name: "system-monitor",
   schedule: "*/5 * * * *",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: \`
       const os = require('os');

@@ -23,7 +23,7 @@ Schedule **CODE** that orchestrates **MULTIPLE MCPs** internally:
 // Schedule CODE that orchestrates many MCPs!
 await schedule.create({
   name: "comprehensive-report",
-  tool: "ncp:code",  // ← Execute CODE, not a single tool
+  tool: "code:run",  // ← Execute CODE, not a single tool
   parameters: {
     code: `
       // Orchestrate multiple MCPs in one schedule!
@@ -65,7 +65,7 @@ Problems:
 // ONE schedule does it all!
 await schedule.create({
   name: "daily-workflow",
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Step 1: Get analytics (analytics MCP)
@@ -119,7 +119,7 @@ Benefits:
 await schedule.create({
   name: "health-monitor",
   schedule: "*/5 * * * *",  // Every 5 minutes
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Check analytics (analytics MCP)
@@ -170,7 +170,7 @@ await schedule.create({
 await schedule.create({
   name: "smart-backup",
   schedule: "0 2 * * *",  // Daily at 2 AM
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Get files to backup (filesystem MCP)
@@ -229,7 +229,7 @@ await schedule.create({
 await schedule.create({
   name: "resource-manager",
   schedule: "*/10 * * * *",  // Every 10 minutes
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Check system usage (analytics MCP)
@@ -289,7 +289,7 @@ await schedule.create({
 await schedule.create({
   name: "data-aggregator",
   schedule: "0 * * * *",  // Hourly
-  tool: "ncp:code",
+  tool: "code:run",
   parameters: {
     code: `
       // Get analytics data (analytics MCP)
@@ -352,7 +352,7 @@ await schedule.create({
 
 ## Code-Mode API Reference
 
-When code runs via `ncp:code`, MCPs are exposed as namespace objects:
+When code runs via `code:run`, MCPs are exposed as namespace objects:
 
 ### Available Namespaces
 
@@ -415,7 +415,7 @@ Ongoing monthly: 4,500 tokens
 **Code-Mode: 1 schedule orchestrating 3 MCPs**
 ```
 Setup:
-  schedule ncp:code (with multi-MCP logic) → 2000 tokens
+  schedule code:run (with multi-MCP logic) → 2000 tokens
 
 Monthly execution: 50 × 30 = 1,500 tokens
 Total first month: 3,500 tokens
@@ -510,7 +510,7 @@ ncp run schedule:create
 
 When prompted:
 - **Name:** your-workflow-name
-- **Tool:** `ncp:code` ← This is key!
+- **Tool:** `code:run` ← This is key!
 - **Schedule:** cron or natural language
 - **Code:** Your multi-MCP orchestration code
 
@@ -541,7 +541,7 @@ ncp run analytics:overview
 3. **Create your own:**
    - Start with examples above
    - Modify for your MCPs
-   - Test with `ncp run ncp:code --code "..."`
+   - Test with `ncp run code:run --code "..."`
    - Schedule with `ncp run schedule:create`
 
 ## Summary

@@ -1,7 +1,7 @@
 /**
  * Code Execution Internal MCP
  *
- * Exposes the ncp:code tool for executing TypeScript code
+ * Exposes the code:run tool for executing TypeScript code
  * with access to all other MCPs as namespaces.
  *
  * This enables the automation powerhouse:
@@ -14,14 +14,14 @@ import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
 
 export class CodeMCP implements InternalMCP {
-  name = 'ncp';
+  name = 'code';
   description = 'Execute TypeScript code with access to all MCPs';
 
   private orchestrator: NCPOrchestrator | null = null;
 
   tools: InternalTool[] = [
     {
-      name: 'code',
+      name: 'run',
       description: `Execute TypeScript code with access to all MCPs as namespaces.
 
 ORCHESTRATION POWERHOUSE - Schedule code that calls multiple MCPs!
@@ -42,7 +42,7 @@ EXAMPLES:
   await schedule.create({
     name: "daily-automation",
     schedule: "0 6 * * *",
-    tool: "ncp:code",
+    tool: "code:run",
     parameters: {
       code: "... your code here ..."
     }
@@ -81,7 +81,7 @@ All MCPs available as namespaces: gmail, github, slack, stripe, schedule, analyt
    * Execute code with MCP access
    */
   async executeTool(toolName: string, parameters: any): Promise<InternalToolResult> {
-    if (toolName !== 'code') {
+    if (toolName !== 'run') {
       return {
         success: false,
         error: `Unknown tool: ${toolName}`
@@ -96,7 +96,7 @@ All MCPs available as namespaces: gmail, github, slack, stripe, schedule, analyt
     }
 
     // Diagnostic logging to help debug parameter issues
-    console.error('[ncp:code] Tool called with parameters:', {
+    console.error('[code:run] Tool called with parameters:', {
       rawType: typeof parameters,
       isNull: parameters === null,
       isUndefined: parameters === undefined,
@@ -109,7 +109,7 @@ All MCPs available as namespaces: gmail, github, slack, stripe, schedule, analyt
     const { code, timeout } = parameters;
 
     if (!code || typeof code !== 'string') {
-      console.error('[ncp:code] Validation failed:', {
+      console.error('[code:run] Validation failed:', {
         code,
         codeType: typeof code,
         allParams: JSON.stringify(parameters)
