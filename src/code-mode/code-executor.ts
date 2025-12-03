@@ -90,6 +90,12 @@ export class CodeExecutor {
       return result;
     } catch (error: any) {
       logger.warn(`Worker Thread execution failed: ${error.message}, falling back to vm module`);
+      logger.error(`[Worker Error Details]`, {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        code: code.substring(0, 100)
+      });
 
       // Fallback to vm module (Phase 1 - less secure but stable)
       try {
@@ -105,6 +111,12 @@ export class CodeExecutor {
         return result;
       } catch (vmError: any) {
         // Phase 5: Log error
+        logger.error(`[VM Execution Error Details]`, {
+          message: vmError.message,
+          stack: vmError.stack,
+          name: vmError.name,
+          code: code.substring(0, 100)
+        });
         await auditLogger.logCodeExecutionError(code, vmError.message, { mcpName: 'code-mode' });
         throw vmError;
       }
