@@ -1,8 +1,20 @@
 /**
  * Internal MCP Manager
  *
- * Manages MCPs that are implemented internally by NCP
- * These appear in tool discovery like external MCPs but are handled internally
+ * Manages MCPs that are implemented internally by NCP.
+ * These appear in tool discovery like external MCPs but are handled internally.
+ *
+ * NAMING CONVENTION FOR INTERNAL MCPS:
+ * - MCP Management tools (add, remove, list MCPs) → namespace: 'mcp'
+ *   Example: mcp:add, mcp:remove, mcp:list
+ *
+ * - Photon tools (custom user-defined MCPs) → namespace: photon_name
+ *   Example: extract:run, get-library-docs:search
+ *
+ * - NCP internal features (analytics, code execution, scheduling, skills) → namespace: 'ncp'
+ *   Example: ncp:overview, ncp:run, ncp:create (for scheduled tasks)
+ *   Note: Currently individual MCPs use domain-specific names (analytics:, schedule:, skills:)
+ *   This is a legacy structure that can be unified under 'ncp' namespace in future refactoring.
  */
 
 import { InternalMCP, InternalToolResult, ElicitationCapable } from './types.js';
