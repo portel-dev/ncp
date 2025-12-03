@@ -813,6 +813,38 @@ export class NCPOrchestrator {
       return;
     }
 
+    // CRITICAL FIX: Load cached tool definitions IMMEDIATELY so code-mode has MCP namespaces available
+    // This is fast (just reading JSON) and prevents "gmail is not defined" errors
+    try {
+      const mcpConfigs: MCPConfig[] = Object.entries(profile.mcpServers).map(([name, config]) => ({
+        name,
+        command: config.command,
+        args: config.args,
+        env: config.env || {},
+        url: config.url
+      }));
+
+      // Initialize CSV cache
+      await this.csvCache.initialize();
+
+      // Get profile hash for cache validation
+      const profileHash = CSVCache.hashProfile(profile.mcpServers);
+
+      // Check if cache is valid
+      const cacheValid = await this.csvCache.validateCache(profileHash);
+
+      if (cacheValid) {
+        // Load from cache immediately so tools are available for code-mode
+        logger.info('Loading tools from CSV cache for immediate availability...');
+        await this.loadFromCSVCache(mcpConfigs);
+        logger.info(`Loaded ${this.definitions.size} MCPs from cache`);
+      } else {
+        logger.info('Cache invalid - tools will be available after background indexing');
+      }
+    } catch (error: any) {
+      logger.warn(`Failed to load cached tools: ${error.message} - code-mode may have limited namespaces initially`);
+    }
+
     // CRITICAL: Run ALL heavy initialization in background to avoid blocking MCP startup
     // MCP protocol requires fast startup - Claude Desktop will timeout and disconnect otherwise
     this.backgroundInitPromise = this.runBackgroundInitialization(profile).catch(err => {
@@ -861,13 +893,9 @@ export class NCPOrchestrator {
       logger.info('Skills disabled via configuration');
     }
 
-    // Initialize CSV cache
-    await this.csvCache.initialize();
-
-    // Get profile hash for cache validation
+    // Note: Cache initialization and loading moved to initialize() for immediate availability
+    // Get profile hash to check if we need re-indexing
     const profileHash = CSVCache.hashProfile(profile.mcpServers);
-
-    // Check if cache is valid
     const cacheValid = await this.csvCache.validateCache(profileHash);
 
     const mcpConfigs: MCPConfig[] = Object.entries(profile.mcpServers).map(([name, config]) => ({
@@ -878,11 +906,7 @@ export class NCPOrchestrator {
       url: config.url  // HTTP/SSE transport support
     }));
 
-    if (cacheValid) {
-      // Load from cache
-      logger.info('Loading tools from CSV cache...');
-      await this.loadFromCSVCache(mcpConfigs);
-    } else {
+    if (!cacheValid) {
       // Cache invalid - clear it to force full re-indexing
       logger.info('Cache invalid, clearing for full re-index...');
       await this.csvCache.clear();
