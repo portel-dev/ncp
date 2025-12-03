@@ -86,15 +86,7 @@ export class FindResultRenderer {
         const matchText = isListing ? '' : ` (${confidence}% match)`;
 
         output += `// ${tool.description || tool.name}${matchText}\n`;
-
-        // Handle tools without namespace (single-name tools)
-        if (!tool.tool || tool.tool.trim() === '') {
-          // Single-name tool - use run() instead
-          output += `await ncp.run('${tool.mcp}', {});\n\n`;
-        } else {
-          // Normal namespaced tool
-          output += `await ${tool.mcp}.${tool.tool}();\n\n`;
-        }
+        output += `await ${tool.mcp}.${tool.tool}();\n\n`;
       });
     } else if (depth === 1) {
       // Depth 1: Tool name + description + Code-Mode example
@@ -114,21 +106,10 @@ export class FindResultRenderer {
         const exampleParams = this.generateCodeModeParams(tool);
         output += `\n\`\`\`typescript\n`;
 
-        // Handle tools without namespace
-        if (!tool.tool || tool.tool.trim() === '') {
-          // Single-name tool - use run() instead
-          if (exampleParams) {
-            output += `const result = await ncp.run('${tool.mcp}', ${exampleParams});\n`;
-          } else {
-            output += `const result = await ncp.run('${tool.mcp}', {});\n`;
-          }
+        if (exampleParams) {
+          output += `const result = await ${tool.mcp}.${tool.tool}(${exampleParams});\n`;
         } else {
-          // Normal namespaced tool
-          if (exampleParams) {
-            output += `const result = await ${tool.mcp}.${tool.tool}(${exampleParams});\n`;
-          } else {
-            output += `const result = await ${tool.mcp}.${tool.tool}();\n`;
-          }
+          output += `const result = await ${tool.mcp}.${tool.tool}();\n`;
         }
 
         output += `console.log(result);\n`;
@@ -165,21 +146,10 @@ export class FindResultRenderer {
         output += `\n**Code-Mode Example:**\n`;
         output += `\`\`\`typescript\n`;
 
-        // Handle tools without namespace
-        if (!tool.tool || tool.tool.trim() === '') {
-          // Single-name tool - use run() instead
-          if (exampleParams) {
-            output += `const result = await ncp.run('${tool.mcp}', ${exampleParams});\n`;
-          } else {
-            output += `const result = await ncp.run('${tool.mcp}', {});\n`;
-          }
+        if (exampleParams) {
+          output += `const result = await ${tool.mcp}.${tool.tool}(${exampleParams});\n`;
         } else {
-          // Normal namespaced tool
-          if (exampleParams) {
-            output += `const result = await ${tool.mcp}.${tool.tool}(${exampleParams});\n`;
-          } else {
-            output += `const result = await ${tool.mcp}.${tool.tool}();\n`;
-          }
+          output += `const result = await ${tool.mcp}.${tool.tool}();\n`;
         }
 
         output += `console.log(result);\n`;
@@ -269,21 +239,10 @@ export class FindResultRenderer {
 
           output += `// ${query}\n`;
 
-          // Handle tools without namespace
-          if (!tool.tool || tool.tool.trim() === '') {
-            // Single-name tool - use run() instead
-            if (exampleParams) {
-              output += `const ${varName} = await ncp.run('${tool.mcp}', ${exampleParams});\n`;
-            } else {
-              output += `const ${varName} = await ncp.run('${tool.mcp}', {});\n`;
-            }
+          if (exampleParams) {
+            output += `const ${varName} = await ${tool.mcp}.${tool.tool}(${exampleParams});\n`;
           } else {
-            // Normal namespaced tool
-            if (exampleParams) {
-              output += `const ${varName} = await ${tool.mcp}.${tool.tool}(${exampleParams});\n`;
-            } else {
-              output += `const ${varName} = await ${tool.mcp}.${tool.tool}();\n`;
-            }
+            output += `const ${varName} = await ${tool.mcp}.${tool.tool}();\n`;
           }
 
           output += `console.log("${query}:", ${varName});\n\n`;
