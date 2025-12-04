@@ -29,6 +29,9 @@ export class FindResultRenderer {
       output = `\n🔍 Available tools${filterText}${paginationInfo}:\n\n`;
     }
 
+    // Group tools by MCP for better organization
+    const toolsByMcp = this.groupToolsByMcp(tools);
+
     // Add MCP health status summary
     if (health.total > 0) {
       const healthIcon = health.unhealthy > 0 ? '⚠️' : '✅';
@@ -79,83 +82,113 @@ export class FindResultRenderer {
     // Render tools based on depth (inferred from parameter availability)
     const depth = this.inferDepth(tools);
 
-    if (depth === 0) {
-      // Depth 0: Tool names only, with Code-Mode compatibility
-      tools.forEach((tool) => {
-        const confidence = Math.round(tool.confidence * 100);
-        const matchText = isListing ? '' : ` (${confidence}% match)`;
+    // Render by MCP group for better organization
+    Object.entries(toolsByMcp).forEach(([mcpName, mcpTools]) => {
+      output += `### ${mcpName}\n\n`;
 
-        output += `// ${tool.description || tool.name}${matchText}\n`;
-        output += `await ${tool.mcp}.${tool.tool}();\n\n`;
-      });
-    } else if (depth === 1) {
-      // Depth 1: Tool name + description + Code-Mode example
-      tools.forEach((tool, toolIndex) => {
-        if (toolIndex > 0) output += '// ---\n';
+      if (depth === 0) {
+        // Depth 0: Tool names only, with Code-Mode compatibility
+        mcpTools.forEach((tool) => {
+          const confidence = Math.round(tool.confidence * 100);
+          const matchText = isListing ? '' : ` (${confidence}% match)`;
 
-        const confidence = Math.round(tool.confidence * 100);
-        const matchText = isListing ? '' : ` (${confidence}% match)`;
-        output += `// Tool: ${tool.name}${matchText}\n`;
+          output += `// ${tool.description || tool.name}${matchText}\n`;
+          output += `await ${tool.mcp}.${tool.tool}();\n\n`;
+        });
+      } else if (depth === 1) {
+        // Depth 1: Tool name + description + Code-Mode example
+        mcpTools.forEach((tool, toolIndex) => {
+          if (toolIndex > 0) output += '\n// ---\n\n';
 
-        if (tool.description) {
-          const cleanDescription = tool.description.replace(/^[^:]+:\s*/, '').replace(/\s+/g, ' ').trim();
-          output += `// Description: ${cleanDescription}\n`;
-        }
+          const confidence = Math.round(tool.confidence * 100);
+          const matchText = isListing ? '' : ` (${confidence}% match)`;
+          const difficulty = this.getDifficultyLevel(tool);
+          const paramCount = (tool.parameters?.length || 0);
+          const requiredCount = tool.parameters?.filter(p => p.required).length || 0;
 
-        // Add Code-Mode example
-        const exampleParams = this.generateCodeModeParams(tool);
-        output += `\n\`\`\`typescript\n`;
+          output += `// ${tool.name}${matchText} | ${difficulty}\n`;
 
-        if (exampleParams) {
-          output += `const result = await ${tool.mcp}.${tool.tool}(${exampleParams});\n`;
-        } else {
-          output += `const result = await ${tool.mcp}.${tool.tool}();\n`;
-        }
+          if (tool.description) {
+            const cleanDescription = tool.description.replace(/^[^:]+:\s*/, '').replace(/\s+/g, ' ').trim();
+            output += `// ${cleanDescription}\n`;
+          }
 
-        output += `console.log(result);\n`;
-        output += `\`\`\`\n`;
-      });
-    } else {
-      // Depth 2: Full details with parameters and Code-Mode example
-      tools.forEach((tool, toolIndex) => {
-        if (toolIndex > 0) output += '// ---\n';
+          if (paramCount > 0) {
+            output += `// Parameters: ${requiredCount} required, ${paramCount - requiredCount} optional\n`;
+          }
 
-        const confidence = Math.round(tool.confidence * 100);
-        const matchText = isListing ? '' : ` (${confidence}% match)`;
-        output += `// Tool: ${tool.name}${matchText}\n`;
+          // Add Code-Mode example
+          const exampleParams = this.generateCodeModeParams(tool);
+          output += `\n\`\`\`typescript\n`;
 
-        if (tool.description) {
-          const cleanDescription = tool.description.replace(/^[^:]+:\s*/, '').replace(/\s+/g, ' ').trim();
-          output += `// Description: ${cleanDescription}\n`;
-        }
+          if (exampleParams) {
+            output += `const result = await ${tool.mcp}.${tool.tool}(${exampleParams});\n`;
+          } else {
+            output += `const result = await ${tool.mcp}.${tool.tool}();\n`;
+          }
 
-        // Parameters with descriptions
-        if (tool.parameters && tool.parameters.length > 0) {
-          output += `// Parameters:\n`;
-          tool.parameters.forEach(param => {
-            const optionalText = param.required ? '' : ' *(optional)*';
-            const descText = param.description ? ` - ${param.description}` : '';
-            output += `// * ${param.name}: \`${param.type}\`${optionalText}${descText}\n`;
-          });
-        } else {
-          output += `// *No parameters*\n`;
-        }
+          output += `console.log(result);\n`;
+          output += `\`\`\`\n`;
+        });
+      } else {
+        // Depth 2: Full details with parameters and Code-Mode example
+        mcpTools.forEach((tool, toolIndex) => {
+          if (toolIndex > 0) output += '\n// ---\n\n';
 
-        // Add Code-Mode example
-        const exampleParams = this.generateCodeModeParams(tool);
-        output += `\n**Code-Mode Example:**\n`;
-        output += `\`\`\`typescript\n`;
+          const confidence = Math.round(tool.confidence * 100);
+          const matchText = isListing ? '' : ` (${confidence}% match)`;
+          const difficulty = this.getDifficultyLevel(tool);
 
-        if (exampleParams) {
-          output += `const result = await ${tool.mcp}.${tool.tool}(${exampleParams});\n`;
-        } else {
-          output += `const result = await ${tool.mcp}.${tool.tool}();\n`;
-        }
+          output += `// **${tool.name}**${matchText} | ${difficulty}\n`;
 
-        output += `console.log(result);\n`;
-        output += `\`\`\`\n`;
-      });
-    }
+          if (tool.description) {
+            const cleanDescription = tool.description.replace(/^[^:]+:\s*/, '').replace(/\s+/g, ' ').trim();
+            output += `// ${cleanDescription}\n`;
+          }
+
+          // Parameters with descriptions
+          if (tool.parameters && tool.parameters.length > 0) {
+            output += `// \n// **Parameters:**\n`;
+            const required = tool.parameters.filter(p => p.required);
+            const optional = tool.parameters.filter(p => !p.required);
+
+            if (required.length > 0) {
+              output += `// *Required:*\n`;
+              required.forEach(param => {
+                const descText = param.description ? ` - ${param.description}` : '';
+                output += `// • ${param.name}: \`${param.type}\`${descText}\n`;
+              });
+            }
+
+            if (optional.length > 0) {
+              output += `// *Optional:*\n`;
+              optional.forEach(param => {
+                const descText = param.description ? ` - ${param.description}` : '';
+                output += `// • ${param.name}: \`${param.type}\`${descText}\n`;
+              });
+            }
+          } else {
+            output += `// No parameters required\n`;
+          }
+
+          // Add Code-Mode example
+          const exampleParams = this.generateCodeModeParams(tool);
+          output += `\n**Code-Mode Example:**\n`;
+          output += `\`\`\`typescript\n`;
+
+          if (exampleParams) {
+            output += `const result = await ${tool.mcp}.${tool.tool}(${exampleParams});\n`;
+          } else {
+            output += `const result = await ${tool.mcp}.${tool.tool}();\n`;
+          }
+
+          output += `console.log(result);\n`;
+          output += `\`\`\`\n`;
+        });
+      }
+
+      output += '\n';
+    });
 
     return output;
   }
@@ -293,5 +326,48 @@ export class FindResultRenderer {
     });
 
     return `{ ${paramPairs.join(', ')} }`;
+  }
+
+  /**
+   * Group tools by their MCP for better organization
+   */
+  private static groupToolsByMcp(tools: ToolResult[]): Record<string, ToolResult[]> {
+    const grouped: Record<string, ToolResult[]> = {};
+
+    tools.forEach(tool => {
+      const mcp = tool.mcp;
+      if (!grouped[mcp]) {
+        grouped[mcp] = [];
+      }
+      grouped[mcp].push(tool);
+    });
+
+    // Sort MCPs alphabetically, but internal MCPs (no :) come first
+    return Object.fromEntries(
+      Object.entries(grouped).sort(([a], [b]) => {
+        const aIsInternal = !a.includes(':');
+        const bIsInternal = !b.includes(':');
+        if (aIsInternal === bIsInternal) return a.localeCompare(b);
+        return aIsInternal ? -1 : 1;
+      })
+    );
+  }
+
+  /**
+   * Determine difficulty level based on parameters
+   */
+  private static getDifficultyLevel(tool: ToolResult): string {
+    const paramCount = tool.parameters?.length || 0;
+    const requiredCount = tool.parameters?.filter(p => p.required).length || 0;
+
+    if (paramCount === 0) {
+      return '⚡ Simple (no params)';
+    } else if (requiredCount === 0 && paramCount <= 2) {
+      return '📋 Simple (optional params)';
+    } else if (requiredCount <= 2 && paramCount <= 4) {
+      return '⚙️ Moderate (2-4 params)';
+    } else {
+      return '🔧 Complex (5+ params)';
+    }
   }
 }
