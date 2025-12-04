@@ -7,26 +7,36 @@
 
 <!-- mcp-name: io.github.portel-dev/ncp -->
 
+<div align="center">
+
+<img src="./ncp.svg" alt="NCP Logo" width="200" height="200">
+
 # NCP - Natural Context Provider
 
 > **1 MCP to rule them all**
 
-Your MCPs, [supercharged](#-supercharged-features). Find any tool instantly, load on demand, run on schedule, ready for any client. Smart loading saves tokens and energy.
+</div>
+
+Your MCPs, [supercharged](#-supercharged-features). Find any tool instantly, execute with code mode, run on schedule, discover skills, load Photons, ready for any client. Smart loading saves tokens and energy.
 
 ## 💍 **What is NCP?**
 
-Instead of your AI juggling 50+ tools scattered across different MCPs, NCP gives it a single, unified interface.
+Instead of your AI juggling 50+ tools scattered across different MCPs, NCP gives it a single, unified interface with **code mode execution, scheduling, skills discovery, and custom Photons**.
 
-Your AI sees just **2 simple tools:**
-- **`find`** - "I need to read a file" → finds the right tool automatically
-- **`run`** - Execute any tool you discovered
+Your AI sees just **2-3 simple tools:**
+- **`find`** - Search for any tool, skill, or Photon: "I need to read a file" → finds the right tool automatically
+- **`code`** - Execute TypeScript directly: `await github.create_issue({...})` (code mode, enabled by default)
+- **`run`** - Execute tools individually (when code mode is disabled)
 
-Behind the scenes, NCP manages all 50+ tools: routing requests, discovering the right tool, caching responses, monitoring health.
+Behind the scenes, NCP manages all 50+ tools + skills + Photons: routing requests, discovering the right capability, executing code, scheduling tasks, managing health, and caching responses.
 
 ![NCP Transformation Flow](docs/images/ncp-transformation-flow.png)
 
 **Why this matters:**
 - Your AI stops analyzing "which tool do I use?" and starts doing actual work
+- **Code mode** lets AI write multi-step TypeScript workflows combining tools, skills, and scheduling
+- **Skills** provide domain expertise: canvas design, PDF manipulation, document generation, more
+- **Photons** enable custom TypeScript MCPs without npm publishing
 - **97% fewer tokens burned** on tool confusion (2,500 vs 103,000 for 80 tools)
 - **5x faster responses** (sub-second tool selection vs 5-8 seconds)
 - **Your AI becomes focused.** Not desperate.

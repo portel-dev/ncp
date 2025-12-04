@@ -3,9 +3,10 @@
   "name": "ncp",
   "display_name": "Natural Context Provider",
   "version": "1.7.0",
-  "icon": "assets/icons/ncp.png",
-  "description": "1 MCP to rule them all. Your MCPs, supercharged. Find any tool instantly, load on demand, run on schedule, ready for any client. Smart loading saves tokens and energy.",
-  "long_description": "Natural Context Provider (NCP) - 1 MCP to rule them all. Your MCPs, supercharged. Find any tool instantly with semantic search, load on demand to save resources, run on schedule for automation, ready for any client (Claude Desktop, Perplexity, Cursor, Cline, Continue). Smart loading saves tokens and energy. Features: intelligent tool discovery, dynamic runtime detection, health monitoring, auto-discovery and installation, AI-assisted management, and optional global CLI. Create once, use everywhere.",
+  "icon": "assets/icons/ncp.svg",
+  "icon_alt": "assets/icons/ncp.jpeg",
+  "description": "1 MCP to rule them all. Your MCPs, supercharged. Find any tool instantly, load on demand, execute with code mode, run on schedule, discover skills, ready for any client. Smart loading saves tokens and energy.",
+  "long_description": "Natural Context Provider (NCP) - 1 MCP to rule them all. Your MCPs, supercharged. Find any tool instantly with semantic search, load on demand to save resources, execute with TypeScript code mode, run on schedule for automation, discover and install Anthropic Skills, load custom Photons, ready for any client (Claude Desktop, Perplexity, Cursor, Cline, Continue). Smart loading saves tokens and energy. Features: intelligent tool discovery, code mode execution, scheduler automation, skills management, photon runtime, dynamic runtime detection, health monitoring, auto-discovery and installation, AI-assisted management, and optional global CLI. Create once, use everywhere.",
   "author": {
     "name": "Portel",
     "url": "https://github.com/portel-dev/ncp"
@@ -120,15 +121,15 @@
   "tools": [
     {
       "name": "find",
-      "description": "Dual-mode tool discovery: (1) SEARCH MODE: Use with description parameter for intelligent vector search - describe your task or capability: \"save file\", \"analyze logs\", \"send email\". For multiple capabilities at once, use pipe separator: \"read gmail | send slack | create issue\". (2) LISTING MODE: Call without description parameter for paginated browsing of all available MCPs and tools."
+      "description": "Intelligent tool discovery with vector search. Search: describe your task (\"save file\", \"analyze logs\", \"send email\"). List: call without parameters to browse all MCPs, tools, skills, and Photons. Supports: MCPs, Anthropic Skills (skills.find), Photons (custom TypeScript MCPs), and CLI tools."
     },
     {
       "name": "code",
-      "description": "Execute TypeScript with MCPs as namespaces (e.g., github.get_repo()). Use ncp.find() for discovery. Console captured. Available when code mode is enabled (default: ON)."
+      "description": "Execute TypeScript with full access to all MCPs, skills, Photons, scheduler, and built-in tools as namespaces. Example: await github.create_issue({...}); await skills.find('pdf'); await schedule.create(...). Console captured. Code mode enabled by default."
     },
     {
       "name": "run",
-      "description": "Execute tools from managed MCP servers. Requires exact format 'mcp_name:tool_name' with required parameters. System provides suggestions if tool not found and automatic fallbacks when tools fail. Available when code mode is disabled."
+      "description": "Execute individual tools from MCPs and skills. Format: 'mcp:tool_name' or 'skills:tool'. Provides suggestions and automatic fallbacks. Available when code mode is disabled."
     }
   ],
   "keywords": ["mcp", "model-context-protocol", "ai-orchestration", "tool-discovery", "multi-mcp", "claude", "ai-gateway", "auto-import"],
