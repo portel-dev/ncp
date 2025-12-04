@@ -236,7 +236,9 @@ async function testDXTEntryPoint_ToolsList() {
     }
 
     const toolNames = response.result.tools.map(t => t.name);
-    if (!toolNames.includes('find') || !toolNames.includes('run')) {
+    // Code mode is enabled by default, so we expect 'find' and 'code'
+    // If code mode were disabled, we'd expect 'find' and 'run'
+    if (!toolNames.includes('find') || (!toolNames.includes('code') && !toolNames.includes('run'))) {
       logError(`tools/list missing required tools. Got: ${toolNames.join(', ')}`);
       return false;
     }

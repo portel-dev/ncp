@@ -1910,7 +1910,7 @@ export class NCPOrchestrator {
 
       // Parse and filter results
       const parsedResults = adjustedResults.map(result => {
-        // Parse tool format: "mcp:tool" or just "tool"
+        // Parse tool format: "mcp:tool" - result.name is set to RAG's toolId via discovery wrapper
         const parts = result.name.includes(':') ? result.name.split(':', 2) : [this.toolToMCP.get(result.name) || 'unknown', result.name];
         let mcpName = parts[0];
         const toolName = parts[1] || result.name;
