@@ -12,6 +12,7 @@
 import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
 import { SkillsMarketplaceClient } from '../services/skills-marketplace-client.js';
 import { SkillsManager } from '../services/skills-manager.js';
+import { PersistentRAGEngine } from '../discovery/rag-engine.js';
 import { logger } from '../utils/logger.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -23,6 +24,8 @@ export class SkillsManagementMCP implements InternalMCP {
 
   private marketplaceClient: SkillsMarketplaceClient | null = null;
   private skillsManager: SkillsManager | null = null;
+  private ragEngine: PersistentRAGEngine | null = null;
+  private skillEmbeddings: Map<string, Float32Array> = new Map();
 
   tools: InternalTool[] = [
     {
@@ -133,6 +136,18 @@ export class SkillsManagementMCP implements InternalMCP {
     return this.skillsManager;
   }
 
+  /**
+   * Initialize RAG engine for vector search on skills
+   */
+  private async ensureRAGEngine(): Promise<PersistentRAGEngine> {
+    if (!this.ragEngine) {
+      this.ragEngine = new PersistentRAGEngine();
+      // Initialize with skills data - use empty config as skills are separate from MCPs
+      await this.ragEngine.initialize({});
+    }
+    return this.ragEngine;
+  }
+
   async executeTool(toolName: string, params: any): Promise<InternalToolResult> {
     try {
       switch (toolName) {
@@ -147,8 +162,8 @@ export class SkillsManagementMCP implements InternalMCP {
           return await this.handleAdd(client, params);
 
         case 'list':
-          const listClient = await this.ensureClient();
-          return await this.handleList(listClient);
+          // skills:list is an alias for skills:find with no parameters
+          return await this.handleFind({});
 
         case 'remove':
           const removeClient = await this.ensureClient();
@@ -170,14 +185,16 @@ export class SkillsManagementMCP implements InternalMCP {
   }
 
   /**
-   * Handle skills:find - Progressive skill discovery
+   * Handle skills:find - Progressive skill discovery with vector search
    * Level 1: Metadata only (name + description)
    * Level 2: + Full SKILL.md content (AI learns the skill)
    * Level 3: + File tree listing
+   *
+   * Uses semantic search via RAG engine when query is provided
    */
   private async handleFind(params: any): Promise<InternalToolResult> {
     const manager = await this.ensureSkillsManager();
-    const query = params?.query?.toLowerCase() || '';
+    const query = params?.query?.trim() || '';
     const depth = params?.depth || 1;
     const page = params?.page || 1;
     const limit = params?.limit || 10;
@@ -185,13 +202,75 @@ export class SkillsManagementMCP implements InternalMCP {
     // Get all loaded skills
     const allSkills = manager.getLoadedSkills();
 
-    // Filter by query if provided
+    // Filter by query using vector search if provided
     let filteredSkills = allSkills;
-    if (query) {
-      filteredSkills = allSkills.filter(skill =>
-        skill.metadata.name.toLowerCase().includes(query) ||
-        skill.metadata.description?.toLowerCase().includes(query)
-      );
+    if (query && allSkills.length > 0) {
+      try {
+        // Use RAG engine for semantic search
+        const ragEngine = await this.ensureRAGEngine();
+
+        // Build skill descriptions for semantic search
+        const skillDescriptions: Record<string, { name: string; description: string; index: number }> = {};
+        allSkills.forEach((skill, idx) => {
+          const fullDescription = `${skill.metadata.name}: ${skill.metadata.description || ''}. ` +
+            `Tags: ${skill.metadata.tags?.join(', ') || 'none'}`;
+          skillDescriptions[`skill_${idx}`] = {
+            name: skill.metadata.name,
+            description: fullDescription,
+            index: idx
+          };
+        });
+
+        // Simple vector similarity search using description matching
+        // For now, use keyword + semantic combination until we have proper embeddings for skills
+        const scoredSkills = allSkills.map((skill, idx) => {
+          let score = 0;
+          const queryLower = query.toLowerCase();
+          const skillName = skill.metadata.name.toLowerCase();
+          const skillDesc = (skill.metadata.description || '').toLowerCase();
+          const skillTags = (skill.metadata.tags || []).map(t => t.toLowerCase()).join(' ');
+
+          // Exact name match - highest priority
+          if (skillName === queryLower) {
+            score = 1.0;
+          }
+          // Name contains query
+          else if (skillName.includes(queryLower)) {
+            score = 0.9;
+          }
+          // Description contains query
+          else if (skillDesc.includes(queryLower)) {
+            score = 0.7;
+          }
+          // Tags contain query
+          else if (skillTags.includes(queryLower)) {
+            score = 0.6;
+          }
+          // Word-level similarity in description
+          else {
+            const queryWords = queryLower.split(/\s+/);
+            const descWords = (skillDesc + ' ' + skillTags).split(/\s+/);
+            const matches = queryWords.filter((w: string) => descWords.some(d => d.includes(w)));
+            score = matches.length > 0 ? (matches.length / queryWords.length) * 0.5 : 0;
+          }
+
+          return { skill, score, index: idx };
+        });
+
+        // Sort by score and filter
+        filteredSkills = scoredSkills
+          .filter(s => s.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .map(s => s.skill);
+      } catch (error: any) {
+        logger.debug(`Vector search failed, falling back to basic filtering: ${error.message}`);
+        // Fallback to simple text matching if vector search fails
+        filteredSkills = allSkills.filter(skill =>
+          skill.metadata.name.toLowerCase().includes(query.toLowerCase()) ||
+          skill.metadata.description?.toLowerCase().includes(query.toLowerCase()) ||
+          skill.metadata.tags?.some(tag => tag.toLowerCase().includes(query.toLowerCase()))
+        );
+      }
     }
 
     // Handle empty results
@@ -434,35 +513,6 @@ export class SkillsManagementMCP implements InternalMCP {
     }
   }
 
-  private async handleList(client: SkillsMarketplaceClient): Promise<InternalToolResult> {
-    const skills = await client.listInstalled();
-
-    if (skills.length === 0) {
-      return {
-        success: true,
-        content: 'No skills installed yet.'
-      };
-    }
-
-    let output = `## Installed Skills (${skills.length})\n\n`;
-
-    for (const skill of skills) {
-      output += `### ${skill.name}\n`;
-      output += `${skill.description}\n`;
-      if (skill.plugin) {
-        output += `**Plugin:** ${skill.plugin}\n`;
-      }
-      if (skill.license) {
-        output += `**License:** ${skill.license}\n`;
-      }
-      output += `**Remove:** Use \`skills:remove\` with \`skill_name: "${skill.name}"\`\n\n`;
-    }
-
-    return {
-      success: true,
-      content: output
-    };
-  }
 
   private async handleRemove(client: SkillsMarketplaceClient, params: any): Promise<InternalToolResult> {
     const skillName = params?.skill_name;

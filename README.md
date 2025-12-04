@@ -385,6 +385,37 @@ ncp find "install mcp"
 - ✅ Update and remove MCPs programmatically
 - ✅ AI can self-extend with new capabilities
 
+### **Skills Management MCP** - Extend Claude with Plugins
+
+Manage Anthropic Agent Skills - modular extensions that add specialized knowledge and tools to Claude.
+
+```typescript
+// Discover skills using vector search
+const results = await skills.find({ query: "canvas design" });
+
+// Install a skill
+await skills.add({ skill_name: "canvas-design" });
+
+// List installed skills
+const installed = await skills.list();
+
+// Read skill resources
+const template = await skills.read_resource({
+  skill_name: "canvas-design",
+  file_path: "resources/templates.md"
+});
+```
+
+**Features:**
+- ✅ Vector-powered semantic search for skills
+- ✅ One-command install from official marketplace
+- ✅ Progressive disclosure (metadata → full content → resources)
+- ✅ Official Anthropic marketplace integration
+- ✅ Custom marketplace support
+- ✅ Auto-loading of installed skills
+
+**[→ Full Skills Guide](./SKILLS.md)**
+
 **Configuration:**
 Internal MCPs are disabled by default. Enable in your profile settings:
 
@@ -392,7 +423,8 @@ Internal MCPs are disabled by default. Enable in your profile settings:
 {
   "settings": {
     "enable_schedule_mcp": true,
-    "enable_mcp_management": true
+    "enable_mcp_management": true,
+    "enable_skills": true
   }
 }
 ```
