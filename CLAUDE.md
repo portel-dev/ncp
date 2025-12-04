@@ -121,6 +121,121 @@ Before committing ANY changes to server code, verify ALL of these:
 - **Test with JSON-RPC directly**: Don't involve AI in tests - use direct JSON-RPC communication
 - **Verify auto-import**: Check that profile file is updated with new MCPs after initialization
 
+## Code Execution Architecture
+
+### How Code Execution Works (Critical for Understanding NCP)
+
+**IMPORTANT**: Code execution is NOT just "display code results". It actually EXECUTES TypeScript with full MCP access via Worker Threads.
+
+### Unified Code Execution Path
+
+Both the `code` tool (direct code-mode) and `code:run` tool (scheduled jobs) use the **same mechanism**:
+
+```
+User executes code
+    ↓
+orchestrator.executeCode(code, timeout)
+    ↓
+CodeExecutor.executeCode()
+    ↓
+Creates Worker Thread with:
+  - Code to execute
+  - All 70+ MCP tools (from toolsProvider)
+  - Security bindings
+    ↓
+Worker creates namespaces:
+  - schedule.*  (for scheduling)
+  - ncp.*       (for discovery)
+  - analytics.* (for analytics)
+  - mail.*      (for email)
+  - github.*    (for GitHub)
+  - ... all other MCPs ...
+    ↓
+Code executes with full MCP access
+    ↓
+Results returned
+```
+
+### MCP Namespace Injection (VERIFIED WORKING)
+
+When code executes, **all MCPs are available as callable namespaces**:
+
+```typescript
+// All of these work in code execution:
+const jobs = await schedule.list({ limit: 10 });
+const tools = await ncp.find({ description: "email" });
+const overview = await analytics.overview({});
+const mails = await mail({ operation: "unread" });
+
+// Can orchestrate multiple MCPs in one execution:
+const emails = await mail({ operation: "list", limit: 5 });
+const notes = await notes({ operation: "create", text: "..." });
+const msg = await messages({ operation: "send", number: "..." });
+```
+
+### Key Characteristics of Code Execution
+
+1. **Worker Thread Isolation**: Code runs in isolated Worker thread with resource limits
+   - Memory: 128MB max
+   - Execution time: 30s default, 5min max
+   - Network: Controlled via NetworkPolicyManager
+
+2. **MCP Namespace Access**: All enabled MCPs available as namespaces
+   - Tools passed from `toolsProvider()` which includes:
+     - External MCPs (from ~/.ncp/config.json)
+     - Internal MCPs (schedule, analytics, skills, code, ncp)
+     - Skill tools (from ~/.ncp/skills/)
+
+3. **Tool Executor Callback**: When code calls an MCP method, messages are sent to main thread
+   - Tool call: Worker → Main thread
+   - Tool result: Main thread → Worker
+   - Synchronous from code perspective (via Promise handling)
+
+4. **Security Hardening**:
+   - Dangerous patterns blocked (eval, require, import, etc.)
+   - Built-in prototypes frozen
+   - Direct filesystem/process access blocked
+   - Network requests routed through policy enforcement
+
+### Code Tool vs code:run Tool
+
+| Aspect | `code` tool (direct) | `code:run` (scheduled) |
+|--------|----------------------|----------------------|
+| Entry point | MCP `tools/call` handler | Internal MCP tool |
+| Execution | `orchestrator.executeCode()` | `orchestrator.executeCode()` |
+| MCP Access | ✅ Full namespace injection | ✅ Full namespace injection |
+| Return Format | Formatted text for Claude | JSON result |
+| Use Case | Direct in Claude chat | Scheduled job automation |
+| Difference | **NONE** - Same mechanism |  |
+
+**This is critical**: When designing scheduled jobs with `code:run`, assume MCPs are available as namespaces. They will be.
+
+### Testing Code Execution
+
+When testing code execution:
+
+1. **Don't test for "no namespace injection"** - it WILL be injected
+2. **Test that MCPs are callable** - verify methods execute
+3. **Test error handling** - what happens when a method fails
+4. **Test multi-MCP orchestration** - do multiple calls work together
+
+Example test:
+```typescript
+const code = `
+const schedule_result = await schedule.list({ limit: 1 });
+const ncp_result = await ncp.find({ description: "test" });
+const analytics_result = await analytics.overview({});
+
+return {
+  schedule_works: !!schedule_result,
+  ncp_works: !!ncp_result,
+  analytics_works: !!analytics_result
+};
+`;
+
+// This will return { schedule_works: true, ncp_works: true, analytics_works: true }
+```
+
 ## Code Quality & Naming Conventions
 
 ### TypeScript/JavaScript Naming Standards
