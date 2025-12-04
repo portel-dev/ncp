@@ -399,7 +399,10 @@ export class NCPOrchestrator {
           if (result.success) {
             return result.content;
           } else {
-            throw new Error(result.error || 'Tool execution failed');
+            // Provide better error messages when error field is missing
+            const errorMessage = result.error ||
+              (typeof result.content === 'string' && result.content ? result.content : `Failed to execute tool: ${params.tool}`);
+            throw new Error(errorMessage);
           }
         }
 
@@ -694,7 +697,10 @@ export class NCPOrchestrator {
         if (result.success) {
           return result.content;
         } else {
-          throw new Error(result.error || 'Tool execution failed');
+          // Provide better error messages when error field is missing
+          const errorMessage = result.error ||
+            (typeof result.content === 'string' && result.content ? result.content : `Failed to execute tool: ${toolName}`);
+          throw new Error(errorMessage);
         }
       },
       // Photon instances provider - provides direct access to Photon class instances

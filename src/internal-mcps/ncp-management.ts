@@ -1611,7 +1611,8 @@ Do you want to remove this MCP?`;
 
     return {
       success: totalIssues === 0,
-      content: report
+      content: report,
+      error: totalIssues > 0 ? `${totalIssues} issue(s) found in NCP configuration` : undefined
     };
   }
 
