@@ -4,7 +4,6 @@
   "display_name": "Natural Context Provider",
   "version": "1.7.0",
   "icon": "assets/icons/ncp.svg",
-  "icon_alt": "assets/icons/ncp.jpeg",
   "description": "1 MCP to rule them all. Your MCPs, supercharged. Find any tool instantly, load on demand, execute with code mode, run on schedule, discover skills, ready for any client. Smart loading saves tokens and energy.",
   "long_description": "Natural Context Provider (NCP) - 1 MCP to rule them all. Your MCPs, supercharged. Find any tool instantly with semantic search, load on demand to save resources, execute with TypeScript code mode, run on schedule for automation, discover and install Anthropic Skills, load custom Photons, ready for any client (Claude Desktop, Perplexity, Cursor, Cline, Continue). Smart loading saves tokens and energy. Features: intelligent tool discovery, code mode execution, scheduler automation, skills management, photon runtime, dynamic runtime detection, health monitoring, auto-discovery and installation, AI-assisted management, and optional global CLI. Create once, use everywhere.",
   "author": {
