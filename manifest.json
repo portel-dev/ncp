@@ -41,6 +41,12 @@
       "description": "Automatically import all MCPs from your MCP client (Claude Desktop, Perplexity, Cursor, etc.) on startup. Syncs both config files and extensions.",
       "default": true
     },
+    "enableCodeMode": {
+      "type": "boolean",
+      "title": "Enable Code-Mode Execution",
+      "description": "Execute TypeScript code with full access to all MCPs, skills, and Photons as namespaces. Provides enhanced orchestration and automation capabilities.",
+      "default": true
+    },
     "enableDebugLogging": {
       "type": "boolean",
       "title": "Enable Debug Logging",
@@ -105,6 +111,7 @@
         "NCP_CONFIG_PATH": "${user_config.configPath}",
         "NCP_ENABLE_GLOBAL_CLI": "${user_config.enableGlobalCli}",
         "NCP_AUTO_IMPORT": "${user_config.autoImportClientMcps}",
+        "NCP_ENABLE_CODE_MODE": "${user_config.enableCodeMode}",
         "NCP_DEBUG": "${user_config.enableDebugLogging}",
         "NCP_CONFIRM_BEFORE_RUN": "${user_config.confirmBeforeRun}",
         "NCP_ENABLE_LOG_ROTATION": "${user_config.enableLogRotation}",
