@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🔨 Building NCP DXT from clean directory..."
+echo "🔨 Building NCP MCPB (MCP Bundle) from clean directory..."
 
 # Store project root directory
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -49,16 +49,16 @@ if [ -d "node_modules/execa/node_modules/human-signals" ]; then
   fi
 fi
 
-# Pack DXT from clean directory
-echo "📦 Packing DXT..."
-npx @anthropic-ai/mcpb pack . "$PROJECT_ROOT/ncp.dxt"
+# Pack MCPB from clean directory
+echo "📦 Packing MCPB (MCP Bundle)..."
+npx @anthropic-ai/mcpb pack . "$PROJECT_ROOT/ncp.mcpb"
 
 # WORKAROUND: mcpb excludes build/ directories from node_modules
-# Extract DXT (zip format), manually add build directories, re-pack
+# Extract MCPB (zip format), manually add build directories, re-pack
 echo "🔧 Fixing missing build directories (mcpb workaround)..."
 PATCH_DIR=$(mktemp -d)
 cd "$PATCH_DIR"
-unzip -q "$PROJECT_ROOT/ncp.dxt"
+unzip -q "$PROJECT_ROOT/ncp.mcpb"
 
 # Copy missing build directories from temp install
 if [ -d "$TEMP_DIR/node_modules/human-signals/build" ]; then
@@ -72,9 +72,9 @@ if [ -d "$TEMP_DIR/node_modules/execa/node_modules/human-signals/build" ]; then
   cp -r "$TEMP_DIR/node_modules/execa/node_modules/human-signals/build" "$PATCH_DIR/node_modules/execa/node_modules/human-signals/"
 fi
 
-# Re-pack as zip (DXT is zip format, not tar.gz)
-rm -f "$PROJECT_ROOT/ncp.dxt"
-zip -qr "$PROJECT_ROOT/ncp.dxt" .
+# Re-pack as zip (MCPB is zip format, not tar.gz)
+rm -f "$PROJECT_ROOT/ncp.mcpb"
+zip -qr "$PROJECT_ROOT/ncp.mcpb" .
 cd "$PROJECT_ROOT"
 
 # Cleanup temp directories
@@ -82,19 +82,19 @@ rm -rf "$TEMP_DIR" "$PATCH_DIR"
 
 # Test the DXT automatically
 echo ""
-echo "🧪 Testing DXT (MCP spec compliance)..."
+echo "🧪 Testing MCPB (MCP spec compliance)..."
 
 # Verify it's a valid zip file
 echo "   • Verifying zip format..."
-if ! unzip -t "$PROJECT_ROOT/ncp.dxt" > /dev/null 2>&1; then
-  echo "   ❌ FAILED: DXT is not a valid zip file"
+if ! unzip -t "$PROJECT_ROOT/ncp.mcpb" > /dev/null 2>&1; then
+  echo "   ❌ FAILED: MCPB is not a valid zip file"
   exit 1
 fi
 echo "   ✅ Valid zip format"
 
 TEST_DIR=$(mktemp -d)
 cd "$TEST_DIR"
-unzip -q "$PROJECT_ROOT/ncp.dxt" > /dev/null 2>&1
+unzip -q "$PROJECT_ROOT/ncp.mcpb" > /dev/null 2>&1
 
 # Quick verification test
 echo "   • Checking dependencies..."
@@ -135,6 +135,6 @@ cd "$PROJECT_ROOT"
 rm -rf "$TEST_DIR"
 
 echo ""
-echo "✅ DXT built and tested successfully: ncp.dxt"
-echo "   Size: $(ls -lh ncp.dxt | awk '{print $5}')"
-echo "   SHA256: $(shasum -a 256 ncp.dxt | awk '{print $1}')"
+echo "✅ MCPB (MCP Bundle) built and tested successfully: ncp.mcpb"
+echo "   Size: $(ls -lh ncp.mcpb | awk '{print $5}')"
+echo "   SHA256: $(shasum -a 256 ncp.mcpb | awk '{print $1}')"
