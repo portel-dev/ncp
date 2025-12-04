@@ -108,32 +108,36 @@ ncp skills:find    # Search all available skills
 
 **Code Examples**:
 
+Both keyword and positional arguments are supported:
+
 ```typescript
+// Keyword arguments (most explicit)
+const designSkills = await skills.find({
+  query: "canvas design",
+  depth: 2
+});
+
+// Positional arguments (more concise)
+const designSkills = await skills.find("canvas design", 2);
+
 // List all available skills
 const allSkills = await skills.find();
 
 // Search for canvas/design skills
-const designSkills = await skills.find({
-  query: "canvas design"
-});
+const designSkills = await skills.find({ query: "canvas design" });
+// Or positional: await skills.find("canvas design");
 
 // Get full skill documentation for learning
-const detailed = await skills.find({
-  query: "pdf",
-  depth: 2
-});
+const detailed = await skills.find({ query: "pdf", depth: 2 });
+// Or positional: await skills.find("pdf", 2);
 
 // See all files in skills (for reading with skills:read_resource)
-const complete = await skills.find({
-  query: "docx",
-  depth: 3
-});
+const complete = await skills.find({ query: "docx", depth: 3 });
+// Or positional: await skills.find("docx", 3);
 
 // Pagination
-const page2 = await skills.find({
-  page: 2,
-  limit: 5
-});
+const page2 = await skills.find({ page: 2, limit: 5 });
+// Or positional: await skills.find("", 1, 2, 5); // query, depth, page, limit
 ```
 
 **Vector Search**: Uses semantic similarity to find skills by intent, not just keyword matching:
@@ -145,14 +149,16 @@ const page2 = await skills.find({
 
 **Purpose**: List all installed skills (alias for `skills:find()` with no parameters)
 
-**Code Example**:
+**Code Examples**:
 
 ```typescript
-// List installed skills
+// List installed skills - no parameters needed
 const installed = await skills.list();
 ```
 
-**Equivalent to**: `await skills.find({})`
+**Equivalent to**: `await skills.find()` or `await skills.find({})`
+
+**Why alias?** Semantic clarity - `skills.list()` explicitly shows intent to list all installed skills, while `skills.find()` implies searching. Both work identically.
 
 ### skills:add - Install Skill
 
@@ -166,15 +172,11 @@ const installed = await skills.list();
 **Code Examples**:
 
 ```typescript
-// Install canvas design skill
-const result1 = await skills.add({
-  skill_name: "canvas-design"
-});
+// Install canvas design skill (keyword arguments)
+const result1 = await skills.add({ skill_name: "canvas-design" });
 
-// Install PDF skill
-const result2 = await skills.add({
-  skill_name: "pdf"
-});
+// Or positional argument
+const result2 = await skills.add("pdf");
 
 // Error handling
 try {
@@ -196,10 +198,11 @@ try {
 **Code Examples**:
 
 ```typescript
-// Remove a skill
-const result = await skills.remove({
-  skill_name: "canvas-design"
-});
+// Remove a skill (keyword arguments)
+const result = await skills.remove({ skill_name: "canvas-design" });
+
+// Or positional argument
+const result = await skills.remove("canvas-design");
 
 // Effects take place after NCP restart
 ```
@@ -217,23 +220,21 @@ const result = await skills.remove({
 **Code Examples**:
 
 ```typescript
-// Read a resource file from canvas-design skill
+// Read a resource file from canvas-design skill (keyword arguments)
 const forms = await skills.read_resource({
   skill_name: "canvas-design",
   file_path: "resources/form-templates.md"
 });
 
+// Or positional arguments
+const forms = await skills.read_resource("canvas-design", "resources/form-templates.md");
+
 // Read a template
-const template = await skills.read_resource({
-  skill_name: "pdf",
-  file_path: "templates/invoice.json"
-});
+const template = await skills.read_resource("pdf", "templates/invoice.json");
 
 // Discover available files with depth: 3
-const skillInfo = await skills.find({
-  query: "pdf",
-  depth: 3
-});
+const skillInfo = await skills.find({ query: "pdf", depth: 3 });
+// Or positional: await skills.find("pdf", 3);
 ```
 
 ---
@@ -520,6 +521,40 @@ await skills.add({ skill_name: "canvas-design" });
 // ❌ Avoid - Wrapping in ncp.run()
 // const installed = await ncp.run('skills:list');
 ```
+
+### Keyword vs Positional Arguments
+
+All skills methods support both calling styles:
+
+```typescript
+// Keyword arguments - most explicit and readable
+const results = await skills.find({
+  query: "canvas design",
+  depth: 2,
+  page: 1,
+  limit: 10
+});
+
+// Positional arguments - more concise
+const results = await skills.find("canvas design", 2, 1, 10);
+
+// Mixed - keyword for clarity on specific params
+const results = await skills.find("pdf", 2);
+
+// How it works:
+// MCP protocol maps positional arguments to schema parameter order:
+// 1st positional → query
+// 2nd positional → depth
+// 3rd positional → page
+// 4th positional → limit
+```
+
+**Parameter Order Reference**:
+- `skills:find(query?, depth?, page?, limit?)`
+- `skills:add(skill_name)` - required
+- `skills:remove(skill_name)` - required
+- `skills:read_resource(skill_name, file_path)` - both required
+- `skills:list()` - no parameters
 
 ### Workflow Example
 
