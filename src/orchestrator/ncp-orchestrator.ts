@@ -1892,10 +1892,11 @@ export class NCPOrchestrator {
       // No query = list all tools, filtered by health
       const healthyTools = this.allTools.filter(tool => this.healthMonitor.getHealthyMCPs([tool.mcpName]).length > 0);
       const results = healthyTools.slice(0, limit).map(tool => {
-        // Extract actual tool name from prefixed format
+        // Ensure toolName is always prefixed with mcpName:toolName format
+        const prefixedName = tool.name.includes(':') ? tool.name : `${tool.mcpName}:${tool.name}`;
         const actualToolName = tool.name.includes(':') ? tool.name.split(':', 2)[1] : tool.name;
         return {
-          toolName: tool.name, // Return prefixed name
+          toolName: prefixedName, // Always return prefixed name (mcpName:toolName)
           mcpName: tool.mcpName,
           confidence: 1.0,
           description: detailed ? tool.description : undefined,

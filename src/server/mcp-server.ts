@@ -1407,7 +1407,7 @@ This operation may modify data or have side effects.`;
       if (result.result !== undefined && result.result !== null) {
         output += '**Return Value:**\n```json\n' +
           JSON.stringify(result.result, null, 2) + '\n```';
-      } else if (result.logs.length === 0) {
+      } else if (!result.logs || result.logs.length === 0) {
         output += '*(Code executed successfully with no output)*';
       }
 
