@@ -28,24 +28,25 @@ export class VisualAnalyticsFormatter {
 
     // Create metrics display with visual bars
     const metrics = [
-      { label: 'Total Sessions', value: report.totalSessions, unit: 'sessions', color: chalk.green },
-      { label: 'Unique MCPs', value: report.uniqueMCPs, unit: 'servers', color: chalk.cyan },
-      { label: 'Success Rate', value: Math.round(report.successRate), unit: '%', color: chalk.yellow },
-      { label: 'Response Data', value: Math.round(report.totalResponseSize / 1024 / 1024), unit: 'MB', color: chalk.blue }
+      { label: 'Total Sessions', value: report?.totalSessions || 0, unit: 'sessions', color: chalk.green },
+      { label: 'Unique MCPs', value: report?.uniqueMCPs || 0, unit: 'servers', color: chalk.cyan },
+      { label: 'Success Rate', value: Math.round(report?.successRate || 0), unit: '%', color: chalk.yellow },
+      { label: 'Response Data', value: Math.round((report?.totalResponseSize || 0) / 1024 / 1024), unit: 'MB', color: chalk.blue }
     ];
 
+    const maxMetricValue = metrics.length > 0 ? Math.max(...metrics.map(m => m?.value || 0)) : 1;
     for (const metric of metrics) {
-      const bar = this.createHorizontalBar(metric.value, Math.max(...metrics.map(m => m.value)), 25);
+      const bar = this.createHorizontalBar(metric.value, maxMetricValue, 25);
       output.push(`${metric.color(metric.label.padEnd(15))}: ${bar} ${metric.color(metric.value.toLocaleString())} ${chalk.dim(metric.unit)}`);
     }
     output.push('');
 
     // Usage Trends Chart
-    if (Object.keys(report.dailyUsage).length > 3) {
+    if (Object.keys(report?.dailyUsage || {}).length > 3) {
       output.push(chalk.bold.white('📈 DAILY USAGE TRENDS'));
       output.push('');
 
-      const dailyData = Object.entries(report.dailyUsage)
+      const dailyData = Object.entries(report?.dailyUsage || {})
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([_, usage]) => usage);
 
@@ -59,31 +60,31 @@ export class VisualAnalyticsFormatter {
     }
 
     // Top MCPs Usage Chart
-    if (report.topMCPsByUsage.length > 0) {
+    if ((report?.topMCPsByUsage || []).length > 0) {
       output.push(chalk.bold.white('🔥 TOP MCP USAGE DISTRIBUTION'));
       output.push('');
 
-      const topMCPs = report.topMCPsByUsage.slice(0, 8);
-      const maxSessions = Math.max(...topMCPs.map(mcp => mcp.sessions));
+      const topMCPs = (report?.topMCPsByUsage || []).slice(0, 8);
+      const maxSessions = topMCPs.length > 0 ? Math.max(...topMCPs.map(mcp => mcp?.sessions || 0)) : 1;
 
       for (const mcp of topMCPs) {
-        const percentage = ((mcp.sessions / report.totalSessions) * 100).toFixed(1);
-        const bar = this.createColorfulBar(mcp.sessions, maxSessions, 30);
-        const successIcon = mcp.successRate >= 95 ? '✅' : mcp.successRate >= 80 ? '⚠️' : '❌';
+        const percentage = (((mcp?.sessions || 0) / (report?.totalSessions || 1)) * 100).toFixed(1);
+        const bar = this.createColorfulBar(mcp?.sessions || 0, maxSessions, 30);
+        const successIcon = (mcp?.successRate || 0) >= 95 ? '✅' : (mcp?.successRate || 0) >= 80 ? '⚠️' : '❌';
 
-        output.push(`${chalk.cyan(mcp.name.padEnd(20))} ${bar} ${chalk.white(mcp.sessions.toString().padStart(3))} ${chalk.dim(`(${percentage}%)`)} ${successIcon}`);
+        output.push(`${chalk.cyan((mcp?.name || 'unknown').padEnd(20))} ${bar} ${chalk.white((mcp?.sessions || 0).toString().padStart(3))} ${chalk.dim(`(${percentage}%)`)} ${successIcon}`);
       }
       output.push('');
     }
 
     // Performance Distribution
-    if (report.performanceMetrics.fastestMCPs.length > 0) {
+    if ((report?.performanceMetrics?.fastestMCPs || []).length > 0) {
       output.push(chalk.bold.white('⚡ PERFORMANCE DISTRIBUTION'));
       output.push('');
 
       // Create performance buckets
-      const performanceData = report.performanceMetrics.fastestMCPs.concat(report.performanceMetrics.slowestMCPs);
-      const durations = performanceData.map(mcp => mcp.avgDuration).filter(d => d > 0);
+      const performanceData = (report?.performanceMetrics?.fastestMCPs || []).concat(report?.performanceMetrics?.slowestMCPs || []);
+      const durations = performanceData.map(mcp => mcp?.avgDuration || 0).filter(d => d > 0);
 
       if (durations.length > 3) {
         // Create performance distribution chart
@@ -152,7 +153,7 @@ export class VisualAnalyticsFormatter {
     output.push(chalk.dim('  🔄 ') + chalk.cyan('ncp analytics overview --visual') + chalk.dim(' - Refresh this view'));
     output.push('');
 
-    return output.join('\\n');
+    return output.join('\n');
   }
 
   /**
@@ -223,53 +224,53 @@ export class VisualAnalyticsFormatter {
     output.push('');
 
     const performanceMetrics = [
-      { label: 'Success Rate', value: report.successRate, max: 100, unit: '%', color: chalk.green },
-      { label: 'Avg Response', value: report.avgSessionDuration || 5000, max: 10000, unit: 'ms', color: chalk.yellow },
-      { label: 'MCPs Active', value: report.uniqueMCPs, max: 2000, unit: 'servers', color: chalk.cyan }
+      { label: 'Success Rate', value: report?.successRate || 0, max: 100, unit: '%', color: chalk.green },
+      { label: 'Avg Response', value: report?.avgSessionDuration || 5000, max: 10000, unit: 'ms', color: chalk.yellow },
+      { label: 'MCPs Active', value: report?.uniqueMCPs || 0, max: 2000, unit: 'servers', color: chalk.cyan }
     ];
 
     for (const metric of performanceMetrics) {
       const gauge = this.createGauge(metric.value, metric.max);
-      output.push(`${metric.label.padEnd(15)}: ${gauge} ${metric.color(metric.value.toFixed(1))}${metric.unit}`);
+      output.push(`${metric.label.padEnd(15)}: ${gauge} ${metric.color((metric.value || 0).toFixed(1))}${metric.unit}`);
     }
     output.push('');
 
     // Performance Leaderboard with Visual Ranking
-    if (report.performanceMetrics.fastestMCPs.length > 0) {
+    if ((report?.performanceMetrics?.fastestMCPs || []).length > 0) {
       output.push(chalk.bold.white('🏆 SPEED CHAMPIONS PODIUM'));
       output.push('');
 
-      const topPerformers = report.performanceMetrics.fastestMCPs.slice(0, 5);
+      const topPerformers = (report?.performanceMetrics?.fastestMCPs || []).slice(0, 5);
       const medals = ['🥇', '🥈', '🥉', '🏅', '🎖️'];
 
       for (let i = 0; i < topPerformers.length; i++) {
         const mcp = topPerformers[i];
         const medal = medals[i] || '⭐';
-        const speedBar = this.createSpeedBar(mcp.avgDuration, 10000);
+        const speedBar = this.createSpeedBar(mcp?.avgDuration || 0, 10000);
 
-        output.push(`${medal} ${chalk.cyan(mcp.name.padEnd(20))} ${speedBar} ${chalk.bold.green(mcp.avgDuration.toFixed(0))}ms`);
+        output.push(`${medal} ${chalk.cyan((mcp?.name || 'unknown').padEnd(20))} ${speedBar} ${chalk.bold.green((mcp?.avgDuration || 0).toFixed(0))}ms`);
       }
       output.push('');
     }
 
     // Reliability Champions
-    if (report.performanceMetrics.mostReliable.length > 0) {
+    if ((report?.performanceMetrics?.mostReliable || []).length > 0) {
       output.push(chalk.bold.white('🛡️ RELIABILITY CHAMPIONS'));
       output.push('');
 
-      const reliablePerformers = report.performanceMetrics.mostReliable.slice(0, 5);
+      const reliablePerformers = (report?.performanceMetrics?.mostReliable || []).slice(0, 5);
 
       for (let i = 0; i < reliablePerformers.length; i++) {
         const mcp = reliablePerformers[i];
-        const reliabilityBar = this.createReliabilityBar(mcp.successRate);
-        const shield = mcp.successRate >= 99 ? '🛡️' : mcp.successRate >= 95 ? '🔰' : '⚡';
+        const reliabilityBar = this.createReliabilityBar(mcp?.successRate || 0);
+        const shield = (mcp?.successRate || 0) >= 99 ? '🛡️' : (mcp?.successRate || 0) >= 95 ? '🔰' : '⚡';
 
-        output.push(`${shield} ${chalk.cyan(mcp.name.padEnd(20))} ${reliabilityBar} ${chalk.bold.green(mcp.successRate.toFixed(1))}%`);
+        output.push(`${shield} ${chalk.cyan((mcp?.name || 'unknown').padEnd(20))} ${reliabilityBar} ${chalk.bold.green((mcp?.successRate || 0).toFixed(1))}%`);
       }
       output.push('');
     }
 
-    return output.join('\\n');
+    return output.join('\n');
   }
 
   /**

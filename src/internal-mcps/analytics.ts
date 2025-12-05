@@ -190,8 +190,8 @@ export class AnalyticsMCP implements InternalMCP {
     // Most Used MCPs - properly spaced markdown table
     output.push('## 🔥 Most Used MCPs');
     output.push('');
-    const topMCPs = report.topMCPsByUsage.slice(0, 10);
-    const maxNameLen = Math.max(...topMCPs.map(m => m.name.length), 15);
+    const topMCPs = (report.topMCPsByUsage || []).slice(0, 10);
+    const maxNameLen = topMCPs.length > 0 ? Math.max(...topMCPs.map(m => m?.name?.length || 0), 15) : 15;
 
     // Header
     output.push(`| ${'#'.padEnd(3)} | ${'MCP'.padEnd(maxNameLen)} | ${'Sessions'.padStart(8)} | ${'% Total'.padStart(9)} |`);
@@ -200,9 +200,9 @@ export class AnalyticsMCP implements InternalMCP {
     // Rows
     topMCPs.forEach((mcp, i) => {
       const rank = `${i + 1}`.padEnd(3);
-      const name = mcp.name.padEnd(maxNameLen);
-      const sessions = mcp.sessions.toString().padStart(8);
-      const pct = `${((mcp.sessions / report.totalSessions) * 100).toFixed(1)}%`.padStart(9);
+      const name = (mcp?.name || 'unknown').padEnd(maxNameLen);
+      const sessions = (mcp?.sessions || 0).toString().padStart(8);
+      const pct = `${(((mcp?.sessions || 0) / (report.totalSessions || 1)) * 100).toFixed(1)}%`.padStart(9);
       output.push(`| ${rank} | ${name} | ${sessions} | ${pct} |`);
     });
     output.push('');
@@ -210,8 +210,8 @@ export class AnalyticsMCP implements InternalMCP {
     // Tool-Rich MCPs
     output.push('## 🛠️ Tool-Rich MCPs');
     output.push('');
-    const toolRich = report.topMCPsByTools.slice(0, 10);
-    const maxToolNameLen = Math.max(...toolRich.map(m => m.name.length), 15);
+    const toolRich = (report.topMCPsByTools || []).slice(0, 10);
+    const maxToolNameLen = toolRich.length > 0 ? Math.max(...toolRich.map(m => m?.name?.length || 0), 15) : 15;
 
     // Header
     output.push(`| ${'#'.padEnd(3)} | ${'MCP'.padEnd(maxToolNameLen)} | ${'Tools'.padStart(6)} |`);
@@ -220,8 +220,8 @@ export class AnalyticsMCP implements InternalMCP {
     // Rows
     toolRich.forEach((mcp, i) => {
       const rank = `${i + 1}`.padEnd(3);
-      const name = mcp.name.padEnd(maxToolNameLen);
-      const tools = mcp.toolCount.toString().padStart(6);
+      const name = (mcp?.name || 'unknown').padEnd(maxToolNameLen);
+      const tools = (mcp?.toolCount || 0).toString().padStart(6);
       output.push(`| ${rank} | ${name} | ${tools} |`);
     });
     output.push('');
@@ -230,7 +230,7 @@ export class AnalyticsMCP implements InternalMCP {
     output.push('## ⏰ Hourly Usage Pattern');
     output.push('');
 
-    const hourlyEntries = Object.entries(report.hourlyUsage)
+    const hourlyEntries = Object.entries(report.hourlyUsage || {})
       .sort(([a], [b]) => parseInt(a) - parseInt(b));
 
     // Header

@@ -56,18 +56,18 @@ export class AnalyticsFormatter {
     output.push(chalk.bold.white('⚡ PERFORMANCE LEADERS'));
     output.push('');
 
-    if (report.performanceMetrics.fastestMCPs.length > 0) {
+    if ((report?.performanceMetrics?.fastestMCPs || []).length > 0) {
       output.push(chalk.green('🏆 Fastest MCPs:'));
-      for (const mcp of report.performanceMetrics.fastestMCPs.slice(0, 5)) {
-        output.push(`   ${chalk.cyan(mcp.name)}: ${mcp.avgDuration.toFixed(0)}ms`);
+      for (const mcp of (report?.performanceMetrics?.fastestMCPs || []).slice(0, 5)) {
+        output.push(`   ${chalk.cyan(mcp?.name || 'unknown')}: ${(mcp?.avgDuration || 0).toFixed(0)}ms`);
       }
       output.push('');
     }
 
-    if (report.performanceMetrics.mostReliable.length > 0) {
+    if ((report?.performanceMetrics?.mostReliable || []).length > 0) {
       output.push(chalk.green('🛡️  Most Reliable MCPs:'));
-      for (const mcp of report.performanceMetrics.mostReliable.slice(0, 5)) {
-        output.push(`   ${chalk.cyan(mcp.name)}: ${mcp.successRate.toFixed(1)}% success`);
+      for (const mcp of (report?.performanceMetrics?.mostReliable || []).slice(0, 5)) {
+        output.push(`   ${chalk.cyan(mcp?.name || 'unknown')}: ${(mcp?.successRate || 0).toFixed(1)}% success`);
       }
       output.push('');
     }
@@ -76,32 +76,35 @@ export class AnalyticsFormatter {
     output.push(chalk.bold.white('📈 USAGE STATISTICS'));
     output.push('');
 
-    if (report.topMCPsByUsage.length > 0) {
+    if ((report?.topMCPsByUsage || []).length > 0) {
       output.push(chalk.green('🔥 Most Used MCPs:'));
-      for (const mcp of report.topMCPsByUsage.slice(0, 8)) {
-        const bar = this.createProgressBar(mcp.sessions, report.topMCPsByUsage[0].sessions, 20);
-        output.push(`   ${chalk.cyan(mcp.name.padEnd(25))} ${bar} ${mcp.sessions} sessions`);
+      const topMCPs = report?.topMCPsByUsage || [];
+      const maxSessions = topMCPs.length > 0 ? topMCPs[0]?.sessions || 1 : 1;
+      for (const mcp of topMCPs.slice(0, 8)) {
+        const bar = this.createProgressBar(mcp?.sessions || 0, maxSessions, 20);
+        output.push(`   ${chalk.cyan((mcp?.name || 'unknown').padEnd(25))} ${bar} ${mcp?.sessions || 0} sessions`);
       }
       output.push('');
     }
 
-    if (report.topMCPsByTools.length > 0) {
+    if ((report?.topMCPsByTools || []).length > 0) {
       output.push(chalk.green('🛠️  Tool-Rich MCPs:'));
-      for (const mcp of report.topMCPsByTools.slice(0, 5)) {
-        output.push(`   ${chalk.cyan(mcp.name)}: ${chalk.bold(mcp.toolCount)} tools`);
+      for (const mcp of (report?.topMCPsByTools || []).slice(0, 5)) {
+        output.push(`   ${chalk.cyan(mcp?.name || 'unknown')}: ${chalk.bold((mcp?.toolCount || 0).toString())} tools`);
       }
       output.push('');
     }
 
     // Hourly Usage Pattern
-    if (Object.keys(report.hourlyUsage).length > 0) {
+    if (Object.keys(report?.hourlyUsage || {}).length > 0) {
       output.push(chalk.bold.white('⏰ HOURLY USAGE PATTERN'));
       output.push('');
 
-      const maxHourlyUsage = Math.max(...Object.values(report.hourlyUsage));
+      const hourlyValues = Object.values(report?.hourlyUsage || {});
+      const maxHourlyUsage = hourlyValues.length > 0 ? Math.max(...hourlyValues) : 1;
 
       for (let hour = 0; hour < 24; hour++) {
-        const usage = report.hourlyUsage[hour] || 0;
+        const usage = (report?.hourlyUsage as any)?.[hour] || 0;
         if (usage > 0) {
           const bar = this.createProgressBar(usage, maxHourlyUsage, 25);
           const hourLabel = `${hour.toString().padStart(2, '0')}:00`;
@@ -112,14 +115,15 @@ export class AnalyticsFormatter {
     }
 
     // Daily Usage Pattern
-    if (Object.keys(report.dailyUsage).length > 1) {
+    if (Object.keys(report?.dailyUsage || {}).length > 1) {
       output.push(chalk.bold.white('📅 DAILY USAGE'));
       output.push('');
 
-      const sortedDays = Object.entries(report.dailyUsage)
+      const sortedDays = Object.entries(report?.dailyUsage || {})
         .sort(([a], [b]) => a.localeCompare(b));
 
-      const maxDailyUsage = Math.max(...Object.values(report.dailyUsage));
+      const dailyValues = Object.values(report?.dailyUsage || {});
+      const maxDailyUsage = dailyValues.length > 0 ? Math.max(...dailyValues) : 1;
 
       for (const [date, usage] of sortedDays) {
         const bar = this.createProgressBar(usage, maxDailyUsage, 30);
@@ -181,24 +185,26 @@ export class AnalyticsFormatter {
     output.push('');
 
     // Performance Leaderboards
-    if (report.performanceMetrics.fastestMCPs.length > 0) {
+    if ((report?.performanceMetrics?.fastestMCPs || []).length > 0) {
       output.push(chalk.bold.white('🏆 SPEED CHAMPIONS'));
       output.push('');
-      for (let i = 0; i < Math.min(3, report.performanceMetrics.fastestMCPs.length); i++) {
-        const mcp = report.performanceMetrics.fastestMCPs[i];
+      const fastestMCPs = report?.performanceMetrics?.fastestMCPs || [];
+      for (let i = 0; i < Math.min(3, fastestMCPs.length); i++) {
+        const mcp = fastestMCPs[i];
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
-        output.push(`${medal} ${chalk.cyan(mcp.name)}: ${chalk.bold.green(mcp.avgDuration.toFixed(0) + 'ms')}`);
+        output.push(`${medal} ${chalk.cyan(mcp?.name || 'unknown')}: ${chalk.bold.green((mcp?.avgDuration || 0).toFixed(0) + 'ms')}`);
       }
       output.push('');
     }
 
-    if (report.performanceMetrics.mostReliable.length > 0) {
+    if ((report?.performanceMetrics?.mostReliable || []).length > 0) {
       output.push(chalk.bold.white('🛡️ RELIABILITY CHAMPIONS'));
       output.push('');
-      for (let i = 0; i < Math.min(3, report.performanceMetrics.mostReliable.length); i++) {
-        const mcp = report.performanceMetrics.mostReliable[i];
+      const mostReliable = report?.performanceMetrics?.mostReliable || [];
+      for (let i = 0; i < Math.min(3, mostReliable.length); i++) {
+        const mcp = mostReliable[i];
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
-        output.push(`${medal} ${chalk.cyan(mcp.name)}: ${chalk.bold.green(mcp.successRate.toFixed(1) + '%')} success`);
+        output.push(`${medal} ${chalk.cyan(mcp?.name || 'unknown')}: ${chalk.bold.green((mcp?.successRate || 0).toFixed(1) + '%')} success`);
       }
       output.push('');
     }
