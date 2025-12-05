@@ -381,76 +381,24 @@ function createContext(tools: any[], bindings: any[], logs: string[]): Record<st
     }
   };
 
-  // Organize tools by namespace (Phase 2: backward compatible)
-  // Track which sanitized names map to which original tool names (collision detection)
-  const namespaceToolMap = new Map<string, Map<string, string>>(); // namespace → Map(sanitizedName → originalName)
-
+  // Organize tools by namespace (mcp:tool convention)
   for (const tool of tools) {
-    let namespace = tool.name.includes(':')
-      ? tool.name.split(':')[0]
-      : 'default';
-    let toolName = tool.name.includes(':')
-      ? tool.name.split(':')[1]
-      : tool.name;
+    const [mcp, toolName] = tool.name.includes(':')
+      ? tool.name.split(':')
+      : ['default', tool.name];
 
-    // Normalize namespace to valid JavaScript identifier
-    // Replace hyphens and other invalid characters with underscores
-    namespace = namespace.replace(/[^a-zA-Z0-9_$]/g, '_');
-
-    // Normalize toolName to valid JavaScript identifier
-    // Replace hyphens, dots, and other invalid characters with underscores
-    const sanitizedToolName = toolName.replace(/[^a-zA-Z0-9_$]/g, '_');
-
-    // Collision detection: if sanitized name already exists with different original name
-    if (!namespaceToolMap.has(namespace)) {
-      namespaceToolMap.set(namespace, new Map());
-    }
-
-    const toolMap = namespaceToolMap.get(namespace)!;
-    const existingOriginal = toolMap.get(sanitizedToolName);
-
-    if (existingOriginal && existingOriginal !== tool.name) {
-      // Collision detected: tool names collide after sanitization
-      // Example: "my-tool" and "my_tool" both become "my_tool"
-      // Solution: append hash of original name to make unique
-      const hash = hashString(tool.name).substring(0, 4);
-      const uniqueToolName = `${sanitizedToolName}_${hash}`;
-
-      // Verify no collision with hash version
-      if (!toolMap.has(uniqueToolName)) {
-        toolMap.set(uniqueToolName, tool.name);
-        toolName = uniqueToolName;
-      } else {
-        // Extremely rare: triple collision. Use hash only
-        toolMap.set(sanitizedToolName, tool.name);
-        toolName = sanitizedToolName;
-      }
-    } else {
-      toolMap.set(sanitizedToolName, tool.name);
-      toolName = sanitizedToolName;
-    }
+    // Normalize MCP namespace to valid JavaScript identifier
+    // Unify naming: my-tool → my_tool, my.tool → my_tool
+    const namespace = mcp.replace(/[^a-zA-Z0-9_$]/g, '_');
 
     if (!context[namespace]) {
       context[namespace] = {};
     }
 
-    // Create async function that calls back to main thread
-    // Use original tool name from the map to ensure correct callback
-    const originalToolName = namespaceToolMap.get(namespace)!.get(toolName)!;
+    // Create async function that calls back to main thread with original tool name
     context[namespace][toolName] = async (params?: any) => {
-      return executeTool(originalToolName, params || {});
+      return executeTool(tool.name, params || {});
     };
-  }
-
-  // Helper function: simple hash for collision detection
-  function hashString(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return Math.abs(hash).toString(16);
   }
 
   // Inject bindings (Phase 3: credential isolation)
