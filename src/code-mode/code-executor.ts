@@ -35,6 +35,14 @@ export interface CodeExecutionResult {
   result: any;
   logs: string[];
   error?: string;
+  errorDetails?: {
+    originalError: any;
+    pendingCalls?: {
+      toolCalls: number;
+      bindingCalls: number;
+      networkCalls: number;
+    };
+  };
 }
 
 export class CodeExecutor {
@@ -184,9 +192,17 @@ export class CodeExecutor {
                   });
                 })
                 .catch(error => {
+                  // Serialize error with full context including tool name for debugging
+                  const serializedError = {
+                    message: error?.message || String(error),
+                    stack: error?.stack,
+                    type: error?.constructor?.name || 'Error',
+                    code: error?.code,
+                    toolName  // Include tool name for debugging
+                  };
                   worker?.postMessage({
                     type: 'tool_response',
-                    data: { id, error: error.message }
+                    data: { id, error: serializedError }
                   });
                 });
               break;
@@ -204,9 +220,16 @@ export class CodeExecutor {
                   });
                 })
                 .catch(error => {
+                  // Serialize error with full context
+                  const serializedError = {
+                    message: error?.message || String(error),
+                    stack: error?.stack,
+                    type: error?.constructor?.name || 'Error',
+                    code: error?.code
+                  };
                   worker?.postMessage({
                     type: 'binding_response',
-                    data: { id: bindingId, error: error.message }
+                    data: { id: bindingId, error: serializedError }
                   });
                 });
               break;
@@ -227,9 +250,17 @@ export class CodeExecutor {
                   });
                 })
                 .catch(error => {
+                  // Serialize error with full context
+                  const serializedError = {
+                    message: error?.message || String(error),
+                    stack: error?.stack,
+                    type: error?.constructor?.name || 'Error',
+                    code: error?.code,
+                    statusCode: error?.statusCode
+                  };
                   worker?.postMessage({
                     type: 'network_response',
-                    data: { id: networkId, error: error.message }
+                    data: { id: networkId, error: serializedError }
                   });
                 });
               break;
@@ -246,10 +277,27 @@ export class CodeExecutor {
             case 'error':
               clearTimeout(timeoutHandle);
               worker?.terminate();
+
+              // Reconstruct error message with full context
+              const errorData = message.data.error;
+              let errorMessage = errorData.message || 'Unknown error';
+
+              if (errorData.type && errorData.type !== 'Error') {
+                errorMessage = `[${errorData.type}] ${errorMessage}`;
+              }
+
+              if (errorData.toolName) {
+                errorMessage = `[Tool: ${errorData.toolName}] ${errorMessage}`;
+              }
+
               resolve({
                 result: null,
                 logs: message.data.logs,
-                error: message.data.error
+                error: errorMessage,
+                errorDetails: {
+                  originalError: errorData,
+                  pendingCalls: message.data.pendingCallsInfo
+                }
               });
               break;
           }

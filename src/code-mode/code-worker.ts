@@ -211,6 +211,39 @@ async function executeNetworkRequest(
   });
 }
 
+// Serialize errors to preserve full context (not just message)
+function serializeError(error: any): { message: string; stack?: string; type: string; code?: string; details?: any } {
+  return {
+    message: error?.message || String(error),
+    stack: error?.stack,
+    type: error?.constructor?.name || 'Error',
+    code: error?.code,
+    details: {
+      errno: error?.errno,
+      syscall: error?.syscall,
+      path: error?.path,
+      statusCode: error?.statusCode,
+      statusMessage: error?.statusMessage
+    }
+  };
+}
+
+// Reconstruct error with preserved context
+function deserializeError(errorData: any): Error {
+  let err = new Error(errorData.message);
+  if (errorData.stack) {
+    err.stack = errorData.stack;
+  }
+  if (errorData.code) {
+    (err as any).code = errorData.code;
+  }
+  if (errorData.type && errorData.type !== 'Error') {
+    // Preserve the original error type in the message
+    err.message = `[${errorData.type}] ${err.message}`;
+  }
+  return err;
+}
+
 // Listen for responses from main thread
 parentPort.on('message', (message: { type: string; data: any }) => {
   if (message.type === 'tool_response') {
@@ -221,7 +254,9 @@ parentPort.on('message', (message: { type: string; data: any }) => {
       pendingToolCalls.delete(id);
 
       if (error) {
-        pending.reject(new Error(error));
+        // Reconstruct error with full context
+        const err = deserializeError(error);
+        pending.reject(err);
       } else {
         pending.resolve(result);
       }
@@ -234,7 +269,9 @@ parentPort.on('message', (message: { type: string; data: any }) => {
       pendingBindingCalls.delete(id);
 
       if (error) {
-        pending.reject(new Error(error));
+        // Reconstruct error with full context
+        const err = deserializeError(error);
+        pending.reject(err);
       } else {
         pending.resolve(result);
       }
@@ -247,7 +284,9 @@ parentPort.on('message', (message: { type: string; data: any }) => {
       pendingNetworkCalls.delete(id);
 
       if (error) {
-        pending.reject(new Error(error));
+        // Reconstruct error with full context
+        const err = deserializeError(error);
+        pending.reject(err);
       } else {
         pending.resolve(result);
       }
@@ -343,11 +382,14 @@ function createContext(tools: any[], bindings: any[], logs: string[]): Record<st
   };
 
   // Organize tools by namespace (Phase 2: backward compatible)
+  // Track which sanitized names map to which original tool names (collision detection)
+  const namespaceToolMap = new Map<string, Map<string, string>>(); // namespace → Map(sanitizedName → originalName)
+
   for (const tool of tools) {
     let namespace = tool.name.includes(':')
       ? tool.name.split(':')[0]
       : 'default';
-    const toolName = tool.name.includes(':')
+    let toolName = tool.name.includes(':')
       ? tool.name.split(':')[1]
       : tool.name;
 
@@ -355,14 +397,60 @@ function createContext(tools: any[], bindings: any[], logs: string[]): Record<st
     // Replace hyphens and other invalid characters with underscores
     namespace = namespace.replace(/[^a-zA-Z0-9_$]/g, '_');
 
+    // Normalize toolName to valid JavaScript identifier
+    // Replace hyphens, dots, and other invalid characters with underscores
+    const sanitizedToolName = toolName.replace(/[^a-zA-Z0-9_$]/g, '_');
+
+    // Collision detection: if sanitized name already exists with different original name
+    if (!namespaceToolMap.has(namespace)) {
+      namespaceToolMap.set(namespace, new Map());
+    }
+
+    const toolMap = namespaceToolMap.get(namespace)!;
+    const existingOriginal = toolMap.get(sanitizedToolName);
+
+    if (existingOriginal && existingOriginal !== tool.name) {
+      // Collision detected: tool names collide after sanitization
+      // Example: "my-tool" and "my_tool" both become "my_tool"
+      // Solution: append hash of original name to make unique
+      const hash = hashString(tool.name).substring(0, 4);
+      const uniqueToolName = `${sanitizedToolName}_${hash}`;
+
+      // Verify no collision with hash version
+      if (!toolMap.has(uniqueToolName)) {
+        toolMap.set(uniqueToolName, tool.name);
+        toolName = uniqueToolName;
+      } else {
+        // Extremely rare: triple collision. Use hash only
+        toolMap.set(sanitizedToolName, tool.name);
+        toolName = sanitizedToolName;
+      }
+    } else {
+      toolMap.set(sanitizedToolName, tool.name);
+      toolName = sanitizedToolName;
+    }
+
     if (!context[namespace]) {
       context[namespace] = {};
     }
 
     // Create async function that calls back to main thread
+    // Use original tool name from the map to ensure correct callback
+    const originalToolName = namespaceToolMap.get(namespace)!.get(toolName)!;
     context[namespace][toolName] = async (params?: any) => {
-      return executeTool(tool.name, params || {});
+      return executeTool(originalToolName, params || {});
     };
+  }
+
+  // Helper function: simple hash for collision detection
+  function hashString(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16);
   }
 
   // Inject bindings (Phase 3: credential isolation)
@@ -450,13 +538,17 @@ function cleanup(): void {
     } as WorkerMessage);
 
   } catch (error: any) {
-    // Send error
+    // Send error with full context preserved
     parentPort!.postMessage({
       type: 'error',
       data: {
-        error: error.message,
-        stack: error.stack,
-        logs
+        error: serializeError(error),
+        logs,
+        pendingCallsInfo: {
+          toolCalls: pendingToolCalls.size,
+          bindingCalls: pendingBindingCalls.size,
+          networkCalls: pendingNetworkCalls.size
+        }
       }
     } as WorkerMessage);
   } finally {
