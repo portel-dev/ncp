@@ -469,13 +469,16 @@ function cleanup(): void {
     // This avoids "Arg string terminates parameters early" error from Function constructor
     // when there are many context keys (tools, bindings, skills)
     const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-    const fn = new AsyncFunction('__context__', `
-      'use strict';
-      const {${Object.keys(context).join(',')}} = __context__;
-      return (async () => {
-        ${code}
-      })();
-    `);
+    const contextKeys = Object.keys(context).join(',');
+    // Use string concatenation to avoid template string interpolation issues with user code
+    const fnBody = [
+      "'use strict';",
+      `const {${contextKeys}} = __context__;`,
+      'return (async () => {',
+      code,
+      '})();'
+    ].join('\n');
+    const fn = new AsyncFunction('__context__', fnBody);
 
     const result = await fn(context);
 
