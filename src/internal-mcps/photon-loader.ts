@@ -143,6 +143,7 @@ export class PhotonLoader {
       }
 
       // Extract and install dependencies (only if source file exists)
+      let nodeModulesPath: string | null = null;
       try {
         await fs.access(sourceFilePath);
         const dependencies = await this.dependencyManager.extractDependencies(sourceFilePath);
@@ -153,8 +154,8 @@ export class PhotonLoader {
           // Get MCP name for cache directory
           const mcpName = path.basename(filePath, '.photon.js').replace('.photon.ts', '');
 
-          // Install dependencies
-          await this.dependencyManager.ensureDependencies(mcpName, dependencies);
+          // Install dependencies and get node_modules path
+          nodeModulesPath = await this.dependencyManager.ensureDependencies(mcpName, dependencies);
         }
       } catch (error: any) {
         // Source file doesn't exist (production mode) - skip dependency extraction
@@ -171,7 +172,7 @@ export class PhotonLoader {
         // Compile TypeScript to JavaScript using esbuild
         logger.debug(`Compiling TypeScript file: ${path.basename(filePath)}`);
 
-        const cachedJsPath = await this.compileTypeScript(filePath);
+        const cachedJsPath = await this.compileTypeScript(filePath, nodeModulesPath || undefined);
         const cachedJsUrl = pathToFileURL(cachedJsPath).href;
         module = await import(cachedJsUrl);
       } else {
@@ -210,6 +211,8 @@ export class PhotonLoader {
       return adapter;
     } catch (error: any) {
       logger.error(`Failed to load ${filePath}: ${error.message}`);
+      console.error(`[PhotonLoader] Failed to load ${path.basename(filePath)}: ${error.message}`);
+      console.error(error.stack);
       return null;
     }
   }
@@ -217,13 +220,17 @@ export class PhotonLoader {
   /**
    * Compile TypeScript file to JavaScript and cache it
    */
-  private async compileTypeScript(tsFilePath: string): Promise<string> {
+  private async compileTypeScript(tsFilePath: string, nodeModulesPath?: string): Promise<string> {
     // Generate cache path based on file content hash
     const tsContent = await fs.readFile(tsFilePath, 'utf-8');
     const hash = crypto.createHash('sha256').update(tsContent).digest('hex').slice(0, 16);
 
-    const paths = envPaths('ncp', { suffix: '' });
-    const cacheDir = path.join(paths.cache, 'compiled-mcp');
+    // IMPORTANT: Store compiled file in same directory as dependencies for module resolution
+    // This allows Node to find npm packages when the compiled code imports them
+    const mcpName = path.basename(tsFilePath, '.photon.ts');
+    const cacheDir = nodeModulesPath
+      ? path.dirname(nodeModulesPath)  // Same dir as node_modules
+      : path.join(envPaths('ncp', { suffix: '' }).cache, 'compiled-mcp'); // Fallback
     const fileName = path.basename(tsFilePath, '.ts');
     const cachedJsPath = path.join(cacheDir, `${fileName}.${hash}.mjs`);
 
@@ -236,7 +243,7 @@ export class PhotonLoader {
       // Cache miss - compile it
     }
 
-    // Compile TypeScript to JavaScript
+    // Compile TypeScript to JavaScript (no bundling - dependencies resolved at runtime)
     logger.debug(`Compiling ${path.basename(tsFilePath)} with esbuild...`);
 
     const esbuild = await import('esbuild');
