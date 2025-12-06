@@ -88,6 +88,9 @@ export class MCPWrapper {
     const logFile = this.getLogFilePath(mcpName);
     const wrapperPath = join(this.WRAPPER_DIR, `mcp-${mcpName}-wrapper.js`);
 
+    // Escape strings for embedding in JavaScript - handles Windows backslashes
+    const escapeForJS = (str: string) => JSON.stringify(str);
+
     // Create Node.js wrapper script
     const wrapperScript = `#!/usr/bin/env node
 /**
@@ -98,18 +101,23 @@ export class MCPWrapper {
 const { spawn } = require('child_process');
 const fs = require('fs');
 
+// Paths are JSON-encoded to handle Windows backslashes properly
+const logFile = ${escapeForJS(logFile)};
+const command = ${escapeForJS(command)};
+const args = ${JSON.stringify(args)};
+
 // Ensure log directory exists
-const logDir = require('path').dirname('${logFile}');
+const logDir = require('path').dirname(logFile);
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir, { recursive: true });
 }
 
 // Create log stream
-const logStream = fs.createWriteStream('${logFile}', { flags: 'a' });
+const logStream = fs.createWriteStream(logFile, { flags: 'a' });
 logStream.write(\`\\n--- MCP \${process.argv[2] || '${mcpName}'} Session Started: \${new Date().toISOString()} ---\\n\`);
 
 // Spawn the actual MCP server
-const child = spawn('${command}', ${JSON.stringify(args)}, {
+const child = spawn(command, args, {
   env: process.env,
   stdio: ['pipe', 'pipe', 'pipe']
 });
