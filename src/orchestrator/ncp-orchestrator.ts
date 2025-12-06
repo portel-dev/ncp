@@ -2197,12 +2197,16 @@ export class NCPOrchestrator {
           !processEnv.PATH.includes('/opt/homebrew/bin') &&
           !processEnv.PATH.includes('/usr/local/bin');
       } else if (platform === 'win32') {
-        // Windows: Standard system paths
-        standardPaths = 'C:\\Windows\\System32;C:\\Windows;C:\\Program Files\\nodejs';
-        // Check if standard Windows directories are missing
+        // Windows: Only ensure basic system paths exist
+        // User-specific paths (Scoop, npm, etc.) are already in process.env.PATH
+        // and findInPATH() in runtime-detector.ts handles command resolution
+        const windir = process.env.WINDIR || process.env.windir || 'C:\\Windows';
+        standardPaths = `${windir}\\System32;${windir}`;
+
+        // Only augment if System32 is missing (very rare edge case)
+        // Use case-insensitive check since Windows paths are case-insensitive
         pathCheckNeeded = !!processEnv.PATH &&
-          !processEnv.PATH.includes('C:\\Windows\\System32') &&
-          !processEnv.PATH.includes('C:\\Program Files\\nodejs');
+          !processEnv.PATH.toLowerCase().includes('system32');
       } else {
         // Linux: Standard system paths
         standardPaths = '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
