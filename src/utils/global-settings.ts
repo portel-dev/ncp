@@ -26,6 +26,7 @@ export interface GlobalSettings {
   logRotation: LogRotationSettings;
   enableCodeMode: boolean;
   enableSkills: boolean;
+  enablePhotonRuntime: boolean;
 }
 
 /**
@@ -67,7 +68,8 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
     maxProtocolLines: 2000
   },
   enableCodeMode: true, // ON by default - DXT: edit ~/.ncp/settings.json, NPM: set NCP_ENABLE_CODE_MODE env var
-  enableSkills: true // ON by default - skills provide valuable tools
+  enableSkills: true, // ON by default - skills provide valuable tools
+  enablePhotonRuntime: true // ON by default - DXT: edit ~/.ncp/settings.json, NPM: set NCP_ENABLE_PHOTON_RUNTIME env var
 };
 
 /**
@@ -117,7 +119,8 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
           ...(fileSettings.logRotation || {})
         },
         enableCodeMode: fileSettings.enableCodeMode !== undefined ? fileSettings.enableCodeMode : DEFAULT_SETTINGS.enableCodeMode,
-        enableSkills: fileSettings.enableSkills !== undefined ? fileSettings.enableSkills : DEFAULT_SETTINGS.enableSkills
+        enableSkills: fileSettings.enableSkills !== undefined ? fileSettings.enableSkills : DEFAULT_SETTINGS.enableSkills,
+        enablePhotonRuntime: fileSettings.enablePhotonRuntime !== undefined ? fileSettings.enablePhotonRuntime : DEFAULT_SETTINGS.enablePhotonRuntime
       };
     } catch (error) {
       console.warn('Failed to load settings, using defaults:', error);
@@ -146,8 +149,30 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
         console.error(`[DEBUG SETTINGS] Applied env var: enableCodeMode=${envValue}`);
       }
     }
-  } else if (!existsSync(settingsPath)) {
-    // No env var and no settings file - save defaults
+  }
+
+  if (process.env.NCP_ENABLE_PHOTON_RUNTIME !== undefined) {
+    const envValue = process.env.NCP_ENABLE_PHOTON_RUNTIME === 'true';
+    if (settings.enablePhotonRuntime !== envValue) {
+      settings.enablePhotonRuntime = envValue;
+      await saveGlobalSettings(settings);
+
+      if (process.env.NCP_DEBUG === 'true') {
+        console.error(`[DEBUG SETTINGS] Applied env var: enablePhotonRuntime=${envValue}`);
+      }
+    }
+  } else {
+    // No env var set - set it based on settings file value
+    // This allows internal-mcp-manager to check process.env.NCP_ENABLE_PHOTON_RUNTIME
+    process.env.NCP_ENABLE_PHOTON_RUNTIME = settings.enablePhotonRuntime ? 'true' : 'false';
+
+    if (process.env.NCP_DEBUG === 'true') {
+      console.error(`[DEBUG SETTINGS] Set env var from settings: NCP_ENABLE_PHOTON_RUNTIME=${process.env.NCP_ENABLE_PHOTON_RUNTIME}`);
+    }
+  }
+
+  if (!existsSync(settingsPath)) {
+    // No settings file - save defaults
     await saveGlobalSettings(settings);
 
     if (process.env.NCP_DEBUG === 'true') {
@@ -157,7 +182,7 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
 
   // Debug logging for final settings
   if (process.env.NCP_DEBUG === 'true') {
-    console.error(`[DEBUG SETTINGS] Final settings: enableCodeMode=${settings.enableCodeMode}, enableSkills=${settings.enableSkills}`);
+    console.error(`[DEBUG SETTINGS] Final settings: enableCodeMode=${settings.enableCodeMode}, enableSkills=${settings.enableSkills}, enablePhotonRuntime=${settings.enablePhotonRuntime}`);
   }
 
   return settings;

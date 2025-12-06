@@ -80,6 +80,7 @@ import { MCPUpdateChecker } from '../utils/mcp-update-checker.js';
 import { CodeExecutor } from '../code-mode/code-executor.js';
 import { NetworkPolicyManager, SECURE_NETWORK_POLICY, type ElicitationFunction } from '../code-mode/network-policy.js';
 import type { ElicitationServer } from '../utils/elicitation-helper.js';
+import { loadGlobalSettings } from '../utils/global-settings.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -730,6 +731,10 @@ export class NCPOrchestrator {
       if (!this.profileManager) {
         this.profileManager = new ProfileManager();
         await this.profileManager.initialize();
+
+        // Load global settings and set environment variables BEFORE loading photons
+        // This ensures NCP_ENABLE_PHOTON_RUNTIME is set correctly
+        await loadGlobalSettings();
 
         // Initialize internal MCPs with ProfileManager
         this.internalMCPManager.initialize(this.profileManager);
