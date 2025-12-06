@@ -62,21 +62,33 @@ export class InternalMCPManager {
    * Load Photon classes from standard directories
    */
   async loadPhotons(): Promise<void> {
+    const photonRuntimeEnabled = process.env.NCP_ENABLE_PHOTON_RUNTIME === 'true';
+
     const directories = [
       // Built-in Photons (in src/internal-mcps/)
       __dirname,
-
-      // Installed Photons from registry (~/.ncp/photons/)
-      path.join(os.homedir(), '.ncp', 'photons'),
-
-      // Global user MCPs (~/.ncp/internal/)
-      path.join(os.homedir(), '.ncp', 'internal'),
-
-      // Project-local MCPs (.ncp/internal/)
-      path.join(process.cwd(), '.ncp', 'internal'),
     ];
 
+    // Only load user photons if photon runtime is enabled
+    if (photonRuntimeEnabled) {
+      directories.push(
+        // Installed Photons from registry (~/.ncp/photons/)
+        path.join(os.homedir(), '.ncp', 'photons'),
+
+        // Global user MCPs (~/.ncp/internal/)
+        path.join(os.homedir(), '.ncp', 'internal'),
+
+        // Project-local MCPs (.ncp/internal/)
+        path.join(process.cwd(), '.ncp', 'internal')
+      );
+    }
+
     logger.debug(`Loading Photons from directories: ${directories.join(', ')}`);
+    if (photonRuntimeEnabled) {
+      logger.info('✅ Photon runtime enabled - loading user photons');
+    } else {
+      logger.info('ℹ️  Photon runtime disabled - loading built-in photons only');
+    }
 
     const mcps = await this.simpleMCPLoader.loadAll(directories);
 

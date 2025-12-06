@@ -15,7 +15,7 @@ import { Photon } from './base-photon.js';
 import { PhotonAdapter } from './photon-adapter.js';
 import { InternalMCP } from './types.js';
 import { logger } from '../utils/logger.js';
-import { DependencyManager } from './dependency-manager.js';
+import { DependencyManager } from '@portel/photon-core';
 import envPaths from 'env-paths';
 
 export class PhotonLoader {

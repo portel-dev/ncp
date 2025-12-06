@@ -24,6 +24,7 @@ coverage/
 # Cache and temp files
 .ncp/
 .ncp-back/
+back.ncp/
 *.cache
 *.tmp
 *.temp
