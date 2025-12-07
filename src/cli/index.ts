@@ -2086,10 +2086,10 @@ analyticsCmd
 
 // Run command (existing functionality)
 program
-  .command('run <tool>')
+  .command('run <tool> [args...]')
 
   .description('Run a specific tool')
-  .option('--params <json>', 'Tool parameters as JSON string (optional - will prompt interactively if not provided)')
+  .option('--params <json>', 'Tool parameters as JSON string (legacy - will prompt interactively if not provided)')
   .option('--no-prompt', 'Skip interactive prompting for missing parameters')
   .option('--output-format <format>', 'Output format: auto (smart rendering), json (raw JSON)', 'auto')
   .option('-y, --yes', 'Automatically answer yes to prompts (e.g., open media files)')
@@ -2100,8 +2100,8 @@ program
 
       // Header first - context before syntax
       output += chalk.bold.white('NCP Run Command') + ' - ' + chalk.cyan('Direct MCP Tool Execution') + '\n\n';
-      output += chalk.dim('Execute MCP tools with intelligent parameter prompting and rich media support.') + '\n';
-      output += chalk.dim('Automatically handles parameter collection, validation, and response formatting.') + '\n\n';
+      output += chalk.dim('Execute MCP tools with natural CLI syntax, intelligent parameter handling, and rich media support.') + '\n';
+      output += chalk.dim('Supports positional arguments, named parameters, and JSON for complex types.') + '\n\n';
 
       // Then usage
       output += chalk.bold.white('Usage:') + ' ' + helper.commandUsage(cmd) + '\n\n';
@@ -2121,16 +2121,18 @@ program
 
       // Examples section
       output += chalk.bold.white('Examples:') + '\n';
-      output += chalk.dim('  Basic execution:') + '\n';
-      output += indent + chalk.yellow('ncp run memory:create_entities') + chalk.gray('  # Interactive parameter prompting') + '\n';
-      output += indent + chalk.yellow('ncp run memory:create_entities --params \'{"entities":["item1"]}\'') + '\n\n';
+      output += chalk.dim('  NEW syntax (recommended):') + '\n';
+      output += indent + chalk.yellow('ncp run filesystem read_file --path /tmp/test.txt') + '\n';
+      output += indent + chalk.yellow('ncp run github create_issue --repo owner/repo --title "Bug" --body "Description"') + '\n';
+      output += indent + chalk.yellow('ncp run memory create_entities item1 item2') + chalk.gray('  # Positional args') + '\n\n';
+
+      output += chalk.dim('  Legacy syntax (still works):') + '\n';
+      output += indent + chalk.yellow('ncp run filesystem:read_file --params \'{"path": "/tmp/test.txt"}\'') + '\n';
+      output += indent + chalk.yellow('ncp run memory:create_entities') + chalk.gray('  # Interactive mode') + '\n\n';
 
       output += chalk.dim('  Output control:') + '\n';
       output += indent + chalk.yellow('ncp run tool --output-format json') + chalk.gray('  # Raw JSON output') + '\n';
       output += indent + chalk.yellow('ncp run tool -y') + chalk.gray('  # Auto-open media files') + '\n\n';
-
-      output += chalk.dim('  Non-interactive:') + '\n';
-      output += indent + chalk.yellow('ncp run tool --no-prompt --params \'{}\'') + chalk.gray('  # Scripting/automation') + '\n\n';
 
       // Media support note
       output += chalk.bold.white('Media Support:') + '\n';
@@ -2141,9 +2143,27 @@ program
       return output;
     }
   })
-  .action(async (tool, options) => {
+  .action(async (tool, args, options) => {
+    // Handle new syntax: "mcp tool" vs old syntax "mcp:tool"
+    // If tool doesn't contain ':' and args has at least one element, check if first arg is the tool name
+    let toolName = tool;
+    let cliArgs: string[] = Array.isArray(args) ? [...args] : [];
+
+    if (!tool.includes(':') && cliArgs.length > 0 && !cliArgs[0].startsWith('-')) {
+      // Might be new syntax: "mcp tool args..."
+      // Check if first arg looks like a tool name (not starting with --)
+      const potentialTool = cliArgs[0];
+      if (!potentialTool.startsWith('-')) {
+        // Treat as: mcp is tool, first arg is actual tool name
+        // Reconstruct full tool name as "mcp:tool"
+        toolName = `${tool}:${potentialTool}`;
+        cliArgs = cliArgs.slice(1); // Remove the tool name from args
+        // console.log(chalk.dim(`Parsed: MCP "${tool}" tool "${potentialTool}"`));
+      }
+    }
+
     // Set branded terminal title with tool name
-    setNCPTitle('Run', tool);
+    setNCPTitle('Run', toolName);
 
     // ⚠️ CRITICAL: Default MUST be 'all' - DO NOT CHANGE!
     const profileName = program.getOptionValue('profile') || 'all';
@@ -2154,14 +2174,14 @@ program
     await orchestrator.initialize();
 
     // If tool doesn't contain a colon, try to find matching tools first
-    if (!tool.includes(':')) {
-      console.log(chalk.dim(`🔍 Searching for tools matching "${tool}"...`));
+    if (!toolName.includes(':')) {
+      console.log(chalk.dim(`🔍 Searching for tools matching "${toolName}"...`));
 
       try {
-        const matchingTools = await orchestrator.find(tool, 5, false);
+        const matchingTools = await orchestrator.find(toolName, 5, false);
 
         if (matchingTools.length === 0) {
-          console.log('\n' + OutputFormatter.error(`No tools found matching "${tool}"`));
+          console.log('\n' + OutputFormatter.error(`No tools found matching "${toolName}"`));
           console.log(chalk.yellow('💡 Try \'ncp find\' to explore all available tools'));
           await orchestrator.cleanup();
           process.exit(1);
@@ -2170,8 +2190,8 @@ program
         if (matchingTools.length === 1) {
           // Only one match, use it automatically
           const matchedTool = matchingTools[0];
-          tool = matchedTool.toolName;
-          console.log(chalk.green(`✅ Found exact match: ${tool}`));
+          toolName = matchedTool.toolName;
+          console.log(chalk.green(`✅ Found exact match: ${toolName}`));
         } else {
           // Multiple matches, show them and ask user to be more specific
           console.log(chalk.yellow(`Found ${matchingTools.length} matching tools:`));
@@ -2196,11 +2216,57 @@ program
 
     // Check if parameters are provided
     let parameters = {};
+
     if (options.params) {
-      parameters = JSON.parse(options.params);
+      // Legacy JSON mode: --params '{"key": "value"}'
+      try {
+        parameters = JSON.parse(options.params);
+      } catch (error: any) {
+        console.log('\n' + OutputFormatter.error(`Failed to parse JSON parameters: ${error.message}`));
+        console.log(chalk.yellow(`💡 Make sure your JSON is valid`));
+        await orchestrator.cleanup();
+        process.exit(1);
+      }
+    } else if (cliArgs.length > 0) {
+      // NEW: Smart argument parsing from CLI args
+      const { ParameterParser } = await import('../utils/parameter-parser.js');
+      const schema = orchestrator.getToolSchemaByIdentifier(toolName);
+
+      if (!schema) {
+        console.log('\n' + OutputFormatter.error(`Could not retrieve schema for tool "${toolName}"`));
+        await orchestrator.cleanup();
+        process.exit(1);
+      }
+
+      try {
+        const parser = new ParameterParser();
+        parameters = parser.parse(cliArgs, schema);
+
+        // Validate required parameters
+        const missingParams = parser.validateRequired(parameters, schema);
+        if (missingParams.length > 0) {
+          console.log('\n' + OutputFormatter.error('Missing required parameters:'));
+          missingParams.forEach(param => {
+            console.log(`  • ${chalk.cyan(param)}`);
+          });
+          console.log(chalk.yellow('\n' + parser.getHelpText(schema)));
+          await orchestrator.cleanup();
+          process.exit(1);
+        }
+      } catch (error: any) {
+        console.log('\n' + OutputFormatter.error(`Parameter parsing error: ${error.message}`));
+        const parser = new (await import('../utils/parameter-parser.js')).ParameterParser();
+        const schema = orchestrator.getToolSchemaByIdentifier(toolName);
+        if (schema) {
+          console.log(chalk.yellow('\n' + parser.getHelpText(schema)));
+        }
+        await orchestrator.cleanup();
+        process.exit(1);
+      }
     } else {
+      // No args provided: use interactive mode if needed
       // Get tool schema and parameters
-      const toolParams = orchestrator.getToolParameters(tool);
+      const toolParams = orchestrator.getToolParameters(toolName);
 
       if (toolParams && toolParams.length > 0) {
         const requiredParams = toolParams.filter(p => p.required);
@@ -2212,10 +2278,10 @@ program
 
           const prompter = new ParameterPrompter();
           const predictor = new ParameterPredictor();
-          const toolContext = orchestrator.getToolContext(tool);
+          const toolContext = orchestrator.getToolContext(toolName);
 
           try {
-            parameters = await prompter.promptForParameters(tool, toolParams, predictor, toolContext);
+            parameters = await prompter.promptForParameters(toolName, toolParams, predictor, toolContext);
             prompter.close();
           } catch (error) {
             prompter.close();
@@ -2225,8 +2291,8 @@ program
           }
         } else if (requiredParams.length > 0 && options.prompt === false) {
           console.log('\n' + OutputFormatter.error('This tool requires parameters'));
-          console.log(chalk.yellow(`💡 Use: ncp run ${tool} --params '{"param": "value"}'`));
-          console.log(chalk.yellow(`💡 Or use: ncp find "${tool}" --depth 2 to see required parameters`));
+          console.log(chalk.yellow(`💡 Use: ncp run ${toolName} --param1 value1 --param2 value2`));
+          console.log(chalk.yellow(`💡 Or use: ncp find "${toolName}" --depth 2 to see required parameters`));
           console.log(chalk.yellow(`💡 Or remove --no-prompt to use interactive prompting`));
           await orchestrator.cleanup();
           process.exit(1);
@@ -2234,9 +2300,9 @@ program
       }
     }
 
-    console.log(OutputFormatter.running(tool) + '\n');
+    console.log(OutputFormatter.running(toolName) + '\n');
 
-    const result = await orchestrator.run(tool, parameters);
+    const result = await orchestrator.run(toolName, parameters);
     const { CLIResultFormatter } = await import('../services/cli-result-formatter.js');
 
     if (result.success) {
@@ -2260,21 +2326,21 @@ program
 
       if (errorMessage.includes('not found') || errorMessage.includes('not configured')) {
         // Extract the query from the tool name for vector search
-        const [mcpName, toolName] = tool.split(':');
+        const [mcpName, toolPart] = toolName.split(':');
 
         // Try multiple search strategies to find the best matches
         let similarTools: any[] = [];
 
         try {
           // Strategy 1: Search with both MCP context and tool name for better domain matching
-          if (toolName && mcpName) {
-            const contextualQuery = `${mcpName} ${toolName}`;
+          if (toolPart && mcpName) {
+            const contextualQuery = `${mcpName} ${toolPart}`;
             similarTools = await orchestrator.find(contextualQuery, 3, false);
           }
 
           // Strategy 2: If no results, try just the tool name
-          if (similarTools.length === 0 && toolName) {
-            similarTools = await orchestrator.find(toolName, 3, false);
+          if (similarTools.length === 0 && toolPart) {
+            similarTools = await orchestrator.find(toolPart, 3, false);
           }
 
           // Strategy 3: If still no results, try just the MCP name (domain search)
@@ -2294,7 +2360,7 @@ program
         }
       }
 
-      const context = ErrorHandler.createContext('mcp', 'run', tool, suggestions);
+      const context = ErrorHandler.createContext('mcp', 'run', toolName, suggestions);
       const errorResult = ErrorHandler.handle(errorMessage, context);
       console.log('\n' + ErrorHandler.formatForConsole(errorResult));
       await orchestrator.cleanup();

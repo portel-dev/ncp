@@ -2586,6 +2586,15 @@ export class NCPOrchestrator {
   }
 
   /**
+   * Get tool schema by tool identifier (e.g., "mcp:tool")
+   */
+  getToolSchemaByIdentifier(toolIdentifier: string): any {
+    const [mcpName, toolName] = toolIdentifier.split(':');
+    if (!mcpName || !toolName) return undefined;
+    return this.getToolSchema(mcpName, toolName);
+  }
+
+  /**
    * Check if a tool requires parameters
    */
   toolRequiresParameters(toolIdentifier: string): boolean {

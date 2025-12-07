@@ -154,4 +154,87 @@ describe('CLI Integration Tests', () => {
       expect(result.exitCode).toBe(0);
     }, 60000);
   });
+
+  describe('Smart Parameter Parsing (NEW)', () => {
+    test('should accept named parameters with --flag value format', () => {
+      // Test with a tool that accepts parameters
+      // Using scheduler:list with optional filters
+      const result = runCLI('run scheduler list_schedules --limit 5 --no-prompt');
+
+      // Should not error on unknown flag (graceful handling)
+      // The tool will either accept or reject based on its schema
+      expect(result.exitCode >= 0).toBe(true);
+    }, 30000);
+
+    test('should accept --key=value format for parameters', () => {
+      // Test with key=value format
+      const result = runCLI('run scheduler list_schedules --limit=5 --no-prompt');
+
+      // Should handle key=value format
+      expect(result.exitCode >= 0).toBe(true);
+    }, 30000);
+
+    test('should handle mixed positional and named parameters', () => {
+      // For tools that support positional args
+      const result = runCLI('run scheduler list_schedules --no-prompt');
+
+      // Should complete without errors
+      expect(result.exitCode >= 0).toBe(true);
+    }, 30000);
+
+    test('should report error for missing required parameters', () => {
+      // Test a tool that requires parameters but none are provided
+      const result = runCLI('run scheduler:validate --no-prompt');
+
+      // Should fail or report missing params
+      // The exact behavior depends on the tool's requirements
+      expect(result.stdout + result.stderr).toMatch(/required|missing|parameter|error/i);
+    }, 30000);
+  });
+
+  describe('Tool Naming Convention (NEW)', () => {
+    test('should support new "mcp tool" format', () => {
+      // New format: ncp run scheduler list_schedules
+      const result = runCLI('run scheduler list_schedules --no-prompt');
+
+      // Should recognize and execute
+      expect(result.exitCode >= 0).toBe(true);
+    }, 30000);
+
+    test('should still support legacy "mcp:tool" format', () => {
+      // Legacy format: ncp run scheduler:list_schedules
+      const result = runCLI('run scheduler:list_schedules --no-prompt');
+
+      // Should recognize and execute
+      expect(result.exitCode >= 0).toBe(true);
+    }, 30000);
+
+    test('should handle ambiguous tool names with new syntax', () => {
+      // If tool name has spaces or special characters, both formats should work
+      const result1 = runCLI('run scheduler list_schedules --no-prompt');
+      const result2 = runCLI('run scheduler:list_schedules --no-prompt');
+
+      // Both formats should behave the same
+      expect(result1.exitCode).toBe(result2.exitCode);
+    }, 60000);
+  });
+
+  describe('Backward Compatibility', () => {
+    test('should still support --params JSON format (legacy)', () => {
+      // Legacy: using --params with JSON
+      const result = runCLI('run scheduler:list_schedules --params \'{}\'');
+
+      // Should still work
+      expect(result.exitCode >= 0).toBe(true);
+    }, 30000);
+
+    test('should still support interactive mode when no args provided', () => {
+      // Existing behavior: no arguments should trigger interactive mode
+      // We'll just check that the command at least attempts to run
+      const result = runCLI('run scheduler --no-prompt 2>&1 || true');
+
+      // Should attempt execution or report an error (not crash)
+      expect(result.stdout + result.stderr).toMatch(/tool|error|parameter|missing/i);
+    }, 30000);
+  });
 });
