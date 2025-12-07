@@ -3735,5 +3735,31 @@ program
     }
   });
 
+// Error handling for unknown commands with fuzzy suggestions
+program.on('command:*', (operands: string[]) => {
+  const unknownCommand = operands[0];
+  const { FuzzyMatcher } = require('../utils/fuzzy-matcher.js');
+  const matcher = new FuzzyMatcher();
+
+  // Get all available command names (excluding hidden commands)
+  const availableCommands = program.commands
+    .filter((cmd: any) => !cmd.hidden)
+    .map((cmd: any) => cmd.name());
+
+  console.error(chalk.red(`\n❌ Unknown command: ${unknownCommand}`));
+
+  // Try to find similar commands
+  const suggestions = matcher.findSuggestions(unknownCommand, availableCommands, 3);
+  if (suggestions.length > 0) {
+    console.error(chalk.cyan(`\n💡 Did you mean?`));
+    suggestions.slice(0, 3).forEach((cmd: string, index: number) => {
+      console.error(chalk.yellow(`   ${index + 1}. ${cmd}`));
+    });
+  }
+
+  console.error(chalk.cyan(`\nℹ️  Use 'ncp --help' to see all available commands\n`));
+  process.exit(1);
+});
+
 program.parse();
 }

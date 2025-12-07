@@ -186,4 +186,40 @@ export class OutputFormatter {
       `Check your input and try again`
     );
   }
+
+  // === STATUS INDICATORS ===
+  // Consistent visual language for status across all commands
+  static readonly STATUS = {
+    HEALTHY: this.noColor ? '✓ HEALTHY' : chalk.green('✓ HEALTHY'),
+    UNHEALTHY: this.noColor ? '✗ UNHEALTHY' : chalk.red('✗ UNHEALTHY'),
+    DEGRADED: this.noColor ? '⚠ DEGRADED' : chalk.yellow('⚠ DEGRADED'),
+    UNKNOWN: this.noColor ? '? UNKNOWN' : chalk.gray('? UNKNOWN'),
+    DISABLED: this.noColor ? '○ DISABLED' : chalk.gray('○ DISABLED'),
+    RUNNING: this.noColor ? '▶ RUNNING' : chalk.blue('▶ RUNNING'),
+    PAUSED: this.noColor ? '⏸ PAUSED' : chalk.yellow('⏸ PAUSED'),
+    FAILED: this.noColor ? '✗ FAILED' : chalk.red('✗ FAILED'),
+    PENDING: this.noColor ? '◐ PENDING' : chalk.cyan('◐ PENDING'),
+    COMPLETED: this.noColor ? '✓ COMPLETED' : chalk.green('✓ COMPLETED'),
+    ACTIVE: this.noColor ? '● ACTIVE' : chalk.green('● ACTIVE'),
+    INACTIVE: this.noColor ? '○ INACTIVE' : chalk.gray('○ INACTIVE'),
+  };
+
+  /**
+   * Format a status badge with icon and color
+   */
+  static statusBadge(status: keyof typeof OutputFormatter.STATUS, label?: string): string {
+    const badge = this.STATUS[status];
+    return label ? `${badge} ${label}` : badge;
+  }
+
+  /**
+   * Create a status row for tables
+   */
+  static statusRow(name: string, status: keyof typeof OutputFormatter.STATUS, details?: string): string {
+    const statusBadge = this.STATUS[status];
+    if (details) {
+      return `${name.padEnd(20)} ${statusBadge.padEnd(20)} ${details}`;
+    }
+    return `${name.padEnd(20)} ${statusBadge}`;
+  }
 }

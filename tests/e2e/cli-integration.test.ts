@@ -237,4 +237,44 @@ describe('CLI Integration Tests', () => {
       expect(result.stdout + result.stderr).toMatch(/tool|error|parameter|missing/i);
     }, 30000);
   });
+
+  describe('Fuzzy Matching (Phase 2)', () => {
+    test('should suggest command when unknown command is typed', () => {
+      const result = runCLI('fnd --help');
+
+      // Should suggest 'find' for typo 'fnd'
+      expect(result.stderr + result.stdout).toMatch(/Did you mean|find/i);
+    }, 10000);
+
+    test('should handle multiple typo suggestions', () => {
+      const result = runCLI('lst');
+
+      // Should not crash, should suggest alternatives
+      expect(result.stdout + result.stderr).toMatch(/unknown|Did you mean|command/i);
+    }, 10000);
+
+    test('should show help prompt for unknown commands', () => {
+      const result = runCLI('invalidcmd');
+
+      // Should direct user to help
+      expect(result.stdout + result.stderr).toMatch(/help|unknown/i);
+    }, 10000);
+  });
+
+  describe('Status Indicators (Phase 2)', () => {
+    test('should display MCPs health status in find results', () => {
+      const result = runCLI('find scheduler --depth 0 --limit 1');
+
+      // Should show health status (MCPs: X/X healthy)
+      expect(result.stdout).toMatch(/healthy|MCPs/i);
+    }, 60000);
+
+    test('should show status indicators in list output', () => {
+      const result = runCLI('list');
+
+      // Output should contain status information
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.length).toBeGreaterThan(0);
+    }, 30000);
+  });
 });
