@@ -102,6 +102,7 @@
     "adm-zip": "^0.5.16",
     "asciichart": "^1.5.25",
     "chalk": "^5.3.0",
+    "chokidar": "^5.0.0",
     "cli-graph": "^3.2.2",
     "cli-highlight": "^2.1.11",
     "clipboardy": "^4.0.0",
