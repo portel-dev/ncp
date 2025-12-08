@@ -1329,52 +1329,66 @@ export class NCPOrchestrator {
       this.fileWatcher = getFileWatcher({
         // Skill callbacks
         onSkillAdded: async (skillName: string, skillPath: string) => {
-          logger.debug(`FileWatcher detected skill added: ${skillName}`);
+          const startTime = Date.now();
+          logger.info(`⭐ Skill added (auto-detected): ${skillName}`);
           try {
             await this.addSkill(skillName, skillPath);
+            const elapsed = Date.now() - startTime;
+            logger.info(`✅ Skill indexed: ${skillName} (${elapsed}ms)`);
           } catch (error: any) {
-            logger.error(`Failed to add skill ${skillName}: ${error.message}`);
+            logger.error(`❌ Failed to add skill ${skillName}: ${error.message}`);
           }
         },
         onSkillModified: async (skillName: string, skillPath: string) => {
-          logger.debug(`FileWatcher detected skill modified: ${skillName}`);
+          const startTime = Date.now();
+          logger.info(`🔄 Skill modified (auto-detected): ${skillName}`);
           try {
             await this.updateSkill(skillName, skillPath);
+            const elapsed = Date.now() - startTime;
+            logger.info(`✅ Skill updated: ${skillName} (${elapsed}ms)`);
           } catch (error: any) {
-            logger.error(`Failed to update skill ${skillName}: ${error.message}`);
+            logger.error(`❌ Failed to update skill ${skillName}: ${error.message}`);
           }
         },
         onSkillRemoved: async (skillName: string) => {
-          logger.debug(`FileWatcher detected skill removed: ${skillName}`);
+          logger.info(`🗑️  Skill removed (auto-detected): ${skillName}`);
           try {
             await this.removeSkill(skillName);
+            logger.info(`✅ Skill unindexed: ${skillName}`);
           } catch (error: any) {
-            logger.error(`Failed to remove skill ${skillName}: ${error.message}`);
+            logger.error(`❌ Failed to remove skill ${skillName}: ${error.message}`);
           }
         },
         // Photon callbacks
         onPhotonAdded: async (photonName: string, photonPath: string) => {
-          logger.debug(`FileWatcher detected photon added: ${photonName}`);
+          const startTime = Date.now();
+          logger.info(`⭐ Photon added (auto-detected): ${photonName}`);
           try {
             await this.addPhoton(photonName, photonPath);
+            const elapsed = Date.now() - startTime;
+            logger.info(`✅ Photon indexed: ${photonName} (${elapsed}ms)`);
           } catch (error: any) {
-            logger.error(`Failed to add photon ${photonName}: ${error.message}`);
+            logger.error(`❌ Failed to add photon ${photonName}: ${error.message}`);
           }
         },
         onPhotonModified: async (photonName: string, photonPath: string) => {
-          logger.debug(`FileWatcher detected photon modified: ${photonName}`);
+          const startTime = Date.now();
+          logger.info(`🔄 Photon modified (auto-detected): ${photonName}`);
           try {
             await this.updatePhoton(photonName, photonPath);
+            const elapsed = Date.now() - startTime;
+            logger.info(`✅ Photon updated: ${photonName} (${elapsed}ms)`);
           } catch (error: any) {
-            logger.error(`Failed to update photon ${photonName}: ${error.message}`);
+            logger.error(`❌ Failed to update photon ${photonName}: ${error.message}`);
           }
         },
         onPhotonRemoved: async (photonName: string) => {
-          logger.debug(`FileWatcher detected photon removed: ${photonName}`);
+          logger.info(`🗑️  Photon removed (auto-detected): ${photonName}`);
           try {
             await this.removePhoton(photonName);
+            logger.info(`✅ Photon unindexed: ${photonName}`);
           } catch (error: any) {
-            logger.error(`Failed to remove photon ${photonName}: ${error.message}`);
+            logger.error(`❌ Failed to remove photon ${photonName}: ${error.message}`);
           }
         },
         // Error callback
@@ -1385,7 +1399,10 @@ export class NCPOrchestrator {
 
       // Start watching
       await this.fileWatcher.start();
-      logger.info('📁 Dynamic discovery enabled - watching for skill and photon changes');
+      const watchModes = [];
+      if (enableSkills) watchModes.push('skills');
+      if (enablePhotonRuntime) watchModes.push('photons');
+      logger.info(`📁 Dynamic discovery enabled - watching for ${watchModes.join(' & ')} changes`);
     } catch (error: any) {
       logger.error(`Failed to start FileWatcher: ${error.message}`);
     }

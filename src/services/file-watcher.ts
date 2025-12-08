@@ -139,7 +139,7 @@ export class FileWatcher {
       });
 
       this.isInitialized = true;
-      logger.info('📁 File watcher started for skills and photons directories');
+      logger.info(`📁 File watcher started for skills and photons directories (debounce: ${this.debounceMs}ms)`);
     } catch (error: any) {
       logger.error(`Failed to start file watcher: ${error.message}`);
       this.callbacks.onError?.(error);
