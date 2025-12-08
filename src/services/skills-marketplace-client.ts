@@ -15,7 +15,7 @@ export interface SkillsMarketplace {
   name: string;
   repo: string; // For GitHub sources
   url: string; // Base URL for fetching
-  sourceType: 'github' | 'url' | 'local';
+  sourceType: 'github' | 'git-ssh' | 'url' | 'local';
   source: string; // Original input (for display)
   enabled: boolean;
   lastUpdated?: string;
@@ -166,12 +166,20 @@ export class SkillsMarketplaceClient {
 
   /**
    * Detect source type from a string
+   * Supports:
+   * - GitHub shorthand: username/repo
+   * - GitHub HTTPS: https://github.com/username/repo[.git]
+   * - GitHub SSH: git@github.com:username/repo.git
+   * - Direct URL: https://example.com/skills.json
+   * - Local path: ./path or /absolute/path
    */
-  private detectSourceType(source: string): 'github' | 'url' | 'local' {
+  private detectSourceType(source: string): 'github' | 'git-ssh' | 'url' | 'local' {
     if (source.startsWith('http://') || source.startsWith('https://')) {
       return 'url';
     } else if (source.startsWith('/') || source.startsWith('.')) {
       return 'local';
+    } else if (source.startsWith('git@') || source.startsWith('ssh://')) {
+      return 'git-ssh';
     } else {
       // Assume GitHub format: username/repo
       return 'github';
@@ -192,10 +200,28 @@ export class SkillsMarketplaceClient {
   /**
    * Build URL from source based on type
    */
-  private buildUrl(source: string, sourceType: 'github' | 'url' | 'local'): string {
+  private buildUrl(source: string, sourceType: 'github' | 'git-ssh' | 'url' | 'local'): string {
     switch (sourceType) {
       case 'github':
         return `https://raw.githubusercontent.com/${source}/main`;
+      case 'git-ssh': {
+        // Convert SSH URL to HTTPS
+        // git@github.com:username/repo.git -> https://raw.githubusercontent.com/username/repo/main
+        const sshMatch = source.match(/^git@github\.com:([a-zA-Z0-9-]+)\/([a-zA-Z0-9-_.]+?)(\.git)?$/);
+        if (sshMatch) {
+          const [, username, repo] = sshMatch;
+          const repoName = repo.replace(/\.git$/, '');
+          return `https://raw.githubusercontent.com/${username}/${repoName}/main`;
+        }
+        // Fallback for ssh:// URLs
+        const sshUrlMatch = source.match(/^ssh:\/\/git@github\.com\/([a-zA-Z0-9-]+)\/([a-zA-Z0-9-_.]+?)(\.git)?$/);
+        if (sshUrlMatch) {
+          const [, username, repo] = sshUrlMatch;
+          const repoName = repo.replace(/\.git$/, '');
+          return `https://raw.githubusercontent.com/${username}/${repoName}/main`;
+        }
+        return source;
+      }
       case 'url':
         return source.endsWith('/') ? source.slice(0, -1) : source;
       case 'local':

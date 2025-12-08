@@ -211,5 +211,23 @@ Content here`;
 
       expect(marketplace.name).toBe('testskills');
     });
+
+    test('should support SSH marketplace sources (git@github.com format)', async () => {
+      await client.initialize();
+      const marketplace = await client.addMarketplace('git@github.com:portel-dev/photon-skill.git');
+
+      expect(marketplace.name).toBe('photon-skill');
+      expect(marketplace.sourceType).toBe('git-ssh');
+      expect(marketplace.url).toBe('https://raw.githubusercontent.com/portel-dev/photon-skill/main');
+    });
+
+    test('should support SSH marketplace sources (ssh:// format)', async () => {
+      await client.initialize();
+      const marketplace = await client.addMarketplace('ssh://git@github.com/anthropics/skills');
+
+      expect(marketplace.name).toBe('skills');
+      expect(marketplace.sourceType).toBe('git-ssh');
+      expect(marketplace.url).toBe('https://raw.githubusercontent.com/anthropics/skills/main');
+    });
   });
 });
