@@ -3675,10 +3675,17 @@ program
   .description('Show available skills commands')
   .action(() => {
     console.log(chalk.bold('\n📚 NCP Skills Commands\n'));
-    console.log('Skills are packaged tools from Anthropic Agent Skills');
-    console.log('Place .zip files in ~/.ncp/skills/ to load them\n');
-    console.log(chalk.cyan('  ncp skills:list') + '              List installed skills');
-    console.log(chalk.cyan('  ncp skills:remove <name>') + '     Remove an installed skill');
+    console.log('Install and manage Anthropic Agent Skills\n');
+    console.log(chalk.cyan('Installed Skills:'));
+    console.log(chalk.cyan('  ncp skills:list') + '                      List installed skills');
+    console.log(chalk.cyan('  ncp skills:remove <name>') + '             Remove an installed skill');
+    console.log();
+    console.log(chalk.cyan('Skills Marketplace:'));
+    console.log(chalk.cyan('  ncp skills:marketplace list') + '           List configured marketplaces');
+    console.log(chalk.cyan('  ncp skills:marketplace add <source>') + '    Add a new marketplace');
+    console.log(chalk.cyan('  ncp skills:marketplace remove <name>') + '  Remove a marketplace');
+    console.log(chalk.cyan('  ncp skills:search [query]') + '             Search skills in marketplaces');
+    console.log(chalk.cyan('  ncp skills:install <name>') + '             Install a skill from marketplace');
     console.log();
   });
 
@@ -3731,6 +3738,146 @@ program
       console.log(chalk.yellow('⚠️  Restart NCP for changes to take effect'));
     } catch (error: any) {
       console.error(chalk.red(`Failed to remove skill: ${error.message}`));
+      process.exit(1);
+    }
+  });
+
+// ========== SKILLS MARKETPLACE COMMANDS ==========
+
+program
+  .command('skills:marketplace')
+  .description('Manage skills marketplaces')
+  .argument('[action]', 'Action: list, add, remove')
+  .argument('[source]', 'Marketplace source (for add) or name (for remove)')
+  .action(async (action?: string, source?: string) => {
+    try {
+      const { SkillsMarketplaceClient } = await import('../services/skills-marketplace-client.js');
+      const client = new SkillsMarketplaceClient();
+      await client.initialize();
+
+      if (!action || action === 'list') {
+        // List all marketplaces
+        const marketplaces = client.getAll();
+
+        if (marketplaces.length === 0) {
+          console.log(chalk.yellow('\n⚠️  No marketplaces configured\n'));
+          return;
+        }
+
+        console.log(chalk.bold(`\n📦 Configured Marketplaces (${marketplaces.length})\n`));
+
+        for (const marketplace of marketplaces) {
+          const status = marketplace.enabled ? chalk.green('✓') : chalk.red('✗');
+          const official = marketplace.name === 'anthropic-skills' ? chalk.blue(' (official)') : '';
+          console.log(`${status} ${chalk.bold(marketplace.name)}${official}`);
+          console.log(chalk.dim(`   Source: ${marketplace.source}`));
+          if (marketplace.lastUpdated) {
+            console.log(chalk.dim(`   Updated: ${marketplace.lastUpdated}`));
+          }
+          console.log();
+        }
+      } else if (action === 'add') {
+        if (!source) {
+          console.error(chalk.red('Error: Please provide a marketplace source'));
+          console.log(chalk.dim('\nExamples:'));
+          console.log(chalk.dim('  ncp skills:marketplace add anthropic-ai/anthropic-agent-skills'));
+          console.log(chalk.dim('  ncp skills:marketplace add https://github.com/anthropic-ai/skills'));
+          console.log(chalk.dim('  ncp skills:marketplace add ./local/skills-path'));
+          process.exit(1);
+        }
+
+        console.log(chalk.cyan('\n➕ Adding marketplace...\n'));
+        const marketplace = await client.addMarketplace(source);
+
+        console.log(chalk.green(`✅ Marketplace added: ${marketplace.name}`));
+        console.log(chalk.dim(`   Source: ${marketplace.source}`));
+        console.log(chalk.dim(`   URL: ${marketplace.url}\n`));
+      } else if (action === 'remove') {
+        if (!source) {
+          console.error(chalk.red('Error: Please provide a marketplace name'));
+          process.exit(1);
+        }
+
+        const removed = await client.removeMarketplace(source);
+
+        if (!removed) {
+          console.log(chalk.yellow(`\n⚠️  Marketplace '${source}' not found\n`));
+          return;
+        }
+
+        console.log(chalk.green(`\n✅ Marketplace removed: ${source}\n`));
+      } else {
+        console.error(chalk.red(`Unknown action: ${action}`));
+        console.log(chalk.dim('Available actions: list, add, remove'));
+        process.exit(1);
+      }
+    } catch (error: any) {
+      console.error(chalk.red(`Failed to manage marketplace: ${error.message}`));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('skills:search')
+  .description('Search for skills in configured marketplaces')
+  .argument('[query]', 'Search query (optional)')
+  .action(async (query?: string) => {
+    try {
+      const { SkillsMarketplaceClient } = await import('../services/skills-marketplace-client.js');
+      const client = new SkillsMarketplaceClient();
+      await client.initialize();
+
+      console.log(chalk.cyan('\n🔍 Searching for skills...\n'));
+      const skills = await client.search(query);
+
+      if (skills.length === 0) {
+        console.log(chalk.yellow(`No skills found${query ? ` for "${query}"` : ''}\n`));
+        return;
+      }
+
+      const searchInfo = query ? ` matching "${query}"` : '';
+      console.log(chalk.bold(`📚 Found ${skills.length} skill${skills.length !== 1 ? 's' : ''}${searchInfo}\n`));
+
+      for (const skill of skills) {
+        console.log(chalk.cyan(`  ${skill.name}`));
+        console.log(chalk.dim(`    ${skill.description || '(no description)'}`));
+        if (skill.plugin) {
+          console.log(chalk.dim(`    Plugin: ${skill.plugin}`));
+        }
+        if (skill.tags && skill.tags.length > 0) {
+          console.log(chalk.dim(`    Tags: ${skill.tags.join(', ')}`));
+        }
+        console.log();
+      }
+    } catch (error: any) {
+      console.error(chalk.red(`Failed to search skills: ${error.message}`));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('skills:install')
+  .description('Install a skill from a marketplace')
+  .argument('<name>', 'Skill name to install')
+  .action(async (skillName: string) => {
+    try {
+      const { SkillsMarketplaceClient } = await import('../services/skills-marketplace-client.js');
+      const client = new SkillsMarketplaceClient();
+      await client.initialize();
+
+      console.log(chalk.cyan(`\n📥 Installing skill: ${skillName}\n`));
+      const result = await client.install(skillName);
+
+      if (result.success) {
+        console.log(chalk.green(`✅ ${result.message}`));
+        console.log(chalk.yellow('⚠️  Restart NCP for the skill to be loaded'));
+      } else {
+        console.log(chalk.red(`❌ ${result.message}`));
+        process.exit(1);
+      }
+      console.log();
+    } catch (error: any) {
+      console.error(chalk.red(`Failed to install skill: ${error.message}`));
       process.exit(1);
     }
   });

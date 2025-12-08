@@ -123,6 +123,89 @@ export class SkillsMarketplaceClient {
   }
 
   /**
+   * Add a new marketplace
+   */
+  async addMarketplace(source: string): Promise<SkillsMarketplace> {
+    const name = this.extractMarketplaceName(source);
+    const sourceType = this.detectSourceType(source);
+    const url = this.buildUrl(source, sourceType);
+
+    const marketplace: SkillsMarketplace = {
+      name,
+      repo: sourceType === 'github' ? source : '',
+      url,
+      sourceType,
+      source,
+      enabled: true,
+      lastUpdated: new Date().toISOString()
+    };
+
+    // Check if marketplace already exists
+    const existing = this.config.marketplaces.find(m => m.name === name);
+    if (!existing) {
+      this.config.marketplaces.push(marketplace);
+      await this.save();
+    }
+
+    return marketplace;
+  }
+
+  /**
+   * Remove a marketplace
+   */
+  async removeMarketplace(name: string): Promise<boolean> {
+    const index = this.config.marketplaces.findIndex(m => m.name === name);
+    if (index === -1) {
+      return false;
+    }
+
+    this.config.marketplaces.splice(index, 1);
+    await this.save();
+    return true;
+  }
+
+  /**
+   * Detect source type from a string
+   */
+  private detectSourceType(source: string): 'github' | 'url' | 'local' {
+    if (source.startsWith('http://') || source.startsWith('https://')) {
+      return 'url';
+    } else if (source.startsWith('/') || source.startsWith('.')) {
+      return 'local';
+    } else {
+      // Assume GitHub format: username/repo
+      return 'github';
+    }
+  }
+
+  /**
+   * Extract marketplace name from source
+   */
+  private extractMarketplaceName(source: string): string {
+    if (source.includes('/')) {
+      const parts = source.split('/');
+      return parts[parts.length - 1].replace('.git', '').toLowerCase();
+    }
+    return source.toLowerCase();
+  }
+
+  /**
+   * Build URL from source based on type
+   */
+  private buildUrl(source: string, sourceType: 'github' | 'url' | 'local'): string {
+    switch (sourceType) {
+      case 'github':
+        return `https://raw.githubusercontent.com/${source}/main`;
+      case 'url':
+        return source.endsWith('/') ? source.slice(0, -1) : source;
+      case 'local':
+        return source;
+      default:
+        return source;
+    }
+  }
+
+  /**
    * Fetch marketplace manifest from remote source
    */
   async fetchManifest(marketplace: SkillsMarketplace): Promise<SkillsMarketplaceManifest | null> {
