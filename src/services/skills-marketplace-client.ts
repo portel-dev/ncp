@@ -318,8 +318,13 @@ export class SkillsMarketplaceClient {
 
       // Iterate through all plugins
       for (const plugin of manifest.plugins) {
+        // Determine skill paths - use explicit list or auto-discover from plugin source
+        const skillPaths = plugin.skills && Array.isArray(plugin.skills)
+          ? plugin.skills
+          : [plugin.source];
+
         // Iterate through all skills in the plugin
-        for (const skillPath of plugin.skills) {
+        for (const skillPath of skillPaths) {
           const content = await this.fetchSkillContent(marketplace, skillPath);
           if (!content) continue;
 
@@ -358,7 +363,12 @@ export class SkillsMarketplaceClient {
 
         // Find the skill in the manifest
         for (const plugin of manifest.plugins) {
-          for (const skillPath of plugin.skills) {
+          // Determine skill paths - use explicit list or auto-discover from plugin source
+          const skillPaths = plugin.skills && Array.isArray(plugin.skills)
+            ? plugin.skills
+            : [plugin.source];
+
+          for (const skillPath of skillPaths) {
             const content = await this.fetchSkillContent(marketplace, skillPath);
             if (!content) continue;
 
