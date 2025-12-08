@@ -12,6 +12,7 @@ import * as path from 'path';
 import { InternalMCP, InternalTool, InternalToolResult, ElicitationCapable } from './types.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
+import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
 import { RegistryMCPCandidate } from '../services/registry-client.js';
 import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
 import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials, collectBulkCredentials, elicitMultiSelect, detectHTTPCredentials } from '../utils/elicitation-helper.js';
@@ -884,7 +885,7 @@ Do you want to remove this MCP?`;
         .replace(/^-/, '');  // Remove leading dash
 
       // Create destination directory
-      const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
+      const microDir = path.join(getNcpBaseDirectory(), 'micromcps');
       await fs.mkdir(microDir, { recursive: true });
 
       const destFile = path.join(microDir, `${baseName}.photon.ts`);
@@ -1627,7 +1628,7 @@ Do you want to remove this MCP?`;
       const os = await import('os');
 
       // Create micromcps directory
-      const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
+      const microDir = path.join(getNcpBaseDirectory(), 'micromcps');
       await fs.mkdir(microDir, { recursive: true });
 
       const microFile = path.join(microDir, `${name}.photon.ts`);
@@ -1720,7 +1721,7 @@ Do you want to remove this MCP?`;
       const baseName = fileName.replace('.photon.ts', '');
 
       // Create destination directory
-      const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
+      const microDir = path.join(getNcpBaseDirectory(), 'micromcps');
       await fs.mkdir(microDir, { recursive: true });
 
       const destFile = path.join(microDir, fileName);
@@ -1790,7 +1791,7 @@ Do you want to remove this MCP?`;
       const baseName = fileName.replace('.photon.ts', '');
 
       // Create destination directory
-      const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
+      const microDir = path.join(getNcpBaseDirectory(), 'micromcps');
       await fs.mkdir(microDir, { recursive: true });
 
       const destFile = path.join(microDir, fileName);

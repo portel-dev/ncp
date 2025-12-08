@@ -7,6 +7,7 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { OutputFormatter } from '../../services/output-formatter.js';
+import { getNcpBaseDirectory } from '../../utils/ncp-paths.js';
 
 export interface DiagnosticCheck {
   name: string;
@@ -133,7 +134,7 @@ export class DoctorCommand {
 
   private static async checkProfileDirectory(): Promise<DiagnosticCheck> {
     try {
-      const ncpDir = path.join(os.homedir(), '.ncp');
+      const ncpDir = getNcpBaseDirectory();
       const stat = await fs.stat(ncpDir);
 
       if (stat.isDirectory()) {
@@ -175,7 +176,7 @@ export class DoctorCommand {
 
   private static async checkCacheSystem(): Promise<DiagnosticCheck> {
     try {
-      const cacheDir = path.join(os.homedir(), '.ncp', 'cache');
+      const cacheDir = path.join(getNcpBaseDirectory(), 'cache');
       const stat = await fs.stat(cacheDir);
 
       if (stat.isDirectory()) {

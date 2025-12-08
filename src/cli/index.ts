@@ -21,7 +21,7 @@ import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 import { UpdateChecker } from '../utils/update-checker.js';
 import { MCPUpdateChecker } from '../utils/mcp-update-checker.js';
 import { logger } from '../utils/logger.js';
-import { setOverrideWorkingDirectory } from '../utils/ncp-paths.js';
+import { setOverrideWorkingDirectory, getNcpBaseDirectory } from '../utils/ncp-paths.js';
 import { ConfigSchemaReader } from '../services/config-schema-reader.js';
 import { ConfigPrompter } from '../services/config-prompter.js';
 import { SchemaCache } from '../cache/schema-cache.js';
@@ -992,7 +992,7 @@ program
           const baseName = fileName.replace('.photon.ts', '');
 
           // Create destination directory
-          const microDir = path.join(os.homedir(), '.ncp', 'micromcps');
+          const microDir = path.join(getNcpBaseDirectory(), 'micromcps');
           await fs.mkdir(microDir, { recursive: true });
 
           const destFile = path.join(microDir, fileName);
@@ -3572,7 +3572,7 @@ photonCmd
       }
 
       // Add to ~/.ncp/photons/
-      const photonDir = path.join(os.homedir(), '.ncp', 'photons');
+      const photonDir = path.join(getNcpBaseDirectory(), 'photons');
       await fs.mkdir(photonDir, { recursive: true });
 
       const fileName = `${name}.photon.ts`;
@@ -3612,7 +3612,7 @@ photonCmd
     const fs = await import('fs/promises');
     const { existsSync } = await import('fs');
 
-    const photonDir = path.join(os.homedir(), '.ncp', 'photons');
+    const photonDir = path.join(getNcpBaseDirectory(), 'photons');
 
     if (!existsSync(photonDir)) {
       console.log(chalk.yellow('No Photons installed'));

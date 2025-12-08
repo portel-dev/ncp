@@ -7,9 +7,9 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as os from 'os';
 import { existsSync } from 'fs';
 import { logger } from '../utils/logger.js';
+import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
 
 export interface SkillsMarketplace {
   name: string;
@@ -66,11 +66,22 @@ export interface SkillsMarketplaceManifest {
   plugins: ClaudePlugin[];
 }
 
-// Use NCP's config directory structure
-const CONFIG_DIR = path.join(os.homedir(), '.ncp');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'skills-marketplaces.json');
-const CACHE_DIR = path.join(CONFIG_DIR, '.cache', 'skills-marketplaces');
-const SKILLS_DIR = path.join(CONFIG_DIR, 'skills');
+// Helper functions to get directories (respects getNcpBaseDirectory for flexibility)
+function getConfigDir(): string {
+  return getNcpBaseDirectory();
+}
+
+function getConfigFile(): string {
+  return path.join(getConfigDir(), 'skills-marketplaces.json');
+}
+
+function getCacheDir(): string {
+  return path.join(getConfigDir(), '.cache', 'skills-marketplaces');
+}
+
+function getSkillsDir(): string {
+  return path.join(getConfigDir(), 'skills');
+}
 
 // Cache is considered stale after 24 hours
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -88,12 +99,12 @@ export class SkillsMarketplaceClient {
   private config: SkillsMarketplaceConfig = { marketplaces: [] };
 
   async initialize() {
-    await fs.mkdir(CONFIG_DIR, { recursive: true });
-    await fs.mkdir(CACHE_DIR, { recursive: true });
-    await fs.mkdir(SKILLS_DIR, { recursive: true });
+    await fs.mkdir(getConfigDir(), { recursive: true });
+    await fs.mkdir(getCacheDir(), { recursive: true });
+    await fs.mkdir(getSkillsDir(), { recursive: true });
 
-    if (existsSync(CONFIG_FILE)) {
-      const data = await fs.readFile(CONFIG_FILE, 'utf-8');
+    if (existsSync(getConfigFile())) {
+      const data = await fs.readFile(getConfigFile(), 'utf-8');
       this.config = JSON.parse(data);
     } else {
       // Initialize with default marketplace
@@ -105,7 +116,7 @@ export class SkillsMarketplaceClient {
   }
 
   async save() {
-    await fs.writeFile(CONFIG_FILE, JSON.stringify(this.config, null, 2), 'utf-8');
+    await fs.writeFile(getConfigFile(), JSON.stringify(this.config, null, 2), 'utf-8');
   }
 
   /**
@@ -248,7 +259,7 @@ export class SkillsMarketplaceClient {
       const manifest: SkillsMarketplaceManifest = await response.json();
 
       // Cache the manifest
-      const cacheFile = path.join(CACHE_DIR, `${marketplace.name}-manifest.json`);
+      const cacheFile = path.join(getCacheDir(), `${marketplace.name}-manifest.json`);
       await fs.writeFile(cacheFile, JSON.stringify(manifest, null, 2), 'utf-8');
 
       return manifest;
@@ -257,7 +268,7 @@ export class SkillsMarketplaceClient {
 
       // Try to load from cache
       try {
-        const cacheFile = path.join(CACHE_DIR, `${marketplace.name}-manifest.json`);
+        const cacheFile = path.join(getCacheDir(), `${marketplace.name}-manifest.json`);
         if (existsSync(cacheFile)) {
           logger.debug(`Using cached manifest for ${marketplace.name}`);
           const cached = await fs.readFile(cacheFile, 'utf-8');
@@ -402,7 +413,7 @@ export class SkillsMarketplaceClient {
             if (!metadata || metadata.name !== skillName) continue;
 
             // Found the skill! Install it
-            const skillDir = path.join(SKILLS_DIR, skillName);
+            const skillDir = path.join(getSkillsDir(), skillName);
             await fs.mkdir(skillDir, { recursive: true });
 
             const skillFile = path.join(skillDir, 'SKILL.md');
@@ -438,12 +449,12 @@ export class SkillsMarketplaceClient {
   async listInstalled(): Promise<SkillMetadata[]> {
     try {
       const installed: SkillMetadata[] = [];
-      const entries = await fs.readdir(SKILLS_DIR, { withFileTypes: true });
+      const entries = await fs.readdir(getSkillsDir(), { withFileTypes: true });
 
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
 
-        const skillFile = path.join(SKILLS_DIR, entry.name, 'SKILL.md');
+        const skillFile = path.join(getSkillsDir(), entry.name, 'SKILL.md');
         if (!existsSync(skillFile)) continue;
 
         const content = await fs.readFile(skillFile, 'utf-8');
@@ -465,7 +476,7 @@ export class SkillsMarketplaceClient {
    */
   async remove(skillName: string): Promise<{ success: boolean; message: string }> {
     try {
-      const skillDir = path.join(SKILLS_DIR, skillName);
+      const skillDir = path.join(getSkillsDir(), skillName);
 
       if (!existsSync(skillDir)) {
         return {

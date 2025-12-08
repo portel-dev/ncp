@@ -6,6 +6,7 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import * as os from 'os';
+import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
 
 export interface MCPSession {
   mcpName: string;
@@ -45,7 +46,7 @@ export class NCPLogParser {
   constructor() {
     // Always use global ~/.ncp/logs for analytics data
     // This ensures we analyze the real usage data, not local development data
-    this.logsDir = join(os.homedir(), '.ncp', 'logs');
+    this.logsDir = join(getNcpBaseDirectory(), 'logs');
   }
 
   /**

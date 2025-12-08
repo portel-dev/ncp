@@ -11,6 +11,7 @@ import * as os from 'os';
 import { existsSync } from 'fs';
 import * as crypto from 'crypto';
 import { logger } from '../utils/logger.js';
+import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
 
 export type MarketplaceSourceType = 'github' | 'git-ssh' | 'url' | 'local';
 
@@ -80,11 +81,22 @@ export interface MarketplaceManifest {
   photons: PhotonMetadata[];
 }
 
-// Use NCP's config directory structure
-const CONFIG_DIR = path.join(os.homedir(), '.ncp');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'photon-marketplaces.json');
-const CACHE_DIR = path.join(CONFIG_DIR, '.cache', 'photon-marketplaces');
-const METADATA_FILE = path.join(CONFIG_DIR, '.photon-metadata.json');
+// Helper functions to get directories (respects getNcpBaseDirectory for flexibility)
+function getConfigDir(): string {
+  return getNcpBaseDirectory();
+}
+
+function getConfigFile(): string {
+  return path.join(getConfigDir(), 'photon-marketplaces.json');
+}
+
+function getCacheDir(): string {
+  return path.join(getConfigDir(), '.cache', 'photon-marketplaces');
+}
+
+function getMetadataFile(): string {
+  return path.join(getConfigDir(), '.photon-metadata.json');
+}
 
 // Cache is considered stale after 24 hours
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -120,8 +132,8 @@ export function calculateHash(content: string): string {
  */
 export async function readLocalMetadata(): Promise<LocalMetadata> {
   try {
-    if (existsSync(METADATA_FILE)) {
-      const data = await fs.readFile(METADATA_FILE, 'utf-8');
+    if (existsSync(getMetadataFile())) {
+      const data = await fs.readFile(getMetadataFile(), 'utf-8');
       return JSON.parse(data);
     }
   } catch {
@@ -134,19 +146,19 @@ export async function readLocalMetadata(): Promise<LocalMetadata> {
  * Write local installation metadata
  */
 export async function writeLocalMetadata(metadata: LocalMetadata): Promise<void> {
-  await fs.mkdir(CONFIG_DIR, { recursive: true });
-  await fs.writeFile(METADATA_FILE, JSON.stringify(metadata, null, 2), 'utf-8');
+  await fs.mkdir(getConfigDir(), { recursive: true });
+  await fs.writeFile(getMetadataFile(), JSON.stringify(metadata, null, 2), 'utf-8');
 }
 
 export class PhotonMarketplaceClient {
   private config: MarketplaceConfig = { marketplaces: [] };
 
   async initialize() {
-    await fs.mkdir(CONFIG_DIR, { recursive: true });
-    await fs.mkdir(CACHE_DIR, { recursive: true });
+    await fs.mkdir(getConfigDir(), { recursive: true });
+    await fs.mkdir(getCacheDir(), { recursive: true });
 
-    if (existsSync(CONFIG_FILE)) {
-      const data = await fs.readFile(CONFIG_FILE, 'utf-8');
+    if (existsSync(getConfigFile())) {
+      const data = await fs.readFile(getConfigFile(), 'utf-8');
       this.config = JSON.parse(data);
     } else {
       // Initialize with default marketplace
@@ -158,7 +170,7 @@ export class PhotonMarketplaceClient {
   }
 
   async save() {
-    await fs.writeFile(CONFIG_FILE, JSON.stringify(this.config, null, 2), 'utf-8');
+    await fs.writeFile(getConfigFile(), JSON.stringify(this.config, null, 2), 'utf-8');
   }
 
   /**
@@ -409,7 +421,7 @@ export class PhotonMarketplaceClient {
    * Get cache file path for marketplace
    */
   private getCacheFile(marketplaceName: string): string {
-    return path.join(CACHE_DIR, `${marketplaceName}.json`);
+    return path.join(getCacheDir(), `${marketplaceName}.json`);
   }
 
   /**

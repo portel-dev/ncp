@@ -27,6 +27,7 @@ import { CodeMCP } from './code.js';
 import { PhotonLoader } from './photon-loader.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
+import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import * as os from 'os';
@@ -73,10 +74,10 @@ export class InternalMCPManager {
     if (photonRuntimeEnabled) {
       directories.push(
         // Installed Photons from registry (~/.ncp/photons/)
-        path.join(os.homedir(), '.ncp', 'photons'),
+        path.join(getNcpBaseDirectory(), 'photons'),
 
         // Global user MCPs (~/.ncp/internal/)
-        path.join(os.homedir(), '.ncp', 'internal'),
+        path.join(getNcpBaseDirectory(), 'internal'),
 
         // Project-local MCPs (.ncp/internal/)
         path.join(process.cwd(), '.ncp', 'internal')

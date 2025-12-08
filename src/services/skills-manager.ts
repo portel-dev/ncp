@@ -13,6 +13,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { existsSync } from 'fs';
 import { logger } from '../utils/logger.js';
+import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
 
 export interface SkillMetadata {
   name: string;
@@ -32,12 +33,16 @@ export interface LoadedSkill {
   directory: string;    // Skill directory
 }
 
+function getSkillsDir(): string {
+  return path.join(getNcpBaseDirectory(), 'skills');
+}
+
 export class SkillsManager {
   private skillsDir: string;
   private loadedSkills: Map<string, LoadedSkill> = new Map();
 
   constructor() {
-    this.skillsDir = path.join(os.homedir(), '.ncp', 'skills');
+    this.skillsDir = getSkillsDir();
   }
 
   /**
