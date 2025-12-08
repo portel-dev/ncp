@@ -3820,8 +3820,8 @@ program
 program
   .command('skills:search')
   .description('Search for skills in configured marketplaces')
-  .argument('[query]', 'Search query (optional)')
-  .action(async (query?: string) => {
+  .argument('<query>', 'Search query')
+  .action(async (query: string) => {
     try {
       const { SkillsMarketplaceClient } = await import('../services/skills-marketplace-client.js');
       const client = new SkillsMarketplaceClient();
