@@ -3368,12 +3368,12 @@ const photonCmd = program
     console.log('  photon marketplace remove <name>     Remove a marketplace');
     console.log('  photon marketplace update [name]     Update marketplace cache');
     console.log('  photon search <query>                Search for Photons');
-    console.log('  photon install <name>                Install a Photon');
+    console.log('  photon add <name>                    Add a Photon');
     console.log('  photon list                          List installed Photons');
     console.log(chalk.dim('\nExamples:'));
     console.log(chalk.dim('  ncp photon marketplace add username/repo'));
     console.log(chalk.dim('  ncp photon search calculator'));
-    console.log(chalk.dim('  ncp photon install calculator\n'));
+    console.log(chalk.dim('  ncp photon add calculator\n'));
   });
 
 photonCmd
