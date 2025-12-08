@@ -222,4 +222,236 @@ export class OutputFormatter {
     }
     return `${name.padEnd(20)} ${statusBadge}`;
   }
+
+  // === INTELLIGENT OUTPUT FORMATTING ===
+  // Auto-detect and format data for optimal presentation
+
+  static readonly FORMAT_TYPES = {
+    PRIMITIVE: 'primitive',
+    TABLE: 'table',
+    TREE: 'tree',
+    LIST: 'list',
+    NONE: 'none'
+  } as const;
+
+  /**
+   * Auto-detect the best format for displaying data
+   */
+  static detectFormat(data: any): string {
+    // Handle null/undefined/empty
+    if (data === null || data === undefined || data === '') {
+      return this.FORMAT_TYPES.NONE;
+    }
+
+    // Handle primitives
+    if (typeof data === 'string' || typeof data === 'number' || typeof data === 'boolean') {
+      return this.FORMAT_TYPES.PRIMITIVE;
+    }
+
+    // Handle arrays
+    if (Array.isArray(data)) {
+      // Array of primitives -> LIST
+      if (data.every(item => typeof item !== 'object' || item === null)) {
+        return this.FORMAT_TYPES.LIST;
+      }
+      // Array of objects with same keys -> TABLE
+      if (data.length > 0 && typeof data[0] === 'object') {
+        return this.FORMAT_TYPES.TABLE;
+      }
+      return this.FORMAT_TYPES.LIST;
+    }
+
+    // Handle objects
+    if (typeof data === 'object') {
+      const keys = Object.keys(data);
+      // Check if nested object (has object values) -> TREE
+      const hasNestedObjects = keys.some(
+        key => typeof data[key] === 'object' && data[key] !== null && !Array.isArray(data[key])
+      );
+
+      if (hasNestedObjects) {
+        return this.FORMAT_TYPES.TREE;
+      }
+
+      // Flat object -> TABLE (single row)
+      return this.FORMAT_TYPES.TABLE;
+    }
+
+    return this.FORMAT_TYPES.PRIMITIVE;
+  }
+
+  /**
+   * Format data based on detected type
+   */
+  static formatAuto(data: any): string {
+    const format = this.detectFormat(data);
+
+    switch (format) {
+      case this.FORMAT_TYPES.PRIMITIVE:
+        return this.formatPrimitive(data);
+      case this.FORMAT_TYPES.TABLE:
+        return this.formatAsTable(data);
+      case this.FORMAT_TYPES.TREE:
+        return this.formatAsTree(data);
+      case this.FORMAT_TYPES.LIST:
+        return this.formatAsList(data);
+      case this.FORMAT_TYPES.NONE:
+        return '(empty)';
+      default:
+        return JSON.stringify(data, null, 2);
+    }
+  }
+
+  private static formatPrimitive(data: any): string {
+    if (typeof data === 'string') {
+      return data;
+    }
+    return String(data);
+  }
+
+  private static formatAsList(data: any[]): string {
+    const items = data.map(item => {
+      if (typeof item === 'object' && item !== null) {
+        return `  • ${JSON.stringify(item)}`;
+      }
+      return this.bullet(String(item));
+    });
+
+    return items.join('\n');
+  }
+
+  private static formatAsTable(data: any): string {
+    if (Array.isArray(data)) {
+      if (data.length === 0) return '(empty table)';
+
+      const firstRow = data[0];
+      if (typeof firstRow !== 'object' || firstRow === null) {
+        return this.formatAsList(data);
+      }
+
+      const headers = Object.keys(firstRow);
+      const rows = data.map(item =>
+        headers.map(header => {
+          const value = (item as any)[header];
+          return value === null || value === undefined ? '' : String(value);
+        })
+      );
+
+      return this.table(headers, rows);
+    } else {
+      // Single object -> single row table
+      const headers = Object.keys(data);
+      const values = headers.map(h => String((data as any)[h]));
+      return this.table(headers, [values]);
+    }
+  }
+
+  private static formatAsTree(data: any, indent: number = 0): string {
+    const prefix = '  '.repeat(indent);
+    const lines: string[] = [];
+
+    if (Array.isArray(data)) {
+      data.forEach((item, index) => {
+        lines.push(`${prefix}[${index}]:`);
+        lines.push(this.formatAsTree(item, indent + 1));
+      });
+    } else if (typeof data === 'object' && data !== null) {
+      Object.entries(data).forEach(([key, value]) => {
+        if (typeof value === 'object' && value !== null) {
+          lines.push(`${prefix}${key}:`);
+          lines.push(this.formatAsTree(value, indent + 1));
+        } else {
+          const displayValue = value === null ? 'null' : value === undefined ? 'undefined' : String(value);
+          lines.push(`${prefix}${key}: ${displayValue}`);
+        }
+      });
+    } else {
+      lines.push(`${prefix}${String(data)}`);
+    }
+
+    return lines.join('\n');
+  }
+
+  // === MARKDOWN RENDERING ===
+  // Basic markdown support for formatted text output
+
+  /**
+   * Detect if content is markdown
+   */
+  static isMarkdown(content: string): boolean {
+    if (typeof content !== 'string') return false;
+
+    // Check for common markdown patterns
+    const markdownPatterns = [
+      /^#+\s/m,           // Headings
+      /\*\*.*?\*\*/,       // Bold
+      /\*.*?\*/,           // Italic
+      /`[^`]+`/,           // Code
+      /```[\s\S]*?```/,    // Code blocks
+      /\[.*?\]\(.*?\)/,    // Links
+      /^\s*[-*+]\s/m,      // Lists
+      /^\s*\d+\.\s/m,      // Numbered lists
+      /^>+ /m              // Blockquotes
+    ];
+
+    return markdownPatterns.some(pattern => pattern.test(content));
+  }
+
+  /**
+   * Render markdown with basic formatting
+   * Note: For full markdown rendering with syntax highlighting,
+   * consider using marked library (optional dependency)
+   */
+  static renderMarkdown(content: string): string {
+    if (!this.noColor) {
+      let formatted = content;
+
+      // Process headings
+      formatted = formatted.replace(/^### (.*?)$/gm, (_, text) => chalk.cyan(`  ${text}`));
+      formatted = formatted.replace(/^## (.*?)$/gm, (_, text) => chalk.blue.bold(`${text}`));
+      formatted = formatted.replace(/^# (.*?)$/gm, (_, text) => chalk.magenta.bold(`${text}`));
+
+      // Process bold and italic
+      formatted = formatted.replace(/\*\*(.*?)\*\*/g, (_, text) => chalk.bold(text));
+      formatted = formatted.replace(/\*(.*?)\*/g, (_, text) => chalk.italic(text));
+
+      // Process inline code
+      formatted = formatted.replace(/`([^`]+)`/g, (_, code) => chalk.bgGray.black(` ${code} `));
+
+      // Process code blocks
+      formatted = formatted.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+        const border = chalk.gray('┌─────────────────────────────┐');
+        const codeLines = code.trim().split('\n').map((line: string) => chalk.gray('│ ') + line);
+        const closeBar = chalk.gray('└─────────────────────────────┘');
+        return `${border}\n${codeLines.join('\n')}\n${closeBar}`;
+      });
+
+      // Process blockquotes
+      formatted = formatted.replace(/^> (.*?)$/gm, (_, text) => chalk.dim(`  │ ${text}`));
+
+      // Process links
+      formatted = formatted.replace(/\[(.*?)\]\((.*?)\)/g, (_, text, url) =>
+        `${chalk.blue.underline(text)} ${chalk.dim(`(${url}`)}`
+      );
+
+      // Process lists
+      formatted = formatted.replace(/^[\s]*[-*+]\s(.*?)$/gm, (_, item) => `  ${chalk.cyan('•')} ${item}`);
+      formatted = formatted.replace(/^[\s]*(\d+)\.\s(.*?)$/gm, (_, num, item) => `  ${chalk.cyan(num)}.${item}`);
+
+      return formatted;
+    }
+
+    return content;
+  }
+
+  /**
+   * Format string content intelligently
+   * Detects markdown and renders accordingly
+   */
+  static formatString(content: string): string {
+    if (this.isMarkdown(content)) {
+      return this.renderMarkdown(content);
+    }
+    return content;
+  }
 }

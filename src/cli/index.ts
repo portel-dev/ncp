@@ -13,6 +13,7 @@ import { formatCommandDisplay } from '../utils/security.js';
 import { TextUtils } from '../utils/text-utils.js';
 import { OutputFormatter } from '../services/output-formatter.js';
 import { ErrorHandler } from '../services/error-handler.js';
+import { DoctorCommand } from './commands/doctor.js';
 import { CachePatcher } from '../cache/cache-patcher.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -3731,6 +3732,20 @@ program
       console.log(chalk.yellow('⚠️  Restart NCP for changes to take effect'));
     } catch (error: any) {
       console.error(chalk.red(`Failed to remove skill: ${error.message}`));
+      process.exit(1);
+    }
+  });
+
+// ========== DOCTOR COMMAND ==========
+
+program
+  .command('doctor [mcp]')
+  .description('Run system diagnostics to check NCP and MCP health')
+  .action(async (mcpName?: string) => {
+    try {
+      await DoctorCommand.diagnose(mcpName);
+    } catch (error: any) {
+      console.error(chalk.red(`\n❌ Doctor diagnostics failed: ${error.message}`));
       process.exit(1);
     }
   });

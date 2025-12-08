@@ -3,11 +3,23 @@
 
 const colorFn = (str) => str;
 
-const chainable = {
-  bold: (str) => str,
-  dim: (str) => str,
-  italic: (str) => str,
-  underline: (str) => str,
+const colors = ['green', 'red', 'yellow', 'blue', 'cyan', 'magenta', 'white', 'gray', 'grey', 'black'];
+
+// Create chainable object that supports all color methods
+const createChainable = () => {
+  const chainable = {
+    bold: (str) => str,
+    dim: (str) => str,
+    italic: (str) => str,
+    underline: (str) => str,
+  };
+
+  // Add all color methods to chainable
+  colors.forEach(color => {
+    chainable[color] = (str) => str;
+  });
+
+  return chainable;
 };
 
 const mockChalk = {
@@ -27,13 +39,22 @@ const mockChalk = {
   dim: colorFn,
   inverse: colorFn,
   strikethrough: colorFn,
+  bgGray: colorFn,
+  level: 0,
 };
 
-// Add chainable methods
-mockChalk.green = Object.assign(colorFn, chainable);
-mockChalk.red = Object.assign(colorFn, chainable);
-mockChalk.yellow = Object.assign(colorFn, chainable);
-mockChalk.blue = Object.assign(colorFn, chainable);
+// Add chainable methods to colors
+const chainable = createChainable();
+colors.forEach(color => {
+  mockChalk[color] = Object.assign(colorFn, chainable);
+});
+
+// Add chainable methods to bold, dim, italic
+mockChalk.bold = Object.assign(colorFn, chainable);
+mockChalk.dim = Object.assign(colorFn, chainable);
+mockChalk.italic = Object.assign(colorFn, chainable);
+mockChalk.underline = Object.assign(colorFn, chainable);
+mockChalk.bgGray = Object.assign(colorFn, { ...chainable, black: (str) => str });
 
 export default mockChalk;
 export { mockChalk };

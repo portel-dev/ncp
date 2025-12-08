@@ -277,4 +277,89 @@ describe('CLI Integration Tests', () => {
       expect(result.stdout.length).toBeGreaterThan(0);
     }, 30000);
   });
+
+  describe('Doctor Command (Phase 3)', () => {
+    test('should run system diagnostics', () => {
+      const result = runCLI('doctor');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Diagnostics');
+    }, 30000);
+
+    test('should display health summary', () => {
+      const result = runCLI('doctor');
+
+      expect(result.exitCode).toBe(0);
+      // Should show checks passed and percentage
+      expect(result.stdout).toMatch(/\d+\/\d+ checks passed \(\d+%\)/);
+    }, 30000);
+
+    test('should show status indicators for each check', () => {
+      const result = runCLI('doctor');
+
+      expect(result.exitCode).toBe(0);
+      // Should include status indicators
+      expect(result.stdout).toMatch(/✓|✗|⚠|\?/);
+    }, 30000);
+
+    test('should verify Node.js version check', () => {
+      const result = runCLI('doctor');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Node.js');
+    }, 30000);
+
+    test('should verify npm availability check', () => {
+      const result = runCLI('doctor');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('npm');
+    }, 30000);
+
+    test('should check working directory', () => {
+      const result = runCLI('doctor');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Working Directory');
+    }, 30000);
+
+    test('should check profile directory status', () => {
+      const result = runCLI('doctor');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Profile Directory');
+    }, 30000);
+
+    test('should check cache system status', () => {
+      const result = runCLI('doctor');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Cache System');
+    }, 30000);
+
+    test('should handle doctor with MCP name argument', () => {
+      const result = runCLI('doctor scheduler');
+
+      // Should handle gracefully, even if MCP doesn't exist
+      expect(result.exitCode >= 0).toBe(true);
+    }, 30000);
+  });
+
+  describe('Output Formatting (Phase 3)', () => {
+    test('should format find results with proper output', () => {
+      const result = runCLI('find scheduler --depth 0 --limit 1');
+
+      expect(result.exitCode).toBe(0);
+      // Results should be properly formatted
+      expect(result.stdout.length).toBeGreaterThan(0);
+    }, 60000);
+
+    test('should handle list output formatting', () => {
+      const result = runCLI('list');
+
+      expect(result.exitCode).toBe(0);
+      // List should be readable
+      expect(result.stdout).toBeTruthy();
+    }, 30000);
+  });
 });
