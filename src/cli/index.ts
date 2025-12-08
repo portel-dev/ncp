@@ -624,16 +624,7 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('credentials') ||
   process.argv.includes('update') ||
   process.argv.includes('photon') ||
-  process.argv.includes('photon:marketplace') ||
-  process.argv.includes('photon:search') ||
-  process.argv.includes('photon:install') ||
-  process.argv.includes('photon:list') ||
   process.argv.includes('skills') ||
-  process.argv.includes('skills:search') ||
-  process.argv.includes('skills:install') ||
-  process.argv.includes('skills:list') ||
-  process.argv.includes('skills:remove') ||
-  process.argv.includes('skills:marketplace') ||
   process.argv.includes('_job-run') ||
   process.argv.includes('_timing-run') ||
   process.argv.includes('_task-execute') ||
@@ -3367,7 +3358,7 @@ program
 // Photon Marketplace Commands
 // ====================================
 
-program
+const photonCmd = program
   .command('photon')
   .description('Manage Photon marketplaces and installations')
   .action(() => {
@@ -3385,11 +3376,9 @@ program
     console.log(chalk.dim('  ncp photon install calculator\n'));
   });
 
-program
-  .command('photon:marketplace')
+photonCmd
+  .command('marketplace [action] [source]')
   .description('Manage Photon marketplaces')
-  .argument('[action]', 'Action: list, add, remove, update')
-  .argument('[source]', 'Marketplace source (for add) or name (for remove)')
   .action(async (action?: string, source?: string) => {
     const { PhotonMarketplaceClient } = await import('../services/photon-marketplace-client.js');
     const client = new PhotonMarketplaceClient();
@@ -3514,10 +3503,9 @@ program
     }
   });
 
-program
-  .command('photon:search')
+photonCmd
+  .command('search <query>')
   .description('Search for Photons in all marketplaces')
-  .argument('<query>', 'Search query')
   .action(async (query: string) => {
     const { PhotonMarketplaceClient } = await import('../services/photon-marketplace-client.js');
     const client = new PhotonMarketplaceClient();
@@ -3551,13 +3539,12 @@ program
       console.log();
     }
 
-    console.log(chalk.dim(`💡 Install with: ncp photon:install <name>`));
+    console.log(chalk.dim(`💡 Install with: ncp photon install <name>`));
   });
 
-program
-  .command('photon:install')
+photonCmd
+  .command('install <name>')
   .description('Install a Photon from marketplace')
-  .argument('<name>', 'Photon name')
   .option('-m, --marketplace <name>', 'Specific marketplace to install from')
   .action(async (name: string, options: { marketplace?: string }) => {
     const { PhotonMarketplaceClient } = await import('../services/photon-marketplace-client.js');
@@ -3574,7 +3561,7 @@ program
 
       if (!result) {
         console.error(chalk.red(`Photon not found: ${name}`));
-        console.log(chalk.dim('\n💡 Try searching first: ncp photon:search <query>'));
+        console.log(chalk.dim('\n💡 Try searching first: ncp photon search <query>'));
         process.exit(1);
       }
 
@@ -3616,8 +3603,8 @@ program
     }
   });
 
-program
-  .command('photon:list')
+photonCmd
+  .command('list')
   .description('List installed Photons')
   .action(async () => {
     const path = await import('path');
@@ -3629,7 +3616,7 @@ program
 
     if (!existsSync(photonDir)) {
       console.log(chalk.yellow('No Photons installed'));
-      console.log(chalk.dim('\n💡 Install Photons with: ncp photon:install <name>'));
+      console.log(chalk.dim('\n💡 Install Photons with: ncp photon install <name>'));
       return;
     }
 
@@ -3676,27 +3663,27 @@ program
 
 // ========== SKILLS COMMANDS ==========
 
-program
+const skillsCmd = program
   .command('skills')
-  .description('Show available skills commands')
+  .description('Manage Anthropic Agent Skills')
   .action(() => {
     console.log(chalk.bold('\n📚 NCP Skills Commands\n'));
     console.log('Install and manage Anthropic Agent Skills\n');
     console.log(chalk.cyan('Installed Skills:'));
-    console.log(chalk.cyan('  ncp skills:list') + '                      List installed skills');
-    console.log(chalk.cyan('  ncp skills:remove <name>') + '             Remove an installed skill');
+    console.log(chalk.cyan('  ncp skills list') + '                      List installed skills');
+    console.log(chalk.cyan('  ncp skills remove <name>') + '             Remove an installed skill');
     console.log();
     console.log(chalk.cyan('Skills Marketplace:'));
-    console.log(chalk.cyan('  ncp skills:marketplace list') + '           List configured marketplaces');
-    console.log(chalk.cyan('  ncp skills:marketplace add <source>') + '    Add a new marketplace');
-    console.log(chalk.cyan('  ncp skills:marketplace remove <name>') + '  Remove a marketplace');
-    console.log(chalk.cyan('  ncp skills:search [query]') + '             Search skills in marketplaces');
-    console.log(chalk.cyan('  ncp skills:install <name>') + '             Install a skill from marketplace');
+    console.log(chalk.cyan('  ncp skills marketplace list') + '           List configured marketplaces');
+    console.log(chalk.cyan('  ncp skills marketplace add <source>') + '    Add a new marketplace');
+    console.log(chalk.cyan('  ncp skills marketplace remove <name>') + '  Remove a marketplace');
+    console.log(chalk.cyan('  ncp skills search [query]') + '             Search skills in marketplaces');
+    console.log(chalk.cyan('  ncp skills install <name>') + '             Install a skill from marketplace');
     console.log();
   });
 
-program
-  .command('skills:list')
+skillsCmd
+  .command('list')
   .description('List installed Anthropic Agent Skills')
   .action(async () => {
     const { SkillsManager } = await import('../services/skills-manager.js');
@@ -3708,8 +3695,8 @@ program
 
     if (skills.length === 0) {
       console.log(chalk.yellow('\n⚠️  No skills installed'));
-      console.log(chalk.dim('   Install skills using the skills:add MCP tool'));
-      console.log(chalk.dim('   Example: ncp run skills:add skill_name=canvas-design'));
+      console.log(chalk.dim('   Install skills using: ncp skills install <skill-name>'));
+      console.log(chalk.dim('   Example: ncp skills install canvas-design'));
       return;
     }
 
@@ -3727,10 +3714,9 @@ program
     console.log(chalk.dim('💡 Skills are loaded as context for Code-Mode, not as executable tools'));
   });
 
-program
-  .command('skills:remove')
+skillsCmd
+  .command('remove <name>')
   .description('Remove an installed skill')
-  .argument('<name>', 'Skill name to remove')
   .action(async (skillName: string) => {
     try {
       const { SkillsManager } = await import('../services/skills-manager.js');
@@ -3750,11 +3736,9 @@ program
 
 // ========== SKILLS MARKETPLACE COMMANDS ==========
 
-program
-  .command('skills:marketplace')
+skillsCmd
+  .command('marketplace [action] [source]')
   .description('Manage skills marketplaces')
-  .argument('[action]', 'Action: list, add, remove')
-  .argument('[source]', 'Marketplace source (for add) or name (for remove)')
   .action(async (action?: string, source?: string) => {
     try {
       const { SkillsMarketplaceClient } = await import('../services/skills-marketplace-client.js');
@@ -3823,11 +3807,10 @@ program
     }
   });
 
-program
-  .command('skills:search')
+skillsCmd
+  .command('search [query]')
   .description('Search for skills in configured marketplaces')
-  .argument('<query>', 'Search query')
-  .action(async (query: string) => {
+  .action(async (query?: string) => {
     try {
       const { SkillsMarketplaceClient } = await import('../services/skills-marketplace-client.js');
       const client = new SkillsMarketplaceClient();
@@ -3861,10 +3844,9 @@ program
     }
   });
 
-program
-  .command('skills:install')
+skillsCmd
+  .command('install <name>')
   .description('Install a skill from a marketplace')
-  .argument('<name>', 'Skill name to install')
   .action(async (skillName: string) => {
     try {
       const { SkillsMarketplaceClient } = await import('../services/skills-marketplace-client.js');
