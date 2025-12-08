@@ -14,7 +14,6 @@ const createChainable = () => {
     underline: (str) => str,
   };
 
-  // Add all color methods to chainable
   colors.forEach(color => {
     chainable[color] = (str) => str;
   });
@@ -56,5 +55,5 @@ mockChalk.italic = Object.assign(colorFn, chainable);
 mockChalk.underline = Object.assign(colorFn, chainable);
 mockChalk.bgGray = Object.assign(colorFn, { ...chainable, black: (str) => str });
 
-export default mockChalk;
-export { mockChalk };
+module.exports = mockChalk;
+module.exports.default = mockChalk;

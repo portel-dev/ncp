@@ -38,7 +38,7 @@ export default {
   ],
   moduleNameMapper: {
     '@xenova/transformers': '<rootDir>/tests/__mocks__/transformers.js',
-    '^chalk$': '<rootDir>/tests/__mocks__/chalk.js',
+    '^chalk$': '<rootDir>/tests/__mocks__/chalk.cjs',
     '^clipboardy$': '<rootDir>/tests/__mocks__/clipboardy.js',
     '^.*\\/utils\\/updater\\.js$': '<rootDir>/tests/__mocks__/updater.js',
     '^.*\\/cache\\/csv-cache\\.js$': '<rootDir>/tests/__mocks__/csv-cache.ts',
