@@ -3539,13 +3539,13 @@ photonCmd
       console.log();
     }
 
-    console.log(chalk.dim(`💡 Install with: ncp photon install <name>`));
+    console.log(chalk.dim(`💡 Add with: ncp photon add <name>`));
   });
 
 photonCmd
-  .command('install <name>')
-  .description('Install a Photon from marketplace')
-  .option('-m, --marketplace <name>', 'Specific marketplace to install from')
+  .command('add <name>')
+  .description('Add a Photon from marketplace')
+  .option('-m, --marketplace <name>', 'Specific marketplace to add from')
   .action(async (name: string, options: { marketplace?: string }) => {
     const { PhotonMarketplaceClient } = await import('../services/photon-marketplace-client.js');
     const path = await import('path');
@@ -3571,7 +3571,7 @@ photonCmd
         process.exit(1);
       }
 
-      // Install to ~/.ncp/photons/
+      // Add to ~/.ncp/photons/
       const photonDir = path.join(os.homedir(), '.ncp', 'photons');
       await fs.mkdir(photonDir, { recursive: true });
 
@@ -3581,7 +3581,7 @@ photonCmd
       // Write the Photon file
       await fs.writeFile(destPath, result.content, 'utf-8');
 
-      console.log(chalk.green(`\n✅ Installed Photon: ${name}`));
+      console.log(chalk.green(`\n✅ Added Photon: ${name}`));
       console.log(chalk.dim(`   Marketplace: ${result.marketplace.name}`));
       if (result.metadata?.version) {
         console.log(chalk.dim(`   Version: ${result.metadata.version}`));
@@ -3598,7 +3598,7 @@ photonCmd
       console.log(chalk.yellow('\n⚠️  Restart NCP to load the new Photon'));
       console.log(chalk.dim(`💡 Usage: ncp run ${name}:tool_name`));
     } catch (error: any) {
-      console.error(chalk.red(`Installation failed: ${error.message}`));
+      console.error(chalk.red(`Failed to add Photon: ${error.message}`));
       process.exit(1);
     }
   });
@@ -3616,7 +3616,7 @@ photonCmd
 
     if (!existsSync(photonDir)) {
       console.log(chalk.yellow('No Photons installed'));
-      console.log(chalk.dim('\n💡 Install Photons with: ncp photon install <name>'));
+      console.log(chalk.dim('\n💡 Add Photons with: ncp photon add <name>'));
       return;
     }
 
@@ -3678,7 +3678,7 @@ const skillsCmd = program
     console.log(chalk.cyan('  ncp skills marketplace add <source>') + '    Add a new marketplace');
     console.log(chalk.cyan('  ncp skills marketplace remove <name>') + '  Remove a marketplace');
     console.log(chalk.cyan('  ncp skills search [query]') + '             Search skills in marketplaces');
-    console.log(chalk.cyan('  ncp skills install <name>') + '             Install a skill from marketplace');
+    console.log(chalk.cyan('  ncp skills add <name>') + '                 Add a skill from marketplace');
     console.log();
   });
 
@@ -3695,8 +3695,8 @@ skillsCmd
 
     if (skills.length === 0) {
       console.log(chalk.yellow('\n⚠️  No skills installed'));
-      console.log(chalk.dim('   Install skills using: ncp skills install <skill-name>'));
-      console.log(chalk.dim('   Example: ncp skills install canvas-design'));
+      console.log(chalk.dim('   Add skills using: ncp skills add <skill-name>'));
+      console.log(chalk.dim('   Example: ncp skills add canvas-design'));
       return;
     }
 
@@ -3845,15 +3845,15 @@ skillsCmd
   });
 
 skillsCmd
-  .command('install <name>')
-  .description('Install a skill from a marketplace')
+  .command('add <name>')
+  .description('Add a skill from a marketplace')
   .action(async (skillName: string) => {
     try {
       const { SkillsMarketplaceClient } = await import('../services/skills-marketplace-client.js');
       const client = new SkillsMarketplaceClient();
       await client.initialize();
 
-      console.log(chalk.cyan(`\n📥 Installing skill: ${skillName}\n`));
+      console.log(chalk.cyan(`\n➕ Adding skill: ${skillName}\n`));
       const result = await client.install(skillName);
 
       if (result.success) {
@@ -3865,7 +3865,7 @@ skillsCmd
       }
       console.log();
     } catch (error: any) {
-      console.error(chalk.red(`Failed to install skill: ${error.message}`));
+      console.error(chalk.red(`Failed to add skill: ${error.message}`));
       process.exit(1);
     }
   });
