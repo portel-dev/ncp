@@ -3416,9 +3416,9 @@ photonCmd
       if (!source) {
         console.error(chalk.red('Error: Please provide a marketplace source'));
         console.log(chalk.dim('\nExamples:'));
-        console.log(chalk.dim('  ncp photon:marketplace add username/repo'));
-        console.log(chalk.dim('  ncp photon:marketplace add https://github.com/username/repo'));
-        console.log(chalk.dim('  ncp photon:marketplace add ./local/path'));
+        console.log(chalk.dim('  ncp photon marketplace add username/repo'));
+        console.log(chalk.dim('  ncp photon marketplace add https://github.com/username/repo'));
+        console.log(chalk.dim('  ncp photon marketplace add ./local/path'));
         process.exit(1);
       }
 
@@ -3770,9 +3770,9 @@ skillsCmd
         if (!source) {
           console.error(chalk.red('Error: Please provide a marketplace source'));
           console.log(chalk.dim('\nExamples:'));
-          console.log(chalk.dim('  ncp skills:marketplace add anthropic-ai/anthropic-agent-skills'));
-          console.log(chalk.dim('  ncp skills:marketplace add https://github.com/anthropic-ai/skills'));
-          console.log(chalk.dim('  ncp skills:marketplace add ./local/skills-path'));
+          console.log(chalk.dim('  ncp skills marketplace add anthropic-ai/anthropic-agent-skills'));
+          console.log(chalk.dim('  ncp skills marketplace add https://github.com/anthropic-ai/skills'));
+          console.log(chalk.dim('  ncp skills marketplace add ./local/skills-path'));
           process.exit(1);
         }
 
