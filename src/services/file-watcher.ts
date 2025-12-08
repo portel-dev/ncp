@@ -36,6 +36,26 @@ export class FileWatcher {
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
   private debounceMs: number;
 
+  // Batch operation detection
+  private batchOperations: Map<string, number> = new Map(); // Track file changes in batch
+  private batchStartTime: number | null = null;
+  private batchCompletionTimer: NodeJS.Timeout | null = null;
+  private readonly BATCH_COMPLETION_WINDOW_MS = 1000; // Consider batch complete if no changes for 1 second
+  private readonly BATCH_SIZE_THRESHOLD = 10; // Treat as batch if >=10 files
+
+  // Metrics tracking
+  private metrics = {
+    skillsAdded: 0,
+    skillsModified: 0,
+    skillsRemoved: 0,
+    photonsAdded: 0,
+    photonsModified: 0,
+    photonsRemoved: 0,
+    totalOperations: 0,
+    lastBatchSize: 0,
+    lastBatchDuration: 0
+  };
+
   // Patterns to ignore (temp files, editor backups, system files)
   private static IGNORE_PATTERNS = [
     /~$/, // Vim/Emacs backup files
@@ -82,6 +102,77 @@ export class FileWatcher {
     }, this.debounceMs);
 
     this.debounceTimers.set(key, newTimer);
+  }
+
+  /**
+   * Track file operation for batch detection
+   */
+  private trackBatchOperation(resourceType: string, operationType: string, resourceName: string): void {
+    // Start batch if this is the first operation
+    if (this.batchOperations.size === 0) {
+      this.batchStartTime = Date.now();
+      logger.debug(`📦 Batch operation started`);
+    }
+
+    // Add to batch operations map
+    const operationKey = `${resourceType}:${operationType}:${resourceName}`;
+    this.batchOperations.set(operationKey, Date.now());
+
+    // Clear existing batch completion timer
+    if (this.batchCompletionTimer) {
+      clearTimeout(this.batchCompletionTimer);
+    }
+
+    // Set new batch completion timer
+    this.batchCompletionTimer = setTimeout(() => {
+      this.completeBatch();
+    }, this.BATCH_COMPLETION_WINDOW_MS);
+
+    // Update metrics based on operation type
+    this.metrics.totalOperations++;
+    if (resourceType === 'skill') {
+      if (operationType === 'add') this.metrics.skillsAdded++;
+      else if (operationType === 'modify') this.metrics.skillsModified++;
+      else if (operationType === 'remove') this.metrics.skillsRemoved++;
+    } else if (resourceType === 'photon') {
+      if (operationType === 'add') this.metrics.photonsAdded++;
+      else if (operationType === 'modify') this.metrics.photonsModified++;
+      else if (operationType === 'remove') this.metrics.photonsRemoved++;
+    }
+  }
+
+  /**
+   * Complete batch and log metrics
+   */
+  private completeBatch(): void {
+    if (this.batchOperations.size === 0) return;
+
+    const batchSize = this.batchOperations.size;
+    const batchDuration = this.batchStartTime ? Date.now() - this.batchStartTime : 0;
+    const isBatch = batchSize >= this.BATCH_SIZE_THRESHOLD;
+
+    // Update metrics
+    this.metrics.lastBatchSize = batchSize;
+    this.metrics.lastBatchDuration = batchDuration;
+
+    // Log batch completion
+    if (isBatch) {
+      logger.info(`📦 Batch operation completed: ${batchSize} files in ${batchDuration}ms`);
+      logger.debug(`  Skills: +${this.metrics.skillsAdded}/-${this.metrics.skillsRemoved}/${this.metrics.skillsModified}m`);
+      logger.debug(`  Photons: +${this.metrics.photonsAdded}/-${this.metrics.photonsRemoved}/${this.metrics.photonsModified}m`);
+    }
+
+    // Reset batch state
+    this.batchOperations.clear();
+    this.batchStartTime = null;
+    this.batchCompletionTimer = null;
+  }
+
+  /**
+   * Get FileWatcher metrics
+   */
+  getMetrics(): typeof this.metrics {
+    return { ...this.metrics };
   }
 
   /**
@@ -163,6 +254,12 @@ export class FileWatcher {
       }
       this.debounceTimers.clear();
 
+      // Clear batch completion timer and complete any pending batch
+      if (this.batchCompletionTimer) {
+        clearTimeout(this.batchCompletionTimer);
+        this.completeBatch(); // Finalize any pending batch
+      }
+
       await this.skillsWatcher?.close();
       await this.photonsWatcher?.close();
       this.isInitialized = false;
@@ -197,6 +294,10 @@ export class FileWatcher {
         const skillName = fileName === 'SKILL.md' ? parentDir : fileName.replace(/\.(ts|js|md)$/, '');
 
         logger.debug(`Skill ${type}: ${skillName} (${filePath})`);
+
+        // Track for batch operation detection
+        const operationType = type === 'change' ? 'modify' : type;
+        this.trackBatchOperation('skill', operationType, skillName);
 
         // Debounce the event to prevent duplicate processing
         const debounceKey = `skill:${skillName}:${type}`;
@@ -235,6 +336,10 @@ export class FileWatcher {
         const photonName = fileName.replace(/\.photon\.(ts|js)$/, '');
 
         logger.debug(`Photon ${type}: ${photonName} (${filePath})`);
+
+        // Track for batch operation detection
+        const operationType = type === 'change' ? 'modify' : type;
+        this.trackBatchOperation('photon', operationType, photonName);
 
         // Debounce the event to prevent duplicate processing
         const debounceKey = `photon:${photonName}:${type}`;
