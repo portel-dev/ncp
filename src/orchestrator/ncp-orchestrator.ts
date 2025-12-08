@@ -193,6 +193,13 @@ export class NCPOrchestrator {
   private skillPrompts: Map<string, any> = new Map(); // Store loaded skill objects
   private fileWatcher: any = null; // FileWatcher instance for dynamic skill/photon discovery
 
+  // State backup for atomic operations (rollback on failure)
+  private stateBackup: {
+    skillPrompts: Map<string, any>;
+    allTools: Array<{ name: string; description: string; mcpName: string }>;
+    toolToMCP: Map<string, string>;
+  } | null = null;
+
   private forceRetry: boolean = false;
 
   // Actual client info (passthrough to downstream MCPs for transparency)
@@ -1180,6 +1187,9 @@ export class NCPOrchestrator {
    * Dynamically add a skill (for file watching)
    */
   async addSkill(skillName: string, skillPath: string): Promise<void> {
+    // Save state for atomic operation (enables rollback on failure)
+    this.saveState();
+
     try {
       if (!this.skillsManager) return;
 
@@ -1187,6 +1197,7 @@ export class NCPOrchestrator {
       const skill = await this.skillsManager.loadSkill(path.basename(path.dirname(skillPath)));
       if (!skill) {
         logger.warn(`Failed to load skill: ${skillName}`);
+        this.restoreState();
         return;
       }
 
@@ -1213,9 +1224,11 @@ export class NCPOrchestrator {
         description: skill.metadata.description || 'Anthropic Agent Skill'
       }]);
 
+      this.clearStateBackup(); // Clear backup on success
       logger.info(`✨ Dynamically added skill: ${skill.metadata.name}`);
     } catch (error: any) {
-      logger.error(`Failed to dynamically add skill ${skillName}: ${error.message}`);
+      this.restoreState(); // Rollback on failure
+      logger.error(`❌ Failed to add skill ${skillName}: ${error.message}`);
     }
   }
 
@@ -1223,6 +1236,9 @@ export class NCPOrchestrator {
    * Dynamically remove a skill (for file watching)
    */
   async removeSkill(skillName: string): Promise<void> {
+    // Save state for atomic operation
+    this.saveState();
+
     try {
       // Remove from skillPrompts
       this.skillPrompts.delete(skillName);
@@ -1236,9 +1252,11 @@ export class NCPOrchestrator {
       this.toolToMCP.delete(`skill.${skillName}`);
       this.toolToMCP.delete(skillName);
 
+      this.clearStateBackup(); // Clear backup on success
       logger.info(`✨ Dynamically removed skill: ${skillName}`);
     } catch (error: any) {
-      logger.error(`Failed to dynamically remove skill ${skillName}: ${error.message}`);
+      this.restoreState(); // Rollback on failure
+      logger.error(`❌ Failed to remove skill ${skillName}: ${error.message}`);
     }
   }
 
@@ -1246,13 +1264,18 @@ export class NCPOrchestrator {
    * Dynamically update a skill (for file watching)
    */
   async updateSkill(skillName: string, skillPath: string): Promise<void> {
+    // Save state for atomic operation (covers both remove and add)
+    this.saveState();
+
     try {
       // Remove old version
       await this.removeSkill(skillName);
       // Add new version
       await this.addSkill(skillName, skillPath);
+      this.clearStateBackup();
     } catch (error: any) {
-      logger.error(`Failed to dynamically update skill ${skillName}: ${error.message}`);
+      this.restoreState(); // Rollback both operations
+      logger.error(`❌ Failed to update skill ${skillName}: ${error.message}`);
     }
   }
 
@@ -1260,14 +1283,19 @@ export class NCPOrchestrator {
    * Dynamically add a photon (for file watching)
    */
   async addPhoton(photonName: string, photonPath: string): Promise<void> {
+    // Save state for atomic operation
+    this.saveState();
+
     try {
       // Reload photons from disk via internal MCP manager
       if (!this.internalMCPManager) return;
 
       await this.internalMCPManager.loadPhotons();
+      this.clearStateBackup(); // Clear backup on success
       logger.info(`✨ Dynamically added photon: ${photonName}`);
     } catch (error: any) {
-      logger.error(`Failed to dynamically add photon ${photonName}: ${error.message}`);
+      this.restoreState(); // Rollback on failure
+      logger.error(`❌ Failed to add photon ${photonName}: ${error.message}`);
     }
   }
 
@@ -1275,6 +1303,9 @@ export class NCPOrchestrator {
    * Dynamically remove a photon (for file watching)
    */
   async removePhoton(photonName: string): Promise<void> {
+    // Save state for atomic operation
+    this.saveState();
+
     try {
       // Find and remove photon from allTools
       const photonTools = this.allTools.filter(t => t.mcpName === photonName);
@@ -1286,9 +1317,11 @@ export class NCPOrchestrator {
         this.toolToMCP.delete(tool.name);
       }
 
+      this.clearStateBackup(); // Clear backup on success
       logger.info(`✨ Dynamically removed photon: ${photonName}`);
     } catch (error: any) {
-      logger.error(`Failed to dynamically remove photon ${photonName}: ${error.message}`);
+      this.restoreState(); // Rollback on failure
+      logger.error(`❌ Failed to remove photon ${photonName}: ${error.message}`);
     }
   }
 
@@ -1296,6 +1329,9 @@ export class NCPOrchestrator {
    * Dynamically update a photon (for file watching)
    */
   async updatePhoton(photonName: string, photonPath: string): Promise<void> {
+    // Save state for atomic operation (covers both remove and reload)
+    this.saveState();
+
     try {
       // Remove old version
       await this.removePhoton(photonName);
@@ -1303,9 +1339,11 @@ export class NCPOrchestrator {
       if (this.internalMCPManager) {
         await this.internalMCPManager.loadPhotons();
       }
+      this.clearStateBackup();
       logger.info(`✨ Dynamically updated photon: ${photonName}`);
     } catch (error: any) {
-      logger.error(`Failed to dynamically update photon ${photonName}: ${error.message}`);
+      this.restoreState(); // Rollback on failure
+      logger.error(`❌ Failed to update photon ${photonName}: ${error.message}`);
     }
   }
 
@@ -1406,6 +1444,43 @@ export class NCPOrchestrator {
     } catch (error: any) {
       logger.error(`Failed to start FileWatcher: ${error.message}`);
     }
+  }
+
+  /**
+   * Save current state for atomic operations
+   * Used to enable rollback if an operation fails
+   */
+  private saveState(): void {
+    this.stateBackup = {
+      skillPrompts: new Map(this.skillPrompts),
+      allTools: [...this.allTools],
+      toolToMCP: new Map(this.toolToMCP),
+    };
+  }
+
+  /**
+   * Restore previous state after a failed operation
+   * Ensures consistency if skill/photon update fails
+   */
+  private restoreState(): void {
+    if (!this.stateBackup) {
+      logger.warn('No state backup available for rollback');
+      return;
+    }
+
+    this.skillPrompts = this.stateBackup.skillPrompts;
+    this.allTools = this.stateBackup.allTools;
+    this.toolToMCP = this.stateBackup.toolToMCP;
+    this.stateBackup = null;
+
+    logger.info('🔄 State restored - previous version recovered from backup');
+  }
+
+  /**
+   * Clear the state backup after successful operation
+   */
+  private clearStateBackup(): void {
+    this.stateBackup = null;
   }
 
   /**
