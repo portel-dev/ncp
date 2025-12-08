@@ -628,6 +628,12 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('photon:search') ||
   process.argv.includes('photon:install') ||
   process.argv.includes('photon:list') ||
+  process.argv.includes('skills') ||
+  process.argv.includes('skills:search') ||
+  process.argv.includes('skills:install') ||
+  process.argv.includes('skills:list') ||
+  process.argv.includes('skills:remove') ||
+  process.argv.includes('skills:marketplace') ||
   process.argv.includes('_job-run') ||
   process.argv.includes('_timing-run') ||
   process.argv.includes('_task-execute') ||
