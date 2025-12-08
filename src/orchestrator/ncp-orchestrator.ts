@@ -24,6 +24,7 @@ import { InternalMCPManager } from '../internal-mcps/internal-mcp-manager.js';
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import type { OAuthConfig } from '../auth/oauth-device-flow.js';
 import { getRuntimeForExtension, logRuntimeInfo } from '../utils/runtime-detector.js';
+import { getFileWatcher } from '../services/file-watcher.js';
 // Simple string similarity for tool name matching
 function calculateSimilarity(str1: string, str2: string): number {
   const s1 = str1.toLowerCase();
@@ -190,6 +191,7 @@ export class NCPOrchestrator {
   private codeExecutor: CodeExecutor;
   private skillsManager: any = null; // SkillsManager instance for loading agent skills
   private skillPrompts: Map<string, any> = new Map(); // Store loaded skill objects
+  private fileWatcher: any = null; // FileWatcher instance for dynamic skill/photon discovery
 
   private forceRetry: boolean = false;
 
@@ -1016,6 +1018,9 @@ export class NCPOrchestrator {
 
     // Trigger CLI auto-discovery if shell access is available
     await this.maybeAutoScanCLITools();
+
+    // Start FileWatcher for dynamic skill and photon discovery
+    await this.startFileWatcher();
   }
 
   /**
@@ -1248,6 +1253,139 @@ export class NCPOrchestrator {
       await this.addSkill(skillName, skillPath);
     } catch (error: any) {
       logger.error(`Failed to dynamically update skill ${skillName}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Dynamically add a photon (for file watching)
+   */
+  async addPhoton(photonName: string, photonPath: string): Promise<void> {
+    try {
+      // Reload photons from disk via internal MCP manager
+      if (!this.internalMCPManager) return;
+
+      await this.internalMCPManager.loadPhotons();
+      logger.info(`✨ Dynamically added photon: ${photonName}`);
+    } catch (error: any) {
+      logger.error(`Failed to dynamically add photon ${photonName}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Dynamically remove a photon (for file watching)
+   */
+  async removePhoton(photonName: string): Promise<void> {
+    try {
+      // Find and remove photon from allTools
+      const photonTools = this.allTools.filter(t => t.mcpName === photonName);
+      for (const tool of photonTools) {
+        const idx = this.allTools.indexOf(tool);
+        if (idx > -1) {
+          this.allTools.splice(idx, 1);
+        }
+        this.toolToMCP.delete(tool.name);
+      }
+
+      logger.info(`✨ Dynamically removed photon: ${photonName}`);
+    } catch (error: any) {
+      logger.error(`Failed to dynamically remove photon ${photonName}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Dynamically update a photon (for file watching)
+   */
+  async updatePhoton(photonName: string, photonPath: string): Promise<void> {
+    try {
+      // Remove old version
+      await this.removePhoton(photonName);
+      // Reload all photons to pick up changes
+      if (this.internalMCPManager) {
+        await this.internalMCPManager.loadPhotons();
+      }
+      logger.info(`✨ Dynamically updated photon: ${photonName}`);
+    } catch (error: any) {
+      logger.error(`Failed to dynamically update photon ${photonName}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Start FileWatcher for dynamic skill and photon discovery
+   * Watches ~/.ncp/skills/ and ~/.ncp/photons/ directories for changes
+   * Automatically loads/unloads skills and photons without requiring restart
+   */
+  private async startFileWatcher(): Promise<void> {
+    try {
+      // Check if skills are enabled
+      const enableSkills = process.env.NCP_ENABLE_SKILLS !== 'false';
+      if (!enableSkills) {
+        logger.debug('Skills disabled - FileWatcher not started');
+        return;
+      }
+
+      // Get FileWatcher singleton with callbacks
+      this.fileWatcher = getFileWatcher({
+        // Skill callbacks
+        onSkillAdded: async (skillName: string, skillPath: string) => {
+          logger.debug(`FileWatcher detected skill added: ${skillName}`);
+          try {
+            await this.addSkill(skillName, skillPath);
+          } catch (error: any) {
+            logger.error(`Failed to add skill ${skillName}: ${error.message}`);
+          }
+        },
+        onSkillModified: async (skillName: string, skillPath: string) => {
+          logger.debug(`FileWatcher detected skill modified: ${skillName}`);
+          try {
+            await this.updateSkill(skillName, skillPath);
+          } catch (error: any) {
+            logger.error(`Failed to update skill ${skillName}: ${error.message}`);
+          }
+        },
+        onSkillRemoved: async (skillName: string) => {
+          logger.debug(`FileWatcher detected skill removed: ${skillName}`);
+          try {
+            await this.removeSkill(skillName);
+          } catch (error: any) {
+            logger.error(`Failed to remove skill ${skillName}: ${error.message}`);
+          }
+        },
+        // Photon callbacks
+        onPhotonAdded: async (photonName: string, photonPath: string) => {
+          logger.debug(`FileWatcher detected photon added: ${photonName}`);
+          try {
+            await this.addPhoton(photonName, photonPath);
+          } catch (error: any) {
+            logger.error(`Failed to add photon ${photonName}: ${error.message}`);
+          }
+        },
+        onPhotonModified: async (photonName: string, photonPath: string) => {
+          logger.debug(`FileWatcher detected photon modified: ${photonName}`);
+          try {
+            await this.updatePhoton(photonName, photonPath);
+          } catch (error: any) {
+            logger.error(`Failed to update photon ${photonName}: ${error.message}`);
+          }
+        },
+        onPhotonRemoved: async (photonName: string) => {
+          logger.debug(`FileWatcher detected photon removed: ${photonName}`);
+          try {
+            await this.removePhoton(photonName);
+          } catch (error: any) {
+            logger.error(`Failed to remove photon ${photonName}: ${error.message}`);
+          }
+        },
+        // Error callback
+        onError: (error: Error) => {
+          logger.error(`FileWatcher error: ${error.message}`);
+        }
+      });
+
+      // Start watching
+      await this.fileWatcher.start();
+      logger.info('📁 Dynamic discovery enabled - watching for skill and photon changes');
+    } catch (error: any) {
+      logger.error(`Failed to start FileWatcher: ${error.message}`);
     }
   }
 
