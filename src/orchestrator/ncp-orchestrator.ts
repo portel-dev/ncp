@@ -6,6 +6,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { getCacheDirectory } from '../utils/ncp-paths.js';
 import { join } from 'path';
+import * as path from 'path';
 import { createHash } from 'crypto';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
@@ -1167,6 +1168,86 @@ export class NCPOrchestrator {
       }
     } catch (error: any) {
       logger.warn(`Failed to load skills: ${error.message}`);
+    }
+  }
+
+  /**
+   * Dynamically add a skill (for file watching)
+   */
+  async addSkill(skillName: string, skillPath: string): Promise<void> {
+    try {
+      if (!this.skillsManager) return;
+
+      // Load the skill
+      const skill = await this.skillsManager.loadSkill(path.basename(path.dirname(skillPath)));
+      if (!skill) {
+        logger.warn(`Failed to load skill: ${skillName}`);
+        return;
+      }
+
+      // Store the skill
+      this.skillPrompts.set(skill.metadata.name, skill);
+
+      // Add to allTools
+      const skillToolName = `skill:${skill.metadata.name}`;
+      this.allTools.push({
+        name: skillToolName,
+        description: skill.metadata.description || 'Anthropic Agent Skill',
+        mcpName: '__skills__',
+      });
+
+      // Add to toolToMCP mappings
+      this.toolToMCP.set(skillToolName, '__skills__');
+      this.toolToMCP.set(`skill.${skill.metadata.name}`, '__skills__');
+      this.toolToMCP.set(skill.metadata.name, '__skills__');
+
+      // Index in discovery
+      await this.discovery.indexMCPTools('skill', [{
+        id: `skill:${skill.metadata.name}`,
+        name: skill.metadata.name,
+        description: skill.metadata.description || 'Anthropic Agent Skill'
+      }]);
+
+      logger.info(`✨ Dynamically added skill: ${skill.metadata.name}`);
+    } catch (error: any) {
+      logger.error(`Failed to dynamically add skill ${skillName}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Dynamically remove a skill (for file watching)
+   */
+  async removeSkill(skillName: string): Promise<void> {
+    try {
+      // Remove from skillPrompts
+      this.skillPrompts.delete(skillName);
+
+      // Remove from allTools
+      const skillToolName = `skill:${skillName}`;
+      this.allTools = this.allTools.filter(t => t.name !== skillToolName);
+
+      // Remove from toolToMCP
+      this.toolToMCP.delete(skillToolName);
+      this.toolToMCP.delete(`skill.${skillName}`);
+      this.toolToMCP.delete(skillName);
+
+      logger.info(`✨ Dynamically removed skill: ${skillName}`);
+    } catch (error: any) {
+      logger.error(`Failed to dynamically remove skill ${skillName}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Dynamically update a skill (for file watching)
+   */
+  async updateSkill(skillName: string, skillPath: string): Promise<void> {
+    try {
+      // Remove old version
+      await this.removeSkill(skillName);
+      // Add new version
+      await this.addSkill(skillName, skillPath);
+    } catch (error: any) {
+      logger.error(`Failed to dynamically update skill ${skillName}: ${error.message}`);
     }
   }
 
