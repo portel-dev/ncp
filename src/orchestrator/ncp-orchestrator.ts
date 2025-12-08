@@ -1392,6 +1392,23 @@ export class NCPOrchestrator {
   }
 
   /**
+   * Stop FileWatcher for cleanup
+   * Called during orchestrator shutdown to prevent resource leaks
+   */
+  async stopFileWatcher(): Promise<void> {
+    if (!this.fileWatcher || !this.fileWatcher.isRunning()) {
+      return;
+    }
+
+    try {
+      await this.fileWatcher.stop();
+      logger.info('📁 File watcher stopped');
+    } catch (error: any) {
+      logger.error(`Failed to stop FileWatcher: ${error.message}`);
+    }
+  }
+
+  /**
    * Execute a skill with progressive disclosure
    * Skills return content based on depth parameter:
    * - depth=1: Metadata only
