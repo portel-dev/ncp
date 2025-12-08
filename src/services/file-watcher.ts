@@ -33,9 +33,55 @@ export class FileWatcher {
   private photonsWatcher: FSWatcher | null = null;
   private callbacks: FileWatcherCallbacks;
   private isInitialized = false;
+  private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
+  private debounceMs: number;
 
-  constructor(callbacks: FileWatcherCallbacks = {}) {
+  // Patterns to ignore (temp files, editor backups, system files)
+  private static IGNORE_PATTERNS = [
+    /~$/, // Vim/Emacs backup files
+    /\.swp$/, // Vim swap files
+    /\.swo$/, // Vim swap files
+    /\.bak$/, // Generic backups
+    /\.tmp$/, // Temp files
+    /\.orig$/, // Original copies
+    /^\._/, // macOS resource forks
+    /^\.DS_Store$/, // macOS folder metadata
+    /Thumbs\.db$/, // Windows thumbnails
+    /~\d+$/, // Word/Office backups
+  ];
+
+  constructor(callbacks: FileWatcherCallbacks = {}, debounceMs?: number) {
     this.callbacks = callbacks;
+    // Default 300ms debounce, configurable via NCP_FILE_WATCHER_DEBOUNCE_MS
+    this.debounceMs = debounceMs || parseInt(process.env.NCP_FILE_WATCHER_DEBOUNCE_MS || '300', 10);
+  }
+
+  /**
+   * Check if a file should be ignored
+   */
+  private shouldIgnoreFile(fileName: string): boolean {
+    return FileWatcher.IGNORE_PATTERNS.some(pattern => pattern.test(fileName));
+  }
+
+  /**
+   * Debounce file event processing
+   */
+  private debounceEvent(key: string, callback: () => Promise<void>): void {
+    // Clear existing timer for this key
+    const existingTimer = this.debounceTimers.get(key);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Set new debounced timer
+    const newTimer = setTimeout(() => {
+      this.debounceTimers.delete(key);
+      callback().catch(error => {
+        logger.error(`Debounced event callback failed: ${error.message}`);
+      });
+    }, this.debounceMs);
+
+    this.debounceTimers.set(key, newTimer);
   }
 
   /**
@@ -111,6 +157,12 @@ export class FileWatcher {
     }
 
     try {
+      // Clear all pending debounce timers
+      for (const timer of this.debounceTimers.values()) {
+        clearTimeout(timer);
+      }
+      this.debounceTimers.clear();
+
       await this.skillsWatcher?.close();
       await this.photonsWatcher?.close();
       this.isInitialized = false;
@@ -129,6 +181,13 @@ export class FileWatcher {
     try {
       // Only process SKILL.md files or skill directories
       const fileName = path.basename(filePath);
+
+      // Ignore temp/system files
+      if (this.shouldIgnoreFile(fileName)) {
+        logger.debug(`Ignoring temp file: ${fileName}`);
+        return;
+      }
+
       const parentDir = path.basename(path.dirname(filePath));
       const ncpDir = getNcpBaseDirectory();
       const skillsDir = path.join(ncpDir, 'skills');
@@ -139,13 +198,17 @@ export class FileWatcher {
 
         logger.debug(`Skill ${type}: ${skillName} (${filePath})`);
 
-        if (type === 'add' && this.callbacks.onSkillAdded) {
-          await this.callbacks.onSkillAdded(skillName, filePath);
-        } else if (type === 'change' && this.callbacks.onSkillModified) {
-          await this.callbacks.onSkillModified(skillName, filePath);
-        } else if (type === 'unlink' && this.callbacks.onSkillRemoved) {
-          await this.callbacks.onSkillRemoved(skillName);
-        }
+        // Debounce the event to prevent duplicate processing
+        const debounceKey = `skill:${skillName}:${type}`;
+        this.debounceEvent(debounceKey, async () => {
+          if (type === 'add' && this.callbacks.onSkillAdded) {
+            await this.callbacks.onSkillAdded(skillName, filePath);
+          } else if (type === 'change' && this.callbacks.onSkillModified) {
+            await this.callbacks.onSkillModified(skillName, filePath);
+          } else if (type === 'unlink' && this.callbacks.onSkillRemoved) {
+            await this.callbacks.onSkillRemoved(skillName);
+          }
+        });
       }
     } catch (error: any) {
       logger.error(`Error handling skill event: ${error.message}`);
@@ -161,19 +224,29 @@ export class FileWatcher {
       // Only process .photon.ts files
       const fileName = path.basename(filePath);
 
+      // Ignore temp/system files
+      if (this.shouldIgnoreFile(fileName)) {
+        logger.debug(`Ignoring temp file: ${fileName}`);
+        return;
+      }
+
       // Match photon files ending in .photon.ts or .photon.js
       if (fileName.match(/\.photon\.(ts|js)$/)) {
         const photonName = fileName.replace(/\.photon\.(ts|js)$/, '');
 
         logger.debug(`Photon ${type}: ${photonName} (${filePath})`);
 
-        if (type === 'add' && this.callbacks.onPhotonAdded) {
-          await this.callbacks.onPhotonAdded(photonName, filePath);
-        } else if (type === 'change' && this.callbacks.onPhotonModified) {
-          await this.callbacks.onPhotonModified(photonName, filePath);
-        } else if (type === 'unlink' && this.callbacks.onPhotonRemoved) {
-          await this.callbacks.onPhotonRemoved(photonName);
-        }
+        // Debounce the event to prevent duplicate processing
+        const debounceKey = `photon:${photonName}:${type}`;
+        this.debounceEvent(debounceKey, async () => {
+          if (type === 'add' && this.callbacks.onPhotonAdded) {
+            await this.callbacks.onPhotonAdded(photonName, filePath);
+          } else if (type === 'change' && this.callbacks.onPhotonModified) {
+            await this.callbacks.onPhotonModified(photonName, filePath);
+          } else if (type === 'unlink' && this.callbacks.onPhotonRemoved) {
+            await this.callbacks.onPhotonRemoved(photonName);
+          }
+        });
       }
     } catch (error: any) {
       logger.error(`Error handling photon event: ${error.message}`);
