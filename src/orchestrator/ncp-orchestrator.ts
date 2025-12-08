@@ -1316,10 +1316,12 @@ export class NCPOrchestrator {
    */
   private async startFileWatcher(): Promise<void> {
     try {
-      // Check if skills are enabled
+      // Check if skills or photon runtime are enabled
       const enableSkills = process.env.NCP_ENABLE_SKILLS !== 'false';
-      if (!enableSkills) {
-        logger.debug('Skills disabled - FileWatcher not started');
+      const enablePhotonRuntime = process.env.NCP_ENABLE_PHOTON_RUNTIME === 'true';
+
+      if (!enableSkills && !enablePhotonRuntime) {
+        logger.debug('Skills and Photon runtime both disabled - FileWatcher not started');
         return;
       }
 
