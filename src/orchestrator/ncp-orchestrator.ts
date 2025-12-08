@@ -200,6 +200,10 @@ export class NCPOrchestrator {
     toolToMCP: Map<string, string>;
   } | null = null;
 
+  // Conflict detection: track resources being modified to prevent race conditions
+  private lockedResources: Set<string> = new Set(); // Format: "skill:name" or "photon:name"
+  private resourceLockQueues: Map<string, Array<() => Promise<void>>> = new Map(); // Queue of pending operations
+
   private forceRetry: boolean = false;
 
   // Actual client info (passthrough to downstream MCPs for transparency)
@@ -1187,10 +1191,13 @@ export class NCPOrchestrator {
    * Dynamically add a skill (for file watching)
    */
   async addSkill(skillName: string, skillPath: string): Promise<void> {
-    // Save state for atomic operation (enables rollback on failure)
-    this.saveState();
+    // Acquire lock to prevent conflicts between CLI and FileWatcher
+    await this.acquireLock('skill', skillName);
 
     try {
+      // Save state for atomic operation (enables rollback on failure)
+      this.saveState();
+
       if (!this.skillsManager) return;
 
       // Load the skill
@@ -1229,6 +1236,9 @@ export class NCPOrchestrator {
     } catch (error: any) {
       this.restoreState(); // Rollback on failure
       logger.error(`❌ Failed to add skill ${skillName}: ${error.message}`);
+    } finally {
+      // Always release lock, even on error
+      this.releaseLock('skill', skillName);
     }
   }
 
@@ -1236,10 +1246,13 @@ export class NCPOrchestrator {
    * Dynamically remove a skill (for file watching)
    */
   async removeSkill(skillName: string): Promise<void> {
-    // Save state for atomic operation
-    this.saveState();
+    // Acquire lock to prevent conflicts between CLI and FileWatcher
+    await this.acquireLock('skill', skillName);
 
     try {
+      // Save state for atomic operation
+      this.saveState();
+
       // Remove from skillPrompts
       this.skillPrompts.delete(skillName);
 
@@ -1257,25 +1270,67 @@ export class NCPOrchestrator {
     } catch (error: any) {
       this.restoreState(); // Rollback on failure
       logger.error(`❌ Failed to remove skill ${skillName}: ${error.message}`);
+    } finally {
+      // Always release lock, even on error
+      this.releaseLock('skill', skillName);
     }
   }
 
   /**
    * Dynamically update a skill (for file watching)
+   * Acquires single lock for both remove and add operations
    */
   async updateSkill(skillName: string, skillPath: string): Promise<void> {
-    // Save state for atomic operation (covers both remove and add)
-    this.saveState();
+    // Acquire lock once for the entire update operation
+    await this.acquireLock('skill', skillName);
 
     try {
+      // Save state for atomic operation (covers both remove and add)
+      this.saveState();
+
       // Remove old version
-      await this.removeSkill(skillName);
+      this.skillPrompts.delete(skillName);
+      const skillToolName = `skill:${skillName}`;
+      this.allTools = this.allTools.filter(t => t.name !== skillToolName);
+      this.toolToMCP.delete(skillToolName);
+      this.toolToMCP.delete(`skill.${skillName}`);
+      this.toolToMCP.delete(skillName);
+
       // Add new version
-      await this.addSkill(skillName, skillPath);
+      if (!this.skillsManager) return;
+      const skill = await this.skillsManager.loadSkill(path.basename(path.dirname(skillPath)));
+      if (!skill) {
+        logger.warn(`Failed to load updated skill: ${skillName}`);
+        this.restoreState();
+        return;
+      }
+
+      this.skillPrompts.set(skill.metadata.name, skill);
+      const newSkillToolName = `skill:${skill.metadata.name}`;
+      this.allTools.push({
+        name: newSkillToolName,
+        description: skill.metadata.description || 'Anthropic Agent Skill',
+        mcpName: '__skills__',
+      });
+
+      this.toolToMCP.set(newSkillToolName, '__skills__');
+      this.toolToMCP.set(`skill.${skill.metadata.name}`, '__skills__');
+      this.toolToMCP.set(skill.metadata.name, '__skills__');
+
+      await this.discovery.indexMCPTools('skill', [{
+        id: `skill:${skill.metadata.name}`,
+        name: skill.metadata.name,
+        description: skill.metadata.description || 'Anthropic Agent Skill'
+      }]);
+
       this.clearStateBackup();
+      logger.info(`🔄 Updated skill: ${skillName}`);
     } catch (error: any) {
-      this.restoreState(); // Rollback both operations
+      this.restoreState(); // Rollback both remove and add operations
       logger.error(`❌ Failed to update skill ${skillName}: ${error.message}`);
+    } finally {
+      // Always release lock, even on error
+      this.releaseLock('skill', skillName);
     }
   }
 
@@ -1283,10 +1338,13 @@ export class NCPOrchestrator {
    * Dynamically add a photon (for file watching)
    */
   async addPhoton(photonName: string, photonPath: string): Promise<void> {
-    // Save state for atomic operation
-    this.saveState();
+    // Acquire lock to prevent conflicts between CLI and FileWatcher
+    await this.acquireLock('photon', photonName);
 
     try {
+      // Save state for atomic operation
+      this.saveState();
+
       // Reload photons from disk via internal MCP manager
       if (!this.internalMCPManager) return;
 
@@ -1296,6 +1354,9 @@ export class NCPOrchestrator {
     } catch (error: any) {
       this.restoreState(); // Rollback on failure
       logger.error(`❌ Failed to add photon ${photonName}: ${error.message}`);
+    } finally {
+      // Always release lock, even on error
+      this.releaseLock('photon', photonName);
     }
   }
 
@@ -1303,10 +1364,13 @@ export class NCPOrchestrator {
    * Dynamically remove a photon (for file watching)
    */
   async removePhoton(photonName: string): Promise<void> {
-    // Save state for atomic operation
-    this.saveState();
+    // Acquire lock to prevent conflicts between CLI and FileWatcher
+    await this.acquireLock('photon', photonName);
 
     try {
+      // Save state for atomic operation
+      this.saveState();
+
       // Find and remove photon from allTools
       const photonTools = this.allTools.filter(t => t.mcpName === photonName);
       for (const tool of photonTools) {
@@ -1322,28 +1386,47 @@ export class NCPOrchestrator {
     } catch (error: any) {
       this.restoreState(); // Rollback on failure
       logger.error(`❌ Failed to remove photon ${photonName}: ${error.message}`);
+    } finally {
+      // Always release lock, even on error
+      this.releaseLock('photon', photonName);
     }
   }
 
   /**
    * Dynamically update a photon (for file watching)
+   * Acquires single lock for both remove and reload operations
    */
   async updatePhoton(photonName: string, photonPath: string): Promise<void> {
-    // Save state for atomic operation (covers both remove and reload)
-    this.saveState();
+    // Acquire lock once for the entire update operation
+    await this.acquireLock('photon', photonName);
 
     try {
+      // Save state for atomic operation (covers both remove and reload)
+      this.saveState();
+
       // Remove old version
-      await this.removePhoton(photonName);
+      const photonTools = this.allTools.filter(t => t.mcpName === photonName);
+      for (const tool of photonTools) {
+        const idx = this.allTools.indexOf(tool);
+        if (idx > -1) {
+          this.allTools.splice(idx, 1);
+        }
+        this.toolToMCP.delete(tool.name);
+      }
+
       // Reload all photons to pick up changes
       if (this.internalMCPManager) {
         await this.internalMCPManager.loadPhotons();
       }
+
       this.clearStateBackup();
-      logger.info(`✨ Dynamically updated photon: ${photonName}`);
+      logger.info(`🔄 Updated photon: ${photonName}`);
     } catch (error: any) {
-      this.restoreState(); // Rollback on failure
+      this.restoreState(); // Rollback both operations
       logger.error(`❌ Failed to update photon ${photonName}: ${error.message}`);
+    } finally {
+      // Always release lock, even on error
+      this.releaseLock('photon', photonName);
     }
   }
 
@@ -1481,6 +1564,58 @@ export class NCPOrchestrator {
    */
   private clearStateBackup(): void {
     this.stateBackup = null;
+  }
+
+  /**
+   * Acquire lock for a resource to prevent conflicts between CLI and FileWatcher
+   * Returns immediately if resource is not locked, queues operation if it is
+   */
+  private async acquireLock(resourceType: string, resourceName: string): Promise<void> {
+    const lockKey = `${resourceType}:${resourceName}`;
+
+    if (this.lockedResources.has(lockKey)) {
+      // Resource is locked, queue this operation
+      logger.debug(`⏳ Conflict detected: ${lockKey} is being modified, queuing operation...`);
+
+      return new Promise((resolve) => {
+        const queue = this.resourceLockQueues.get(lockKey) || [];
+        queue.push(async () => {
+          // Wait for lock to be released
+          while (this.lockedResources.has(lockKey)) {
+            await new Promise(r => setTimeout(r, 50));
+          }
+          resolve();
+        });
+        this.resourceLockQueues.set(lockKey, queue);
+      });
+    } else {
+      // Acquire the lock
+      this.lockedResources.add(lockKey);
+    }
+  }
+
+  /**
+   * Release lock for a resource and process any queued operations
+   */
+  private releaseLock(resourceType: string, resourceName: string): void {
+    const lockKey = `${resourceType}:${resourceName}`;
+
+    if (this.lockedResources.has(lockKey)) {
+      this.lockedResources.delete(lockKey);
+      logger.debug(`🔓 Released lock: ${lockKey}`);
+
+      // Process queued operations
+      const queue = this.resourceLockQueues.get(lockKey);
+      if (queue && queue.length > 0) {
+        logger.debug(`📋 Processing ${queue.length} queued operation(s) for ${lockKey}`);
+        const nextOp = queue.shift();
+        if (nextOp) {
+          nextOp().catch(error => {
+            logger.error(`Queued operation failed: ${error.message}`);
+          });
+        }
+      }
+    }
   }
 
   /**
