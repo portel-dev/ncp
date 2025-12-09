@@ -27,6 +27,7 @@ import { ConfigPrompter } from '../services/config-prompter.js';
 import { SchemaCache } from '../cache/schema-cache.js';
 import { getCacheDirectory } from '../utils/ncp-paths.js';
 import { setNCPTitle, updateNCPProgress } from '../utils/terminal-title.js';
+import type { CredentialType } from '../auth/secure-credential-store.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -1613,6 +1614,7 @@ const configCmd = program
     // If key and value provided, set the config directly
     if (key && value) {
       await configManager.setConfigValue(key, value);
+      process.exit(0);
     } else if (key && !value) {
       // If only key provided (no value), show error
       console.error(chalk.red(`\n❌ Missing value for key "${key}"\n`));
@@ -3113,85 +3115,178 @@ const cleanupRunsCmd = program
   });
 (cleanupRunsCmd as any).hidden = true;
 
-// Credentials: List stored credentials
-program
-  .command('credentials [action]')
+const formatCredentialTimestamp = (value?: number | string): string => {
+  if (value === undefined || value === null) {
+    return 'unknown';
+  }
+  const epochValue = typeof value === 'number' ? value : Date.parse(value);
+  if (Number.isNaN(epochValue)) {
+    return 'unknown';
+  }
+  return new Date(epochValue).toLocaleString();
+};
+
+async function listStoredCredentials(mcpFilter?: string): Promise<void> {
+  try {
+    const { getSecureCredentialStore } = await import('../auth/secure-credential-store.js');
+    const { CredentialVault } = await import('../code-mode/bindings-manager.js');
+
+    const credentialStore = getSecureCredentialStore();
+    const vault = CredentialVault.getInstance();
+
+    const [storedCredentials, vaultCredentialsRaw] = await Promise.all([
+      credentialStore.listCredentials(mcpFilter),
+      vault.list()
+    ]);
+
+    const vaultCredentials = vaultCredentialsRaw
+      .filter((cred) => !mcpFilter || cred.mcpName === mcpFilter)
+      .sort((a, b) => a.mcpName.localeCompare(b.mcpName));
+
+    const total = storedCredentials.length + vaultCredentials.length;
+
+    if (total === 0) {
+      console.log('ℹ️  No stored credentials found');
+      return;
+    }
+
+    if (storedCredentials.length > 0) {
+      console.log(`\n🔐 Secure Credential Store (${storedCredentials.length})\n`);
+      console.log(chalk.dim('Storage method: ') + chalk.cyan(credentialStore.getStorageMethod()));
+      console.log('');
+
+      for (const cred of storedCredentials) {
+        console.log(chalk.bold(`${cred.mcpName}`) + chalk.dim(` (${cred.type})`));
+        if (cred.description) {
+          console.log(chalk.dim(`   ${cred.description}`));
+        }
+        console.log(chalk.dim(`   Updated: ${formatCredentialTimestamp(cred.updatedAt)}`));
+        console.log('');
+      }
+
+      const storageMethod = credentialStore.getStorageMethod();
+      console.log(chalk.dim('💡 Secure store management:'));
+      if (storageMethod === 'keychain') {
+        if (process.platform === 'darwin') {
+          console.log(chalk.dim('   • Open Keychain Access and search for "@portel/ncp"'));
+        } else if (process.platform === 'win32') {
+          console.log(chalk.dim('   • Open Windows Credential Manager'));
+        } else {
+          console.log(chalk.dim('   • Use your system\'s credential manager'));
+        }
+      } else {
+        console.log(chalk.dim('   • Encrypted files stored under ~/.ncp/credentials'));
+      }
+      console.log('');
+    }
+
+    if (vaultCredentials.length > 0) {
+      console.log(`\n🔐 Code-Mode Credential Vault (${vaultCredentials.length})\n`);
+      console.log(chalk.dim('Storage: ') + chalk.cyan('~/.ncp/credentials/vault.json (AES-256 encrypted)'));
+      console.log('');
+
+      for (const cred of vaultCredentials) {
+        console.log(chalk.bold(`${cred.mcpName}`) + chalk.dim(` (${cred.type})`));
+        console.log(chalk.dim(`   Updated: ${formatCredentialTimestamp(cred.updatedAt)}`));
+      }
+
+      console.log('');
+      console.log(chalk.dim('💡 Vault management:'));
+      console.log(chalk.dim(`   • Run ${chalk.cyan('ncp credentials remove <mcp> --vault-only')} to revoke a single binding.`));
+      console.log(chalk.dim('   • Delete ~/.ncp/credentials/vault.json to wipe the entire vault (NCP recreates it automatically).'));
+      console.log('');
+    }
+  } catch (error) {
+    console.error(`❌ Failed to list credentials: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+}
+
+async function removeStoredCredentials(mcpName: string, options: { vaultOnly?: boolean; storeOnly?: boolean }): Promise<void> {
+  if (options.vaultOnly && options.storeOnly) {
+    console.error('❌ --vault-only and --store-only cannot be used together');
+    process.exit(1);
+  }
+
+  const removeStore = options.storeOnly ? true : !options.vaultOnly;
+  const removeVault = options.vaultOnly ? true : !options.storeOnly;
+
+  try {
+    const { getSecureCredentialStore } = await import('../auth/secure-credential-store.js');
+    const { CredentialVault } = await import('../code-mode/bindings-manager.js');
+
+    const credentialStore = getSecureCredentialStore();
+    const vault = CredentialVault.getInstance();
+
+    let storeRemoved = 0;
+    let storeFailed = 0;
+
+    if (removeStore) {
+      const entries = await credentialStore.listCredentials(mcpName);
+      for (const entry of entries) {
+        const deleted = await credentialStore.deleteCredential(mcpName, entry.type as CredentialType);
+        if (deleted) {
+          storeRemoved++;
+        } else {
+          storeFailed++;
+        }
+      }
+    }
+
+    let vaultRemoved = 0;
+    if (removeVault) {
+      const removed = await vault.remove(mcpName);
+      vaultRemoved = removed ? 1 : 0;
+    }
+
+    if (storeRemoved === 0 && storeFailed === 0 && vaultRemoved === 0) {
+      console.log(chalk.yellow(`⚠️  No credentials found for ${mcpName}`));
+      return;
+    }
+
+    if (storeRemoved > 0) {
+      console.log(chalk.green(`✅ Removed ${storeRemoved} entr${storeRemoved === 1 ? 'y' : 'ies'} from secure credential store`));
+    }
+    if (storeFailed > 0) {
+      console.log(chalk.red(`⚠️  Failed to delete ${storeFailed} entr${storeFailed === 1 ? 'y' : 'ies'} from secure credential store`));
+    }
+    if (vaultRemoved > 0) {
+      console.log(chalk.green('✅ Removed Code-Mode vault credential'));
+    } else if (removeVault) {
+      console.log(chalk.dim('ℹ️  No Code-Mode vault credential found'));
+    }
+
+    console.log(chalk.dim('💡 Tip: run ') + chalk.cyan('ncp credentials list') + chalk.dim(' to verify remaining entries.'));
+  } catch (error) {
+    console.error(`❌ Failed to remove credentials: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+}
+
+const credentialsCmd = program
+  .command('credentials')
+  .description('Manage stored credentials')
+  .usage('[options] [command]')
+  .option('--mcp <name>', 'Filter by MCP name')
+  .action(async (options) => {
+    await listStoredCredentials(options.mcp);
+  });
+
+credentialsCmd
+  .command('list')
   .description('List stored credentials')
   .option('--mcp <name>', 'Filter by MCP name')
-  .action(async (action, options) => {
-    if (action && action !== 'list') {
-      console.error(`❌ Unknown credentials subcommand: ${action}`);
-      process.exit(1);
-    }
+  .action(async (options) => {
+    await listStoredCredentials(options.mcp);
+  });
 
-    try {
-      const { getSecureCredentialStore } = await import('../auth/secure-credential-store.js');
-      const { CredentialVault } = await import('../code-mode/bindings-manager.js');
-
-      const credentialStore = getSecureCredentialStore();
-      const [storedCredentials, vaultCredentialsRaw] = await Promise.all([
-        credentialStore.listCredentials(options.mcp),
-        CredentialVault.getInstance().list()
-      ]);
-
-      const vaultCredentials = vaultCredentialsRaw.filter((cred) => !options.mcp || cred.mcpName === options.mcp);
-      const total = storedCredentials.length + vaultCredentials.length;
-
-      if (total === 0) {
-        console.log('ℹ️  No stored credentials found');
-        return;
-      }
-
-      if (storedCredentials.length > 0) {
-        console.log(`\n🔐 Secure Credential Store (${storedCredentials.length})\n`);
-        console.log(chalk.dim('Storage method: ') + chalk.cyan(credentialStore.getStorageMethod()));
-        console.log('');
-
-        for (const cred of storedCredentials) {
-          console.log(chalk.bold(`${cred.mcpName}`) + chalk.dim(` (${cred.type})`));
-          if (cred.description) {
-            console.log(chalk.dim(`   ${cred.description}`));
-          }
-          console.log(chalk.dim(`   Updated: ${new Date(cred.updatedAt).toLocaleString()}`));
-          console.log('');
-        }
-
-        // Show helpful tips for credential management
-        const storageMethod = credentialStore.getStorageMethod();
-        console.log(chalk.dim('💡 Secure store management:'));
-        if (storageMethod === 'keychain') {
-          if (process.platform === 'darwin') {
-            console.log(chalk.dim('   • Open Keychain Access and search for "@portel/ncp"'));
-          } else if (process.platform === 'win32') {
-            console.log(chalk.dim('   • Open Windows Credential Manager'));
-          } else {
-            console.log(chalk.dim('   • Use your system\'s credential manager'));
-          }
-        } else {
-          console.log(chalk.dim('   • Encrypted files stored under ~/.ncp/credentials'));
-        }
-        console.log('');
-      }
-
-      if (vaultCredentials.length > 0) {
-        console.log(`\n🔐 Code-Mode Credential Vault (${vaultCredentials.length})\n`);
-        console.log(chalk.dim('Storage: ') + chalk.cyan('~/.ncp/credentials/vault.json (AES-256 encrypted)'));
-        console.log('');
-
-        for (const cred of vaultCredentials) {
-          console.log(chalk.bold(`${cred.mcpName}`) + chalk.dim(` (${cred.type})`));
-        }
-
-        console.log('');
-        console.log(chalk.dim('💡 Vault management:'));
-        console.log(chalk.dim('   • Remove a binding via NCP UI or delete the stored credential using ncp config tools.'));
-        console.log(chalk.dim('   • To wipe everything, delete ~/.ncp/credentials/vault.json (NCP will regenerate an empty vault).'));
-        console.log('');
-      }
-    } catch (error) {
-      console.error(`❌ Failed to list credentials: ${error instanceof Error ? error.message : String(error)}`);
-      process.exit(1);
-    }
+credentialsCmd
+  .command('remove <mcpName>')
+  .description('Remove stored credentials for an MCP')
+  .option('--vault-only', 'Remove only Code-Mode vault credentials')
+  .option('--store-only', 'Remove only secure credential store entries')
+  .action(async (mcpName, options) => {
+    await removeStoredCredentials(mcpName, options);
   });
 
 // Doctor: Comprehensive diagnostics and repair

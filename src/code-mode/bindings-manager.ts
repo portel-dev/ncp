@@ -41,6 +41,7 @@ export interface Credential {
     password?: string;
     custom?: Record<string, any>;
   };
+  updatedAt?: string;
 }
 
 /**
@@ -204,6 +205,12 @@ interface EncryptedPayload {
   data: string;
 }
 
+interface VaultCredentialMetadata {
+  mcpName: string;
+  type: Credential['type'];
+  updatedAt?: string;
+}
+
 export class CredentialVault {
   private static instance: CredentialVault;
   private credentials: Map<string, Credential> = new Map();
@@ -361,7 +368,11 @@ export class CredentialVault {
    */
   async store(mcpName: string, credential: Credential): Promise<void> {
     await this.ensureInitialized();
-    this.credentials.set(mcpName, credential);
+    const storedCredential: Credential = {
+      ...credential,
+      updatedAt: new Date().toISOString()
+    };
+    this.credentials.set(mcpName, storedCredential);
     logger.info(`🔐 Stored credential for ${mcpName} in vault`);
 
     try {
@@ -382,9 +393,13 @@ export class CredentialVault {
   /**
    * Remove a credential
    */
-  async remove(mcpName: string): Promise<void> {
+  async remove(mcpName: string): Promise<boolean> {
     await this.ensureInitialized();
-    this.credentials.delete(mcpName);
+    const existed = this.credentials.delete(mcpName);
+    if (!existed) {
+      return false;
+    }
+
     logger.info(`🗑️  Removed credential for ${mcpName} from vault`);
 
     try {
@@ -392,16 +407,19 @@ export class CredentialVault {
     } catch (error: any) {
       logger.error(`Failed to update credential vault: ${error.message}`);
     }
+
+    return true;
   }
 
   /**
    * List all stored credentials (metadata only, no sensitive data)
    */
-  async list(): Promise<Array<{ mcpName: string; type: string }>> {
+  async list(): Promise<VaultCredentialMetadata[]> {
     await this.ensureInitialized();
     return Array.from(this.credentials.values()).map(cred => ({
       mcpName: cred.mcpName,
-      type: cred.type
+      type: cred.type,
+      updatedAt: cred.updatedAt
     }));
   }
 }
