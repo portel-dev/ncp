@@ -884,8 +884,14 @@ export class NCPOrchestrator {
    * Run heavy initialization in background (non-blocking)
    */
   private async runBackgroundInitialization(profile: Profile): Promise<void> {
-    if (process.env.NCP_DISABLE_BACKGROUND_INIT === 'true') {
+    const backgroundInitDisabled = process.env.NCP_DISABLE_BACKGROUND_INIT === 'true';
+
+    if (backgroundInitDisabled) {
       logger.info('⏭️  Background initialization disabled via NCP_DISABLE_BACKGROUND_INIT');
+
+      // Still expose internal MCPs so built-in tools work in tests/diagnostics
+      await this.addInternalMCPsToDiscovery();
+
       this.indexingProgress = null;
       return;
     }
