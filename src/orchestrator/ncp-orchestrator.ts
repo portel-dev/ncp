@@ -884,6 +884,12 @@ export class NCPOrchestrator {
    * Run heavy initialization in background (non-blocking)
    */
   private async runBackgroundInitialization(profile: Profile): Promise<void> {
+    if (process.env.NCP_DISABLE_BACKGROUND_INIT === 'true') {
+      logger.info('⏭️  Background initialization disabled via NCP_DISABLE_BACKGROUND_INIT');
+      this.indexingProgress = null;
+      return;
+    }
+
     // Initialize discovery engine (loads embeddings from disk - can be slow)
     await this.discovery.initialize();
 

@@ -3,3 +3,8 @@
 if (!process.env.NCP_ENABLE_PHOTON_RUNTIME) {
   process.env.NCP_ENABLE_PHOTON_RUNTIME = 'false';
 }
+
+// Disable heavy background initialization during tests to prevent async teardown warnings
+if (!process.env.NCP_DISABLE_BACKGROUND_INIT) {
+  process.env.NCP_DISABLE_BACKGROUND_INIT = 'true';
+}
