@@ -13,7 +13,7 @@
  * 5. Second startup uses cache (no re-indexing)
  */
 
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -432,6 +432,47 @@ async function test5_NoReindexingOnRestart() {
   return true;
 }
 
+async function test6_CredentialsJsonOutput() {
+  logInfo('Test 6: credentials --json returns well-formed output');
+
+  const result = spawnSync('node', ['dist/index.js', 'credentials', '--json'], {
+    env: {
+      ...process.env,
+      NO_COLOR: 'true'
+    },
+    encoding: 'utf-8'
+  });
+
+  if (result.status !== 0) {
+    logError(`credentials --json exited with code ${result.status}`);
+    if (result.stderr) {
+      logInfo(`stderr:\n${result.stderr}`);
+    }
+    return false;
+  }
+
+  const raw = result.stdout.trim();
+  if (!raw) {
+    logError('credentials --json produced empty output');
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.secureStore) || !Array.isArray(parsed.vault)) {
+      logError('credentials --json missing secureStore or vault arrays');
+      return false;
+    }
+  } catch (error) {
+    logError(`credentials --json output was not valid JSON: ${error.message}`);
+    logInfo(`Output:\n${raw}`);
+    return false;
+  }
+
+  logSuccess('credentials --json produced valid JSON payload');
+  return true;
+}
+
 async function runAllTests() {
   console.log('\n' + '='.repeat(60));
   console.log('🧪 NCP Integration Test Suite');
@@ -446,7 +487,8 @@ async function runAllTests() {
     test2_ToolsListDuringIndexing,
     test3_FindDuringIndexing,
     test4_CacheProfileHashPersists,
-    test5_NoReindexingOnRestart
+    test5_NoReindexingOnRestart,
+    test6_CredentialsJsonOutput
   ];
 
   let passed = 0;
