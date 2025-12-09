@@ -6,8 +6,9 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
-import { getProfilesDirectory } from '../utils/ncp-paths.js';
+import { getProfilesDirectory, getNcpBaseDirectory } from '../utils/ncp-paths.js';
 import { importFromClient, shouldAttemptClientSync } from '../utils/client-importer.js';
+import { getClientConfigPath, getClientDefinition } from '../utils/client-registry.js';
 import type { OAuthConfig } from '../auth/oauth-device-flow.js';
 import { getSecureCredentialStore, type CredentialType } from '../auth/secure-credential-store.js';
 import { logger } from '../utils/logger.js';
@@ -465,10 +466,142 @@ Your ${clientName} has ${totalMCPs} MCPs configured (~${estimatedTools} tools in
     clientName: string,
     importResult: any
   ): Promise<void> {
-    // TODO: Implement actual backup and replacement logic
-    // This will depend on client-specific config formats
-    logger.info(`Would backup and replace config for ${clientName}`);
-    logger.info(`Config path: ${importResult.configPath}`);
+    const configPath = getClientConfigPath(clientName);
+
+    if (!configPath) {
+      logger.warn(`Unable to locate config for ${clientName} – skipping automatic replacement`);
+      return;
+    }
+
+    const definition = getClientDefinition(clientName);
+    if (definition?.configFormat && definition.configFormat !== 'json') {
+      logger.warn(`Config format ${definition.configFormat} for ${clientName} is not supported for automatic replacement`);
+      return;
+    }
+
+    const mcpPath = definition?.mcpServersPath || 'mcpServers';
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+
+    await this.backupClientConfigFile(clientName, configPath);
+
+    const configData = await this.readJsonConfig(configPath);
+    const existingValue = this.getNestedProperty(configData, mcpPath);
+
+    if (Array.isArray(existingValue)) {
+      logger.warn(`Cannot auto-optimize ${clientName} config because ${mcpPath} is array-based`);
+      return;
+    }
+
+    this.setNestedProperty(configData, mcpPath, this.buildNcpServerDefinition());
+
+    await fs.writeFile(configPath, JSON.stringify(configData, null, 2), 'utf-8');
+    logger.info(`🔄 Replaced ${clientName} MCP config with NCP-only server at ${configPath}`);
+  }
+
+  private async backupClientConfigFile(clientName: string, configPath: string): Promise<void> {
+    try {
+      await fs.access(configPath);
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        return; // Nothing to backup
+      }
+      throw error;
+    }
+
+    const backupDir = path.join(getNcpBaseDirectory(), 'client-backups', this.normalizeClientName(clientName));
+    await fs.mkdir(backupDir, { recursive: true });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupPath = path.join(backupDir, `config-${timestamp}.json`);
+    await fs.copyFile(configPath, backupPath);
+    logger.info(`📦 Backed up ${clientName} config to ${backupPath}`);
+  }
+
+  private async readJsonConfig(configPath: string): Promise<any> {
+    try {
+      const content = await fs.readFile(configPath, 'utf-8');
+      if (!content.trim()) {
+        return {};
+      }
+      const parsed = JSON.parse(content);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        logger.warn(`Config at ${configPath} is not an object; using empty object for replacement`);
+        return {};
+      }
+      return parsed;
+    } catch (error: any) {
+      if (error.code !== 'ENOENT') {
+        logger.warn(`Failed to read config ${configPath}: ${error.message}`);
+      }
+      return {};
+    }
+  }
+
+  private buildNcpServerDefinition(): Record<string, any> {
+    const launchConfig = this.resolveNcpLaunchCommand();
+    const server: Record<string, any> = {
+      command: launchConfig.command,
+      env: {
+        NCP_PROFILE: 'all'
+      }
+    };
+
+    if (launchConfig.args.length > 0) {
+      server.args = launchConfig.args;
+    }
+
+    return {
+      ncp: server
+    };
+  }
+
+  private resolveNcpLaunchCommand(): { command: string; args: string[] } {
+    const entryPoint = process.argv[1];
+    if (entryPoint) {
+      return {
+        command: process.execPath,
+        args: [entryPoint]
+      };
+    }
+
+    return {
+      command: 'ncp',
+      args: []
+    };
+  }
+
+  private getNestedProperty(obj: any, keyPath: string): any {
+    const parts = keyPath.split('.');
+    let current = obj;
+
+    for (const part of parts) {
+      if (current && typeof current === 'object' && part in current) {
+        current = current[part];
+      } else {
+        return undefined;
+      }
+    }
+
+    return current;
+  }
+
+  private setNestedProperty(obj: any, keyPath: string, value: any): void {
+    const parts = keyPath.split('.');
+    let current = obj;
+
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i];
+      if (!current[part] || typeof current[part] !== 'object') {
+        current[part] = {};
+      }
+      current = current[part];
+    }
+
+    current[parts[parts.length - 1]] = value;
+  }
+
+  private normalizeClientName(name: string): string {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'client';
   }
 
   private async loadProfiles(): Promise<void> {

@@ -915,6 +915,19 @@ program
   .option('--env <vars...>', 'Environment variables (KEY=value)')
   .option('--token <value>', 'Bearer token for HTTP MCPs (skips interactive prompt)')
   .option('-y, --yes', 'Auto-run setup commands without prompting')
+  .addHelpText('after', `
+Arguments:
+  <provider>   Registry name (e.g., github), pipe list ("github|slack"), config path, or Photon URL
+  [command]    Executable to run when not using the registry/import modes (e.g., npx)
+  [args...]    Additional arguments for the command form (e.g., @modelcontextprotocol/server-filesystem /tmp)
+
+Examples:
+  ncp add github
+  ncp add "github|slack|stripe"             # Bulk install from registry
+  ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/Documents
+  ncp add ~/Library/Application\ Support/Claude/claude_desktop_config.json
+  ncp add https://example.com/my.photon.ts
+`)
   .action(async (providerName, command, args, options) => {
     // Set branded terminal title with MCP being added
     setNCPTitle('Add', providerName.includes('|') ? 'multiple MCPs' : providerName);
@@ -1946,6 +1959,7 @@ const analyticsCmd = program
   .description('View NCP usage analytics and performance metrics');
 
 analyticsCmd
+  .action(() => analyticsCmd.help())
   .command('overview')
   .description('Show comprehensive analytics overview')
   .option('--period <days>', 'Show data for last N days (e.g., --period 7)')
@@ -2558,6 +2572,8 @@ const scheduleCmd = program
   .command('schedule')
   .description('Schedule MCP tool executions with cron');
 
+scheduleCmd.action(() => scheduleCmd.help());
+
 // schedule create
 scheduleCmd
   .command('create <tool> <schedule>')
@@ -3099,49 +3115,79 @@ const cleanupRunsCmd = program
 
 // Credentials: List stored credentials
 program
-  .command('credentials')
+  .command('credentials [action]')
   .description('List stored credentials')
   .option('--mcp <name>', 'Filter by MCP name')
-  .action(async (options) => {
+  .action(async (action, options) => {
+    if (action && action !== 'list') {
+      console.error(`❌ Unknown credentials subcommand: ${action}`);
+      process.exit(1);
+    }
+
     try {
       const { getSecureCredentialStore } = await import('../auth/secure-credential-store.js');
+      const { CredentialVault } = await import('../code-mode/bindings-manager.js');
+
       const credentialStore = getSecureCredentialStore();
+      const [storedCredentials, vaultCredentialsRaw] = await Promise.all([
+        credentialStore.listCredentials(options.mcp),
+        CredentialVault.getInstance().list()
+      ]);
 
-      const credentials = await credentialStore.listCredentials(options.mcp);
+      const vaultCredentials = vaultCredentialsRaw.filter((cred) => !options.mcp || cred.mcpName === options.mcp);
+      const total = storedCredentials.length + vaultCredentials.length;
 
-      if (credentials.length === 0) {
+      if (total === 0) {
         console.log('ℹ️  No stored credentials found');
         return;
       }
 
-      console.log(`\n🔐 Stored Credentials (${credentials.length})\n`);
-      console.log(chalk.dim('Storage method: ') + chalk.cyan(credentialStore.getStorageMethod()));
-      console.log('');
+      if (storedCredentials.length > 0) {
+        console.log(`\n🔐 Secure Credential Store (${storedCredentials.length})\n`);
+        console.log(chalk.dim('Storage method: ') + chalk.cyan(credentialStore.getStorageMethod()));
+        console.log('');
 
-      for (const cred of credentials) {
-        console.log(chalk.bold(`${cred.mcpName}`) + chalk.dim(` (${cred.type})`));
-        if (cred.description) {
-          console.log(chalk.dim(`   ${cred.description}`));
+        for (const cred of storedCredentials) {
+          console.log(chalk.bold(`${cred.mcpName}`) + chalk.dim(` (${cred.type})`));
+          if (cred.description) {
+            console.log(chalk.dim(`   ${cred.description}`));
+          }
+          console.log(chalk.dim(`   Updated: ${new Date(cred.updatedAt).toLocaleString()}`));
+          console.log('');
         }
-        console.log(chalk.dim(`   Updated: ${new Date(cred.updatedAt).toLocaleString()}`));
+
+        // Show helpful tips for credential management
+        const storageMethod = credentialStore.getStorageMethod();
+        console.log(chalk.dim('💡 Secure store management:'));
+        if (storageMethod === 'keychain') {
+          if (process.platform === 'darwin') {
+            console.log(chalk.dim('   • Open Keychain Access and search for "@portel/ncp"'));
+          } else if (process.platform === 'win32') {
+            console.log(chalk.dim('   • Open Windows Credential Manager'));
+          } else {
+            console.log(chalk.dim('   • Use your system\'s credential manager'));
+          }
+        } else {
+          console.log(chalk.dim('   • Encrypted files stored under ~/.ncp/credentials'));
+        }
         console.log('');
       }
 
-      // Show helpful tips for credential management
-      const storageMethod = credentialStore.getStorageMethod();
-      console.log(chalk.dim('💡 To manage credentials:'));
-      if (storageMethod === 'keychain') {
-        if (process.platform === 'darwin') {
-          console.log(chalk.dim('   • Open Keychain Access app and search for "@portel/ncp"'));
-        } else if (process.platform === 'win32') {
-          console.log(chalk.dim('   • Open Windows Credential Manager'));
-        } else {
-          console.log(chalk.dim('   • Use your system\'s credential manager'));
+      if (vaultCredentials.length > 0) {
+        console.log(`\n🔐 Code-Mode Credential Vault (${vaultCredentials.length})\n`);
+        console.log(chalk.dim('Storage: ') + chalk.cyan('~/.ncp/credentials/vault.json (AES-256 encrypted)'));
+        console.log('');
+
+        for (const cred of vaultCredentials) {
+          console.log(chalk.bold(`${cred.mcpName}`) + chalk.dim(` (${cred.type})`));
         }
-      } else {
-        console.log(chalk.dim('   • Credentials are stored in encrypted files in ~/.ncp'));
+
+        console.log('');
+        console.log(chalk.dim('💡 Vault management:'));
+        console.log(chalk.dim('   • Remove a binding via NCP UI or delete the stored credential using ncp config tools.'));
+        console.log(chalk.dim('   • To wipe everything, delete ~/.ncp/credentials/vault.json (NCP will regenerate an empty vault).'));
+        console.log('');
       }
-      console.log('');
     } catch (error) {
       console.error(`❌ Failed to list credentials: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);

@@ -10,7 +10,7 @@
  * For enterprise compliance and security monitoring.
  */
 
-import { writeFile, appendFile, mkdir } from 'fs/promises';
+import { appendFile, mkdir, readdir, rename, stat, unlink } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
@@ -101,6 +101,7 @@ export class AuditLogger {
   private auditDir: string;
   private currentFile: string;
   private sessionId: string;
+  private rotationInProgress = false;
 
   constructor(config: Partial<AuditLoggerConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -410,8 +411,92 @@ export class AuditLogger {
    * Check if audit file needs rotation
    */
   private async checkRotation(): Promise<void> {
-    // TODO: Implement file size check and rotation
-    // For now, rotate daily (file name includes date)
+    const maxSizeMB = this.config.maxFileSizeMB ?? 0;
+    if (maxSizeMB <= 0 || this.rotationInProgress) {
+      return;
+    }
+
+    const threshold = maxSizeMB * 1024 * 1024;
+
+    try {
+      const stats = await stat(this.currentFile);
+      if (stats.size < threshold) {
+        return;
+      }
+    } catch (error: any) {
+      if (error.code !== 'ENOENT') {
+        logger.warn(`Failed to inspect audit log size: ${error.message}`);
+      }
+      return;
+    }
+
+    this.rotationInProgress = true;
+    try {
+      await this.rotateLogFile();
+    } finally {
+      this.rotationInProgress = false;
+    }
+  }
+
+  private async rotateLogFile(): Promise<void> {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const rotatedPath = join(this.auditDir, `audit-${timestamp}.jsonl`);
+
+    try {
+      await rename(this.currentFile, rotatedPath);
+      logger.info(`🌀 Rotated audit log: ${rotatedPath}`);
+    } catch (error: any) {
+      if (error.code !== 'ENOENT') {
+        logger.warn(`Failed to rotate audit log: ${error.message}`);
+      }
+      return;
+    }
+
+    this.currentFile = join(this.auditDir, `audit-${this.getDateString()}-${Date.now()}.jsonl`);
+    await this.cleanupOldFiles();
+  }
+
+  private async cleanupOldFiles(): Promise<void> {
+    const maxFiles = this.config.maxFiles ?? 0;
+    if (maxFiles <= 0) {
+      return;
+    }
+
+    try {
+      const entries = await readdir(this.auditDir);
+      const auditFiles = await Promise.all(
+        entries
+          .filter(name => name.startsWith('audit-') && name.endsWith('.jsonl'))
+          .map(async name => {
+            const filePath = join(this.auditDir, name);
+            try {
+              const fileStats = await stat(filePath);
+              return { filePath, mtime: fileStats.mtimeMs };
+            } catch (error: any) {
+              logger.warn(`Failed to inspect audit log ${filePath}: ${error.message}`);
+              return null;
+            }
+          })
+      );
+
+      const validFiles = auditFiles.filter((entry): entry is { filePath: string; mtime: number } => Boolean(entry));
+      if (validFiles.length <= maxFiles) {
+        return;
+      }
+
+      validFiles.sort((a, b) => a.mtime - b.mtime);
+      const excess = validFiles.length - maxFiles;
+
+      for (let i = 0; i < excess; i++) {
+        try {
+          await unlink(validFiles[i].filePath);
+        } catch (error: any) {
+          logger.warn(`Failed to remove old audit log ${validFiles[i].filePath}: ${error.message}`);
+        }
+      }
+    } catch (error: any) {
+      logger.warn(`Failed to clean up audit logs: ${error.message}`);
+    }
   }
 }
 
