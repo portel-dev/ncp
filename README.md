@@ -549,6 +549,28 @@ NCP automatically supports hibernation-enabled MCP servers (like Cloudflare Dura
 
 > **Note:** Hibernation is a server-side feature. NCP's standard HTTP/SSE client automatically works with both traditional and hibernation-enabled servers without any special configuration.
 
+### **Photon Runtime (CLI vs DXT)**
+
+The TypeScript Photon runtime is enabled by default, but the toggle lives in different places depending on how you run NCP:
+
+- **CLI / npm installs:** Edit `~/.ncp/settings.json` (or run `ncp config`) and set `enablePhotonRuntime: true` or `false`. You can also override ad‑hoc with `NCP_ENABLE_PHOTON_RUNTIME=true ncp find "photon"`.
+- **DXT / client bundles (Claude Desktop, Cursor, etc.):** These builds **ignore** `~/.ncp/settings.json`. Configure photons by setting the env var inside the client config:
+
+```json
+{
+  "mcpServers": {
+    "ncp": {
+      "command": "ncp",
+      "env": {
+        "NCP_ENABLE_PHOTON_RUNTIME": "true"
+      }
+    }
+  }
+}
+```
+
+If you disable the photon runtime, internal MCPs continue to work, but `.photon.ts` files are ignored until you re-enable the flag.
+
 ### **Import from Anywhere**
 ```bash
 # From clipboard (any JSON config)

@@ -33,11 +33,14 @@ Enables skill discovery. Set to `false` to disable skills:
 export NCP_ENABLE_SKILLS=false
 ```
 
-#### `NCP_ENABLE_PHOTON_RUNTIME` (default: false)
-Enables photon runtime. Set to `true` to enable photons:
+#### `NCP_ENABLE_PHOTON_RUNTIME` (default: true)
+Enables photon runtime. Set to `false` if you need to temporarily disable photons:
 ```bash
-export NCP_ENABLE_PHOTON_RUNTIME=true
+export NCP_ENABLE_PHOTON_RUNTIME=false
 ```
+
+- **CLI / npm installs:** Update `~/.ncp/settings.json` (`enablePhotonRuntime`) to make the change stick across shells.
+- **DXT / client bundles:** These builds ignore `~/.ncp/settings.json`, so specify the env var in your client config (`"NCP_ENABLE_PHOTON_RUNTIME": "true"`).
 
 **Note**: FileWatcher only starts if at least one of these is enabled.
 
