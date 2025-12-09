@@ -3127,8 +3127,45 @@ const formatCredentialTimestamp = (value?: number | string): string => {
   return new Date(epochValue).toLocaleString();
 };
 
-async function listStoredCredentials(options: { mcpFilter?: string; json?: boolean } = {}): Promise<void> {
-  const { mcpFilter, json } = options;
+type CredentialTableRow = {
+  source: string;
+  mcpName: string;
+  type: string;
+  updated: string;
+  backend: string;
+  notes?: string;
+};
+
+const printCredentialTable = (rows: CredentialTableRow[]): void => {
+  if (rows.length === 0) {
+    console.log('ℹ️  No stored credentials found');
+    return;
+  }
+
+  const headers = ['Source', 'MCP', 'Type', 'Updated', 'Backend', 'Notes'];
+  const data = rows.map(row => [
+    row.source,
+    row.mcpName,
+    row.type,
+    row.updated,
+    row.backend,
+    row.notes || ''
+  ]);
+
+  const columnWidths = headers.map((header, index) =>
+    Math.max(header.length, ...data.map(values => values[index].length))
+  );
+
+  const formatRow = (values: string[]) =>
+    values.map((val, index) => val.padEnd(columnWidths[index])).join('  ');
+
+  console.log(formatRow(headers));
+  console.log(columnWidths.map(width => '-'.repeat(width)).join('  '));
+  data.forEach(values => console.log(formatRow(values)));
+};
+
+async function listStoredCredentials(options: { mcpFilter?: string; json?: boolean; table?: boolean } = {}): Promise<void> {
+  const { mcpFilter, json, table } = options;
 
   try {
     const { getSecureCredentialStore } = await import('../auth/secure-credential-store.js');
@@ -3160,6 +3197,30 @@ async function listStoredCredentials(options: { mcpFilter?: string; json?: boole
 
     if (total === 0) {
       console.log('ℹ️  No stored credentials found');
+      return;
+    }
+
+    if (table) {
+      const storageMethod = credentialStore.getStorageMethod();
+      const tableRows: CredentialTableRow[] = [
+        ...storedCredentials.map(cred => ({
+          source: 'Secure store',
+          mcpName: cred.mcpName,
+          type: cred.type,
+          updated: formatCredentialTimestamp(cred.updatedAt),
+          backend: storageMethod,
+          notes: cred.description || ''
+        })),
+        ...vaultCredentials.map(cred => ({
+          source: 'Code-mode vault',
+          mcpName: cred.mcpName,
+          type: cred.type,
+          updated: formatCredentialTimestamp(cred.updatedAt),
+          backend: 'vault (AES-256)'
+        }))
+      ];
+      printCredentialTable(tableRows);
+      console.log('\n💡 Tip: use --json for automation-friendly output.');
       return;
     }
 
@@ -3282,8 +3343,9 @@ const credentialsCmd = program
   .usage('[options] [command]')
   .option('--mcp <name>', 'Filter by MCP name')
   .option('--json', 'Output credentials as JSON')
+  .option('--table', 'Display credentials in a formatted table')
   .action(async (options) => {
-    await listStoredCredentials({ mcpFilter: options.mcp, json: options.json });
+    await listStoredCredentials({ mcpFilter: options.mcp, json: options.json, table: options.table });
   });
 
 credentialsCmd
@@ -3291,8 +3353,9 @@ credentialsCmd
   .description('List stored credentials')
   .option('--mcp <name>', 'Filter by MCP name')
   .option('--json', 'Output credentials as JSON')
+  .option('--table', 'Display credentials in a formatted table')
   .action(async (options) => {
-    await listStoredCredentials({ mcpFilter: options.mcp, json: options.json });
+    await listStoredCredentials({ mcpFilter: options.mcp, json: options.json, table: options.table });
   });
 
 credentialsCmd

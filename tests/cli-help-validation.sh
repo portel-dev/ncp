@@ -1,19 +1,35 @@
-#!/bin/bash
-# CLI Help Validation - Minimal version
-cd /Users/arul/Projects/ncp-production-clean
+#!/usr/bin/env bash
+# CLI Help Validation
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+ENTRYPOINT="${NCP_CLI_ENTRY:-dist/index.js}"
+if [[ ! -f "$ENTRYPOINT" ]]; then
+  echo "❌ $ENTRYPOINT not found. Run 'npm run build' first."
+  exit 1
+fi
 
 echo "Testing CLI Help Output..."
 echo ""
 
-node dist/cli/index.js --help 2>&1 | grep -q "add" && echo "✓ add command" || echo "✗ add command"
-node dist/cli/index.js --help 2>&1 | grep -q "find" && echo "✓ find command" || echo "✗ find command"
-node dist/cli/index.js --help 2>&1 | grep -q "run" && echo "✓ run command" || echo "✗ run command"
-node dist/cli/index.js --help 2>&1 | grep -q "list" && echo "✓ list command" || echo "✗ list command"
-node dist/cli/index.js --help 2>&1 | grep -q "analytics" && echo "✓ analytics command" || echo "✗ analytics command"
-node dist/cli/index.js --help 2>&1 | grep -q "config" && echo "✓ config command" || echo "✗ config command"
-node dist/cli/index.js --help 2>&1 | grep -q "remove" && echo "✓ remove command" || echo "✗ remove command"
-node dist/cli/index.js --help 2>&1 | grep -q "repair" && echo "✓ repair command" || echo "✗ repair command"
-node dist/cli/index.js --help 2>&1 | grep -q "update" && echo "✓ update command" || echo "✗ update command"
+commands=(add find run list analytics config remove repair update)
+missing=false
 
-echo ""
-echo "✅ All commands present in help"
+for cmd in "${commands[@]}"; do
+  if node "$ENTRYPOINT" --help 2>&1 | grep -q "$cmd"; then
+    echo "✓ $cmd command"
+  else
+    echo "✗ $cmd command"
+    missing=true
+  fi
+  echo ""
+done
+
+if [[ "$missing" == false ]]; then
+  echo "✅ All commands present in help"
+else
+  echo "⚠️  Missing commands detected"
+  exit 1
+fi
