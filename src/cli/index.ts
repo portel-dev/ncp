@@ -508,7 +508,8 @@ program.configureHelp({
 
     // Then usage and config info
     output += `${chalk.bold.white('Usage:')} ${cmd.name()} [options] [command]\n`;
-    output += `${chalk.yellow('NCP config files:')} ~/.ncp/profiles/\n\n`;
+    output += `${chalk.yellow('NCP config files:')} ~/.ncp/profiles/\n`;
+    output += chalk.dim('DXT/MCP bundles ignore ~/.ncp/settings.json; configure them via env vars in your client.') + '\n\n';
 
     // Options
     if (cmd.options.length) {
@@ -3126,7 +3127,9 @@ const formatCredentialTimestamp = (value?: number | string): string => {
   return new Date(epochValue).toLocaleString();
 };
 
-async function listStoredCredentials(mcpFilter?: string): Promise<void> {
+async function listStoredCredentials(options: { mcpFilter?: string; json?: boolean } = {}): Promise<void> {
+  const { mcpFilter, json } = options;
+
   try {
     const { getSecureCredentialStore } = await import('../auth/secure-credential-store.js');
     const { CredentialVault } = await import('../code-mode/bindings-manager.js');
@@ -3143,7 +3146,17 @@ async function listStoredCredentials(mcpFilter?: string): Promise<void> {
       .filter((cred) => !mcpFilter || cred.mcpName === mcpFilter)
       .sort((a, b) => a.mcpName.localeCompare(b.mcpName));
 
+    const payload = {
+      secureStore: storedCredentials,
+      vault: vaultCredentials
+    };
+
     const total = storedCredentials.length + vaultCredentials.length;
+
+    if (json) {
+      console.log(JSON.stringify(payload, null, 2));
+      return;
+    }
 
     if (total === 0) {
       console.log('ℹ️  No stored credentials found');
@@ -3268,16 +3281,18 @@ const credentialsCmd = program
   .description('Manage stored credentials')
   .usage('[options] [command]')
   .option('--mcp <name>', 'Filter by MCP name')
+  .option('--json', 'Output credentials as JSON')
   .action(async (options) => {
-    await listStoredCredentials(options.mcp);
+    await listStoredCredentials({ mcpFilter: options.mcp, json: options.json });
   });
 
 credentialsCmd
   .command('list')
   .description('List stored credentials')
   .option('--mcp <name>', 'Filter by MCP name')
+  .option('--json', 'Output credentials as JSON')
   .action(async (options) => {
-    await listStoredCredentials(options.mcp);
+    await listStoredCredentials({ mcpFilter: options.mcp, json: options.json });
   });
 
 credentialsCmd

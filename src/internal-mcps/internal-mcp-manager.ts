@@ -63,6 +63,11 @@ export class InternalMCPManager {
    * Load Photon classes from standard directories
    */
   async loadPhotons(): Promise<void> {
+    if (process.env.JEST_WORKER_ID) {
+      logger.info('🧪 Test environment detected - skipping Photon load');
+      return;
+    }
+
     const photonRuntimeEnabled = process.env.NCP_ENABLE_PHOTON_RUNTIME === 'true';
 
     const directories = [

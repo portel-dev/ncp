@@ -191,6 +191,10 @@ I have access to 2 tools:
 
 Control NCP behavior via environment variables in your Claude Desktop config:
 
+> ⚠️ **DXT vs CLI**
+> - When running NCP as a DXT or MCP bundle (Claude Desktop, Cursor, etc.), only the environment variables in the client config are read. The packaged server does **not** read `~/.ncp/settings.json`.
+> - When running the CLI (npm install/-g), `~/.ncp/settings.json` provides the defaults, and env vars override them at runtime without persisting changes to the file.
+
 ```json
 {
   "mcpServers": {

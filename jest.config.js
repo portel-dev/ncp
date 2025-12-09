@@ -45,6 +45,7 @@ export default {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   // '^.*/utils/version\\.js$': '<rootDir>/tests/__mocks__/version.ts'
   },
+  setupFiles: ['<rootDir>/tests/setup-env.ts'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   testTimeout: 15000,
   verbose: true,

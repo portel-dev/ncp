@@ -102,6 +102,10 @@ ncp settings whitelist list
 ncp settings whitelist clear
 ```
 
+> 🔁 **DXT builds:** When NCP runs as a packaged DXT/MCP bundle (Claude Desktop, Cursor, etc.) the client must set environment variables such as `NCP_CONFIRM_BEFORE_RUN=false`. The packaged server does **not** read `~/.ncp/settings.json`; that file only applies to the CLI build.
+
+**For advanced users**, you can edit the file directly:
+
 **For advanced users**, you can edit the file directly:
 
 ```json
