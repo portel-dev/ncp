@@ -142,11 +142,9 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
     const envValue = process.env.NCP_ENABLE_CODE_MODE === 'true';
     if (settings.enableCodeMode !== envValue) {
       settings.enableCodeMode = envValue;
-      // Save to file so it persists if env var is later removed
-      await saveGlobalSettings(settings);
 
       if (process.env.NCP_DEBUG === 'true') {
-        console.error(`[DEBUG SETTINGS] Applied env var: enableCodeMode=${envValue}`);
+        console.error(`[DEBUG SETTINGS] Applied env var (non-persistent): enableCodeMode=${envValue}`);
       }
     }
   }
@@ -155,10 +153,9 @@ export async function loadGlobalSettings(): Promise<GlobalSettings> {
     const envValue = process.env.NCP_ENABLE_PHOTON_RUNTIME === 'true';
     if (settings.enablePhotonRuntime !== envValue) {
       settings.enablePhotonRuntime = envValue;
-      await saveGlobalSettings(settings);
 
       if (process.env.NCP_DEBUG === 'true') {
-        console.error(`[DEBUG SETTINGS] Applied env var: enablePhotonRuntime=${envValue}`);
+        console.error(`[DEBUG SETTINGS] Applied env var (non-persistent): enablePhotonRuntime=${envValue}`);
       }
     }
   } else {
