@@ -239,44 +239,28 @@ export class ProfileManager {
       // Import missing MCPs in parallel with timeout (prevents startup delays)
       const AUTO_IMPORT_TIMEOUT = 30000; // 30 second max for all auto-imports
       const imported: string[] = [];
+      const timeoutAt = Date.now() + AUTO_IMPORT_TIMEOUT;
 
-      try {
-        // Parallelize MCP additions for faster startup
-        const importPromises = missingMCPs.map(async ({ name, config }) => {
-          try {
-            // Remove metadata fields before adding (internal use only)
-            const cleanConfig = {
-              command: config.command,
-              args: config.args || [],
-              env: config.env || {}
-            };
-
-            // Use addMCPToProfile to ensure cache updates happen
-            await this.addMCPToProfile('all', name, cleanConfig);
-            return { name, success: true };
-          } catch (error) {
-            logger.warn(`Failed to import ${name}: ${error}`);
-            return { name, success: false, error };
-          }
-        });
-
-        // Wait for all imports with timeout
-        const results = await Promise.race([
-          Promise.allSettled(importPromises),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Auto-import timeout')), AUTO_IMPORT_TIMEOUT)
-          )
-        ]);
-
-        // Collect successfully imported MCPs
-        for (const result of results) {
-          if (result.status === 'fulfilled' && result.value.success) {
-            imported.push(result.value.name);
-          }
+      for (const { name, config } of missingMCPs) {
+        if (Date.now() > timeoutAt) {
+          logger.warn('Auto-import timeout - remaining MCPs will be skipped');
+          break;
         }
-      } catch (error: any) {
-        // Timeout or critical error - log but don't block startup
-        logger.warn(`Auto-import interrupted: ${error.message}`);
+
+        try {
+          // Remove metadata fields before adding (internal use only)
+          const cleanConfig = {
+            command: config.command,
+            args: config.args || [],
+            env: config.env || {}
+          };
+
+          // Use addMCPToProfile to ensure cache updates happen
+          await this.addMCPToProfile('all', name, cleanConfig);
+          imported.push(name);
+        } catch (error) {
+          logger.warn(`Failed to import ${name}: ${error}`);
+        }
       }
 
       if (imported.length > 0) {
