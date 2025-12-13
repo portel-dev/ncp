@@ -23,7 +23,6 @@ rsync -a \
   --exclude='*.test.ts' \
   --exclude='*.test.js' \
   --exclude='tests/' \
-  --exclude='scripts/' \
   --exclude='*.dxt' \
   --exclude='.ncp/' \
   ./ "$TEMP_DIR/"
