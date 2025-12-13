@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+* fix Windows runtime detection and log path handling for MCP servers (fixes #4, fixes #5)
+
 ## [1.5.3](https://github.com/portel-dev/ncp/compare/1.5.2...1.5.3) (2025-10-14)
 
 ### Bug Fixes
