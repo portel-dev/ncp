@@ -8,27 +8,35 @@ import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
+import { setOverrideWorkingDirectory, resetPathsCache } from '../../src/utils/ncp-paths.js';
+
+const ORIGINAL_HOME = process.env.HOME;
 
 describe('SkillsMarketplaceClient', () => {
   let client: SkillsMarketplaceClient;
   let testConfigDir: string;
 
   beforeEach(async () => {
-    // Create isolated test environment
+    // Create isolated test environment rooted outside the repo's .ncp directory
     testConfigDir = path.join(os.tmpdir(), `ncp-skills-test-${Date.now()}`);
     await fs.mkdir(testConfigDir, { recursive: true });
 
-    // Mock the home directory for testing
     process.env.HOME = testConfigDir;
+    resetPathsCache();
+    setOverrideWorkingDirectory(testConfigDir);
 
     client = new SkillsMarketplaceClient();
   });
 
   afterEach(async () => {
-    // Cleanup test directory
+    // Cleanup test directory and restore environment overrides
     if (existsSync(testConfigDir)) {
       await fs.rm(testConfigDir, { recursive: true, force: true });
     }
+
+    process.env.HOME = ORIGINAL_HOME;
+    setOverrideWorkingDirectory(null);
+    resetPathsCache();
   });
 
   describe('initialization', () => {

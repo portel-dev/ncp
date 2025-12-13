@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from '@jest/globals';
+import { describe, it, expect, afterEach, jest } from '@jest/globals';
 import { NCPOrchestrator } from '../../src/orchestrator/ncp-orchestrator.js';
 
 describe('NCPOrchestrator background init guard', () => {
@@ -18,8 +18,9 @@ describe('NCPOrchestrator background init guard', () => {
     const orchestrator = new NCPOrchestrator('test', false);
 
     // Stub discovery + helpers to avoid hitting actual subsystems
+    const discoveryInitialize = jest.fn(async () => {});
     const mockDiscovery = {
-      initialize: jest.fn().mockResolvedValue(undefined)
+      initialize: discoveryInitialize
     } as any;
     (orchestrator as any).discovery = mockDiscovery;
 
@@ -31,7 +32,7 @@ describe('NCPOrchestrator background init guard', () => {
 
     await (orchestrator as any).runBackgroundInitialization(profile);
 
-    expect(mockDiscovery.initialize).not.toHaveBeenCalled();
+    expect(discoveryInitialize).not.toHaveBeenCalled();
     expect(addInternalSpy).toHaveBeenCalledTimes(1);
     expect((orchestrator as any).indexingProgress).toBeNull();
   });

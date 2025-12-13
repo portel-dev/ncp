@@ -9,12 +9,45 @@
  */
 
 import { SkillsManagementMCP } from '../../src/internal-mcps/skills.js';
+import * as path from 'path';
+import * as os from 'os';
+import * as fs from 'fs/promises';
+import { setOverrideWorkingDirectory, resetPathsCache } from '../../src/utils/ncp-paths.js';
 
 describe('Skills Methods - Positional Arguments Support', () => {
   let skillsMCP: SkillsManagementMCP;
+  let testWorkingDir: string;
+  let stubbedSkills: any[];
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    testWorkingDir = path.join(os.tmpdir(), `ncp-skills-mcp-${Date.now()}`);
+    await fs.mkdir(testWorkingDir, { recursive: true });
+
+    stubbedSkills = [];
+
+    resetPathsCache();
+    setOverrideWorkingDirectory(testWorkingDir);
+
     skillsMCP = new SkillsManagementMCP();
+
+    // Stub heavy dependencies so tests don't hit real filesystem/network
+    (skillsMCP as any).skillsManager = {
+      initialize: async () => {},
+      loadAllSkills: async () => stubbedSkills,
+      getLoadedSkills: () => stubbedSkills
+    };
+
+    (skillsMCP as any).marketplaceClient = {
+      initialize: async () => {},
+      install: async () => ({ success: false, message: 'Skill not found' }),
+      remove: async () => ({ success: true, message: 'Removed skill' })
+    };
+  });
+
+  afterEach(async () => {
+    resetPathsCache();
+    setOverrideWorkingDirectory(null);
+    await fs.rm(testWorkingDir, { recursive: true, force: true });
   });
 
   describe('skills:find parameter handling', () => {
