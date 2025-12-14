@@ -11,11 +11,10 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as crypto from 'crypto';
-import { Photon } from './base-photon.js';
+import { PhotonMCP, DependencyManager } from '@portel/photon-core';
 import { PhotonAdapter } from './photon-adapter.js';
 import { InternalMCP } from './types.js';
 import { logger } from '../utils/logger.js';
-import { DependencyManager } from '@portel/photon-core';
 import envPaths from 'env-paths';
 
 export class PhotonLoader {
