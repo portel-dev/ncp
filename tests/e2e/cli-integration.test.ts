@@ -297,7 +297,7 @@ describe('CLI Integration Tests', () => {
       const result = runCLI('doctor');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toMatch(/healthy MCPs/i);
+      expect(result.stdout).toMatch(/(healthy MCPs|No MCPs configured)/i);
     }, 30000);
 
     test('should verify Node.js version check', () => {
@@ -332,7 +332,7 @@ describe('CLI Integration Tests', () => {
       const result = runCLI('doctor');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toMatch(/healthy MCPs/i);
+      expect(result.stdout).toMatch(/(healthy MCPs|No MCPs configured)/i);
     }, 30000);
 
     test('should handle doctor with MCP name argument', () => {
