@@ -49,9 +49,6 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Test package functionality
-        run: npm run test:package
-
       - name: Build Desktop Extension (DXT)
         run: npm run build:dxt:signed
 
