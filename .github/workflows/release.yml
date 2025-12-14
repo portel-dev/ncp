@@ -69,7 +69,7 @@ jobs:
 
       - name: Release
         if: ${{ inputs.dry_run == false }}
-        run: npm run release -- --increment=${{ inputs.release_type }} --ci
+        run: npm run release -- --increment=${{ inputs.release_type }} --no-npm.publish --ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
