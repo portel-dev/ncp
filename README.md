@@ -295,6 +295,16 @@ We wanted to stay on top of MCP-related conferences and workshops for an upcomin
      --catchup-missed
    ```
 
+**How to set this up yourself:**
+
+First, install the web photon (provides search and read capabilities):
+```bash
+# Install from the official photons repo
+ncp photon add https://raw.githubusercontent.com/portel-dev/photons/main/web.photon.ts
+```
+
+Then ask Claude to create the scraper - it will use the web photon automatically.
+
 **What happens now:**
 - Every morning at 9am, the scraper runs automatically
 - Searches for new MCP events and adds them to the CSV
