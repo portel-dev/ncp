@@ -101,6 +101,58 @@ export async function importFromClient(clientName: string): Promise<ImportResult
 }
 
 /**
+ * Normalize MCP configs to NCP format
+ * 
+ * Handles different config formats:
+ * - Claude Desktop: { type: "http", url: "...", headers: {...} }
+ * - NCP format: { url: "...", auth: { type: "bearer", token: "..." } }
+ */
+function normalizeMCPConfigs(mcpServers: Record<string, any>): Record<string, ImportedMCP> {
+  const normalized: Record<string, ImportedMCP> = {};
+
+  for (const [name, config] of Object.entries(mcpServers)) {
+    const normalizedConfig: any = { ...config };
+
+    // Remove `type` field (redundant - we detect by presence of `url` or `command`)
+    delete normalizedConfig.type;
+
+    // Convert `headers` to `auth` format
+    if (config.headers && typeof config.headers === 'object') {
+      const headers = config.headers as Record<string, string>;
+      
+      // Extract Authorization header
+      const authHeader = headers['Authorization'] || headers['authorization'];
+      if (authHeader) {
+        // Parse Bearer token
+        if (authHeader.startsWith('Bearer ')) {
+          normalizedConfig.auth = {
+            type: 'bearer',
+            token: authHeader.substring(7) // Remove "Bearer " prefix
+          };
+        } 
+        // Parse Basic auth
+        else if (authHeader.startsWith('Basic ')) {
+          const decoded = Buffer.from(authHeader.substring(6), 'base64').toString('utf-8');
+          const [username, password] = decoded.split(':');
+          normalizedConfig.auth = {
+            type: 'basic',
+            username,
+            password
+          };
+        }
+      }
+
+      // Remove headers field after conversion
+      delete normalizedConfig.headers;
+    }
+
+    normalized[name] = normalizedConfig;
+  }
+
+  return normalized;
+}
+
+/**
  * Import MCPs from client's config file
  */
 async function importFromConfig(
@@ -149,7 +201,8 @@ async function importFromConfig(
       return null;
     }
 
-    return mcpServersData;
+    // Normalize config formats (e.g., Claude Desktop `headers` → NCP `auth`)
+    return normalizeMCPConfigs(mcpServersData);
   } catch (error) {
     console.error(`Failed to read ${clientName} config: ${error}`);
     return null;
