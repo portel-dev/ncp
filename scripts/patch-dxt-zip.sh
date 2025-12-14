@@ -1,9 +1,9 @@
 #!/bin/bash
-# Patch .dxt (ZIP) bundle to include missing human-signals build directory
+# Patch .mcpb (ZIP) bundle to include missing human-signals build directory
 
 set -e
 
-DXT_FILE="ncp.dxt"
+DXT_FILE="ncp.mcpb"
 
 echo "📦 Patching $DXT_FILE to include human-signals build directory..."
 
