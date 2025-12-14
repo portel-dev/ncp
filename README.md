@@ -261,6 +261,50 @@ ncp run filesystem:read_file --params '{"path": "/tmp/test.txt"}' --dry-run
 
 ---
 
+## 💪 **From Tools to Automation: The Real Power**
+
+You've seen `find` (discover tools) and `code` (execute TypeScript). Individually, they're useful. **Together with scheduling, they become an automation powerhouse.**
+
+### A Real Example: The MCP Conference Scraper
+
+We wanted to stay on top of MCP-related conferences and workshops for an upcoming release. Instead of manually checking websites daily, we asked Claude:
+
+> "Set up a daily scraper that finds MCP conferences and saves them to a CSV file"
+
+**What Claude did:**
+
+1. **Used `code` to write the automation:**
+   ```typescript
+   // Search the web for MCP conferences
+   const results = await web.search({
+     query: "Model Context Protocol conference 2025"
+   });
+
+   // Read each result and extract details
+   for (const url of results) {
+     const content = await web.read({ url });
+     // Extract title, deadline, description...
+     // Save to ~/.ncp/mcp-conferences.csv
+   }
+   ```
+
+2. **Used `schedule` to automate it:**
+   ```bash
+   ncp schedule create code:run "every day at 9am" \
+     --name "MCP Conference Scraper" \
+     --catchup-missed
+   ```
+
+**What happens now:**
+- Every morning at 9am, the scraper runs automatically
+- Searches for new MCP events and adds them to the CSV
+- If our laptop was closed at 9am, it catches up when we open it
+- We wake up to fresh conference data - no manual work
+
+**The insight:** `find` and `code` let AI write automation. `schedule` makes it run forever. That's the powerhouse.
+
+---
+
 ## 💡 **Why NCP Transforms Your AI Experience**
 
 ### **🧠 From Desperation to Delegation**
