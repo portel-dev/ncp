@@ -2930,6 +2930,39 @@ scheduleCmd
     }
   });
 
+// schedule sync
+scheduleCmd
+  .command('sync')
+  .description('Sync scheduled jobs with system cron/Task Scheduler')
+  .action(async () => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      console.log(chalk.blue('🔄 Syncing scheduled jobs with system scheduler...'));
+
+      const result = scheduler.syncWithScheduler();
+
+      console.log(chalk.green('\n✅ Sync completed'));
+      console.log(chalk.dim(`  Timings added to cron: ${result.added}`));
+      console.log(chalk.dim(`  Timings removed from cron: ${result.removed}`));
+
+      if (result.errors.length > 0) {
+        console.log(chalk.yellow(`\n⚠️  Errors (${result.errors.length}):`));
+        result.errors.forEach(err => console.log(chalk.yellow(`  • ${err}`)));
+      }
+
+      if (result.added > 0 || result.removed > 0) {
+        console.log(chalk.dim('\n💡 Your scheduled jobs will now execute at their scheduled times'));
+      } else {
+        console.log(chalk.dim('\n✓ All timings are already synced with cron'));
+      }
+    } catch (error) {
+      console.error(chalk.red('❌ Sync failed:'), error);
+      process.exit(1);
+    }
+  });
+
 // Scheduler: Execute scheduled job (called by cron)
 const executeScheduledCmd = program
   .command('_job-run <job-id>')
