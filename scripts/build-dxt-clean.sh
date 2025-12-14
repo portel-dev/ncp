@@ -30,7 +30,7 @@ rsync -a \
 # Install production dependencies in clean directory
 cd "$TEMP_DIR"
 echo "📥 Installing production dependencies (clean)..."
-npm install --omit=dev --no-audit --no-fund
+npm install --omit=dev --ignore-scripts --no-audit --no-fund
 
 # Verify human-signals build directory exists BEFORE packing
 echo "🔍 Verifying human-signals..."

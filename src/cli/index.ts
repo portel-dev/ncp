@@ -3445,15 +3445,12 @@ program
       spinner.updateMessage(`Checking MCP servers in "${targetProfile}" profile...`);
 
       const profileMCPs = await manager.getProfileMCPs(targetProfile);
-      if (!profileMCPs || Object.keys(profileMCPs).length === 0) {
-        spinner.stop();
-        console.log(chalk.dim(`   ℹ️  No MCPs configured in "${targetProfile}" profile`));
-      } else {
-        const { healthMonitor } = await import('../utils/health-monitor.js');
+      const { healthMonitor } = await import('../utils/health-monitor.js');
 
-        // Collect MCPs to check from the target profile
-        const mcpsToCheck: Array<{name: string; command: string; args?: string[]; env?: Record<string, string>}> = [];
+      // Collect MCPs to check from the target profile
+      const mcpsToCheck: Array<{name: string; command: string; args?: string[]; env?: Record<string, string>}> = [];
 
+      if (profileMCPs && Object.keys(profileMCPs).length > 0) {
         for (const [name, config] of Object.entries(profileMCPs)) {
           // If specific MCP requested, only check that one
           if (mcpName && name !== mcpName) continue;
@@ -3470,52 +3467,57 @@ program
             });
           }
         }
+      }
 
-        const mcpFailures: Array<{name: string; error: string}> = [];
-        const mcpDisabled: Array<{name: string; reason: string}> = [];
-        let healthyCount = 0;
+      const mcpFailures: Array<{name: string; error: string}> = [];
+      const mcpDisabled: Array<{name: string; reason: string}> = [];
+      let healthyCount = 0;
 
-        if (mcpsToCheck.length > 0) {
-          // Check MCPs with spinner progress
-          let checked = 0;
-          for (const mcp of mcpsToCheck) {
-            checked++;
-            spinner.updateMessage(`Checking MCP servers (${checked}/${mcpsToCheck.length})...`);
+      if (mcpsToCheck.length > 0) {
+        // Check MCPs with spinner progress
+        let checked = 0;
+        for (const mcp of mcpsToCheck) {
+          checked++;
+          spinner.updateMessage(`Checking MCP servers (${checked}/${mcpsToCheck.length})...`);
 
-            const health = await healthMonitor.checkMCPHealth(
-              mcp.name,
-              mcp.command,
-              mcp.args,
-              mcp.env
-            );
+          const health = await healthMonitor.checkMCPHealth(
+            mcp.name,
+            mcp.command,
+            mcp.args,
+            mcp.env
+          );
 
-            if (health.status === 'healthy') {
-              healthyCount++;
-            } else if (health.status === 'unhealthy') {
-              mcpFailures.push({name: mcp.name, error: health.lastError || 'Unknown error'});
-              systemIssuesFound++;
-            } else if (health.status === 'disabled') {
-              mcpDisabled.push({name: mcp.name, reason: health.disabledReason || 'Unknown reason'});
-              systemIssuesFound++;
+          if (health.status === 'healthy') {
+            healthyCount++;
+          } else if (health.status === 'unhealthy') {
+            mcpFailures.push({name: mcp.name, error: health.lastError || 'Unknown error'});
+            systemIssuesFound++;
+          } else if (health.status === 'disabled') {
+            mcpDisabled.push({name: mcp.name, reason: health.disabledReason || 'Unknown reason'});
+            systemIssuesFound++;
 
-              if (options.fix) {
-                // Reset error count to re-enable
-                health.errorCount = 0;
-                health.status = 'unknown';
-                delete health.disabledReason;
-                systemIssuesFixed++;
-              }
+            if (options.fix) {
+              // Reset error count to re-enable
+              health.errorCount = 0;
+              health.status = 'unknown';
+              delete health.disabledReason;
+              systemIssuesFixed++;
             }
           }
         }
+      }
 
-        // Show summary
-        spinner.stop();
-        console.log(chalk.green(`✅ System check complete\n`));
+      // Show summary (always, even if no MCPs configured)
+      spinner.stop();
+      console.log(chalk.green(`✅ System check complete\n`));
 
-        // Show statistics
-        console.log(chalk.cyan('📊 Summary:'));
-        console.log(chalk.dim(`   • Profile: ${targetProfile}`));
+      // Show statistics
+      console.log(chalk.cyan('📊 Summary:'));
+      console.log(chalk.dim(`   • Profile: ${targetProfile}`));
+
+      if (mcpsToCheck.length === 0) {
+        console.log(chalk.dim(`   ℹ️  No MCPs configured in "${targetProfile}" profile`));
+      } else {
         console.log(chalk.dim(`   • ${healthyCount} healthy MCPs`));
         if (mcpFailures.length > 0) {
           console.log(chalk.red(`   • ${mcpFailures.length} failed MCPs`));
@@ -3523,45 +3525,46 @@ program
         if (mcpDisabled.length > 0) {
           console.log(chalk.yellow(`   • ${mcpDisabled.length} disabled MCPs`));
         }
-        if (systemIssues.length > 0) {
-          console.log(chalk.yellow(`   • ${systemIssues.length} system issues`));
-        }
+      }
 
-        // Show failures
-        if (mcpFailures.length > 0) {
-          console.log(chalk.red('\n❌ Failed MCPs:'));
-          for (const failure of mcpFailures) {
-            console.log(chalk.cyan(`   📦 ${failure.name}`));
-            console.log(chalk.dim(`      ${failure.error}`));
+      if (systemIssues.length > 0) {
+        console.log(chalk.yellow(`   • ${systemIssues.length} system issues`));
+      }
+
+      // Show failures
+      if (mcpFailures.length > 0) {
+        console.log(chalk.red('\n❌ Failed MCPs:'));
+        for (const failure of mcpFailures) {
+          console.log(chalk.cyan(`   📦 ${failure.name}`));
+          console.log(chalk.dim(`      ${failure.error}`));
+        }
+      }
+
+      // Show disabled
+      if (mcpDisabled.length > 0) {
+        console.log(chalk.yellow('\n⚠️  Disabled MCPs:'));
+        for (const disabled of mcpDisabled) {
+          console.log(chalk.cyan(`   📦 ${disabled.name}`));
+          console.log(chalk.dim(`      ${disabled.reason}`));
+          if (!options.fix) {
+            console.log(chalk.dim(`      💡 Run with --fix to re-enable`));
           }
         }
+      }
 
-        // Show disabled
-        if (mcpDisabled.length > 0) {
-          console.log(chalk.yellow('\n⚠️  Disabled MCPs:'));
-          for (const disabled of mcpDisabled) {
-            console.log(chalk.cyan(`   📦 ${disabled.name}`));
-            console.log(chalk.dim(`      ${disabled.reason}`));
-            if (!options.fix) {
-              console.log(chalk.dim(`      💡 Run with --fix to re-enable`));
-            }
-          }
+      // Show system issues
+      if (systemIssues.length > 0) {
+        console.log(chalk.yellow('\n⚠️  System Issues:'));
+        for (const issue of systemIssues) {
+          console.log(chalk.dim(`   • ${issue}`));
         }
+      }
 
-        // Show system issues
-        if (systemIssues.length > 0) {
-          console.log(chalk.yellow('\n⚠️  System Issues:'));
-          for (const issue of systemIssues) {
-            console.log(chalk.dim(`   • ${issue}`));
-          }
-        }
-
-        // Show helpful tip about the "all" profile
-        if (targetProfile === 'all' && (mcpFailures.length > 0 || mcpDisabled.length > 0)) {
-          console.log(chalk.cyan('\n💡 Tip:'));
-          console.log(chalk.dim('   The "all" profile is your source of truth - fix MCPs here once,'));
-          console.log(chalk.dim('   then copy working configurations to other profiles as needed.'));
-        }
+      // Show helpful tip about the "all" profile
+      if (targetProfile === 'all' && (mcpFailures.length > 0 || mcpDisabled.length > 0)) {
+        console.log(chalk.cyan('\n💡 Tip:'));
+        console.log(chalk.dim('   The "all" profile is your source of truth - fix MCPs here once,'));
+        console.log(chalk.dim('   then copy working configurations to other profiles as needed.'));
       }
 
       // Exit with error code if there are issues
