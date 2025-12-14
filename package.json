@@ -1,6 +1,6 @@
 {
   "name": "@portel/ncp",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "mcpName": "io.github.portel-dev/ncp",
   "description": "Natural Context Provider (NCP) - 1 MCP to rule them all. Your MCPs, supercharged. Find any tool instantly, load on demand, run on schedule, ready for any client. Smart loading saves tokens and energy.",
   "main": "dist/index.js",
