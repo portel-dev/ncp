@@ -29,6 +29,7 @@ export interface CreateTaskOptions {
   fireOnce?: boolean;
   maxExecutions?: number;
   endDate?: string; // ISO date string
+  catchupMissed?: boolean; // If true, run this task even if its scheduled time was missed (default: false)
   skipValidation?: boolean; // Skip parameter validation (not recommended)
   testRun?: boolean; // Run tool once to test before scheduling
 }
@@ -266,6 +267,7 @@ export class Scheduler {
       fireOnce,
       maxExecutions: options.maxExecutions,
       endDate: options.endDate,
+      catchupMissed: options.catchupMissed || false,
       createdAt: new Date().toISOString(),
       status: 'active',
       executionCount: 0,
@@ -698,5 +700,132 @@ export class Scheduler {
    */
   syncWithCrontab(): { added: number; removed: number; errors: string[] } {
     return this.syncWithScheduler();
+  }
+
+  /**
+   * Catch up on missed task executions
+   * Executes tasks with catchupMissed=true that should have run while system was off
+   */
+  async catchupMissedExecutions(): Promise<{ executed: number; skipped: number; failed: number; errors: string[] }> {
+    logger.info('[Scheduler] Checking for missed task executions...');
+
+    const errors: string[] = [];
+    let executed = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    // Get all active tasks with catchupMissed enabled
+    const allTasks = this.taskManager.getAllTasks();
+    const catchupTasks = allTasks.filter((task: ScheduledTask) =>
+      task.status === 'active' && task.catchupMissed === true
+    );
+
+    if (catchupTasks.length === 0) {
+      logger.info('[Scheduler] No tasks with catchupMissed enabled');
+      return { executed: 0, skipped: 0, failed: 0, errors: [] };
+    }
+
+    logger.info(`[Scheduler] Found ${catchupTasks.length} tasks with catchupMissed enabled`);
+
+    const now = new Date();
+
+    for (const task of catchupTasks) {
+      try {
+        // Determine last execution time or creation time
+        const lastRun = task.lastExecutionAt
+          ? new Date(task.lastExecutionAt)
+          : new Date(task.createdAt);
+
+        // Calculate when the task should have last run based on its cron schedule
+        const timing = this.taskManager.getTimingGroup(task.timingId);
+        if (!timing) {
+          errors.push(`Task ${task.name}: Timing group not found`);
+          skipped++;
+          continue;
+        }
+
+        // Check if task should have run since last execution
+        // For simplicity, if more than the cron interval has passed, consider it missed
+        const shouldCatchup = this.shouldCatchupTask(task, timing, lastRun, now);
+
+        if (shouldCatchup) {
+          logger.info(`[Scheduler] Catching up missed execution for task: ${task.name}`);
+
+          // Execute the task via the timing executor (creates timing with single task)
+          try {
+            const result = await this.timingExecutor.executeTimingGroup(task.timingId, 300000);
+
+            if (result.successfulTasks > 0) {
+              executed++;
+              logger.info(`[Scheduler] Successfully caught up task: ${task.name}`);
+            } else if (result.failedTasks > 0) {
+              failed++;
+              const errorMsg = result.results[0]?.error || 'Unknown error';
+              errors.push(`Task ${task.name}: ${errorMsg}`);
+              logger.error(`[Scheduler] Failed to catch up task ${task.name}: ${errorMsg}`);
+            }
+          } catch (execError) {
+            failed++;
+            const errorMsg = execError instanceof Error ? execError.message : String(execError);
+            errors.push(`Task ${task.name}: ${errorMsg}`);
+            logger.error(`[Scheduler] Error executing task ${task.name}: ${errorMsg}`);
+          }
+        } else {
+          skipped++;
+          logger.debug(`[Scheduler] Task ${task.name} does not need catchup`);
+        }
+      } catch (error) {
+        failed++;
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        errors.push(`Task ${task.name}: ${errorMsg}`);
+        logger.error(`[Scheduler] Error during catchup for ${task.name}: ${errorMsg}`);
+      }
+    }
+
+    logger.info(`[Scheduler] Catchup complete: ${executed} executed, ${skipped} skipped, ${failed} failed`);
+    return { executed, skipped, failed, errors };
+  }
+
+  /**
+   * Determine if a task should be caught up
+   * Returns true if the task should have run at least once since lastRun
+   */
+  private shouldCatchupTask(task: ScheduledTask, timing: TimingGroup, lastRun: Date, now: Date): boolean {
+    // If fireOnce and already executed, skip
+    if (task.fireOnce && task.executionCount > 0) {
+      return false;
+    }
+
+    // If maxExecutions reached, skip
+    if (task.maxExecutions && task.executionCount >= task.maxExecutions) {
+      return false;
+    }
+
+    // If past endDate, skip
+    if (task.endDate && new Date(task.endDate) < now) {
+      return false;
+    }
+
+    // Simple heuristic: if more than 2x the minimum cron interval has passed, consider it missed
+    // For example, if task runs every hour and 2+ hours passed, it's missed
+    const cronParts = timing.cronExpression.split(/\s+/);
+    const minutePart = cronParts[0];
+
+    let intervalMinutes: number;
+    if (minutePart.startsWith('*/')) {
+      // Every N minutes
+      intervalMinutes = parseInt(minutePart.substring(2));
+    } else if (minutePart === '*') {
+      // Every minute
+      intervalMinutes = 1;
+    } else {
+      // Specific time - check if at least 24 hours passed (daily or less frequent)
+      intervalMinutes = 24 * 60;
+    }
+
+    const minutesSinceLastRun = (now.getTime() - lastRun.getTime()) / (1000 * 60);
+    const missed = minutesSinceLastRun > (intervalMinutes * 1.5);
+
+    return missed;
   }
 }

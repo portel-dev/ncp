@@ -2587,6 +2587,7 @@ scheduleCmd
   .option('--fire-once', 'Execute only once then stop')
   .option('--max-executions <n>', 'Maximum number of executions', parseInt)
   .option('--end-date <date>', 'Stop executing after this date (ISO format)')
+  .option('--catchup-missed', 'Run this job even if its scheduled time was missed (e.g., laptop was closed)')
   .option('--test-run', 'Test execution before scheduling')
   .option('--skip-validation', 'Skip parameter validation (not recommended)')
   .action(async (tool, schedule, options) => {
@@ -2617,6 +2618,7 @@ scheduleCmd
         fireOnce: options.fireOnce,
         maxExecutions: options.maxExecutions,
         endDate: options.endDate,
+        catchupMissed: options.catchupMissed,
         testRun: options.testRun,
         skipValidation: options.skipValidation
       });
@@ -2959,6 +2961,42 @@ scheduleCmd
       }
     } catch (error) {
       console.error(chalk.red('❌ Sync failed:'), error);
+      process.exit(1);
+    }
+  });
+
+// schedule catchup
+scheduleCmd
+  .command('catchup')
+  .description('Execute missed scheduled tasks (tasks with catchupMissed=true that should have run while system was off)')
+  .action(async () => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      console.log(chalk.blue('🔄 Checking for missed task executions...\n'));
+
+      const result = await scheduler.catchupMissedExecutions();
+
+      console.log(chalk.green('✅ Catchup completed\n'));
+      console.log(chalk.dim(`  Tasks executed: ${result.executed}`));
+      console.log(chalk.dim(`  Tasks skipped: ${result.skipped}`));
+      if (result.failed > 0) {
+        console.log(chalk.yellow(`  Tasks failed: ${result.failed}`));
+      }
+
+      if (result.errors.length > 0) {
+        console.log(chalk.yellow(`\n⚠️  Errors (${result.errors.length}):`));
+        result.errors.forEach(err => console.log(chalk.yellow(`  • ${err}`)));
+      }
+
+      if (result.executed > 0) {
+        console.log(chalk.dim('\n💡 View execution results with: ncp schedule executions'));
+      } else if (result.skipped > 0) {
+        console.log(chalk.dim('\n✓ No missed executions detected'));
+      }
+    } catch (error) {
+      console.error(chalk.red('❌ Catchup failed:'), error);
       process.exit(1);
     }
   });

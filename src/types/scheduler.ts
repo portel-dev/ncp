@@ -50,6 +50,7 @@ export interface ScheduledTask {
   fireOnce: boolean; // If true, task fires only once then completes
   maxExecutions?: number; // Maximum number of times to execute
   endDate?: string; // ISO date string - stop executing after this date
+  catchupMissed?: boolean; // If true, run this task even if its scheduled time was missed (default: false)
 
   // Metadata
   createdAt: string; // ISO date string
