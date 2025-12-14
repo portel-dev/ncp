@@ -615,6 +615,14 @@ export class Scheduler {
 
     logger.info(`[Scheduler] Sync complete: added ${added}, removed ${removed}, errors ${errors.length}`);
 
+    // Setup auto-catchup agent (macOS only)
+    try {
+      this.setupAutoCatchup();
+    } catch (error) {
+      // Auto-catchup setup is optional, don't fail sync if it errors
+      logger.warn(`[Scheduler] Auto-catchup setup failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
     return { added, removed, errors };
   }
 
@@ -827,5 +835,39 @@ export class Scheduler {
     const missed = minutesSinceLastRun > (intervalMinutes * 1.5);
 
     return missed;
+  }
+
+  /**
+   * Set up automatic catchup agent (macOS only)
+   * Creates a launchd agent that runs catchup at login and every hour
+   */
+  setupAutoCatchup(): void {
+    if (!this.scheduleManager) {
+      throw new Error('Scheduler not available on this platform');
+    }
+
+    if (!(this.scheduleManager instanceof LaunchdManager)) {
+      logger.debug('[Scheduler] Auto-catchup only supported on macOS with launchd');
+      return;
+    }
+
+    const ncpPath = this.getNCPExecutablePath();
+    this.scheduleManager.setupAutoCatchup(ncpPath);
+  }
+
+  /**
+   * Remove automatic catchup agent (macOS only)
+   */
+  removeAutoCatchup(): void {
+    if (!this.scheduleManager) {
+      throw new Error('Scheduler not available on this platform');
+    }
+
+    if (!(this.scheduleManager instanceof LaunchdManager)) {
+      logger.debug('[Scheduler] Auto-catchup only supported on macOS with launchd');
+      return;
+    }
+
+    this.scheduleManager.removeAutoCatchup();
   }
 }

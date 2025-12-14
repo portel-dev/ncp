@@ -332,4 +332,83 @@ ${calendarIntervalXML}
       return [];
     }
   }
+
+  /**
+   * Setup automatic catchup agent
+   * Runs at login and periodically to execute missed tasks
+   */
+  setupAutoCatchup(ncpPath: string): void {
+    try {
+      const catchupId = '__ncp_auto_catchup__';
+      const label = this.getLabel(catchupId);
+      const plistPath = this.getPlistPath(catchupId);
+
+      logger.info('[LaunchdManager] Setting up automatic catchup agent...');
+
+      // Create plist content for auto-catchup
+      // Runs at login (RunAtLoad) and every hour (StartInterval)
+      const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${label}</string>
+    <key>ProgramArguments</key>
+  <array>
+    <string>${process.execPath}</string>
+    <string>${ncpPath}</string>
+    <string>schedule</string>
+    <string>catchup</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>${homedir()}</string>
+    <key>USER</key>
+    <string>${userInfo().username}</string>
+    <key>LOGNAME</key>
+    <string>${userInfo().username}</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>StandardInPath</key>
+  <string>/dev/null</string>
+  <key>StandardOutPath</key>
+  <string>/tmp/ncp-auto-catchup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/ncp-auto-catchup.err</string>
+</dict>
+</plist>`;
+
+      // Write plist file
+      writeFileSync(plistPath, plistContent, 'utf-8');
+      logger.debug(`[LaunchdManager] Created catchup plist: ${plistPath}`);
+
+      // Load the agent
+      execSync(`launchctl unload "${plistPath}" 2>/dev/null || true`, { stdio: 'pipe' });
+      execSync(`launchctl load "${plistPath}"`, { stdio: 'pipe' });
+
+      logger.info(`[LaunchdManager] Auto-catchup agent installed successfully`);
+      logger.info(`[LaunchdManager] Catchup will run at login and every hour`);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.error(`[LaunchdManager] Failed to setup auto-catchup: ${errorMsg}`);
+      throw new Error(`Failed to setup auto-catchup: ${errorMsg}`);
+    }
+  }
+
+  /**
+   * Remove automatic catchup agent
+   */
+  removeAutoCatchup(): void {
+    try {
+      const catchupId = '__ncp_auto_catchup__';
+      this.removeJob(catchupId);
+      logger.info('[LaunchdManager] Auto-catchup agent removed');
+    } catch (error) {
+      logger.debug('[LaunchdManager] Auto-catchup agent was not installed');
+    }
+  }
 }
