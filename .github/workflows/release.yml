@@ -69,9 +69,10 @@ jobs:
 
       - name: Release
         if: ${{ inputs.dry_run == false }}
-        run: npm run release -- --increment=${{ inputs.release_type }} --no-npm.publish --ci
+        run: npm run release -- --increment=${{ inputs.release_type }} --ci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Upload Desktop Extension to release
         if: ${{ inputs.dry_run == false }}
