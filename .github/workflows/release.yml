@@ -80,7 +80,7 @@ jobs:
         if: ${{ inputs.dry_run == false }}
         uses: softprops/action-gh-release@v1
         with:
-          files: ncp.dxt
+          files: ncp.mcpb
           tag_name: ${{ steps.get_version.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
