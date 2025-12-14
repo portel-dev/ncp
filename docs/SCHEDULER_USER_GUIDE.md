@@ -22,13 +22,15 @@ ncp schedule executions
 ## Installation & Requirements
 
 **Supported Platforms:**
-- ✅ Unix/Linux/macOS (full support)
-- ❌ Windows (not supported - no native cron)
+- ✅ macOS (launchd - full support, no Full Disk Access required)
+- ✅ Linux/Unix (cron - full support)
+- ❌ Windows (not supported - no native scheduler integration)
 
 **Requirements:**
 - Node.js environment with system access
-- `crontab` command available
-- Permission to modify crontab
+- **macOS**: `launchctl` command (built-in)
+- **Linux/Unix**: `crontab` command available
+- Permission to modify system scheduler
 
 **Check Availability:**
 ```bash
@@ -177,6 +179,19 @@ ncp schedule create social:post "every day at 9am" \
   --end-date "2026-01-01T00:00:00Z"
 ```
 
+### 7. Data Collection with Auto-Catchup
+```bash
+# Conference scraper that catches up if laptop was closed
+ncp schedule create code:run "every day at 9am" \
+  --name "MCP Conference Scraper" \
+  --description "Daily scraper for MCP events - catches up if missed" \
+  --params '{"code": "...scraper code..."}' \
+  --catchup-missed
+
+# When your laptop opens, missed runs automatically execute
+# Perfect for data collection, analytics, backups, etc.
+```
+
 ## Job Management
 
 ### Create a Job
@@ -191,6 +206,7 @@ Options:
   --fire-once               Run only once
   --max-executions <num>    Max times to run
   --end-date <iso-date>     Stop after date
+  --catchup-missed          Run this job even if scheduled time was missed (e.g., laptop was closed)
   --test-run                Test before scheduling
   --skip-validation         Skip parameter validation (not recommended)
 ```
@@ -230,6 +246,34 @@ ncp schedule delete "Job Name"
 # Skip confirmation
 ncp schedule delete "Job Name" -y
 ```
+
+### Sync Schedules
+```bash
+# Repair and sync all jobs with system scheduler
+# Adds missing timing groups, removes orphaned entries
+# Automatically sets up auto-catchup agent (macOS only)
+ncp schedule sync
+```
+
+**When to use:**
+- After upgrading NCP to a new version
+- If jobs aren't executing as expected
+- To verify scheduler integration is healthy
+- After manually modifying schedule configuration
+
+### Run Catchup
+```bash
+# Manually execute missed scheduled tasks
+# Only runs tasks with --catchup-missed enabled
+ncp schedule catchup
+```
+
+**When to use:**
+- After laptop was closed during scheduled time
+- To manually trigger missed data collection tasks
+- For testing catchup behavior
+
+**Note:** On macOS, catchup runs automatically at login and every hour. Manual execution is usually not needed.
 
 ## Execution History
 
@@ -315,6 +359,25 @@ ncp schedule executions --status failure
 ncp schedule cleanup --max-age 90 --max-per-job 20
 ```
 
+### 7. Use Catchup for Data Collection
+```bash
+# Enable catchup for tasks that should run even if delayed
+ncp schedule create data:collect "every day at 9am" \
+  --name "Daily Data Sync" \
+  --catchup-missed  # ✅ Good for data collection
+
+# Don't use catchup for time-sensitive tasks
+ncp schedule create notifications:send "every day at 9am" \
+  --name "Morning Briefing"
+  # ❌ No --catchup-missed for notifications
+```
+
+### 8. Run Sync After Upgrades
+```bash
+# After upgrading NCP, sync to repair integration
+ncp schedule sync
+```
+
 ## Validation
 
 The scheduler validates tool parameters **before** scheduling to prevent silent failures.
@@ -380,13 +443,34 @@ sudo usermod -a -G cron $USER
 ```
 
 ### Jobs not executing
-**Check crontab:**
+
+**First: Run sync to repair scheduler integration:**
+```bash
+ncp schedule sync
+```
+
+**Check system scheduler (macOS):**
+```bash
+launchctl list | grep com.portel.ncp
+
+# You should see agents with exit code 0
+# Format: - 0 com.portel.ncp.job.daily-9am
+#         ↑ ↑
+#         │ └─ 0 = success, 1 = failure
+#         └─ PID (- means not running now)
+
+# Check agent logs
+cat /tmp/ncp-launchd-*.log
+cat /tmp/ncp-launchd-*.err
+```
+
+**Check system scheduler (Linux):**
 ```bash
 crontab -l | grep NCP
 
 # You should see entries like:
 # NCP_JOB: job-id-123
-# 0 9 * * * ncp _job-run job-id-123
+# 0 9 * * * ncp _timing-run timing-id-123
 ```
 
 **Check execution history:**
@@ -398,11 +482,11 @@ ncp schedule executions --job-id "Job Name"
 
 **Test manually:**
 ```bash
-# Get job ID
+# Get timing ID from job
 ncp schedule get "Job Name"
 
-# Execute manually
-ncp _job-run <job-id>
+# Execute timing manually (macOS)
+ncp _timing-run <timing-id>
 
 # Check for errors
 ```
@@ -488,8 +572,23 @@ Jobs and execution records are stored in:
         └── exec-*.json    # Detailed results
 ```
 
-## Cron Integration
+## System Scheduler Integration
 
+### macOS (launchd)
+Jobs are registered as launchd agents in `~/Library/LaunchAgents/`:
+```bash
+# View NCP scheduler agents
+launchctl list | grep com.portel.ncp
+
+# Shows agents like:
+# - com.portel.ncp.job.daily-9am
+# - com.portel.ncp.job.every-15min
+# - com.portel.ncp.job.__ncp_auto_catchup__
+```
+
+**Important:** Don't manually edit plist files - use `ncp schedule` commands instead.
+
+### Linux/Unix (cron)
 Jobs are added to your user's crontab in a managed section:
 ```bash
 crontab -l
@@ -561,10 +660,15 @@ ncp schedule create finance:reconcile "every weekday at 5pm" \
 ## FAQ
 
 **Q: Can I schedule jobs to run when NCP is not running?**
-A: Yes! Jobs run via system cron, independent of NCP.
+A: Yes! Jobs run via system scheduler (launchd/cron), independent of NCP.
 
 **Q: What happens if my computer is off at execution time?**
-A: Job is skipped. Cron only runs jobs when the system is on.
+A: By default, the job is skipped. However, you can enable automatic catchup:
+- Add `--catchup-missed` flag when creating the job
+- On macOS, an auto-catchup agent runs at login and every hour
+- Missed tasks with catchup enabled will execute when your laptop opens
+- Perfect for data collection tasks that should run even if delayed
+- Time-sensitive tasks (like notifications) should NOT use catchup
 
 **Q: Can I use this in a desktop extension?**
 A: Yes! Desktop extensions (VS Code, Electron) have full Node.js access.
