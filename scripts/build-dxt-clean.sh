@@ -49,8 +49,9 @@ if [ -d "node_modules/execa/node_modules/human-signals" ]; then
 fi
 
 # Pack MCPB from clean directory
+# Skip prepack script since we already built in project root
 echo "📦 Packing MCPB (MCP Bundle)..."
-npx @anthropic-ai/mcpb pack . "$PROJECT_ROOT/ncp.mcpb"
+npm_config_ignore_scripts=true npx @anthropic-ai/mcpb pack . "$PROJECT_ROOT/ncp.mcpb"
 
 # WORKAROUND: mcpb excludes build/ directories from node_modules
 # Extract MCPB (zip format), manually add build directories, re-pack
