@@ -22,8 +22,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         node-version: [18.x, 20.x]
+        exclude:
+          # Only test Node 20 on Windows and macOS to reduce CI time
+          - os: windows-latest
+            node-version: 18.x
+          - os: macos-latest
+            node-version: 18.x
 
     steps:
       - name: Checkout code
