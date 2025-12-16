@@ -28,6 +28,7 @@ import { ConfigPrompter } from '../services/config-prompter.js';
 import { SchemaCache } from '../cache/schema-cache.js';
 import { getCacheDirectory } from '../utils/ncp-paths.js';
 import { setNCPTitle, updateNCPProgress } from '../utils/terminal-title.js';
+import { getRuntimeForExtension } from '../utils/runtime-detector.js';
 import type { CredentialType } from '../auth/secure-credential-store.js';
 
 // Check for no-color flag early
@@ -888,8 +889,11 @@ async function handleManualAdd(name: string, command: string, args: string[], op
       }
     }
 
+    // Apply runtime resolution (npx → npx.cmd on Windows)
+    const resolvedCommand = getRuntimeForExtension(command);
+    
     mcpConfig = {
-      command,
+      command: resolvedCommand,
       args: args || []
     };
 
