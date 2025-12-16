@@ -151,6 +151,19 @@ export class ProfileManager {
       logger.debug(`Credential auto-migration failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
+    // Auto-migrate commands (npx → npx.cmd on Windows)
+    if (process.platform === 'win32') {
+      try {
+        const runtimeResult = await this.migrateAllRuntimeCommands();
+        if (runtimeResult.migrated > 0) {
+          logger.info(`🔧 Auto-migrated ${runtimeResult.migrated} command(s) for Windows`);
+        }
+      } catch (error) {
+        // Silent failure - don't block initialization
+        logger.debug(`Runtime command auto-migration failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
     // ⚠️ IMPORTANT: Auto-import is now triggered ONLY when a client announces itself
     // via the MCP initialize handshake (see ncp-orchestrator.ts line 2084)
     // This ensures:
@@ -812,6 +825,61 @@ Your ${clientName} has ${totalMCPs} MCPs configured (~${estimatedTools} tools in
 
     for (const profileName of this.listProfiles()) {
       const result = await this.migrateProfileCredentials(profileName);
+      totalMigrated += result.migrated;
+      totalErrors += result.errors;
+    }
+
+    return { migrated: totalMigrated, errors: totalErrors };
+  }
+
+  /**
+   * Migrate runtime commands in a profile (npx → npx.cmd on Windows)
+   */
+  async migrateProfileRuntimeCommands(profileName: string): Promise<{ migrated: number; errors: number }> {
+    const { getRuntimeForExtension } = await import('../utils/runtime-detector.js');
+    const profile = this.profiles.get(profileName);
+    if (!profile) {
+      return { migrated: 0, errors: 0 };
+    }
+
+    let migrated = 0;
+    let errors = 0;
+
+    for (const [mcpName, config] of Object.entries(profile.mcpServers)) {
+      if (config.command && typeof config.command === 'string') {
+        try {
+          const resolved = getRuntimeForExtension(config.command);
+          
+          // Only update if resolution actually changed the command
+          if (resolved !== config.command) {
+            profile.mcpServers[mcpName].command = resolved;
+            migrated++;
+            logger.debug(`Migrated command for ${mcpName}: ${config.command} → ${resolved}`);
+          }
+        } catch (error) {
+          logger.error(`Failed to migrate command for ${mcpName}: ${error}`);
+          errors++;
+        }
+      }
+    }
+
+    if (migrated > 0) {
+      profile.metadata.modified = new Date().toISOString();
+      await this.saveProfile(profile);
+    }
+
+    return { migrated, errors };
+  }
+
+  /**
+   * Migrate runtime commands across all profiles
+   */
+  async migrateAllRuntimeCommands(): Promise<{ migrated: number; errors: number }> {
+    let totalMigrated = 0;
+    let totalErrors = 0;
+
+    for (const profileName of this.listProfiles()) {
+      const result = await this.migrateProfileRuntimeCommands(profileName);
       totalMigrated += result.migrated;
       totalErrors += result.errors;
     }
