@@ -232,7 +232,7 @@ ncp --help
 ### **⚡ Direct Testing**
 ```bash
 # Test any tool safely:
-ncp run filesystem:read_file --params '{"path": "/tmp/test.txt"}'
+ncp run filesystem read_file --path "/tmp/test.txt"
 ```
 
 **Why this matters:** You can debug and test tools directly, just like your AI would use them.
@@ -250,7 +250,7 @@ ncp list
 ncp find "file"
 
 # 4. Test a simple tool (if you have filesystem MCP)
-ncp run filesystem:read_file --params '{"path": "/tmp/test.txt"}' --dry-run
+ncp run filesystem read_file --path "/tmp/test.txt" --dry-run
 ```
 
 **✅ Success indicators:**

@@ -58,7 +58,7 @@ The MCP is automatically loaded. Use it through NCP's `find` and `run` commands:
 ncp find "say hello"
 # → my-awesome:say-hello
 
-ncp run my-awesome:say-hello name="World"
+ncp run my-awesome say-hello --name "World"
 # → Hello, World!
 ```
 
@@ -319,10 +319,10 @@ Save this as `~/.ncp/internal/github.mcp.ts` and it's ready to use:
 ncp find "create github issue"
 # → git-hub:create-issue
 
-ncp run git-hub:create-issue \
-  repo="owner/repo" \
-  title="Bug found" \
-  body="Description of the bug"
+ncp run git-hub create-issue \
+  --repo "owner/repo" \
+  --title "Bug found" \
+  --body "Description of the bug"
 ```
 
 ## Comparison: Old vs New

@@ -7,6 +7,7 @@ import { OutputFormatter } from '../services/output-formatter.js';
 import { ErrorHandler } from '../services/error-handler.js';
 import { formatCommandDisplay } from '../utils/security.js';
 import { TextUtils } from '../utils/text-utils.js';
+import { UIMessages } from './ui-messages.js';
 import { logger } from '../utils/logger.js';
 
 interface MCPConfig {
@@ -238,14 +239,13 @@ export class ConfigManager {
           // Schema is optional
         }
 
-        console.log(chalk.green(`\n✅ Photon "${baseName}" imported successfully!`));
+        console.log(chalk.green(`\n${UIMessages.photonImportedFile(baseName)}`));
         console.log(chalk.dim(`📍 Location: ${destFile}`));
         if (schemaImported) {
           console.log(chalk.dim(`📋 Schema: ${destSchema}`));
         }
-        console.log(chalk.blue(`\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'`));
-        console.log(chalk.blue(`🔍 Discover tools: ncp find ${baseName}`));
-        console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new Photon`));
+        console.log(chalk.blue(`\n${UIMessages.photonUsage(baseName)}`));
+        console.log(chalk.blue(UIMessages.photonDiscovery(baseName)));
         return;
       } catch (error: any) {
         const errorResult = ErrorHandler.handle(error, ErrorHandler.fileOperation('import Photon', filePath));
@@ -449,12 +449,11 @@ export class ConfigManager {
     // Write TypeScript code to file
     await writeFile(destFile, tsContent, 'utf8');
 
-    console.log(chalk.green(`\n✅ Photon "${baseName}" imported from clipboard!`));
+    console.log(chalk.green(`\n${UIMessages.photonImportedClipboard(baseName)}`));
     console.log(chalk.dim(`📍 Location: ${destFile}`));
     console.log(chalk.dim(`📝 Class: ${className}`));
-    console.log(chalk.blue(`\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'`));
-    console.log(chalk.blue(`🔍 Discover tools: ncp find ${baseName}`));
-    console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new Photon`));
+    console.log(chalk.blue(`\n${UIMessages.photonUsage(baseName)}`));
+    console.log(chalk.blue(UIMessages.photonDiscovery(baseName)));
   }
 
   /**

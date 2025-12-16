@@ -56,7 +56,7 @@ export class Math {
 }
 ```
 
-**Usage**: `ncp run math:random min=1 max=100`
+**Usage**: `ncp run math random --min 1 --max 100`
 
 #### 2. String MCP
 ```typescript
@@ -71,7 +71,7 @@ export class String {
 }
 ```
 
-**Usage**: `ncp run string:slugify text="Hello World"`
+**Usage**: `ncp run string slugify --text "Hello World"`
 
 #### 3. Encode MCP
 ```typescript
@@ -92,7 +92,7 @@ export class Encode {
 }
 ```
 
-**Usage**: `ncp run encode:base64 text="Hello" action=encode`
+**Usage**: `ncp run encode base64 --text "Hello" --action encode`
 
 ### 🚀 With Dependencies (15-20 minutes)
 
@@ -116,7 +116,7 @@ export class HTTP {
 }
 ```
 
-**Usage**: `ncp run http:get url="https://api.github.com/users/octocat"`
+**Usage**: `ncp run http get --url "https://api.github.com/users/octocat"`
 
 #### 5. Date MCP
 ```typescript
@@ -136,7 +136,7 @@ export class Date {
 }
 ```
 
-**Usage**: `ncp run date:format date="2024-01-01" format="MMMM dd, yyyy"`
+**Usage**: `ncp run date format --date "2024-01-01" --format "MMMM dd, yyyy"`
 
 #### 6. Validation MCP
 ```typescript
@@ -156,7 +156,7 @@ export class Validation {
 }
 ```
 
-**Usage**: `ncp run validation:email email="test@example.com"`
+**Usage**: `ncp run validation email --email "test@example.com"`
 
 ### 💪 More Complex (30+ minutes)
 
@@ -205,7 +205,7 @@ export class GitHub {
 }
 ```
 
-**Usage**: `ncp run github:create-issue repo="owner/repo" title="Bug" body="Description"`
+**Usage**: `ncp run github create-issue --repo "owner/repo" --title "Bug" --body "Description"`
 
 #### 8. JSON MCP
 ```typescript
@@ -229,7 +229,7 @@ export class JSON {
 }
 ```
 
-**Usage**: `ncp run json:query data='{"users":[{"name":"Alice"}]}' path="$.users[*].name"`
+**Usage**: `ncp run json query --data '{"users":[{"name":"Alice"}]}' --path "$.users[*].name"`
 
 ## Complete Example: Weather MCP
 
@@ -312,7 +312,7 @@ Save as `~/.ncp/internal/weather.mcp.ts`, then:
 
 ```bash
 # First time - dependencies auto-install
-ncp run weather:current city="London"
+ncp run weather current --city "London"
 
 # Returns:
 {
@@ -353,7 +353,7 @@ export class MyTool {
 ncp find "do something"
 
 # Run it
-ncp run my-tool:do-something input="hello"
+ncp run my-tool do-something --input "hello"
 ```
 
 ### 4. Iterate

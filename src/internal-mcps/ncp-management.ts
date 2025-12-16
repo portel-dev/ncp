@@ -17,6 +17,7 @@ import { RegistryMCPCandidate } from '../services/registry-client.js';
 import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
 import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials, collectBulkCredentials, elicitMultiSelect, detectHTTPCredentials } from '../utils/elicitation-helper.js';
 import { showConfirmDialog } from '../utils/native-dialog.js';
+import { UIMessages } from '../utils/ui-messages.js';
 import { CLIIndexer } from '../services/cli-indexer.js';
 
 export class NCPManagementMCP implements InternalMCP {
@@ -897,12 +898,11 @@ Do you want to remove this MCP?`;
       return {
         success: true,
         content: [
-          { type: 'text', text: `✅ Photon "${baseName}" imported from clipboard!\n\n` +
+          { type: 'text', text: `${UIMessages.photonImportedClipboard(baseName)}\n\n` +
             `📍 Location: ${destFile}\n` +
             `📝 Class: ${className}\n` +
-            `\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'` +
-            `\n🔍 Discover tools: ncp find ${baseName}` +
-            `\n\n⚠️  Restart NCP to load the new Photon` }
+            `\n${UIMessages.photonUsage(baseName)}` +
+            `\n${UIMessages.photonDiscovery(baseName)}` }
         ]
       };
     } catch (error: any) {
@@ -1666,11 +1666,11 @@ Do you want to remove this MCP?`;
       return {
         success: true,
         content: [
-          { type: 'text', text: `✅ Photon "${name}" installed successfully!\n\n` +
+          { type: 'text', text: `${UIMessages.photonInstalled(name)}\n\n` +
             `📍 Location: ${microFile}\n` +
             (schemaDownloaded ? `📋 Schema: ${schemaFile}\n` : '') +
-            `\n💡 Usage: ncp run ${name}:tool_name --params '{"param":"value"}'` +
-            `\n🔍 Discover tools: ncp find ${name}` }
+            `\n${UIMessages.photonUsage(name)}` +
+            `\n${UIMessages.photonDiscovery(name)}` }
         ]
       };
     } catch (error: any) {
@@ -1749,12 +1749,11 @@ Do you want to remove this MCP?`;
       return {
         success: true,
         content: [
-          { type: 'text', text: `✅ Photon "${baseName}" imported successfully!\n\n` +
+          { type: 'text', text: `${UIMessages.photonImportedFile(baseName)}\n\n` +
             `📍 Location: ${destFile}\n` +
             (schemaImported ? `📋 Schema: ${destSchema}\n` : '') +
-            `\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'` +
-            `\n🔍 Discover tools: ncp find ${baseName}` +
-            `\n\n⚠️  Restart NCP to load the new Photon` }
+            `\n${UIMessages.photonUsage(baseName)}` +
+            `\n${UIMessages.photonDiscovery(baseName)}` }
         ]
       };
     } catch (error: any) {
@@ -1819,11 +1818,11 @@ Do you want to remove this MCP?`;
       return {
         success: true,
         content: [
-          { type: 'text', text: `✅ Photon "${baseName}" downloaded successfully!\n\n` +
+          { type: 'text', text: `${UIMessages.photonDownloaded(baseName)}\n\n` +
             `📍 Location: ${destFile}\n` +
             (schemaDownloaded ? `📋 Schema: ${destSchema}\n` : '') +
-            `\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'` +
-            `\n🔍 Discover tools: ncp find ${baseName}` }
+            `\n${UIMessages.photonUsage(baseName)}` +
+            `\n${UIMessages.photonDiscovery(baseName)}` }
         ]
       };
     } catch (error: any) {

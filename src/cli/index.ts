@@ -11,6 +11,7 @@ import { MCPServer } from '../server/mcp-server.js';
 import { ConfigManager } from '../utils/config-manager.js';
 import { formatCommandDisplay } from '../utils/security.js';
 import { TextUtils } from '../utils/text-utils.js';
+import { UIMessages } from '../utils/ui-messages.js';
 import { OutputFormatter } from '../services/output-formatter.js';
 import { ErrorHandler } from '../services/error-handler.js';
 import { CachePatcher } from '../cache/cache-patcher.js';
@@ -1036,9 +1037,8 @@ Examples:
           if (schemaImported) {
             console.log(chalk.dim(`📋 Schema: ${path.join(microDir, `${baseName}.micro.schema.json`)}`));
           }
-          console.log(chalk.blue(`\n💡 Usage: ncp run ${baseName}:tool_name --params '{"param":"value"}'`));
-          console.log(chalk.blue(`🔍 Discover tools: ncp find ${baseName}`));
-          console.log(chalk.yellow(`\n⚠️  Restart NCP to load the new Photon`));
+          console.log(chalk.blue(`\n${UIMessages.photonUsage(baseName)}`));
+          console.log(chalk.blue(UIMessages.photonDiscovery(baseName)));
           return;
         } catch (error: any) {
           console.log(chalk.red(`\n✗ Download failed: ${error.message}`));
@@ -2135,7 +2135,7 @@ program
 
       // Examples section
       output += chalk.bold.white('Examples:') + '\n';
-      output += chalk.dim('  NEW syntax (recommended):') + '\n';
+      output += chalk.dim('  Standard syntax:') + '\n';
       output += indent + chalk.yellow('ncp run filesystem read_file --path /tmp/test.txt') + '\n';
       output += indent + chalk.yellow('ncp run github create_issue --repo owner/repo --title "Bug" --body "Description"') + '\n';
       output += indent + chalk.yellow('ncp run memory create_entities item1 item2') + chalk.gray('  # Positional args') + '\n\n';
@@ -3888,8 +3888,7 @@ photonCmd
         await client.savePhotonMetadata(fileName, result.marketplace, result.metadata, contentHash);
       }
 
-      console.log(chalk.yellow('\n⚠️  Restart NCP to load the new Photon'));
-      console.log(chalk.dim(`💡 Usage: ncp run ${name}:tool_name`));
+      console.log(chalk.blue(`\n${UIMessages.photonUsage(name)}`));
     } catch (error: any) {
       console.error(chalk.red(`Failed to add Photon: ${error.message}`));
       process.exit(1);

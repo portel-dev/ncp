@@ -330,7 +330,7 @@ ncp add stripe-dev npx stripe-cli --env STRIPE_KEY=sk_test_...
 ncp add stripe-prod npx stripe-cli --env STRIPE_KEY=sk_live_...
 
 # Conditional routing based on context
-ncp run "stripe:create_payment" --context="development"
+ncp run stripe create_payment --context="development"
 ```
 
 ### High-Availability Setups

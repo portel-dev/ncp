@@ -131,7 +131,7 @@ export class UsageTipsGenerator {
    */
   private static generateExecutionTips(results: any[], depth: number): string {
     if (results.length === 0) {
-      return `• **Run tools**: Use \`ncp run <tool_name>\` to execute (interactive prompts for parameters)\n`;
+      return `• **Run tools**: Use \`ncp run <mcp> <tool>\` to execute (interactive prompts for parameters)\n`;
     }
 
     if (depth >= 2) {
@@ -142,11 +142,14 @@ export class UsageTipsGenerator {
       // Generate Code-Mode example
       const codeModeExample = this.generateCodeModeExample(results.slice(0, 3));
 
+      // Use space-separated syntax for CLI examples
+      const cmdName = exampleTool.toolName.replace(':', ' ');
+
       if (exampleParams === '{}') {
-        return `• **Run tools**: Use \`ncp run ${exampleTool.toolName}\` to execute (no parameters needed)\n` +
+        return `• **Run tools**: Use \`ncp run ${cmdName}\` to execute (no parameters needed)\n` +
                `• **Code-Mode** (fastest): ${codeModeExample}\n`;
       } else {
-        return `• **Run tools**: Use \`ncp run ${exampleTool.toolName}\` (interactive prompts) or \`--params '${exampleParams}'\`\n` +
+        return `• **Run tools**: Use \`ncp run ${cmdName}\` (interactive prompts) or add arguments like \`--arg value\`\n` +
                `• **Code-Mode** (fastest): ${codeModeExample}\n`;
       }
     } else {

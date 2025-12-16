@@ -28,13 +28,13 @@ SimpleMCP allows you to create powerful MCPs using:
 **Example Usage**:
 ```bash
 # Generate text completion
-ncp run ai:complete prompt="Explain quantum computing" provider=openai
+ncp run ai complete --prompt "Explain quantum computing" --provider openai
 
 # Analyze image
-ncp run ai:vision imageUrl="https://example.com/image.jpg" question="What's in this image?" provider=anthropic
+ncp run ai vision --imageUrl "https://example.com/image.jpg" --question "What's in this image?" --provider anthropic
 
 # Calculate semantic similarity
-ncp run ai:similarity text1="cat" text2="kitten"
+ncp run ai similarity --text1 "cat" --text2 "kitten"
 ```
 
 **Key Methods**:
@@ -59,16 +59,16 @@ ncp run ai:similarity text1="cat" text2="kitten"
 **Example Usage**:
 ```bash
 # Create table
-ncp run database:create-table dbPath="./data.db" tableName="users" columns='{"id":"INTEGER PRIMARY KEY","name":"TEXT","email":"TEXT"}'
+ncp run database create-table --dbPath "./data.db" --tableName "users" --columns '{"id":"INTEGER PRIMARY KEY","name":"TEXT","email":"TEXT"}'
 
 # Insert data
-ncp run database:insert dbPath="./data.db" tableName="users" data='{"name":"Alice","email":"alice@example.com"}'
+ncp run database insert --dbPath "./data.db" --tableName "users" --data '{"name":"Alice","email":"alice@example.com"}'
 
 # Query with conditions
-ncp run database:find dbPath="./data.db" table="users" where='{"name":"Alice"}' limit=10
+ncp run database find --dbPath "./data.db" --table "users" --where '{"name":"Alice"}' --limit 10
 
 # Backup database to JSON
-ncp run database:backup dbPath="./data.db"
+ncp run database backup --dbPath "./data.db"
 ```
 
 **Key Methods**:
@@ -95,16 +95,16 @@ ncp run database:backup dbPath="./data.db"
 **Example Usage**:
 ```bash
 # Send Slack message
-ncp run notify:slack webhookUrl="https://hooks.slack.com/..." text="Deployment complete!"
+ncp run notify slack --webhookUrl "https://hooks.slack.com/..." --text "Deployment complete!"
 
 # Rich Discord embed
-ncp run notify:discord-rich webhookUrl="https://discord.com/api/webhooks/..." title="Build Status" description="Build #42 succeeded" color="#00ff00"
+ncp run notify discord-rich --webhookUrl "https://discord.com/api/webhooks/..." --title "Build Status" --description "Build #42 succeeded" --color "#00ff00"
 
 # Send email
-ncp run notify:email to="user@example.com" subject="Alert" text="Server CPU usage high"
+ncp run notify email --to "user@example.com" --subject "Alert" --text "Server CPU usage high"
 
 # Broadcast to all platforms
-ncp run notify:broadcast message="System update at 3pm" platforms='{"slack":{"webhookUrl":"..."},"discord":{"webhookUrl":"..."}}'
+ncp run notify broadcast --message "System update at 3pm" --platforms '{"slack":{"webhookUrl":"..."},"discord":{"webhookUrl":"..."}}'
 ```
 
 **Key Methods**:
@@ -132,19 +132,19 @@ ncp run notify:broadcast message="System update at 3pm" platforms='{"slack":{"we
 **Example Usage**:
 ```bash
 # Extract content from webpage
-ncp run scraper:extract url="https://news.ycombinator.com" selector=".titleline"
+ncp run scraper extract --url "https://news.ycombinator.com" --selector ".titleline"
 
 # Take screenshot
-ncp run scraper:screenshot url="https://example.com" fullPage=true
+ncp run scraper screenshot --url "https://example.com" --fullPage true
 
 # Fill and submit form
-ncp run scraper:fill-form url="https://example.com/login" formData='{"#username":"user","#password":"pass"}' submitSelector="#login-btn"
+ncp run scraper fill-form --url "https://example.com/login" --formData '{"#username":"user","#password":"pass"}' --submitSelector "#login-btn"
 
 # Generate PDF from webpage
-ncp run scraper:to-pdf url="https://example.com" landscape=true
+ncp run scraper to-pdf --url "https://example.com" --landscape true
 
 # Monitor page for changes
-ncp run scraper:monitor url="https://example.com/status" selector=".status" interval=60 maxChecks=10
+ncp run scraper monitor --url "https://example.com/status" --selector ".status" --interval 60 --maxChecks 10
 ```
 
 **Key Methods**:
@@ -172,22 +172,22 @@ ncp run scraper:monitor url="https://example.com/status" selector=".status" inte
 **Example Usage**:
 ```bash
 # Upload to S3
-ncp run cloud:s3-upload bucket="my-bucket" key="files/data.txt" content="SGVsbG8gV29ybGQ=" contentType="text/plain"
+ncp run cloud s3-upload --bucket "my-bucket" --key "files/data.txt" --content "SGVsbG8gV29ybGQ=" --contentType "text/plain"
 
 # Download from S3
-ncp run cloud:s3-download bucket="my-bucket" key="files/data.txt"
+ncp run cloud s3-download --bucket "my-bucket" --key "files/data.txt"
 
 # List S3 files
-ncp run cloud:s3-list bucket="my-bucket" prefix="files/"
+ncp run cloud s3-list --bucket "my-bucket" --prefix "files/"
 
 # Upload to Google Cloud Storage
-ncp run cloud:gcs-upload bucket="my-bucket" filename="data.txt" content="SGVsbG8gV29ybGQ="
+ncp run cloud gcs-upload --bucket "my-bucket" --filename "data.txt" --content "SGVsbG8gV29ybGQ="
 
 # Upload to Azure
-ncp run cloud:azure-upload container="my-container" blobName="data.txt" content="SGVsbG8gV29ybGQ="
+ncp run cloud azure-upload --container "my-container" --blobName "data.txt" --content "SGVsbG8gV29ybGQ="
 
 # Multi-cloud upload (all providers)
-ncp run cloud:multi-upload filename="backup.zip" content="..." providers='{"s3":{"bucket":"...","key":"..."},"gcs":{"bucket":"...","filename":"..."}}'
+ncp run cloud multi-upload --filename "backup.zip" --content "..." --providers '{"s3":{"bucket":"...","key":"..."},"gcs":{"bucket":"...","filename":"..."}}'
 ```
 
 **Key Methods**:
@@ -213,25 +213,25 @@ ncp run cloud:multi-upload filename="backup.zip" content="..." providers='{"s3":
 **Example Usage**:
 ```bash
 # Create PDF
-ncp run document:create-pdf content="Hello World" title="My Document" orientation=portrait
+ncp run document create-pdf --content "Hello World" --title "My Document" --orientation portrait
 
 # Create Excel spreadsheet
-ncp run document:create-excel sheets='{"Sheet1":[{"name":"Alice","age":30},{"name":"Bob","age":25}]}' filename="data.xlsx"
+ncp run document create-excel --sheets '{"Sheet1":[{"name":"Alice","age":30},{"name":"Bob","age":25}]}' --filename "data.xlsx"
 
 # Parse CSV
-ncp run document:parse-csv content="name,age\nAlice,30\nBob,25"
+ncp run document parse-csv --content "name,age\nAlice,30\nBob,25"
 
 # Convert to CSV
-ncp run document:to-csv data='[{"name":"Alice","age":30},{"name":"Bob","age":25}]'
+ncp run document to-csv --data '[{"name":"Alice","age":30},{"name":"Bob","age":25}]'
 
 # Create Word document
-ncp run document:create-word title="Report" sections='[{"heading":"Introduction","content":"This is..."}]'
+ncp run document create-word --title "Report" --sections '[{"heading":"Introduction","content":"This is..."}]'
 
 # Render Mustache template
-ncp run document:render-template template="Hello {{name}}!" data='{"name":"World"}'
+ncp run document render-template --template "Hello {{name}}!" --data '{"name":"World"}'
 
 # Generate invoice
-ncp run document:create-invoice invoiceNumber="INV-001" date="2024-01-15" from='{"name":"..."}' to='{"name":"..."}' items='[{"description":"...","quantity":1,"price":100}]'
+ncp run document create-invoice --invoiceNumber "INV-001" --date "2024-01-15" --from '{"name":"..."}' --to '{"name":"..."}' --items '[{"description":"...","quantity":1,"price":100}]'
 ```
 
 **Key Methods**:
@@ -447,4 +447,4 @@ These 6 complex examples demonstrate real-world integrations that would traditio
 **Unique npm Packages**: 20+
 **Capabilities**: AI, Databases, Notifications, Web Scraping, Cloud Storage, Document Processing
 
-All accessible through a simple convention: `ncp run mcp-name:tool-name`
+All accessible through a simple convention: `ncp run mcp-name tool-name`
