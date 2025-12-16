@@ -849,11 +849,14 @@ Timing groups use descriptive IDs (e.g., "daily-9am", "every-5min").
 
 * migrate to @portel/photon-core package for Photon MCP management
 * simplify skills subsystem
+* auto-migrate runtime commands on Windows (npx → npx.cmd) on startup (closes #7)
 
 ### Bug Fixes
 
 * fix Windows runtime detection and log path handling for MCP servers (fixes #4, fixes #5)
-* fix HTTP MCP config normalization - convert Claude Desktop `headers` format to NCP `auth` format (fixes #3)
+* fix HTTP MCP config normalization - convert Claude Desktop `headers` format to NCP `auth` format (fixes #3, fixes #7)
+* fix config import to accept HTTP/SSE servers with `url` field (fixes #7)
+* fix CLI add command to apply runtime resolution on Windows (fixes #7)
 * fix auto-import profile writes - make sequential to prevent JSON corruption
 
 ## [1.5.3](https://github.com/portel-dev/ncp/compare/1.5.2...1.5.3) (2025-10-14)
