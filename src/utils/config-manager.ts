@@ -9,6 +9,7 @@ import { formatCommandDisplay } from '../utils/security.js';
 import { TextUtils } from '../utils/text-utils.js';
 import { UIMessages } from './ui-messages.js';
 import { logger } from '../utils/logger.js';
+import { getRuntimeForExtension } from './runtime-detector.js';
 
 interface MCPConfig {
   command?: string;  // Optional: for stdio transport
@@ -846,14 +847,68 @@ export class ConfigManager {
       // Validate that value is a valid MCP config object
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         const mcpConfig = value as any;
-        // Must have a command property to be valid
-        if (mcpConfig.command && typeof mcpConfig.command === 'string') {
-          cleaned[key] = mcpConfig as MCPConfig;
+        
+        // Normalize config format (Claude Desktop → NCP format)
+        const normalizedConfig = this.normalizeConfig(mcpConfig);
+        
+        // Must have either command (stdio) or url (HTTP/SSE) to be valid
+        const hasCommand = normalizedConfig.command && typeof normalizedConfig.command === 'string';
+        const hasUrl = normalizedConfig.url && typeof normalizedConfig.url === 'string';
+        
+        if (hasCommand || hasUrl) {
+          cleaned[key] = normalizedConfig as MCPConfig;
         }
       }
     }
 
     return cleaned;
+  }
+
+  /**
+   * Normalize MCP config from various formats to NCP format
+   */
+  private normalizeConfig(config: any): any {
+    const normalized = { ...config };
+
+    // Remove redundant 'type' field (we detect by presence of url/command)
+    delete normalized.type;
+
+    // Convert 'headers' to 'auth' format
+    if (config.headers && typeof config.headers === 'object') {
+      const headers = config.headers as Record<string, string>;
+      
+      // Extract Authorization header
+      const authHeader = headers['Authorization'] || headers['authorization'];
+      if (authHeader) {
+        // Parse Bearer token
+        if (authHeader.startsWith('Bearer ')) {
+          normalized.auth = {
+            type: 'bearer',
+            token: authHeader.substring(7)
+          };
+        } 
+        // Parse Basic auth
+        else if (authHeader.startsWith('Basic ')) {
+          const decoded = Buffer.from(authHeader.substring(6), 'base64').toString('utf-8');
+          const [username, password] = decoded.split(':');
+          normalized.auth = {
+            type: 'basic',
+            username,
+            password
+          };
+        }
+      }
+
+      // Remove headers field after conversion
+      delete normalized.headers;
+    }
+
+    // Apply runtime resolution for command (npx → npx.cmd on Windows)
+    if (normalized.command && typeof normalized.command === 'string') {
+      normalized.command = getRuntimeForExtension(normalized.command);
+    }
+
+    return normalized;
   }
 
 
