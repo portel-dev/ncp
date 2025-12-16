@@ -216,8 +216,10 @@ async function test1_Initialize() {
     return false;
   }
 
-  if (duration > 1000) {
-    logError(`Initialize took ${duration}ms (should be < 1000ms)`);
+  // Allow 1500ms on Windows/macOS CI runners (slower than local dev)
+  const maxDuration = process.platform === 'win32' || process.env.CI ? 1500 : 1000;
+  if (duration > maxDuration) {
+    logError(`Initialize took ${duration}ms (should be < ${maxDuration}ms)`);
     return false;
   }
 
