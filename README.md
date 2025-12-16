@@ -440,7 +440,7 @@ Install and configure MCPs dynamically through natural language.
 ```bash
 # AI can discover and install MCPs for you
 ncp find "install mcp"
-# Shows: mcp:install, mcp:search, mcp:configure
+# Shows: mcp:add, mcp:remove, mcp:list
 ```
 
 **Features:**
@@ -480,6 +480,20 @@ const template = await skills.read_resource({
 
 **[→ Full Skills Guide](./SKILLS.md)**
 
+### **Analytics MCP** - Visualize Usage & Performance
+View usage statistics, token savings, and performance metrics directly in your chat.
+
+```bash
+# View usage overview with ASCII charts
+ncp run analytics:overview --params '{"period": 7}'
+```
+
+**Features:**
+- ✅ Usage trends and most used tools
+- ✅ Token savings analysis (Code-Mode efficiency)
+- ✅ Performance metrics (response times, error rates)
+- ✅ ASCII-formatted charts for AI consumption
+
 **Configuration:**
 Internal MCPs are disabled by default. Enable in your profile settings:
 
@@ -488,7 +502,8 @@ Internal MCPs are disabled by default. Enable in your profile settings:
   "settings": {
     "enable_schedule_mcp": true,
     "enable_mcp_management": true,
-    "enable_skills": true
+    "enable_skills": true,
+    "enable_analytics_mcp": true
   }
 }
 ```

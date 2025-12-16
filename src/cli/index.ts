@@ -2908,6 +2908,54 @@ scheduleCmd
     }
   });
 
+// schedule trigger
+scheduleCmd
+  .command('trigger <job-id>')
+  .description('Trigger a scheduled job immediately (manual run)')
+  .action(async (jobId) => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      let job = scheduler.getTask(jobId);
+      if (!job) {
+        job = scheduler.getTaskByName(jobId);
+        if (job) jobId = job.id;
+      }
+
+      if (!job) {
+        console.error(chalk.red(`❌ Job not found: ${jobId}`));
+        process.exit(1);
+      }
+
+      console.log(chalk.blue(`🚀 Triggering job: ${job.name}...`));
+      
+      const result = await scheduler.runTaskNow(jobId);
+      
+      const statusIcon = result.status === 'success' ? chalk.green('✅') : chalk.red('❌');
+      const duration = result.duration ? `${result.duration}ms` : 'N/A';
+      
+      console.log(`${statusIcon} Manual execution completed`);
+      console.log(`  ${chalk.dim('ID:')} ${result.executionId}`);
+      console.log(`  ${chalk.dim('Status:')} ${result.status}`);
+      console.log(`  ${chalk.dim('Duration:')} ${duration}`);
+      
+      if (result.result) {
+        console.log(chalk.bold('\nResult:'));
+        console.log(result.result);
+      }
+      
+      if (result.error) {
+        console.log(chalk.bold('\nError:'));
+        console.log(chalk.red(result.error));
+      }
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Trigger failed:'), error);
+      process.exit(1);
+    }
+  });
+
 // schedule cleanup
 scheduleCmd
   .command('cleanup')

@@ -485,21 +485,24 @@ Returns:
 
 ```bash
 # Schedule daily standup for weekdays at 9am
-ncp run schedule:add \
+ncp run schedule:create \
   name="daily-standup" \
-  command="ncp run workflow:execute workflowName=daily-standup context='{\"slackWebhook\":\"https://hooks.slack.com/...\",\"repo\":\"owner/repo\"}'" \
+  tool="workflow:execute" \
+  parameters='{"workflowName":"daily-standup", "context": {"slackWebhook":"https://hooks.slack.com/...", "repo":"owner/repo"}}' \
   schedule="0 9 * * 1-5"
 
 # Schedule content pipeline daily at midnight
-ncp run schedule:add \
+ncp run schedule:create \
   name="content-pipeline" \
-  command="ncp run workflow:execute workflowName=content-pipeline context='{\"sourceUrl\":\"https://...\",\"recipient\":\"team@company.com\"}'" \
+  tool="workflow:execute" \
+  parameters='{"workflowName":"content-pipeline", "context": {"sourceUrl":"https://...", "recipient":"user@example.com"}}' \
   schedule="0 0 * * *"
 
 # Schedule data sync daily at 2am
-ncp run schedule:add \
+ncp run schedule:create \
   name="data-sync" \
-  command="ncp run workflow:execute workflowName=data-sync context='{\"dbPath\":\"./data.db\",\"s3Bucket\":\"backups\",\"slackWebhook\":\"...\"}'" \
+  tool="workflow:execute" \
+  parameters='{"workflowName":"data-sync", "context": {"dbPath":"./data.db", "s3Bucket":"backups", "slackWebhook":"..."}}' \
   schedule="0 2 * * *"
 ```
 
@@ -535,9 +538,10 @@ ncp run workflow:execute \
   context='{"slackWebhook":"https://hooks.slack.com/services/T00/B00/XXX","repo":"anthropics/claude-code"}'
 
 # 2. If successful, schedule it
-ncp run schedule:add \
+ncp run schedule:create \
   name="team-standup" \
-  command="ncp run workflow:execute workflowName=daily-standup context='{\"slackWebhook\":\"https://hooks.slack.com/services/T00/B00/XXX\",\"repo\":\"anthropics/claude-code\"}'" \
+  tool="workflow:execute" \
+  parameters='{"workflowName":"daily-standup", "context": {"slackWebhook":"https://hooks.slack.com/services/T00/B00/XXX", "repo":"anthropics/claude-code"}}' \
   schedule="0 9 * * 1-5" \
   description="Daily standup summary posted to Slack"
 
@@ -545,34 +549,38 @@ ncp run schedule:add \
 ncp run schedule:list
 
 # 4. Remove if needed
-ncp run schedule:remove name="team-standup"
+ncp run schedule:delete job_id="team-standup"
 ```
 
 ### Advanced: Multiple Workflows on Different Schedules
 
 ```bash
 # Morning standup
-ncp run schedule:add \
+ncp run schedule:create \
   name="morning-standup" \
-  command="ncp run workflow:execute workflowName=daily-standup context='...'" \
+  tool="workflow:execute" \
+  parameters='{"workflowName":"daily-standup", "context": "..."}' \
   schedule="0 9 * * 1-5"
 
 # Hourly content check
-ncp run schedule:add \
+ncp run schedule:create \
   name="hourly-content-monitor" \
-  command="ncp run workflow:execute-task task='Check website for changes and alert if needed' context='...'" \
+  tool="workflow:execute-task" \
+  parameters='{"task": "Check website for changes and alert if needed", "context": "..."}' \
   schedule="0 * * * *"
 
 # Nightly backup
-ncp run schedule:add \
+ncp run schedule:create \
   name="nightly-backup" \
-  command="ncp run workflow:execute workflowName=data-sync context='...'" \
+  tool="workflow:execute" \
+  parameters='{"workflowName":"data-sync", "context": "..."}' \
   schedule="0 2 * * *"
 
 # Weekly report
-ncp run schedule:add \
+ncp run schedule:create \
   name="weekly-report" \
-  command="ncp run workflow:execute-custom workflow='...'" \
+  tool="workflow:execute-custom" \
+  parameters='{"workflow": "..."}' \
   schedule="0 9 * * 1"
 ```
 

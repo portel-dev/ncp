@@ -44,6 +44,22 @@ export class TimingExecutor {
   }
 
   /**
+   * Execute a single task immediately
+   */
+  async executeSingleTask(taskId: string, timeout?: number): Promise<TaskExecutionResult> {
+    const task = this.taskManager.getTask(taskId);
+    
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    logger.info(`[TimingExecutor] Executing single task: ${task.name} (${task.id})`);
+    
+    // Execute in child process for isolation
+    return this.executeTaskInChildProcess(task, timeout);
+  }
+
+  /**
    * Execute all active tasks for a timing group in parallel
    */
   async executeTimingGroup(timingId: string, timeout?: number): Promise<TimingExecutionSummary> {

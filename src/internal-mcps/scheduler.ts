@@ -320,6 +320,20 @@ export class SchedulerMCP implements InternalMCP {
           }
         }
       }
+    },
+    {
+      name: 'trigger',
+      description: 'Trigger an immediate execution of a scheduled job (manual run).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          job_id: {
+            type: 'string',
+            description: 'Job ID or name'
+          }
+        },
+        required: ['job_id']
+      }
     }
   ];
 
@@ -360,14 +374,16 @@ export class SchedulerMCP implements InternalMCP {
           return await this.handleResume(args);
         case 'executions':
           return await this.handleExecutions(args);
+        case 'trigger':
+          return await this.handleTrigger(args);
 
         default:
           return {
             success: false,
-            error: `Unknown schedule tool: ${toolName}. Available: validate, create, list, get, retrieve, pause, resume, cancel, executions`,
+            error: `Unknown schedule tool: ${toolName}. Available: validate, create, list, get, retrieve, pause, resume, cancel, executions, trigger`,
             content: [{
               type: 'text',
-              text: `❌ Unknown schedule tool: ${toolName}\n\n📋 Available tools: validate, create, list, get, retrieve, pause, resume, cancel, executions`
+              text: `❌ Unknown schedule tool: ${toolName}\n\n📋 Available tools: validate, create, list, get, retrieve, pause, resume, cancel, executions, trigger`
             }]
           };
       }
@@ -989,5 +1005,77 @@ export class SchedulerMCP implements InternalMCP {
       status: args?.status || 'all',
       limit: args?.limit || 50
     });
+  }
+
+  /**
+   * Trigger immediate execution of a job
+   */
+  private async handleTrigger(args: any): Promise<InternalToolResult> {
+    if (!args?.job_id) {
+      return {
+        success: false,
+        error: 'job_id parameter is required',
+        content: [{
+          type: 'text',
+          text: '❌ job_id parameter is required'
+        }]
+      };
+    }
+
+    let jobId = args.job_id;
+    let job = this.scheduler.getJob(jobId);
+    if (!job) {
+      job = this.scheduler.getJobByName(jobId);
+      if (job) jobId = job.id;
+    }
+
+    if (!job) {
+      return {
+        success: false,
+        error: `Job not found: ${args.job_id}`,
+        content: [{
+          type: 'text',
+          text: `❌ Job not found: ${args.job_id}`
+        }]
+      };
+    }
+
+    try {
+      const result = await this.scheduler.runTaskNow(jobId);
+      
+      const statusIcon = result.status === 'success' ? '✅' : '❌';
+      const duration = result.duration ? `${result.duration}ms` : 'N/A';
+      
+      let message = `${statusIcon} Manual execution completed: ${job.name}\n\n` +
+                    `  ID: ${result.executionId}\n` +
+                    `  Status: ${result.status}\n` +
+                    `  Duration: ${duration}\n`;
+      
+      if (result.result) {
+        message += `\n📤 Result:\n${result.result}`;
+      }
+      
+      if (result.error) {
+        message += `\n❌ Error:\n${result.error}`;
+      }
+
+      return {
+        success: result.status === 'success',
+        content: [{
+          type: 'text',
+          text: message
+        }]
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        error: errorMessage,
+        content: [{
+          type: 'text',
+          text: `❌ Trigger failed: ${errorMessage}`
+        }]
+      };
+    }
   }
 }

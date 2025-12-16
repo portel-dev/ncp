@@ -152,7 +152,7 @@ Debug logs include:
 
 ```bash
 # Check MCP health
-ncp status --detailed
+ncp doctor
 
 # Verify configuration
 ncp config location  # Check where configs are stored
@@ -171,7 +171,7 @@ ncp find "operation description"
 ncp list | grep "mcp-name"
 
 # Verify MCP is loaded
-ncp status
+ncp doctor
 ```
 
 **Symptom: "Command execution timeout"**
@@ -485,6 +485,6 @@ Typical performance metrics on a modern system:
 ## Getting Help
 
 - Check debug logs: `ncp config debugLogging true`
-- Review MCP status: `ncp status --detailed`
+- Review MCP status: ncp doctor
 - Consult test-drive guide: `ncp resources read ncp:test-drive`
 - Review docs: `ncp resources read ncp:help/getting-started`

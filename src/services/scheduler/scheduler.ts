@@ -506,6 +506,24 @@ export class Scheduler {
   }
 
   /**
+   * Run a task immediately (manual trigger)
+   */
+  async runTaskNow(taskId: string): Promise<any> {
+    if (!this.scheduleManager) {
+      throw new Error('Scheduler not available on this platform');
+    }
+
+    const task = this.taskManager.getTask(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    logger.info(`[Scheduler] Manually triggering task: ${task.name} (${taskId})`);
+    
+    return this.timingExecutor.executeSingleTask(taskId);
+  }
+
+  /**
    * Get executions for a task
    */
   getExecutions(taskId: string): TaskExecutionSummary[] {
