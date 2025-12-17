@@ -2700,7 +2700,9 @@ scheduleCmd
   .action(async (options) => {
     try {
       const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const { ExecutionRecorder } = await import('../services/scheduler/execution-recorder.js');
       const scheduler = new Scheduler();
+      const recorder = new ExecutionRecorder();
 
       const jobs = scheduler.listJobs(options.status);
 
@@ -2710,6 +2712,14 @@ scheduleCmd
         return;
       }
 
+      // Build a map of job ID to actual execution count from the recorder
+      const allExecutions = recorder.queryExecutions();
+      const executionCounts = new Map<string, number>();
+      for (const exec of allExecutions) {
+        const current = executionCounts.get(exec.jobId) || 0;
+        executionCounts.set(exec.jobId, current + 1);
+      }
+
       console.log(chalk.bold(`\n📋 Scheduled Jobs (${jobs.length})\n`));
 
       for (const job of jobs) {
@@ -2717,11 +2727,14 @@ scheduleCmd
                            job.status === 'paused' ? chalk.yellow :
                            job.status === 'error' ? chalk.red : chalk.gray;
 
+        // Get actual execution count from recorder (more accurate than stored count)
+        const actualExecutionCount = executionCounts.get(job.id) || 0;
+
         console.log(`${statusColor('●')} ${chalk.bold(job.name)} ${chalk.dim(`(${job.status})`)}`);
         console.log(`  ${chalk.dim('ID:')} ${job.id}`);
         console.log(`  ${chalk.dim('Tool:')} ${job.tool}`);
         console.log(`  ${chalk.dim('Schedule:')} ${job.cronExpression}`);
-        console.log(`  ${chalk.dim('Executions:')} ${job.executionCount}`);
+        console.log(`  ${chalk.dim('Executions:')} ${actualExecutionCount}`);
         if (job.lastExecutionAt) {
           console.log(`  ${chalk.dim('Last run:')} ${new Date(job.lastExecutionAt).toLocaleString()}`);
         }
@@ -2808,7 +2821,9 @@ scheduleCmd
   .action(async (jobId) => {
     try {
       const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const { ExecutionRecorder } = await import('../services/scheduler/execution-recorder.js');
       const scheduler = new Scheduler();
+      const recorder = new ExecutionRecorder();
 
       let job = scheduler.getJob(jobId);
       if (!job) {
@@ -2820,6 +2835,10 @@ scheduleCmd
         process.exit(1);
       }
 
+      // Get actual execution count from recorder
+      const executions = recorder.getExecutionsForJob(job.id);
+      const actualExecutionCount = executions.length;
+
       console.log(chalk.bold(`\n📋 ${job.name}\n`));
       console.log(`${chalk.cyan('ID:')} ${job.id}`);
       console.log(`${chalk.cyan('Tool:')} ${job.tool}`);
@@ -2830,7 +2849,7 @@ scheduleCmd
         console.log(`${chalk.cyan('Description:')} ${job.description}`);
       }
       console.log(`${chalk.cyan('Created:')} ${new Date(job.createdAt).toLocaleString()}`);
-      console.log(`${chalk.cyan('Executions:')} ${job.executionCount}`);
+      console.log(`${chalk.cyan('Executions:')} ${actualExecutionCount}`);
       if (job.lastExecutionAt) {
         console.log(`${chalk.cyan('Last run:')} ${new Date(job.lastExecutionAt).toLocaleString()}`);
       }
@@ -3086,11 +3105,22 @@ scheduleCmd
   .description('View execution history')
   .option('--job-id <id>', 'Filter by job ID or name')
   .option('--status <status>', 'Filter by status (success, failure, timeout)')
-  .option('--limit <n>', 'Maximum number of executions to show', parseInt, 50)
+  .option('--limit <n>', 'Maximum number of executions to show', (val) => parseInt(val, 10), 50)
+  .option('--no-cleanup', 'Skip automatic cleanup of stale executions')
   .action(async (options) => {
     try {
       const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const { ExecutionRecorder } = await import('../services/scheduler/execution-recorder.js');
       const scheduler = new Scheduler();
+      const recorder = new ExecutionRecorder();
+
+      // Auto-cleanup stale executions (running > 60 minutes)
+      if (options.cleanup !== false) {
+        const staleCleanup = recorder.cleanupStaleExecutions(60);
+        if (staleCleanup.cleaned > 0) {
+          console.log(chalk.yellow(`⚠️  Cleaned ${staleCleanup.cleaned} stale execution(s) stuck in "running" state\n`));
+        }
+      }
 
       let jobId = options.jobId;
       if (jobId) {
@@ -3105,7 +3135,8 @@ scheduleCmd
         }
       }
 
-      const executions = scheduler.queryExecutions({
+      // Query executions directly from recorder (more accurate than scheduler)
+      const executions = recorder.queryExecutions({
         jobId,
         status: options.status
       });
@@ -3137,6 +3168,70 @@ scheduleCmd
       }
     } catch (error) {
       console.error(chalk.red('❌ Failed to list executions:'), error);
+      process.exit(1);
+    }
+  });
+
+// schedule cleanup-stale
+scheduleCmd
+  .command('cleanup-stale')
+  .description('Clean up executions stuck in "running" state')
+  .option('--max-age <minutes>', 'Mark executions older than this as timed out', parseInt, 60)
+  .option('--dry-run', 'Show what would be cleaned without making changes')
+  .action(async (options) => {
+    try {
+      const { ExecutionRecorder } = await import('../services/scheduler/execution-recorder.js');
+      const recorder = new ExecutionRecorder();
+
+      // Get running executions first
+      const running = recorder.getRunningExecutions();
+
+      if (running.length === 0) {
+        console.log(chalk.green('✅ No stale executions found'));
+        return;
+      }
+
+      console.log(chalk.bold(`\n🔍 Found ${running.length} execution(s) in "running" state:\n`));
+
+      const now = Date.now();
+      const maxAgeMs = options.maxAge * 60 * 1000;
+
+      for (const exec of running) {
+        const startedAt = new Date(exec.startedAt);
+        const ageMs = now - startedAt.getTime();
+        const ageMinutes = Math.round(ageMs / 60000);
+        const isStale = ageMs > maxAgeMs;
+
+        const statusIcon = isStale ? chalk.yellow('⏱️ STALE') : chalk.blue('🔄 Running');
+        console.log(`${statusIcon} ${exec.jobName}`);
+        console.log(`  ${chalk.dim('ID:')} ${exec.executionId}`);
+        console.log(`  ${chalk.dim('Started:')} ${startedAt.toLocaleString()} (${ageMinutes} minutes ago)`);
+        console.log(`  ${chalk.dim('Task ID:')} ${exec.jobId}`);
+        console.log();
+      }
+
+      if (options.dryRun) {
+        const staleCount = running.filter(e => now - new Date(e.startedAt).getTime() > maxAgeMs).length;
+        console.log(chalk.cyan(`\n📝 Dry run: Would clean up ${staleCount} stale execution(s)`));
+        console.log(chalk.dim('Run without --dry-run to actually clean up'));
+        return;
+      }
+
+      const result = recorder.cleanupStaleExecutions(options.maxAge);
+
+      if (result.cleaned > 0) {
+        console.log(chalk.green(`\n✅ Cleaned ${result.cleaned} stale execution(s)`));
+        result.executions.forEach(id => console.log(chalk.dim(`   - ${id}`)));
+      } else {
+        console.log(chalk.yellow(`\n⚠️  No executions older than ${options.maxAge} minutes to clean`));
+      }
+
+      if (result.errors.length > 0) {
+        console.log(chalk.red(`\n⚠️  ${result.errors.length} error(s):`));
+        result.errors.forEach(err => console.log(chalk.dim(`   - ${err}`)));
+      }
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to cleanup stale executions:'), error);
       process.exit(1);
     }
   });
@@ -3354,16 +3449,23 @@ const executeTaskCmd = program
   .description('Execute a single task (internal use - called by timing executor in child process)')
   .option('--timeout <ms>', 'Execution timeout in milliseconds', '300000')
   .action(async (taskId, options) => {
+    // Declare these outside try/catch so they're accessible in catch block
+    let taskManager: any = null;
+    let executionRecorder: any = null;
+    let executionId: string | null = null;
+    let task: any = null;
+    let startTime: number = Date.now();
+
     try {
       const { TaskManager } = await import('../services/scheduler/task-manager.js');
       const { ExecutionRecorder } = await import('../services/scheduler/execution-recorder.js');
       const { v4: uuidv4 } = await import('uuid');
 
-      const taskManager = new TaskManager();
-      const executionRecorder = new ExecutionRecorder();
+      taskManager = new TaskManager();
+      executionRecorder = new ExecutionRecorder();
 
       // Load task
-      const task = taskManager.getTask(taskId);
+      task = taskManager.getTask(taskId);
       if (!task) {
         console.error(`Task ${taskId} not found`);
         process.exit(1);
@@ -3375,7 +3477,7 @@ const executeTaskCmd = program
         process.exit(0); // Exit successfully but don't execute
       }
 
-      const executionId = uuidv4();
+      executionId = uuidv4();
       const timeout = parseInt(options.timeout);
 
       // Start execution recording
@@ -3393,7 +3495,7 @@ const executeTaskCmd = program
       console.log(`Tool: ${task.tool}`);
       console.log(`Parameters: ${JSON.stringify(task.parameters)}`);
 
-      const startTime = Date.now();
+      startTime = Date.now();
 
       // Change to home directory for global MCP access
       const { homedir } = await import('os');
@@ -3431,6 +3533,21 @@ const executeTaskCmd = program
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const isTimeout = errorMessage.includes('Timeout after');
+
+      // Record failed execution (if we started one)
+      if (executionRecorder && executionId) {
+        const status = isTimeout ? 'timeout' : 'failure';
+        executionRecorder.completeExecution(executionId, status, undefined, { message: errorMessage });
+        console.log(`📝 Recorded execution ${executionId} as ${status}`);
+      }
+
+      // Update task's execution count even on failure
+      if (taskManager && task) {
+        taskManager.recordExecution(task.id, executionId || 'unknown', new Date().toISOString());
+        console.log(`📝 Updated task execution count`);
+      }
+
       console.error(`❌ Task execution failed: ${errorMessage}`);
       process.exit(1);
     }

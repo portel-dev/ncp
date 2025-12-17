@@ -390,4 +390,104 @@ export class ExecutionRecorder {
       avgDuration
     };
   }
+
+  /**
+   * Find and mark stale "running" executions as timed out
+   * Executions stuck in "running" state for longer than maxAgeMinutes are marked as timeout
+   */
+  cleanupStaleExecutions(maxAgeMinutes: number = 60): {
+    cleaned: number;
+    executions: string[];
+    errors: string[];
+  } {
+    this.ensureInitialized();
+    const cleaned: string[] = [];
+    const errors: string[] = [];
+    const cutoffTime = new Date(Date.now() - maxAgeMinutes * 60 * 1000);
+
+    try {
+      // Scan all JSON files in results directory
+      const files = readdirSync(this.resultsDir!).filter(f => f.endsWith('.json'));
+
+      for (const file of files) {
+        try {
+          const filePath = join(this.resultsDir!, file);
+          const content = readFileSync(filePath, 'utf-8');
+          const execution: JobExecution = JSON.parse(content);
+
+          // Check if execution is stuck in "running" state
+          if (execution.status === 'running') {
+            const startedAt = new Date(execution.startedAt);
+
+            if (startedAt < cutoffTime) {
+              // Mark as timed out
+              execution.status = 'timeout';
+              execution.completedAt = new Date().toISOString();
+              execution.duration = new Date(execution.completedAt).getTime() - startedAt.getTime();
+              execution.error = {
+                message: `Execution stuck in running state for ${Math.round(execution.duration / 60000)} minutes - marked as timeout during cleanup`
+              };
+
+              // Save updated execution
+              writeFileSync(filePath, JSON.stringify(execution, null, 2), 'utf-8');
+
+              // Append to CSV
+              this.appendToCSV(execution);
+
+              cleaned.push(execution.executionId);
+              logger.info(`[ExecutionRecorder] Cleaned stale execution: ${execution.executionId} for job ${execution.jobName}`);
+            }
+          }
+        } catch (error) {
+          errors.push(`Failed to process ${file}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      if (cleaned.length > 0) {
+        logger.info(`[ExecutionRecorder] Cleaned ${cleaned.length} stale executions`);
+      }
+
+      return {
+        cleaned: cleaned.length,
+        executions: cleaned,
+        errors
+      };
+    } catch (error) {
+      logger.error(`[ExecutionRecorder] Failed to cleanup stale executions: ${error instanceof Error ? error.message : String(error)}`);
+      return {
+        cleaned: 0,
+        executions: [],
+        errors: [error instanceof Error ? error.message : String(error)]
+      };
+    }
+  }
+
+  /**
+   * Get all running executions (useful for monitoring)
+   */
+  getRunningExecutions(): JobExecution[] {
+    this.ensureInitialized();
+    const running: JobExecution[] = [];
+
+    try {
+      const files = readdirSync(this.resultsDir!).filter(f => f.endsWith('.json'));
+
+      for (const file of files) {
+        try {
+          const content = readFileSync(join(this.resultsDir!, file), 'utf-8');
+          const execution: JobExecution = JSON.parse(content);
+
+          if (execution.status === 'running') {
+            running.push(execution);
+          }
+        } catch {
+          // Skip files that can't be parsed
+        }
+      }
+
+      return running;
+    } catch {
+      return [];
+    }
+  }
 }
