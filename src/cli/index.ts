@@ -2689,6 +2689,15 @@ scheduleCmd
         if (job.lastExecutionAt) {
           console.log(`  ${chalk.dim('Last run:')} ${new Date(job.lastExecutionAt).toLocaleString()}`);
         }
+        // Show code preview for code:run jobs
+        if (job.tool === 'code:run' && job.parameters?.code) {
+          // Get first non-empty line
+          const lines = job.parameters.code.split('\n');
+          const firstLine = lines.find((l: string) => l.trim()) || '';
+          const codePreview = firstLine.trim().substring(0, 60);
+          const hasMore = lines.length > 1 || firstLine.length > 60;
+          console.log(`  ${chalk.dim('Code:')} ${chalk.cyan(codePreview)}${hasMore ? chalk.dim('...') : ''}`);
+        }
         console.log();
       }
 
@@ -2752,6 +2761,185 @@ scheduleCmd
       console.log(JSON.stringify(job.parameters, null, 2));
     } catch (error) {
       console.error(chalk.red('❌ Failed to get job:'), error);
+      process.exit(1);
+    }
+  });
+
+// schedule show - display job with formatted code
+scheduleCmd
+  .command('show <job-id>')
+  .description('Show job details with formatted code (for code:run jobs)')
+  .action(async (jobId) => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const scheduler = new Scheduler();
+
+      let job = scheduler.getJob(jobId);
+      if (!job) {
+        job = scheduler.getJobByName(jobId);
+      }
+
+      if (!job) {
+        console.error(chalk.red(`❌ Job not found: ${jobId}`));
+        process.exit(1);
+      }
+
+      console.log(chalk.bold(`\n📋 ${job.name}\n`));
+      console.log(`${chalk.cyan('ID:')} ${job.id}`);
+      console.log(`${chalk.cyan('Tool:')} ${job.tool}`);
+      console.log(`${chalk.cyan('Schedule:')} ${job.cronExpression}`);
+      console.log(`${chalk.cyan('Status:')} ${job.status}`);
+      console.log(`${chalk.cyan('Type:')} ${job.fireOnce ? 'One-time' : 'Recurring'}`);
+      if (job.description) {
+        console.log(`${chalk.cyan('Description:')} ${job.description}`);
+      }
+      console.log(`${chalk.cyan('Created:')} ${new Date(job.createdAt).toLocaleString()}`);
+      console.log(`${chalk.cyan('Executions:')} ${job.executionCount}`);
+      if (job.lastExecutionAt) {
+        console.log(`${chalk.cyan('Last run:')} ${new Date(job.lastExecutionAt).toLocaleString()}`);
+      }
+
+      // Display code with syntax highlighting for code:run jobs
+      if (job.tool === 'code:run' && job.parameters?.code) {
+        console.log(chalk.bold('\n📝 Code:\n'));
+        console.log(chalk.dim('─'.repeat(60)));
+        // Display code with line numbers
+        const lines = job.parameters.code.split('\n');
+        lines.forEach((line: string, i: number) => {
+          const lineNum = chalk.dim(String(i + 1).padStart(3, ' ') + ' │ ');
+          console.log(lineNum + chalk.cyan(line));
+        });
+        console.log(chalk.dim('─'.repeat(60)));
+        console.log(chalk.dim(`\n💡 Use "ncp schedule edit ${job.id}" to modify this code`));
+      } else {
+        console.log(chalk.bold('\nParameters:'));
+        console.log(JSON.stringify(job.parameters, null, 2));
+      }
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to show job:'), error);
+      process.exit(1);
+    }
+  });
+
+// schedule edit - open code in editor
+scheduleCmd
+  .command('edit <job-id>')
+  .description('Edit job code in your default editor (for code:run jobs)')
+  .option('--editor <editor>', 'Specify editor (default: $EDITOR or code/vim/nano)')
+  .action(async (jobId, options) => {
+    try {
+      const { Scheduler } = await import('../services/scheduler/scheduler.js');
+      const { writeFileSync, unlinkSync, readFileSync } = await import('fs');
+      const { tmpdir } = await import('os');
+      const { join } = await import('path');
+      const { spawn } = await import('child_process');
+
+      const scheduler = new Scheduler();
+
+      let job = scheduler.getJob(jobId);
+      if (!job) {
+        job = scheduler.getJobByName(jobId);
+        if (job) jobId = job.id;
+      }
+
+      if (!job) {
+        console.error(chalk.red(`❌ Job not found: ${jobId}`));
+        process.exit(1);
+      }
+
+      if (job.tool !== 'code:run' || !job.parameters?.code) {
+        console.error(chalk.red('❌ This command only works with code:run jobs'));
+        console.log(chalk.dim('Use "ncp schedule get <job-id>" to view other job types'));
+        process.exit(1);
+      }
+
+      // Create temp file with the code
+      const tempFile = join(tmpdir(), `ncp-job-${job.id.substring(0, 8)}.ts`);
+      writeFileSync(tempFile, job.parameters.code, 'utf-8');
+
+      // Determine editor
+      const editor = options.editor || process.env.EDITOR || process.env.VISUAL;
+      let editorCmd: string;
+      let editorArgs: string[] = [];
+
+      if (editor) {
+        editorCmd = editor;
+      } else {
+        // Try common editors in order of preference
+        const { execSync } = await import('child_process');
+        const editors = ['code', 'vim', 'nano', 'vi'];
+        editorCmd = 'nano'; // fallback
+        for (const ed of editors) {
+          try {
+            execSync(`which ${ed}`, { stdio: 'ignore' });
+            editorCmd = ed;
+            break;
+          } catch {
+            // Editor not found, try next
+          }
+        }
+      }
+
+      // VS Code needs --wait flag to block until file is closed
+      if (editorCmd === 'code' || editorCmd.includes('code')) {
+        editorArgs = ['--wait', tempFile];
+      } else {
+        editorArgs = [tempFile];
+      }
+
+      console.log(chalk.blue(`📝 Opening ${job.name} in ${editorCmd}...`));
+      console.log(chalk.dim(`Temp file: ${tempFile}`));
+      console.log(chalk.dim('Save and close the editor when done.\n'));
+
+      // Open editor and wait for it to close
+      const editorProcess = spawn(editorCmd, editorArgs, {
+        stdio: 'inherit',
+        shell: true
+      });
+
+      editorProcess.on('close', async (code) => {
+        if (code !== 0) {
+          console.error(chalk.red(`\n❌ Editor exited with code ${code}`));
+          try { unlinkSync(tempFile); } catch { /* ignore */ }
+          process.exit(1);
+        }
+
+        try {
+          // Read the modified code
+          const newCode = readFileSync(tempFile, 'utf-8');
+
+          // Check if code changed
+          if (newCode === job!.parameters.code) {
+            console.log(chalk.yellow('\n⚠️ No changes detected'));
+            unlinkSync(tempFile);
+            return;
+          }
+
+          // Update the job
+          await scheduler.updateJob(jobId, {
+            parameters: { ...job!.parameters, code: newCode }
+          });
+
+          console.log(chalk.green(`\n✅ Job "${job!.name}" updated successfully!`));
+          console.log(chalk.dim('The new code will be used for future executions.'));
+
+          // Clean up temp file
+          unlinkSync(tempFile);
+        } catch (err) {
+          console.error(chalk.red('\n❌ Failed to update job:'), err);
+          console.log(chalk.dim(`Your changes are saved in: ${tempFile}`));
+          process.exit(1);
+        }
+      });
+
+      editorProcess.on('error', (err) => {
+        console.error(chalk.red(`\n❌ Failed to open editor: ${err.message}`));
+        console.log(chalk.dim(`Your code is saved in: ${tempFile}`));
+        console.log(chalk.dim(`Try: ${editorCmd} ${tempFile}`));
+        process.exit(1);
+      });
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to edit job:'), error);
       process.exit(1);
     }
   });
