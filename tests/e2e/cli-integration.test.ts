@@ -360,4 +360,104 @@ describe('CLI Integration Tests', () => {
       expect(result.stdout).toBeTruthy();
     }, 30000);
   });
+
+  describe('Code Execution Command', () => {
+    test('should display code command help', () => {
+      const result = runCLI('code --help');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Execute TypeScript');
+      expect(result.stdout).toContain('MCP');
+      expect(result.stdout).toContain('--file');
+      expect(result.stdout).toContain('--timeout');
+    }, 10000);
+
+    test('should execute simple expression directly', () => {
+      const result = runCLI('code "return 2 + 2"');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('4');
+      expect(result.stdout).toMatch(/Result|✅/);
+    }, 60000);
+
+    test('should execute code with string operations', () => {
+      const result = runCLI('code "return \\"hello\\".toUpperCase()"');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('HELLO');
+    }, 60000);
+
+    test('should execute code from file', () => {
+      // Create a temporary test file
+      const testFile = path.join(testConfigPath, 'test-code.ts');
+      fs.writeFileSync(testFile, 'return { sum: 1 + 2, product: 2 * 3 }');
+
+      const result = runCLI(`code --file "${testFile}"`);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('sum');
+      expect(result.stdout).toContain('3');
+      expect(result.stdout).toContain('product');
+      expect(result.stdout).toContain('6');
+    }, 60000);
+
+    test('should handle code execution errors gracefully', () => {
+      const result = runCLI('code "throw new Error(\\"test error\\")"');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toMatch(/error|Error/i);
+    }, 60000);
+
+    test('should support --json output format', () => {
+      const result = runCLI('code "return { a: 1, b: 2 }" --json');
+
+      expect(result.exitCode).toBe(0);
+      // Should contain valid JSON output
+      expect(result.stdout).toContain('"a"');
+      expect(result.stdout).toContain('"b"');
+    }, 60000);
+
+    test('should handle file not found gracefully', () => {
+      const result = runCLI('code --file /nonexistent/file.ts');
+
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toMatch(/error|not found|ENOENT/i);
+    }, 10000);
+
+    test('should respect timeout option', () => {
+      // Very short timeout should fail for long-running code
+      const result = runCLI('code "while(true){}" --timeout 100');
+
+      // Should timeout/fail
+      expect(result.exitCode).not.toBe(0);
+    }, 30000);
+
+    test('should have access to MCP namespaces', () => {
+      // Test that schedule namespace is available (internal MCP)
+      const result = runCLI('code "return typeof schedule"');
+
+      expect(result.exitCode).toBe(0);
+      // schedule should be an object (namespace)
+      expect(result.stdout).toMatch(/object|function/);
+    }, 60000);
+  });
+
+  describe('Code Execution via run command (code:run)', () => {
+    test('should execute code via run code:run', () => {
+      const result = runCLI('run code:run --params \'{"code": "return 1 + 1"}\'');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('2');
+    }, 60000);
+
+    test('should have CodeMCP properly initialized', () => {
+      // This tests the orchestrator injection fix
+      const result = runCLI('run code:run --params \'{"code": "return \\"CodeMCP working\\""}\'');
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('CodeMCP working');
+      // Should NOT contain "not yet initialized" error
+      expect(result.stdout).not.toContain('not yet initialized');
+    }, 60000);
+  });
 });

@@ -103,7 +103,7 @@ All MCPs available as namespaces: gmail, github, slack, stripe, schedule, analyt
       keys: parameters ? Object.keys(parameters) : [],
       codeType: typeof parameters?.code,
       codeLength: parameters?.code?.length,
-      codePreview: parameters?.code ? parameters.code.substring(0, 100) : 'N/A'
+      codePreview: typeof parameters?.code === 'string' ? parameters.code.substring(0, 100) : 'N/A'
     });
 
     const { code, timeout } = parameters;
