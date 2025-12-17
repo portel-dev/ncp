@@ -1497,7 +1497,47 @@ function stripAnsi(str: string): string {
   return str.replace(/\u001b\[\d+m/g, '');
 }
 
+/**
+ * Syntax highlight TypeScript code with line numbers (no box)
+ * Used for schedule show command
+ */
+function formatTypeScriptCodeWithLineNumbers(code: string): string {
+  // Apply syntax highlighting
+  let highlighted = code
+    // Keywords
+    .replace(/\b(const|let|var|await|async|return|if|else|for|while|function|class|interface|type|import|export|from|new|try|catch|throw)\b/g,
+      (match) => chalk.magenta(match))
+    // Strings: "..." and '...' and `...`
+    .replace(/(["'`])(?:(?=(\\?))\2.)*?\1/g, (match) => chalk.green(match))
+    // Comments: // ...
+    .replace(/\/\/.*$/gm, (match) => chalk.dim.gray(match))
+    // Numbers
+    .replace(/\b(\d+)\b/g, (match) => chalk.yellow(match))
+    // Function calls: functionName(
+    .replace(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g, (match, fn) => chalk.cyan(fn) + '(')
+    // Object keys in { key: value }
+    .replace(/(\w+):/g, (match, key) => chalk.blue(key) + ':')
+    // console/await special
+    .replace(/\bconsole\./g, chalk.yellow('console') + '.');
 
+  // Add line numbers with box
+  const lines = highlighted.split('\n');
+  const lineNumWidth = String(lines.length).length;
+  const maxLength = Math.max(...lines.map(l => stripAnsi(l).length), 56);
+  const border = '─'.repeat(maxLength + lineNumWidth + 5);
+
+  const result = [
+    chalk.dim('┌' + border + '┐'),
+    ...lines.map((line, i) => {
+      const lineNum = chalk.dim(String(i + 1).padStart(lineNumWidth, ' ') + ' │ ');
+      const padding = ' '.repeat(maxLength - stripAnsi(line).length);
+      return chalk.dim('│ ') + lineNum + line + padding + chalk.dim(' │');
+    }),
+    chalk.dim('└' + border + '┘')
+  ];
+
+  return result.join('\n');
+}
 
 // Remove command
 program
@@ -2802,14 +2842,9 @@ scheduleCmd
       // Display code with syntax highlighting for code:run jobs
       if (job.tool === 'code:run' && job.parameters?.code) {
         console.log(chalk.bold('\n📝 Code:\n'));
-        console.log(chalk.dim('─'.repeat(60)));
-        // Display code with line numbers
-        const lines = job.parameters.code.split('\n');
-        lines.forEach((line: string, i: number) => {
-          const lineNum = chalk.dim(String(i + 1).padStart(3, ' ') + ' │ ');
-          console.log(lineNum + chalk.cyan(line));
-        });
-        console.log(chalk.dim('─'.repeat(60)));
+        // Use the existing TypeScript syntax highlighter with line numbers
+        const highlighted = formatTypeScriptCodeWithLineNumbers(job.parameters.code);
+        console.log(highlighted);
         console.log(chalk.dim(`\n💡 Use "ncp schedule edit ${job.id}" to modify this code`));
       } else {
         console.log(chalk.bold('\nParameters:'));
