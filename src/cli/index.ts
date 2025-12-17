@@ -610,31 +610,27 @@ const profileIndex = process.argv.indexOf('--profile');
 // Check for NCP_* environment variables (DXT config pattern)
 const hasNcpEnvVars = Object.keys(process.env).some(key => key.startsWith('NCP_'));
 
-const hasCommands = process.argv.includes('find') ||
-  process.argv.includes('add') ||
-  process.argv.includes('list') ||
-  process.argv.includes('remove') ||
-  process.argv.includes('run') ||
-  process.argv.includes('config') ||
-  process.argv.includes('profile') ||
-  process.argv.includes('help') ||
-  process.argv.includes('--help') ||
+const knownCommands = new Set([
+  'find', 'add', 'list', 'remove', 'run', 'config', 'profile', 'help',
+  'analytics', 'schedule', 'doctor', 'credentials', 'update', 'photon',
+  'skills', 'code', 'auth', '_job-run', '_timing-run', '_task-execute',
+  'cleanup-runs', 'marketplace'
+]);
+
+const hasHelpOrVersion = process.argv.includes('--help') ||
   process.argv.includes('-h') ||
   process.argv.includes('--version') ||
-  process.argv.includes('-v') ||
-  process.argv.includes('analytics') ||
-  process.argv.includes('schedule') ||
-  process.argv.includes('doctor') ||
-  process.argv.includes('credentials') ||
-  process.argv.includes('update') ||
-  process.argv.includes('photon') ||
-  process.argv.includes('skills') ||
-  process.argv.includes('code') ||
-  process.argv.includes('auth') ||
-  process.argv.includes('_job-run') ||
-  process.argv.includes('_timing-run') ||
-  process.argv.includes('_task-execute') ||
-  process.argv.includes('cleanup-runs');
+  process.argv.includes('-v');
+
+// Get non-flag arguments (skip first two: node and script path)
+const nonFlagArgs = process.argv.slice(2).filter(arg => !arg.startsWith('-') && !arg.startsWith('--'));
+
+// Check if first non-flag arg is a known command OR unknown (potential typo)
+const firstArg = nonFlagArgs[0];
+const hasKnownCommand = firstArg && knownCommands.has(firstArg);
+const hasUnknownCommand = firstArg && !knownCommands.has(firstArg) && firstArg !== 'all';
+
+const hasCommands = hasHelpOrVersion || hasKnownCommand || hasUnknownCommand;
 
 // Decision logic:
 // - NCP_* env vars + no CLI commands → MCP mode
@@ -4692,9 +4688,9 @@ skillsCmd
   });
 
 // Error handling for unknown commands with fuzzy suggestions
-program.on('command:*', (operands: string[]) => {
+program.on('command:*', async (operands: string[]) => {
   const unknownCommand = operands[0];
-  const { FuzzyMatcher } = require('../utils/fuzzy-matcher.js');
+  const { FuzzyMatcher } = await import('../utils/fuzzy-matcher.js');
   const matcher = new FuzzyMatcher();
 
   // Get all available command names (excluding hidden commands)
