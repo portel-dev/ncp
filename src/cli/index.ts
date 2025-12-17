@@ -629,6 +629,8 @@ const hasCommands = process.argv.includes('find') ||
   process.argv.includes('update') ||
   process.argv.includes('photon') ||
   process.argv.includes('skills') ||
+  process.argv.includes('code') ||
+  process.argv.includes('auth') ||
   process.argv.includes('_job-run') ||
   process.argv.includes('_timing-run') ||
   process.argv.includes('_task-execute') ||
@@ -3704,6 +3706,250 @@ program
     } catch (error) {
       console.error(`❌ Diagnostics failed: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
+    }
+  });
+
+// ====================================
+// Code Execution Command
+// ====================================
+
+program
+  .command('code [code-string]')
+  .description('Execute TypeScript code with MCP access')
+  .option('-f, --file <path>', 'Execute code from a TypeScript file')
+  .option('-t, --timeout <ms>', 'Execution timeout in milliseconds (default: 30000, max: 300000)', '30000')
+  .option('--json', 'Output result as JSON')
+  .configureHelp({
+    formatHelp: (cmd, helper) => {
+      const indent = '  ';
+      let output = '\n';
+
+      output += chalk.bold.white('NCP Code Command') + ' - ' + chalk.cyan('Execute TypeScript with MCP Access') + '\n\n';
+      output += chalk.dim('Run TypeScript code with full access to all MCPs as namespaces.') + '\n';
+      output += chalk.dim('Perfect for testing, automation, and debugging.') + '\n\n';
+
+      output += chalk.bold.white('Usage:') + ' ' + helper.commandUsage(cmd) + '\n\n';
+
+      const visibleOptions = helper.visibleOptions(cmd);
+      if (visibleOptions.length) {
+        output += chalk.bold.white('Options:') + '\n';
+        visibleOptions.forEach(option => {
+          const flags = option.flags;
+          const description = helper.optionDescription(option);
+          const paddingNeeded = Math.max(0, 42 - flags.length);
+          const padding = ' '.repeat(paddingNeeded);
+          output += indent + chalk.cyan(flags) + padding + ' ' + chalk.white(description) + '\n';
+        });
+        output += '\n';
+      }
+
+      output += chalk.bold.white('Modes:') + '\n';
+      output += indent + chalk.yellow('ncp code "<code>"') + chalk.gray('         Execute code string directly') + '\n';
+      output += indent + chalk.yellow('ncp code --file script.ts') + chalk.gray('  Execute code from file') + '\n';
+      output += indent + chalk.yellow('ncp code') + chalk.gray('                    Interactive REPL mode') + '\n\n';
+
+      output += chalk.bold.white('Examples:') + '\n';
+      output += chalk.dim('  Simple expression:') + '\n';
+      output += indent + chalk.yellow('ncp code "return 2 + 2"') + '\n\n';
+
+      output += chalk.dim('  MCP calls:') + '\n';
+      output += indent + chalk.yellow('ncp code "const jobs = await schedule.list({}); return jobs.length"') + '\n';
+      output += indent + chalk.yellow('ncp code "await mcp.doctor({})"') + '\n\n';
+
+      output += chalk.dim('  From file:') + '\n';
+      output += indent + chalk.yellow('ncp code --file automation.ts') + '\n\n';
+
+      output += chalk.bold.white('MCP Namespaces Available:') + '\n';
+      output += chalk.dim('  All installed MCPs are available as namespaces:') + '\n';
+      output += indent + chalk.cyan('schedule') + chalk.gray(', ') + chalk.cyan('analytics') + chalk.gray(', ') + chalk.cyan('mcp') + chalk.gray(', ') + chalk.cyan('skills') + chalk.gray(', ') + chalk.cyan('ncp') + chalk.gray(', etc.') + '\n';
+      output += indent + chalk.dim('Plus external MCPs: ') + chalk.cyan('gmail') + chalk.gray(', ') + chalk.cyan('github') + chalk.gray(', ') + chalk.cyan('slack') + chalk.gray(', etc.') + '\n\n';
+
+      return output;
+    }
+  })
+  .action(async (codeString, options) => {
+    // Set branded terminal title
+    setNCPTitle('Code');
+
+    const profileName = program.getOptionValue('profile') || 'all';
+    const timeout = parseInt(options.timeout) || 30000;
+
+    // Determine execution mode
+    let code: string | null = null;
+
+    if (options.file) {
+      // Mode 2: File execution
+      try {
+        const { readFile } = await import('fs/promises');
+        const { resolve } = await import('path');
+        const filePath = resolve(options.file);
+        code = await readFile(filePath, 'utf-8');
+        console.log(chalk.dim(`📄 Executing code from: ${options.file}`));
+      } catch (error: any) {
+        console.log(chalk.red(`\n❌ Error reading file: ${error.message}`));
+        process.exit(1);
+      }
+    } else if (codeString) {
+      // Mode 1: Direct execution
+      code = codeString;
+    } else {
+      // Mode 3: REPL mode
+      console.log(chalk.cyan('\n🔧 NCP Code REPL'));
+      console.log(chalk.dim('Execute TypeScript with MCP access. Type .help for commands.\n'));
+
+      const { NCPOrchestrator } = await import('../orchestrator/ncp-orchestrator.js');
+      const orchestrator = new NCPOrchestrator(profileName, false);
+      await orchestrator.initialize();
+
+      // Wait for background init to ensure code execution is available
+      await orchestrator.waitForInitialization();
+
+      const readline = await import('readline');
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        prompt: chalk.cyan('ncp> ')
+      });
+
+      let multilineBuffer = '';
+      let inMultiline = false;
+
+      console.log(chalk.dim('MCPs loaded. Ready for code execution.'));
+      console.log(chalk.dim('Use .exit to quit, .help for commands\n'));
+      rl.prompt();
+
+      rl.on('line', async (line: string) => {
+        const trimmed = line.trim();
+
+        // Handle REPL commands
+        if (trimmed === '.exit' || trimmed === '.quit') {
+          await orchestrator.cleanup();
+          rl.close();
+          process.exit(0);
+        }
+
+        if (trimmed === '.help') {
+          console.log(chalk.cyan('\nREPL Commands:'));
+          console.log('  .exit, .quit   Exit the REPL');
+          console.log('  .clear         Clear the screen');
+          console.log('  .help          Show this help');
+          console.log(chalk.dim('\nTip: Use multi-line code with { } blocks'));
+          console.log(chalk.dim('All MCPs are available as namespaces (schedule, analytics, etc.)'));
+          rl.prompt();
+          return;
+        }
+
+        if (trimmed === '.clear') {
+          console.clear();
+          rl.prompt();
+          return;
+        }
+
+        // Handle multiline input
+        if (inMultiline) {
+          multilineBuffer += '\n' + line;
+          if (trimmed.endsWith('}') || trimmed === '') {
+            inMultiline = false;
+            line = multilineBuffer;
+            multilineBuffer = '';
+          } else {
+            process.stdout.write(chalk.dim('... '));
+            return;
+          }
+        } else if (trimmed.endsWith('{') && !trimmed.includes('}')) {
+          inMultiline = true;
+          multilineBuffer = line;
+          process.stdout.write(chalk.dim('... '));
+          return;
+        }
+
+        if (!line.trim()) {
+          rl.prompt();
+          return;
+        }
+
+        try {
+          const result = await orchestrator.executeCode(line, timeout);
+
+          if (result.error) {
+            console.log(chalk.red('Error:'), result.error);
+          } else {
+            if (result.logs && result.logs.length > 0) {
+              result.logs.forEach((log: string) => console.log(chalk.dim(log)));
+            }
+            if (result.result !== undefined) {
+              console.log(chalk.green('→'), typeof result.result === 'object'
+                ? JSON.stringify(result.result, null, 2)
+                : result.result);
+            }
+          }
+        } catch (error: any) {
+          console.log(chalk.red('Error:'), error.message);
+        }
+
+        rl.prompt();
+      });
+
+      rl.on('close', async () => {
+        await orchestrator.cleanup();
+        process.exit(0);
+      });
+
+      return; // Don't continue - REPL handles its own lifecycle
+    }
+
+    // Modes 1 & 2: Execute code and exit
+    if (code) {
+      console.log(chalk.dim('🚀 Executing code...\n'));
+
+      const { NCPOrchestrator } = await import('../orchestrator/ncp-orchestrator.js');
+      const orchestrator = new NCPOrchestrator(profileName, false);
+      await orchestrator.initialize();
+
+      // Wait for background init to ensure code execution is available
+      await orchestrator.waitForInitialization();
+
+      try {
+        const result = await orchestrator.executeCode(code, timeout);
+
+        if (result.error) {
+          console.log(chalk.red('❌ Error:'), result.error);
+          if (result.logs && result.logs.length > 0) {
+            console.log(chalk.dim('\nLogs:'));
+            result.logs.forEach((log: string) => console.log(chalk.dim('  ' + log)));
+          }
+          await orchestrator.cleanup();
+          process.exit(1);
+        }
+
+        // Output logs
+        if (result.logs && result.logs.length > 0) {
+          result.logs.forEach((log: string) => console.log(log));
+        }
+
+        // Output result
+        if (result.result !== undefined) {
+          if (options.json) {
+            console.log(JSON.stringify(result.result, null, 2));
+          } else {
+            console.log(chalk.green('✅ Result:'));
+            if (typeof result.result === 'object') {
+              console.log(JSON.stringify(result.result, null, 2));
+            } else {
+              console.log(result.result);
+            }
+          }
+        } else {
+          console.log(chalk.green('✅ Code executed successfully'));
+        }
+
+        await orchestrator.cleanup();
+        process.exit(0);
+      } catch (error: any) {
+        console.log(chalk.red('❌ Execution failed:'), error.message);
+        await orchestrator.cleanup();
+        process.exit(1);
+      }
     }
   });
 

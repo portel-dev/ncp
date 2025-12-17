@@ -774,7 +774,7 @@ export class NCPOrchestrator {
         }
 
         // Inject orchestrator into CodeMCP
-        const codeMCP = allInternalMCPs.find(mcp => mcp.name === 'ncp');
+        const codeMCP = allInternalMCPs.find(mcp => mcp.name === 'code');
         if (codeMCP && 'setOrchestratorOnCodeMCP' in this.internalMCPManager) {
           logger.info('[NCPOrchestrator] Injecting orchestrator into CodeMCP');
           this.internalMCPManager.setOrchestratorOnCodeMCP(this);
