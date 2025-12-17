@@ -889,9 +889,17 @@ async function handleManualAdd(name: string, command: string, args: string[], op
       }
     }
 
+    // Validate command is provided
+    if (!command) {
+      console.log(chalk.red('\n❌ Error: No command specified for stdio MCP'));
+      console.log(chalk.dim('   Either provide a command or use a known provider from the registry'));
+      console.log(chalk.dim(`   Example: ${chalk.cyan(`ncp add ${name} npx @some/package`)}`));
+      process.exit(1);
+    }
+
     // Apply runtime resolution (npx → npx.cmd on Windows)
     const resolvedCommand = getRuntimeForExtension(command);
-    
+
     mcpConfig = {
       command: resolvedCommand,
       args: args || []
