@@ -85,6 +85,8 @@ import type { ElicitationServer } from '../utils/elicitation-helper.js';
 import { loadGlobalSettings } from '../utils/global-settings.js';
 import { ToolDiscoveryService } from './services/tool-discovery.js';
 import { CacheService } from './services/cache-service.js';
+import { SkillsService } from './services/skills-service.js';
+import { ConnectionPoolManager } from './services/connection-pool.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -214,6 +216,7 @@ export class NCPOrchestrator {
   // Extracted services (facade pattern)
   private toolDiscoveryService: ToolDiscoveryService | null = null;
   private cacheService: CacheService | null = null;
+  private skillsService: SkillsService | null = null;
 
   /**
    * ⚠️ CRITICAL: Default profile MUST be 'all' - DO NOT CHANGE!
@@ -852,6 +855,21 @@ export class NCPOrchestrator {
       );
     }
     return this.cacheService;
+  }
+
+  /**
+   * Get or create SkillsService (lazy initialization)
+   */
+  private getSkillsService(): SkillsService {
+    if (!this.skillsService) {
+      this.skillsService = new SkillsService(this.createFacadeContext());
+      // Wire up dependencies
+      if (this.skillsManager) {
+        this.skillsService.setSkillsManager(this.skillsManager);
+      }
+      this.skillsService.setDiscoveryEngine(this.discovery);
+    }
+    return this.skillsService;
   }
 
   async initialize(): Promise<void> {
