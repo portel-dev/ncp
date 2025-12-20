@@ -83,6 +83,8 @@ import { CodeExecutor } from '../code-mode/code-executor.js';
 import { NetworkPolicyManager, SECURE_NETWORK_POLICY, type ElicitationFunction } from '../code-mode/network-policy.js';
 import type { ElicitationServer } from '../utils/elicitation-helper.js';
 import { loadGlobalSettings } from '../utils/global-settings.js';
+import { ToolDiscoveryService } from './services/tool-discovery.js';
+import { CacheService } from './services/cache-service.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -208,6 +210,10 @@ export class NCPOrchestrator {
 
   // Actual client info (passthrough to downstream MCPs for transparency)
   private clientInfo: { name: string; version: string } = { name: 'ncp-oss', version: version };
+
+  // Extracted services (facade pattern)
+  private toolDiscoveryService: ToolDiscoveryService | null = null;
+  private cacheService: CacheService | null = null;
 
   /**
    * ⚠️ CRITICAL: Default profile MUST be 'all' - DO NOT CHANGE!
@@ -793,6 +799,59 @@ export class NCPOrchestrator {
       logger.error(`Failed to load profile: ${error.message}`);
       return null;
     }
+  }
+
+  /**
+   * Create a minimal context for facade services
+   * This provides read-only access to orchestrator state
+   */
+  private createFacadeContext() {
+    return {
+      state: {
+        definitions: this.definitions,
+        connections: this.connections,
+        toolToMCP: this.toolToMCP,
+        allTools: this.allTools,
+        skillPrompts: this.skillPrompts,
+      },
+      events: {
+        emit: () => true,
+        on: () => this,
+        off: () => this,
+        once: () => this,
+      } as any,
+      getService: <T>(): T => ({} as T),
+      profileName: this.profileName,
+      clientInfo: this.clientInfo,
+    };
+  }
+
+  /**
+   * Get or create ToolDiscoveryService (lazy initialization)
+   */
+  private getToolDiscoveryService(): ToolDiscoveryService {
+    if (!this.toolDiscoveryService) {
+      this.toolDiscoveryService = new ToolDiscoveryService(
+        this.createFacadeContext(),
+        this.discovery,
+        this.healthMonitor,
+        this.cliScanner
+      );
+    }
+    return this.toolDiscoveryService;
+  }
+
+  /**
+   * Get or create CacheService (lazy initialization)
+   */
+  private getCacheService(): CacheService {
+    if (!this.cacheService) {
+      this.cacheService = new CacheService(
+        this.createFacadeContext(),
+        this.profileName
+      );
+    }
+    return this.cacheService;
   }
 
   async initialize(): Promise<void> {
