@@ -34,6 +34,18 @@ export interface FindOptions {
 }
 
 /**
+ * Options for tool search via ToolDiscoveryService
+ */
+export interface ToolSearchOptions {
+  /** Maximum number of results */
+  limit?: number;
+  /** Include description and schema in results */
+  detailed?: boolean;
+  /** Minimum confidence threshold */
+  confidenceThreshold?: number;
+}
+
+/**
  * Progress information for indexing operations
  */
 export interface IndexingProgress {

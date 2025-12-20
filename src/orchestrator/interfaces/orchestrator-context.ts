@@ -6,7 +6,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { MCPDefinition, ToolDefinition } from '../types/connection.js';
+import type { MCPDefinition, MCPConnection, ToolDefinition } from '../types/connection.js';
 import type { ToolInfo } from '../types/discovery.js';
 
 /**
@@ -83,6 +83,7 @@ export type ServiceName =
  */
 export interface OrchestratorState {
   readonly definitions: Map<string, MCPDefinition>;
+  readonly connections: Map<string, MCPConnection>;
   readonly toolToMCP: Map<string, string>;
   readonly allTools: ToolInfo[];
   readonly skillPrompts: Map<string, unknown>;
@@ -94,6 +95,7 @@ export interface OrchestratorState {
  */
 export interface MutableOrchestratorState {
   definitions: Map<string, MCPDefinition>;
+  connections: Map<string, MCPConnection>;
   toolToMCP: Map<string, string>;
   allTools: ToolInfo[];
   skillPrompts: Map<string, unknown>;

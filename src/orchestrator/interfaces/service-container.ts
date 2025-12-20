@@ -64,6 +64,7 @@ export class ServiceContainer implements OrchestratorContext {
     // Initialize mutable state
     this._state = {
       definitions: new Map(),
+      connections: new Map(),
       toolToMCP: new Map(),
       allTools: [],
       skillPrompts: new Map(),

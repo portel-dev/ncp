@@ -15,6 +15,8 @@ import { logger } from '../utils/logger.js';
 import { BindingsManager } from './bindings-manager.js';
 import { NetworkPolicyManager, SECURE_NETWORK_POLICY } from './network-policy.js';
 import { getAuditLogger } from './audit-logger.js';
+import { CodeAnalyzer } from './validation/code-analyzer.js';
+import { SemanticValidator } from './validation/semantic-validator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -51,6 +53,8 @@ export class CodeExecutor {
   private photonInstancesProvider?: () => Promise<PhotonInstance[]>;
   private bindingsManager: BindingsManager;
   private networkPolicyManager: NetworkPolicyManager;
+  private codeAnalyzer: CodeAnalyzer;
+  private semanticValidator: SemanticValidator;
 
   constructor(
     toolsProvider: () => Promise<ToolDefinition[]>,
@@ -64,6 +68,8 @@ export class CodeExecutor {
     this.photonInstancesProvider = photonInstancesProvider;
     this.bindingsManager = bindingsManager || new BindingsManager();
     this.networkPolicyManager = networkPolicyManager || new NetworkPolicyManager(SECURE_NETWORK_POLICY);
+    this.codeAnalyzer = new CodeAnalyzer();
+    this.semanticValidator = new SemanticValidator();
   }
 
   /**
@@ -135,13 +141,19 @@ export class CodeExecutor {
    * Execute code in Worker Thread with resource limits
    * Phase 2: True process isolation
    * Phase 3: Bindings for credential isolation
+   * Phase 5: AST-based validation pipeline
    */
   private async executeWithWorkerThread(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
-    // Validate code for security issues before execution
-    this.validateCode(code);
-
-    // Get all available tools
+    // Get all available tools first (needed for validation)
     const tools = await this.toolsProvider();
+
+    // Extract available MCP namespaces for semantic validation
+    const availableMCPs = [...new Set(
+      tools.map((t) => t.name.split(':')[0] || t.name.split('.')[0])
+    )];
+
+    // Validate code using AST + semantic pipeline before execution
+    await this.validateCodeWithPipeline(code, availableMCPs);
 
     // Get bindings (Phase 3: credentials stay in main thread)
     const bindings = this.bindingsManager.getBindingsForWorker();
@@ -330,17 +342,23 @@ export class CodeExecutor {
   /**
    * Execute code in VM context (fallback)
    * Phase 1: Basic security with frozen prototypes
+   * Phase 5: AST-based validation pipeline
    */
   private async executeWithVM(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
     const logs: string[] = [];
     let context: Record<string, any> | null = null;
 
     try {
-      // Validate code for security issues before execution
-      this.validateCode(code);
-
-      // Get all available tools
+      // Get all available tools first (needed for validation)
       const tools = await this.toolsProvider();
+
+      // Extract available MCP namespaces for semantic validation
+      const availableMCPs = [...new Set(
+        tools.map((t) => t.name.split(':')[0] || t.name.split('.')[0])
+      )];
+
+      // Validate code using AST + semantic pipeline before execution
+      await this.validateCodeWithPipeline(code, availableMCPs);
 
       logger.info(`🔍 Executing code with ${tools.length} tools available (vm fallback)`);
 
@@ -400,8 +418,67 @@ export class CodeExecutor {
   }
 
   /**
-   * Validate code for dangerous patterns before execution
-   * Phase 1: Static Analysis
+   * Validate code using AST-based analysis and semantic validation
+   * Phase 1: Static Analysis with TypeScript AST
+   * Phase 2: Semantic validation for intent classification
+   */
+  private async validateCodeWithPipeline(
+    code: string,
+    availableMCPs: string[]
+  ): Promise<void> {
+    // Phase 1: AST-based static analysis
+    const analysisResult = this.codeAnalyzer.analyze(code);
+
+    // Check for critical violations that must be rejected
+    const criticalViolations = analysisResult.violations.filter(
+      (v) => v.severity === 'critical'
+    );
+
+    if (criticalViolations.length > 0) {
+      const violationMessages = criticalViolations
+        .map((v) => `  - ${v.description}${v.location ? ` (line ${v.location.line})` : ''}`)
+        .join('\n');
+
+      throw new Error(
+        `Code validation failed: Detected dangerous patterns:\n` +
+        violationMessages +
+        '\n\nCode-Mode is sandboxed for safety. Use tool namespaces instead.'
+      );
+    }
+
+    // Phase 2: Semantic validation for intent classification
+    const validatorContext = {
+      availableMCPs: availableMCPs,
+    };
+
+    const semanticResult = this.semanticValidator.validate(
+      code,
+      analysisResult,
+      validatorContext
+    );
+
+    if (!semanticResult.approved) {
+      throw new Error(
+        `Code validation failed: ${semanticResult.reason || 'Security policy violation'}\n` +
+        `Risk level: ${semanticResult.riskLevel}\n` +
+        (semanticResult.recommendations.length > 0
+          ? `Recommendations:\n${semanticResult.recommendations.map(r => `  - ${r}`).join('\n')}`
+          : '')
+      );
+    }
+
+    // Log the analysis for audit purposes
+    const intentTypes = semanticResult.detectedIntents.map(i => i.type);
+    logger.debug(
+      `Code validation passed - Risk: ${semanticResult.riskLevel}, ` +
+      `Intents: ${intentTypes.join(', ')}, ` +
+      `MCP calls: ${analysisResult.detectedPatterns.mcpCalls.length}`
+    );
+  }
+
+  /**
+   * Legacy validation method (kept for fallback compatibility)
+   * @deprecated Use validateCodeWithPipeline instead
    */
   private validateCode(code: string): void {
     const dangerousPatterns = [
