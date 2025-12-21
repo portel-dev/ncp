@@ -3,9 +3,10 @@
  * Based on official UTCP Code-Mode implementation pattern
  *
  * Execution hierarchy (most secure first):
- * 1. SubprocessSandbox - True process isolation via child_process.spawn
- * 2. Worker Threads - V8 isolate with resource limits
- * 3. VM Module - Same-process sandbox (fallback)
+ * 1. IsolatedVMSandbox - True V8 Isolate (same tech as Cloudflare Workers)
+ * 2. SubprocessSandbox - True process isolation via child_process.spawn
+ * 3. Worker Threads - V8 isolate with resource limits
+ * 4. VM Module - Same-process sandbox (fallback)
  *
  * Phase 3: Bindings for credential isolation
  * Phase 4: Network isolation
@@ -22,6 +23,7 @@ import { getAuditLogger } from './audit-logger.js';
 import { CodeAnalyzer } from './validation/code-analyzer.js';
 import { SemanticValidator } from './validation/semantic-validator.js';
 import { SubprocessSandbox } from './sandbox/subprocess-sandbox.js';
+import { IsolatedVMSandbox } from './sandbox/isolated-vm-sandbox.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -90,9 +92,10 @@ export class CodeExecutor {
    * Execute TypeScript code with tool access
    *
    * Execution hierarchy (most secure first):
-   * 1. SubprocessSandbox - True process isolation via child_process.spawn
-   * 2. Worker Threads - V8 isolate with resource limits
-   * 3. VM Module - Same-process sandbox (fallback)
+   * 1. IsolatedVMSandbox - True V8 Isolate (same tech as Cloudflare Workers)
+   * 2. SubprocessSandbox - True process isolation via child_process.spawn
+   * 3. Worker Threads - V8 isolate with resource limits
+   * 4. VM Module - Same-process sandbox (fallback)
    *
    * Phase 5: Audit logging for security monitoring
    */
@@ -103,19 +106,40 @@ export class CodeExecutor {
     // Phase 5: Log code execution start
     await auditLogger.logCodeExecutionStart(code, { mcpName: 'code-mode' });
 
-    // Try SubprocessSandbox first (most secure - true process isolation)
+    // Try IsolatedVMSandbox first (most secure - true V8 Isolate)
+    if (IsolatedVMSandbox.isAvailable()) {
+      try {
+        const result = await this.executeWithIsolatedVM(code, timeout);
+
+        // Phase 5: Log success
+        const duration = Date.now() - startTime;
+        await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
+          mcpName: 'code-mode',
+          userId: 'isolated-vm'
+        });
+
+        return result;
+      } catch (isolatedVMError: any) {
+        logger.warn(`IsolatedVM execution failed: ${isolatedVMError.message}, falling back to Subprocess`);
+      }
+    }
+
+    // Try SubprocessSandbox (second most secure - true process isolation)
     try {
       const result = await this.executeWithSubprocess(code, timeout);
 
       // Phase 5: Log success
       const duration = Date.now() - startTime;
-      await auditLogger.logCodeExecutionSuccess(code, result.result, duration, { mcpName: 'code-mode' });
+      await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
+        mcpName: 'code-mode',
+        userId: 'subprocess'
+      });
 
       return result;
     } catch (subprocessError: any) {
       logger.warn(`Subprocess execution failed: ${subprocessError.message}, falling back to Worker Thread`);
 
-      // Fallback to Worker Thread (second most secure)
+      // Fallback to Worker Thread (third most secure)
       try {
         const result = await this.executeWithWorkerThread(code, timeout);
 
@@ -155,7 +179,62 @@ export class CodeExecutor {
   }
 
   /**
-   * Execute code in SubprocessSandbox (most secure)
+   * Execute code in IsolatedVMSandbox (most secure)
+   *
+   * Uses isolated-vm for true V8 Isolate separation:
+   * - Completely separate V8 isolate (no shared memory at all)
+   * - Same technology as Cloudflare Workers
+   * - Memory limits enforced at V8 level
+   * - No access to Node.js APIs by design
+   * - Cannot access file system, network, or process
+   *
+   * Note: Bindings and network calls are currently not supported in
+   * isolated-vm mode - they require the Worker Thread fallback.
+   */
+  private async executeWithIsolatedVM(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
+    // Get all available tools
+    const tools = await this.toolsProvider();
+
+    // Extract available MCP namespaces for semantic validation
+    const availableMCPs = [...new Set(
+      tools.map((t) => t.name.split(':')[0] || t.name.split('.')[0])
+    )];
+
+    // Validate code using AST + semantic pipeline before execution
+    await this.validateCodeWithPipeline(code, availableMCPs);
+
+    logger.info(`🔒 Executing code in IsolatedVM with ${tools.length} tools (true V8 Isolate - Cloudflare Workers tech)`);
+
+    // Create sandbox instance
+    const sandbox = new IsolatedVMSandbox({
+      timeout,
+      memoryLimit: 128,
+      inspector: false,
+    });
+
+    // Convert ToolDefinition[] to IsolatedVMTool[]
+    const sandboxTools = tools.map(t => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+    }));
+
+    // Execute code
+    const result = await sandbox.execute(code, sandboxTools, this.toolExecutor);
+
+    // Convert to CodeExecutionResult format
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    return {
+      result: result.result,
+      logs: result.logs,
+    };
+  }
+
+  /**
+   * Execute code in SubprocessSandbox (second most secure)
    *
    * Uses child_process.spawn for true process isolation:
    * - Separate V8 isolate (no shared memory)

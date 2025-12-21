@@ -42,6 +42,7 @@ export default {
     '^clipboardy$': '<rootDir>/tests/__mocks__/clipboardy.js',
     '^.*\\/utils\\/updater\\.js$': '<rootDir>/tests/__mocks__/updater.js',
     '^.*\\/cache\\/csv-cache\\.js$': '<rootDir>/tests/__mocks__/csv-cache.ts',
+    '^isolated-vm$': '<rootDir>/tests/__mocks__/isolated-vm.js',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   // '^.*/utils/version\\.js$': '<rootDir>/tests/__mocks__/version.ts'
   },
