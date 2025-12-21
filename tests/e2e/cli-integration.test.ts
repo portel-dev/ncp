@@ -62,7 +62,7 @@ describe('CLI Integration Tests', () => {
     }, 60000);
 
     test('should find with custom confidence threshold', () => {
-      const result = runCLI('find scheduler --confidence_threshold 0.5 --depth 0');
+      const result = runCLI('find scheduler --confidence-threshold 0.5 --depth 0');
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toMatch(/(Found tools|No tools found)/);

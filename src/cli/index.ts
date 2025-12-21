@@ -1915,7 +1915,7 @@ program
   .option('--limit <number>', 'Maximum number of results (default: 5)')
   .option('--page <number>', 'Page number (default: 1)')
   .option('--depth <number>', 'Display depth: 0=overview, 1=tools, 2=details (default: 2)')
-  .option('--confidence_threshold <number>', 'Minimum confidence level (0.0-1.0, default: 0.3). Examples: 0.1=show all, 0.5=strict, 0.7=very precise')
+  .option('--confidence-threshold <number>', 'Minimum confidence level (0.0-1.0, default: 0.3). Examples: 0.1=show all, 0.5=strict, 0.7=very precise')
   .action(async (query, options) => {
     // Set branded terminal title with search context
     setNCPTitle('Find', query || 'all tools');
@@ -1956,14 +1956,14 @@ program
     const limit = parseInt(options.limit || '5');
     const page = parseInt(options.page || '1');
     const depth = parseInt(options.depth || '2');
-    const confidence_threshold = options.confidence_threshold ? parseFloat(options.confidence_threshold) : undefined;
+    const confidenceThreshold = options.confidenceThreshold ? parseFloat(options.confidenceThreshold) : undefined;
 
     const result = await server.callTool('find', {
       description: normalizedQuery,
       limit,
       page,
       depth,
-      confidence_threshold
+      confidence_threshold: confidenceThreshold
     });
 
     let formattedOutput = formatFindOutput(result.content[0].text);

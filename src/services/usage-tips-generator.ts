@@ -120,7 +120,7 @@ export class UsageTipsGenerator {
 
     // Add confidence threshold guidance for search queries
     if (description) {
-      tips += `• **Precision control**: \`--confidence_threshold 0.1\` (show all), \`0.5\` (strict), \`0.7\` (very precise)\n`;
+      tips += `• **Precision control**: \`--confidence-threshold 0.1\` (show all), \`0.5\` (strict), \`0.7\` (very precise)\n`;
     }
 
     return tips;
