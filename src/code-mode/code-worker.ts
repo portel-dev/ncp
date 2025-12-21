@@ -69,12 +69,46 @@ function hardenContext(): void {
   Object.freeze(Number.prototype);
   Object.freeze(Boolean.prototype);
   Object.freeze(Function.prototype);
+  Object.freeze(RegExp.prototype);
+  Object.freeze(Error.prototype);
+  Object.freeze(Promise.prototype);
 
   // Delete dangerous constructors
   try {
     delete (Function.prototype as any).constructor;
   } catch (e) {
     // Ignore if already non-configurable
+  }
+
+  // Remove metaprogramming APIs from global scope
+  // These can be used to bypass sandbox protections
+  const dangerousGlobals = [
+    'Reflect',
+    'Proxy',
+    'WeakRef',
+    'FinalizationRegistry',
+  ];
+
+  for (const name of dangerousGlobals) {
+    try {
+      delete (globalThis as any)[name];
+    } catch (e) {
+      // Try to make it undefined if delete fails
+      try {
+        (globalThis as any)[name] = undefined;
+      } catch (e2) {
+        // Ignore if can't modify
+      }
+    }
+  }
+
+  // Freeze Symbol but keep it available for basic usage
+  // (some libraries need Symbol.iterator, Symbol.toStringTag, etc.)
+  // But block Symbol creation for custom symbols
+  try {
+    Object.freeze(Symbol);
+  } catch (e) {
+    // Ignore if already frozen
   }
 }
 
@@ -90,6 +124,17 @@ function validateCode(code: string): void {
     { pattern: /Function\s*\(/g, name: 'Function constructor' },
     { pattern: /child_process/g, name: 'child_process access' },
     { pattern: /fs\./g, name: 'Direct filesystem access' },
+    // Metaprogramming APIs - can bypass sandbox protections
+    { pattern: /\bReflect\b/g, name: 'Reflect API access (metaprogramming)' },
+    { pattern: /\bProxy\b/g, name: 'Proxy API access (metaprogramming)' },
+    { pattern: /\bSymbol\b/g, name: 'Symbol API access (metaprogramming)' },
+    { pattern: /\bWeakRef\b/g, name: 'WeakRef access (GC probing)' },
+    { pattern: /\bFinalizationRegistry\b/g, name: 'FinalizationRegistry access (GC probing)' },
+    // Object descriptor manipulation
+    { pattern: /\.getOwnPropertyDescriptor\s*\(/g, name: 'getOwnPropertyDescriptor (descriptor manipulation)' },
+    { pattern: /\.defineProperty\s*\(/g, name: 'defineProperty (descriptor manipulation)' },
+    { pattern: /\.setPrototypeOf\s*\(/g, name: 'setPrototypeOf (prototype manipulation)' },
+    { pattern: /\.getPrototypeOf\s*\(/g, name: 'getPrototypeOf (prototype access)' },
   ];
 
   const violations: string[] = [];

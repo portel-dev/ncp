@@ -50,9 +50,11 @@ describe('SemanticValidator', () => {
     });
 
     it('should detect delete operations as high risk', () => {
+      // Note: delete_all triggers "data destruction" malicious intent pattern → critical
+      // Regular delete methods are still high risk
       const code = `
-        await db.delete_all({ table: "users" });
         await github.remove_label({ issue: 123, label: "bug" });
+        await db.delete_record({ id: 123 });
       `;
       const analysis = analyzer.analyze(code);
       const result = validator.validate(code, analysis, {
@@ -61,6 +63,18 @@ describe('SemanticValidator', () => {
 
       expect(result.riskLevel).toBe('high');
       expect(result.detectedIntents.some((i) => i.type === 'data_delete')).toBe(true);
+    });
+
+    it('should block mass deletion patterns as critical', () => {
+      const code = `await db.delete_all({ table: "users" });`;
+      const analysis = analyzer.analyze(code);
+      const result = validator.validate(code, analysis, {
+        availableMCPs: ['db'],
+      });
+
+      expect(result.approved).toBe(false);
+      expect(result.riskLevel).toBe('critical');
+      expect(result.reason).toContain('destruction');
     });
 
     it('should detect scheduling operations', () => {
@@ -211,14 +225,41 @@ describe('SemanticValidator', () => {
       expect(result.riskLevel).toBe('critical');
     });
 
-    it('should assess high risk for high-risk namespaces', () => {
+    it('should assess critical risk for shell namespace (any method)', () => {
+      // All shell namespace operations are now critical due to suspicious combination pattern
       const code = `await shell.list_files({});`;
       const analysis = analyzer.analyze(code);
       const result = validator.validate(code, analysis, {
         availableMCPs: ['shell'],
       });
 
-      expect(result.riskLevel).toBe('high');
+      expect(result.approved).toBe(false);
+      expect(result.riskLevel).toBe('critical');
+      expect(result.reason).toContain('Shell command execution');
+    });
+
+    it('should escalate to critical for admin-related operations', () => {
+      // "admin" namespace triggers privilege escalation pattern → critical
+      const code = `await admin.list_users({});`;
+      const analysis = analyzer.analyze(code);
+      const result = validator.validate(code, analysis, {
+        availableMCPs: ['admin'],
+      });
+
+      expect(result.approved).toBe(false);
+      expect(result.riskLevel).toBe('critical');
+      expect(result.reason).toContain('privilege escalation');
+    });
+
+    it('should assess medium risk for standard write operations', () => {
+      // Standard write operation without dangerous patterns
+      const code = `await database.update_record({ id: 1, data: {} });`;
+      const analysis = analyzer.analyze(code);
+      const result = validator.validate(code, analysis, {
+        availableMCPs: ['database'],
+      });
+
+      expect(result.riskLevel).toBe('medium');
     });
   });
 

@@ -164,6 +164,91 @@ const HIGH_RISK_NAMESPACES = new Set([
 ]);
 
 /**
+ * Malicious intent patterns - detected via method/namespace combinations
+ * These represent attack patterns, not just dangerous operations
+ */
+const MALICIOUS_INTENT_PATTERNS = {
+  // Data exfiltration: reading sensitive data then sending it out
+  exfiltration: {
+    readPatterns: ['credential', 'secret', 'password', 'token', 'key', 'auth', 'private', 'ssh', 'env'],
+    sendPatterns: ['send', 'post', 'upload', 'webhook', 'http', 'fetch', 'request'],
+    description: 'Potential data exfiltration - reading sensitive data and sending externally',
+  },
+  // Credential harvesting: accessing multiple credential stores
+  credentialHarvest: {
+    patterns: ['password', 'credential', 'keychain', 'vault', 'secret', 'token', 'oauth', 'jwt', 'apikey', 'api_key'],
+    threshold: 2, // If accessing 2+ credential-related resources
+    description: 'Potential credential harvesting - accessing multiple credential stores',
+  },
+  // Reconnaissance: probing system/environment info
+  reconnaissance: {
+    patterns: ['env', 'config', 'setting', 'info', 'version', 'whoami', 'hostname', 'ip', 'network', 'interface'],
+    threshold: 3,
+    description: 'Potential reconnaissance - probing system configuration',
+  },
+  // Persistence: creating scheduled tasks or modifying startup
+  persistence: {
+    patterns: ['cron', 'schedule', 'startup', 'autorun', 'service', 'daemon', 'hook', 'trigger'],
+    description: 'Potential persistence mechanism - creating recurring execution',
+  },
+  // Denial of service: resource exhaustion patterns
+  dos: {
+    patterns: ['loop', 'while', 'recursive', 'fork', 'spawn', 'infinite', 'flood', 'stress'],
+    description: 'Potential denial of service - resource exhaustion pattern',
+  },
+  // Backdoor: creating remote access or reverse shells
+  backdoor: {
+    patterns: ['reverse', 'shell', 'bind', 'listen', 'socket', 'tunnel', 'proxy', 'remote', 'ssh'],
+    description: 'Potential backdoor - creating unauthorized remote access',
+  },
+  // Privilege escalation: attempting to gain higher privileges
+  privesc: {
+    patterns: ['sudo', 'root', 'admin', 'elevate', 'privilege', 'permission', 'chmod', 'chown', 'setuid'],
+    description: 'Potential privilege escalation attempt',
+  },
+  // Data destruction: mass deletion or corruption
+  destruction: {
+    patterns: ['delete_all', 'drop_all', 'truncate', 'wipe', 'destroy', 'purge_all', 'format', 'rm_rf'],
+    description: 'Potential data destruction - mass deletion pattern',
+  },
+};
+
+/**
+ * Suspicious namespace + method combinations that are almost always malicious
+ */
+const SUSPICIOUS_COMBINATIONS: Array<{
+  namespace: RegExp;
+  method: RegExp;
+  severity: 'critical' | 'high';
+  description: string;
+}> = [
+  {
+    namespace: /^(file|fs|storage)/i,
+    method: /^(read|get).*(secret|password|credential|key|token)/i,
+    severity: 'high',
+    description: 'Reading credential files',
+  },
+  {
+    namespace: /^(http|webhook|api)/i,
+    method: /.*(secret|password|credential|key|token)/i,
+    severity: 'critical',
+    description: 'Sending credentials over network',
+  },
+  {
+    namespace: /^(shell|exec|system|terminal)/i,
+    method: /.*/,
+    severity: 'critical',
+    description: 'Shell command execution',
+  },
+  {
+    namespace: /^(ssh|remote)/i,
+    method: /^(connect|exec|tunnel)/i,
+    severity: 'critical',
+    description: 'Remote system access',
+  },
+];
+
+/**
  * Semantic Validator using rules-based analysis
  */
 export class SemanticValidator {
@@ -255,6 +340,18 @@ export class SemanticValidator {
         riskLevel,
         detectedIntents: intents,
         recommendations: this.getRecommendationsForRisk(intents),
+      };
+    }
+
+    // Check for malicious intent patterns
+    const maliciousResult = this.detectMaliciousIntent(intents, code);
+    if (maliciousResult) {
+      return {
+        approved: false,
+        reason: maliciousResult.reason,
+        riskLevel: 'critical',
+        detectedIntents: intents,
+        recommendations: [maliciousResult.recommendation],
       };
     }
 
@@ -519,6 +616,119 @@ export class SemanticValidator {
         'Some operations could not be classified - review manually'
       );
     }
+  }
+
+  /**
+   * Detect malicious intent patterns in code
+   * Returns null if no malicious intent detected, otherwise returns reason and recommendation
+   */
+  private detectMaliciousIntent(
+    intents: CodeIntent[],
+    code: string
+  ): { reason: string; recommendation: string } | null {
+    const codeLower = code.toLowerCase();
+    const allTargets = intents.map((i) => i.target.toLowerCase()).join(' ');
+    const allMethods = intents
+      .filter((i) => i.mcpCall)
+      .map((i) => i.mcpCall!.method.toLowerCase());
+    const allNamespaces = intents
+      .filter((i) => i.mcpCall)
+      .map((i) => i.mcpCall!.namespace.toLowerCase());
+
+    // Check suspicious namespace+method combinations
+    for (const intent of intents) {
+      if (!intent.mcpCall) continue;
+
+      for (const combo of SUSPICIOUS_COMBINATIONS) {
+        if (
+          combo.namespace.test(intent.mcpCall.namespace) &&
+          combo.method.test(intent.mcpCall.method)
+        ) {
+          return {
+            reason: `Blocked: ${combo.description} (${intent.mcpCall.namespace}.${intent.mcpCall.method})`,
+            recommendation: 'This operation pattern is blocked for security reasons',
+          };
+        }
+      }
+    }
+
+    // Check for data exfiltration pattern
+    // (reading sensitive data + sending over network in same code)
+    const exfil = MALICIOUS_INTENT_PATTERNS.exfiltration;
+    const hasReadSensitive = exfil.readPatterns.some(
+      (p) => codeLower.includes(p) || allTargets.includes(p)
+    );
+    const hasSendExternal = exfil.sendPatterns.some(
+      (p) => allMethods.some((m) => m.includes(p))
+    );
+    if (hasReadSensitive && hasSendExternal) {
+      return {
+        reason: exfil.description,
+        recommendation: 'Avoid combining credential reads with network operations in single execution',
+      };
+    }
+
+    // Check for credential harvesting
+    const credHarvest = MALICIOUS_INTENT_PATTERNS.credentialHarvest;
+    const credentialAccesses = credHarvest.patterns.filter(
+      (p) => allTargets.includes(p) || codeLower.includes(p)
+    ).length;
+    if (credentialAccesses >= credHarvest.threshold) {
+      return {
+        reason: credHarvest.description,
+        recommendation: 'Access credentials individually with clear justification',
+      };
+    }
+
+    // Check for reconnaissance pattern
+    const recon = MALICIOUS_INTENT_PATTERNS.reconnaissance;
+    const reconAccesses = recon.patterns.filter(
+      (p) => allTargets.includes(p) || allMethods.some((m) => m.includes(p))
+    ).length;
+    if (reconAccesses >= recon.threshold) {
+      return {
+        reason: recon.description,
+        recommendation: 'Limit system information queries to what is strictly necessary',
+      };
+    }
+
+    // Check for backdoor patterns
+    const backdoor = MALICIOUS_INTENT_PATTERNS.backdoor;
+    const hasBackdoorPattern = backdoor.patterns.some(
+      (p) => allNamespaces.some((ns) => ns.includes(p)) || allMethods.some((m) => m.includes(p))
+    );
+    if (hasBackdoorPattern) {
+      return {
+        reason: backdoor.description,
+        recommendation: 'Remote access and shell operations require explicit authorization',
+      };
+    }
+
+    // Check for privilege escalation
+    const privesc = MALICIOUS_INTENT_PATTERNS.privesc;
+    const hasPrivescPattern = privesc.patterns.some(
+      (p) => allMethods.some((m) => m.includes(p)) || codeLower.includes(p)
+    );
+    if (hasPrivescPattern) {
+      return {
+        reason: privesc.description,
+        recommendation: 'Privilege escalation operations are not permitted',
+      };
+    }
+
+    // Check for data destruction patterns
+    const destruction = MALICIOUS_INTENT_PATTERNS.destruction;
+    const hasDestructionPattern = destruction.patterns.some(
+      (p) => allMethods.some((m) => m.includes(p)) || codeLower.includes(p)
+    );
+    if (hasDestructionPattern) {
+      return {
+        reason: destruction.description,
+        recommendation: 'Mass deletion operations require explicit confirmation',
+      };
+    }
+
+    return null;
   }
 }
 

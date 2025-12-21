@@ -25,7 +25,10 @@ export interface SecurityViolation {
     | 'process_access'
     | 'global_access'
     | 'fs_access'
-    | 'child_process';
+    | 'child_process'
+    | 'metaprogramming'
+    | 'descriptor_manipulation'
+    | 'dangerous_module';
   location: { line: number; column: number };
   code: string;
   severity: 'critical' | 'high' | 'medium';
@@ -80,6 +83,13 @@ const DANGEROUS_GLOBALS = new Set([
   'module',
   '__dirname',
   '__filename',
+  // Metaprogramming APIs - can bypass sandbox protections
+  'Reflect',
+  'Proxy',
+  'Symbol',
+  // Weak references can be used to detect GC and leak info
+  'WeakRef',
+  'FinalizationRegistry',
 ]);
 
 /**
@@ -93,6 +103,17 @@ const DANGEROUS_PROPERTIES = new Set([
   '__defineSetter__',
   '__lookupGetter__',
   '__lookupSetter__',
+  // Object descriptor manipulation - can unfreeze prototypes
+  'getOwnPropertyDescriptor',
+  'getOwnPropertyDescriptors',
+  'defineProperty',
+  'defineProperties',
+  // Prototype chain manipulation
+  'setPrototypeOf',
+  'getPrototypeOf',
+  // Property enumeration for sandbox probing
+  'getOwnPropertyNames',
+  'getOwnPropertySymbols',
 ]);
 
 /**
@@ -109,6 +130,18 @@ const DANGEROUS_MODULES = new Set([
   'vm',
   'worker_threads',
   'v8',
+  // Additional dangerous modules
+  'os',
+  'path', // Can be used for path traversal attacks
+  'http',
+  'https',
+  'http2',
+  'crypto', // Can be used for mining or key generation
+  'perf_hooks',
+  'inspector', // Debugger access
+  'async_hooks',
+  'trace_events',
+  'repl',
 ]);
 
 /**
@@ -229,14 +262,25 @@ export class CodeAnalyzer {
 
     // Map name to violation type
     let type: SecurityViolation['type'];
+    let description: string;
     if (name === 'eval') {
       type = 'eval_usage';
+      description = `Dangerous global '${name}' accessed directly`;
     } else if (name === 'require' || name === 'module') {
       type = 'require_import';
+      description = `Dangerous global '${name}' accessed directly`;
     } else if (name === 'process') {
       type = 'process_access';
+      description = `Dangerous global '${name}' accessed directly`;
+    } else if (name === 'Reflect' || name === 'Proxy' || name === 'Symbol') {
+      type = 'metaprogramming';
+      description = `Metaprogramming API '${name}' blocked - can bypass sandbox protections`;
+    } else if (name === 'WeakRef' || name === 'FinalizationRegistry') {
+      type = 'metaprogramming';
+      description = `'${name}' blocked - can detect GC and probe sandbox boundaries`;
     } else {
       type = 'global_access';
+      description = `Dangerous global '${name}' accessed directly`;
     }
 
     violations.push({
@@ -244,7 +288,7 @@ export class CodeAnalyzer {
       location: this.getLocation(node, sourceFile),
       code: this.getCode(node, sourceFile),
       severity: 'critical',
-      description: `Dangerous global '${name}' accessed directly`,
+      description,
     });
   }
 
@@ -293,6 +337,29 @@ export class CodeAnalyzer {
         }
       }
 
+      return;
+    }
+
+    // Descriptor manipulation methods
+    const descriptorMethods = new Set([
+      'getOwnPropertyDescriptor',
+      'getOwnPropertyDescriptors',
+      'defineProperty',
+      'defineProperties',
+      'setPrototypeOf',
+      'getPrototypeOf',
+      'getOwnPropertyNames',
+      'getOwnPropertySymbols',
+    ]);
+
+    if (descriptorMethods.has(propName)) {
+      violations.push({
+        type: 'descriptor_manipulation',
+        location: this.getLocation(node, sourceFile),
+        code: this.getCode(node, sourceFile),
+        severity: 'critical',
+        description: `Object descriptor manipulation '${propName}' blocked - can bypass prototype freezing`,
+      });
       return;
     }
 
