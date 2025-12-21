@@ -548,39 +548,6 @@ export class CodeExecutor {
   }
 
   /**
-   * Legacy validation method (kept for fallback compatibility)
-   * @deprecated Use validateCodeWithPipeline instead
-   */
-  private validateCode(code: string): void {
-    const dangerousPatterns = [
-      { pattern: /__proto__/g, name: 'Prototype pollution via __proto__' },
-      { pattern: /\.constructor\s*\(/g, name: 'Constructor access' },
-      { pattern: /process\./g, name: 'Process object access' },
-      { pattern: /require\s*\(/g, name: 'require() call' },
-      { pattern: /import\s+/g, name: 'import statement' },
-      { pattern: /eval\s*\(/g, name: 'eval() call' },
-      { pattern: /Function\s*\(/g, name: 'Function constructor' },
-      { pattern: /child_process/g, name: 'child_process access' },
-      { pattern: /fs\./g, name: 'Direct filesystem access' },
-    ];
-
-    const violations: string[] = [];
-    for (const { pattern, name } of dangerousPatterns) {
-      if (pattern.test(code)) {
-        violations.push(name);
-      }
-    }
-
-    if (violations.length > 0) {
-      throw new Error(
-        `Code validation failed: Detected dangerous patterns:\n` +
-        violations.map(v => `  - ${v}`).join('\n') +
-        '\n\nCode-Mode is sandboxed for safety. Use tool namespaces instead.'
-      );
-    }
-  }
-
-  /**
    * Create VM execution context with tools organized by namespace
    * Based on official UTCP pattern
    */

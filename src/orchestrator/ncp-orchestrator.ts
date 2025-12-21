@@ -197,18 +197,6 @@ export class NCPOrchestrator {
   private skillsManager: any = null; // SkillsManager instance for loading agent skills
   private skillPrompts: Map<string, any> = new Map(); // Store loaded skill objects
   private fileWatcher: any = null; // FileWatcher instance for dynamic skill/photon discovery
-
-  // State backup for atomic operations (rollback on failure)
-  private stateBackup: {
-    skillPrompts: Map<string, any>;
-    allTools: Array<{ name: string; description: string; mcpName: string }>;
-    toolToMCP: Map<string, string>;
-  } | null = null;
-
-  // Conflict detection: track resources being modified to prevent race conditions
-  private lockedResources: Set<string> = new Set(); // Format: "skill:name" or "photon:name"
-  private resourceLockQueues: Map<string, Array<() => Promise<void>>> = new Map(); // Queue of pending operations
-
   private forceRetry: boolean = false;
 
   // Actual client info (passthrough to downstream MCPs for transparency)
@@ -1432,95 +1420,6 @@ export class NCPOrchestrator {
       logger.info(`📁 Dynamic discovery enabled - watching for ${watchModes.join(' & ')} changes`);
     } catch (error: any) {
       logger.error(`Failed to start FileWatcher: ${error.message}`);
-    }
-  }
-
-  /**
-   * Save current state for atomic operations
-   * Used to enable rollback if an operation fails
-   */
-  private saveState(): void {
-    this.stateBackup = {
-      skillPrompts: new Map(this.skillPrompts),
-      allTools: [...this.allTools],
-      toolToMCP: new Map(this.toolToMCP),
-    };
-  }
-
-  /**
-   * Restore previous state after a failed operation
-   * Ensures consistency if skill/photon update fails
-   */
-  private restoreState(): void {
-    if (!this.stateBackup) {
-      logger.warn('No state backup available for rollback');
-      return;
-    }
-
-    this.skillPrompts = this.stateBackup.skillPrompts;
-    this.allTools = this.stateBackup.allTools;
-    this.toolToMCP = this.stateBackup.toolToMCP;
-    this.stateBackup = null;
-
-    logger.info('🔄 State restored - previous version recovered from backup');
-  }
-
-  /**
-   * Clear the state backup after successful operation
-   */
-  private clearStateBackup(): void {
-    this.stateBackup = null;
-  }
-
-  /**
-   * Acquire lock for a resource to prevent conflicts between CLI and FileWatcher
-   * Returns immediately if resource is not locked, queues operation if it is
-   */
-  private async acquireLock(resourceType: string, resourceName: string): Promise<void> {
-    const lockKey = `${resourceType}:${resourceName}`;
-
-    if (this.lockedResources.has(lockKey)) {
-      // Resource is locked, queue this operation
-      logger.debug(`⏳ Conflict detected: ${lockKey} is being modified, queuing operation...`);
-
-      return new Promise((resolve) => {
-        const queue = this.resourceLockQueues.get(lockKey) || [];
-        queue.push(async () => {
-          // Wait for lock to be released
-          while (this.lockedResources.has(lockKey)) {
-            await new Promise(r => setTimeout(r, 50));
-          }
-          resolve();
-        });
-        this.resourceLockQueues.set(lockKey, queue);
-      });
-    } else {
-      // Acquire the lock
-      this.lockedResources.add(lockKey);
-    }
-  }
-
-  /**
-   * Release lock for a resource and process any queued operations
-   */
-  private releaseLock(resourceType: string, resourceName: string): void {
-    const lockKey = `${resourceType}:${resourceName}`;
-
-    if (this.lockedResources.has(lockKey)) {
-      this.lockedResources.delete(lockKey);
-      logger.debug(`🔓 Released lock: ${lockKey}`);
-
-      // Process queued operations
-      const queue = this.resourceLockQueues.get(lockKey);
-      if (queue && queue.length > 0) {
-        logger.debug(`📋 Processing ${queue.length} queued operation(s) for ${lockKey}`);
-        const nextOp = queue.shift();
-        if (nextOp) {
-          nextOp().catch(error => {
-            logger.error(`Queued operation failed: ${error.message}`);
-          });
-        }
-      }
     }
   }
 
