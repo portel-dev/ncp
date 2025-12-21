@@ -86,6 +86,7 @@ import { loadGlobalSettings } from '../utils/global-settings.js';
 import { ToolDiscoveryService } from './services/tool-discovery.js';
 import { CacheService } from './services/cache-service.js';
 import { SkillsService } from './services/skills-service.js';
+import { PhotonService } from './services/photon-service.js';
 import { ConnectionPoolManager } from './services/connection-pool.js';
 
 interface DiscoveryResult {
@@ -217,6 +218,7 @@ export class NCPOrchestrator {
   private toolDiscoveryService: ToolDiscoveryService | null = null;
   private cacheService: CacheService | null = null;
   private skillsService: SkillsService | null = null;
+  private photonService: PhotonService | null = null;
 
   /**
    * ⚠️ CRITICAL: Default profile MUST be 'all' - DO NOT CHANGE!
@@ -872,6 +874,20 @@ export class NCPOrchestrator {
     return this.skillsService;
   }
 
+  /**
+   * Get or create PhotonService (lazy initialization)
+   */
+  private getPhotonService(): PhotonService {
+    if (!this.photonService) {
+      this.photonService = new PhotonService(this.createFacadeContext());
+      // Wire up dependencies
+      if (this.internalMCPManager) {
+        this.photonService.setInternalMCPManager(this.internalMCPManager);
+      }
+    }
+    return this.photonService;
+  }
+
   async initialize(): Promise<void> {
     const startTime = Date.now();
     this.indexingStartTime = startTime;
@@ -1274,245 +1290,50 @@ export class NCPOrchestrator {
 
   /**
    * Dynamically add a skill (for file watching)
+   * Delegates to SkillsService for atomic operations
    */
   async addSkill(skillName: string, skillPath: string): Promise<void> {
-    // Acquire lock to prevent conflicts between CLI and FileWatcher
-    await this.acquireLock('skill', skillName);
-
-    try {
-      // Save state for atomic operation (enables rollback on failure)
-      this.saveState();
-
-      if (!this.skillsManager) return;
-
-      // Load the skill
-      const skill = await this.skillsManager.loadSkill(path.basename(path.dirname(skillPath)));
-      if (!skill) {
-        logger.warn(`Failed to load skill: ${skillName}`);
-        this.restoreState();
-        return;
-      }
-
-      // Store the skill
-      this.skillPrompts.set(skill.metadata.name, skill);
-
-      // Add to allTools
-      const skillToolName = `skill:${skill.metadata.name}`;
-      this.allTools.push({
-        name: skillToolName,
-        description: skill.metadata.description || 'Anthropic Agent Skill',
-        mcpName: '__skills__',
-      });
-
-      // Add to toolToMCP mappings
-      this.toolToMCP.set(skillToolName, '__skills__');
-      this.toolToMCP.set(`skill.${skill.metadata.name}`, '__skills__');
-      this.toolToMCP.set(skill.metadata.name, '__skills__');
-
-      // Index in discovery
-      await this.discovery.indexMCPTools('skill', [{
-        id: `skill:${skill.metadata.name}`,
-        name: skill.metadata.name,
-        description: skill.metadata.description || 'Anthropic Agent Skill'
-      }]);
-
-      this.clearStateBackup(); // Clear backup on success
-      logger.info(`✨ Dynamically added skill: ${skill.metadata.name}`);
-    } catch (error: any) {
-      this.restoreState(); // Rollback on failure
-      logger.error(`❌ Failed to add skill ${skillName}: ${error.message}`);
-    } finally {
-      // Always release lock, even on error
-      this.releaseLock('skill', skillName);
-    }
+    return this.getSkillsService().addSkill(skillName, skillPath);
   }
 
   /**
    * Dynamically remove a skill (for file watching)
+   * Delegates to SkillsService for atomic operations
    */
   async removeSkill(skillName: string): Promise<void> {
-    // Acquire lock to prevent conflicts between CLI and FileWatcher
-    await this.acquireLock('skill', skillName);
-
-    try {
-      // Save state for atomic operation
-      this.saveState();
-
-      // Remove from skillPrompts
-      this.skillPrompts.delete(skillName);
-
-      // Remove from allTools
-      const skillToolName = `skill:${skillName}`;
-      this.allTools = this.allTools.filter(t => t.name !== skillToolName);
-
-      // Remove from toolToMCP
-      this.toolToMCP.delete(skillToolName);
-      this.toolToMCP.delete(`skill.${skillName}`);
-      this.toolToMCP.delete(skillName);
-
-      this.clearStateBackup(); // Clear backup on success
-      logger.info(`✨ Dynamically removed skill: ${skillName}`);
-    } catch (error: any) {
-      this.restoreState(); // Rollback on failure
-      logger.error(`❌ Failed to remove skill ${skillName}: ${error.message}`);
-    } finally {
-      // Always release lock, even on error
-      this.releaseLock('skill', skillName);
-    }
+    return this.getSkillsService().removeSkill(skillName);
   }
 
   /**
    * Dynamically update a skill (for file watching)
-   * Acquires single lock for both remove and add operations
+   * Delegates to SkillsService for atomic operations
    */
   async updateSkill(skillName: string, skillPath: string): Promise<void> {
-    // Acquire lock once for the entire update operation
-    await this.acquireLock('skill', skillName);
-
-    try {
-      // Save state for atomic operation (covers both remove and add)
-      this.saveState();
-
-      // Remove old version
-      this.skillPrompts.delete(skillName);
-      const skillToolName = `skill:${skillName}`;
-      this.allTools = this.allTools.filter(t => t.name !== skillToolName);
-      this.toolToMCP.delete(skillToolName);
-      this.toolToMCP.delete(`skill.${skillName}`);
-      this.toolToMCP.delete(skillName);
-
-      // Add new version
-      if (!this.skillsManager) return;
-      const skill = await this.skillsManager.loadSkill(path.basename(path.dirname(skillPath)));
-      if (!skill) {
-        logger.warn(`Failed to load updated skill: ${skillName}`);
-        this.restoreState();
-        return;
-      }
-
-      this.skillPrompts.set(skill.metadata.name, skill);
-      const newSkillToolName = `skill:${skill.metadata.name}`;
-      this.allTools.push({
-        name: newSkillToolName,
-        description: skill.metadata.description || 'Anthropic Agent Skill',
-        mcpName: '__skills__',
-      });
-
-      this.toolToMCP.set(newSkillToolName, '__skills__');
-      this.toolToMCP.set(`skill.${skill.metadata.name}`, '__skills__');
-      this.toolToMCP.set(skill.metadata.name, '__skills__');
-
-      await this.discovery.indexMCPTools('skill', [{
-        id: `skill:${skill.metadata.name}`,
-        name: skill.metadata.name,
-        description: skill.metadata.description || 'Anthropic Agent Skill'
-      }]);
-
-      this.clearStateBackup();
-      logger.info(`🔄 Updated skill: ${skillName}`);
-    } catch (error: any) {
-      this.restoreState(); // Rollback both remove and add operations
-      logger.error(`❌ Failed to update skill ${skillName}: ${error.message}`);
-    } finally {
-      // Always release lock, even on error
-      this.releaseLock('skill', skillName);
-    }
+    return this.getSkillsService().updateSkill(skillName, skillPath);
   }
 
   /**
    * Dynamically add a photon (for file watching)
+   * Delegates to PhotonService for atomic operations
    */
   async addPhoton(photonName: string, photonPath: string): Promise<void> {
-    // Acquire lock to prevent conflicts between CLI and FileWatcher
-    await this.acquireLock('photon', photonName);
-
-    try {
-      // Save state for atomic operation
-      this.saveState();
-
-      // Reload photons from disk via internal MCP manager
-      if (!this.internalMCPManager) return;
-
-      await this.internalMCPManager.loadPhotons();
-      this.clearStateBackup(); // Clear backup on success
-      logger.info(`✨ Dynamically added photon: ${photonName}`);
-    } catch (error: any) {
-      this.restoreState(); // Rollback on failure
-      logger.error(`❌ Failed to add photon ${photonName}: ${error.message}`);
-    } finally {
-      // Always release lock, even on error
-      this.releaseLock('photon', photonName);
-    }
+    return this.getPhotonService().addPhoton(photonName, photonPath);
   }
 
   /**
    * Dynamically remove a photon (for file watching)
+   * Delegates to PhotonService for atomic operations
    */
   async removePhoton(photonName: string): Promise<void> {
-    // Acquire lock to prevent conflicts between CLI and FileWatcher
-    await this.acquireLock('photon', photonName);
-
-    try {
-      // Save state for atomic operation
-      this.saveState();
-
-      // Find and remove photon from allTools
-      const photonTools = this.allTools.filter(t => t.mcpName === photonName);
-      for (const tool of photonTools) {
-        const idx = this.allTools.indexOf(tool);
-        if (idx > -1) {
-          this.allTools.splice(idx, 1);
-        }
-        this.toolToMCP.delete(tool.name);
-      }
-
-      this.clearStateBackup(); // Clear backup on success
-      logger.info(`✨ Dynamically removed photon: ${photonName}`);
-    } catch (error: any) {
-      this.restoreState(); // Rollback on failure
-      logger.error(`❌ Failed to remove photon ${photonName}: ${error.message}`);
-    } finally {
-      // Always release lock, even on error
-      this.releaseLock('photon', photonName);
-    }
+    return this.getPhotonService().removePhoton(photonName);
   }
 
   /**
    * Dynamically update a photon (for file watching)
-   * Acquires single lock for both remove and reload operations
+   * Delegates to PhotonService for atomic operations
    */
   async updatePhoton(photonName: string, photonPath: string): Promise<void> {
-    // Acquire lock once for the entire update operation
-    await this.acquireLock('photon', photonName);
-
-    try {
-      // Save state for atomic operation (covers both remove and reload)
-      this.saveState();
-
-      // Remove old version
-      const photonTools = this.allTools.filter(t => t.mcpName === photonName);
-      for (const tool of photonTools) {
-        const idx = this.allTools.indexOf(tool);
-        if (idx > -1) {
-          this.allTools.splice(idx, 1);
-        }
-        this.toolToMCP.delete(tool.name);
-      }
-
-      // Reload all photons to pick up changes
-      if (this.internalMCPManager) {
-        await this.internalMCPManager.loadPhotons();
-      }
-
-      this.clearStateBackup();
-      logger.info(`🔄 Updated photon: ${photonName}`);
-    } catch (error: any) {
-      this.restoreState(); // Rollback both operations
-      logger.error(`❌ Failed to update photon ${photonName}: ${error.message}`);
-    } finally {
-      // Always release lock, even on error
-      this.releaseLock('photon', photonName);
-    }
+    return this.getPhotonService().updatePhoton(photonName, photonPath);
   }
 
   /**

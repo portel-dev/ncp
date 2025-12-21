@@ -2,7 +2,11 @@
  * Code-Mode Executor - TypeScript code execution with tool access
  * Based on official UTCP Code-Mode implementation pattern
  *
- * Phase 2: Uses Worker Threads for true process isolation with resource limits
+ * Execution hierarchy (most secure first):
+ * 1. SubprocessSandbox - True process isolation via child_process.spawn
+ * 2. Worker Threads - V8 isolate with resource limits
+ * 3. VM Module - Same-process sandbox (fallback)
+ *
  * Phase 3: Bindings for credential isolation
  * Phase 4: Network isolation
  */
@@ -17,6 +21,7 @@ import { NetworkPolicyManager, SECURE_NETWORK_POLICY } from './network-policy.js
 import { getAuditLogger } from './audit-logger.js';
 import { CodeAnalyzer } from './validation/code-analyzer.js';
 import { SemanticValidator } from './validation/semantic-validator.js';
+import { SubprocessSandbox } from './sandbox/subprocess-sandbox.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -83,7 +88,12 @@ export class CodeExecutor {
 
   /**
    * Execute TypeScript code with tool access
-   * Phase 2: Uses Worker Threads for true isolation with resource limits
+   *
+   * Execution hierarchy (most secure first):
+   * 1. SubprocessSandbox - True process isolation via child_process.spawn
+   * 2. Worker Threads - V8 isolate with resource limits
+   * 3. VM Module - Same-process sandbox (fallback)
+   *
    * Phase 5: Audit logging for security monitoring
    */
   async executeCode(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
@@ -93,48 +103,109 @@ export class CodeExecutor {
     // Phase 5: Log code execution start
     await auditLogger.logCodeExecutionStart(code, { mcpName: 'code-mode' });
 
-    // Try Worker Thread execution first (Phase 2 - secure)
+    // Try SubprocessSandbox first (most secure - true process isolation)
     try {
-      const result = await this.executeWithWorkerThread(code, timeout);
+      const result = await this.executeWithSubprocess(code, timeout);
 
       // Phase 5: Log success
       const duration = Date.now() - startTime;
       await auditLogger.logCodeExecutionSuccess(code, result.result, duration, { mcpName: 'code-mode' });
 
       return result;
-    } catch (error: any) {
-      logger.warn(`Worker Thread execution failed: ${error.message}, falling back to vm module`);
-      logger.error(`[Worker Error Details]`, {
-        message: error.message,
-        stack: error.stack,
-        name: error.name,
-        code: code.substring(0, 100)
-      });
+    } catch (subprocessError: any) {
+      logger.warn(`Subprocess execution failed: ${subprocessError.message}, falling back to Worker Thread`);
 
-      // Fallback to vm module (Phase 1 - less secure but stable)
+      // Fallback to Worker Thread (second most secure)
       try {
-        const result = await this.executeWithVM(code, timeout);
+        const result = await this.executeWithWorkerThread(code, timeout);
 
-        // Phase 5: Log success (with fallback note)
         const duration = Date.now() - startTime;
         await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
           mcpName: 'code-mode',
-          userId: 'vm-fallback'
+          userId: 'worker-fallback'
         });
 
         return result;
-      } catch (vmError: any) {
-        // Phase 5: Log error
-        logger.error(`[VM Execution Error Details]`, {
-          message: vmError.message,
-          stack: vmError.stack,
-          name: vmError.name,
-          code: code.substring(0, 100)
-        });
-        await auditLogger.logCodeExecutionError(code, vmError.message, { mcpName: 'code-mode' });
-        throw vmError;
+      } catch (workerError: any) {
+        logger.warn(`Worker Thread execution failed: ${workerError.message}, falling back to VM`);
+
+        // Final fallback to VM module (least secure but stable)
+        try {
+          const result = await this.executeWithVM(code, timeout);
+
+          const duration = Date.now() - startTime;
+          await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
+            mcpName: 'code-mode',
+            userId: 'vm-fallback'
+          });
+
+          return result;
+        } catch (vmError: any) {
+          logger.error(`[VM Execution Error Details]`, {
+            message: vmError.message,
+            stack: vmError.stack,
+            name: vmError.name,
+            code: code.substring(0, 100)
+          });
+          await auditLogger.logCodeExecutionError(code, vmError.message, { mcpName: 'code-mode' });
+          throw vmError;
+        }
       }
     }
+  }
+
+  /**
+   * Execute code in SubprocessSandbox (most secure)
+   *
+   * Uses child_process.spawn for true process isolation:
+   * - Separate V8 isolate (no shared memory)
+   * - Can be killed without affecting main process
+   * - Resource limits enforced by OS
+   * - No prototype pollution can escape to main process
+   *
+   * Note: Bindings and network calls are currently not supported in subprocess
+   * mode - they require the Worker Thread fallback.
+   */
+  private async executeWithSubprocess(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
+    // Get all available tools
+    const tools = await this.toolsProvider();
+
+    // Extract available MCP namespaces for semantic validation
+    const availableMCPs = [...new Set(
+      tools.map((t) => t.name.split(':')[0] || t.name.split('.')[0])
+    )];
+
+    // Validate code using AST + semantic pipeline before execution
+    await this.validateCodeWithPipeline(code, availableMCPs);
+
+    logger.info(`🔒 Executing code in SubprocessSandbox with ${tools.length} tools (true process isolation)`);
+
+    // Create sandbox instance
+    const sandbox = new SubprocessSandbox({
+      timeout,
+      memoryLimit: 128,
+      minimalEnv: true,
+    });
+
+    // Convert ToolDefinition[] to SandboxTool[]
+    const sandboxTools = tools.map(t => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+    }));
+
+    // Execute code
+    const result = await sandbox.execute(code, sandboxTools, this.toolExecutor);
+
+    // Convert to CodeExecutionResult format
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    return {
+      result: result.result,
+      logs: result.logs,
+    };
   }
 
   /**

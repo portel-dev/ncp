@@ -8,3 +8,4 @@ export * from './transport-factory.js';
 export * from './cache-service.js';
 export * from './tool-discovery.js';
 export * from './skills-service.js';
+export * from './photon-service.js';
