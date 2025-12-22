@@ -10,13 +10,14 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { logger } from '../../utils/logger.js';
 import { withFilteredOutput } from '../../transports/filtered-stdio-transport.js';
 import type {
   MCPConnection,
   MCPDefinition,
   MCPConfig,
+  MCPTransport,
   ConnectionPoolConfig,
   DEFAULT_CONNECTION_POOL_CONFIG,
 } from '../types/connection.js';
@@ -30,11 +31,12 @@ import type { OrchestratorService } from '../interfaces/service-container.js';
 export interface TransportFactory {
   /**
    * Create a transport for the given configuration
+   * Supports: StdioClientTransport, SSEClientTransport, StreamableHTTPClientTransport
    */
   createTransport(
     config: MCPConfig,
     env?: Record<string, string>
-  ): Promise<StdioClientTransport | SSEClientTransport>;
+  ): Promise<MCPTransport>;
 
   /**
    * Get authentication token for a config (if needed)
@@ -167,6 +169,15 @@ export class ConnectionPoolManager implements OrchestratorService {
       // Capture server info after successful connection
       const serverInfo = client.getServerVersion();
 
+      // Capture session ID for Streamable HTTP connections (for reconnection)
+      let sessionId: string | undefined;
+      if (transport instanceof StreamableHTTPClientTransport) {
+        sessionId = transport.sessionId;
+        if (sessionId) {
+          logger.debug(`Streamable HTTP session established: ${sessionId}`);
+        }
+      }
+
       const connection: MCPConnection = {
         client,
         transport,
@@ -183,6 +194,7 @@ export class ConnectionPoolManager implements OrchestratorService {
         lastUsed: Date.now(),
         connectTime: Date.now() - connectStart,
         executionCount: 1,
+        sessionId,
       };
 
       // Store connection for reuse
@@ -209,6 +221,17 @@ export class ConnectionPoolManager implements OrchestratorService {
     if (!connection) return;
 
     try {
+      // Terminate Streamable HTTP session if applicable
+      if (connection.transport instanceof StreamableHTTPClientTransport) {
+        try {
+          await connection.transport.terminateSession();
+          logger.debug(`Terminated Streamable HTTP session for ${mcpName}`);
+        } catch (e) {
+          // Server may return 405 if it doesn't support session termination
+          logger.debug(`Session termination not supported for ${mcpName}`);
+        }
+      }
+
       await connection.client.close();
       this.connections.delete(mcpName);
 

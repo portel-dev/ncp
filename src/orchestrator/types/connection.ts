@@ -5,7 +5,15 @@
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { OAuthConfig } from '../../auth/oauth-device-flow.js';
+
+/**
+ * Transport type for remote MCP connections
+ * - 'sse': Legacy HTTP+SSE transport (deprecated but widely supported)
+ * - 'streamableHttp': New Streamable HTTP transport (MCP 2025-03-26+)
+ */
+export type RemoteTransportType = 'sse' | 'streamableHttp';
 
 /**
  * Server info returned by MCP servers
@@ -39,6 +47,19 @@ export interface MCPConfig {
   env?: Record<string, string>;
   url?: string;
   auth?: MCPAuthConfig;
+  /**
+   * Transport type for remote connections (url-based).
+   * - 'streamableHttp': Modern Streamable HTTP transport (recommended)
+   * - 'sse': Legacy HTTP+SSE transport (deprecated but widely supported)
+   *
+   * Default: 'streamableHttp' for new connections
+   */
+  transport?: RemoteTransportType;
+  /**
+   * Session ID for Streamable HTTP transport.
+   * Used to resume sessions after disconnection.
+   */
+  sessionId?: string;
 }
 
 /**
@@ -61,16 +82,23 @@ export interface ToolDefinition {
 }
 
 /**
+ * Union type for all supported transports
+ */
+export type MCPTransport = StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport;
+
+/**
  * An active connection to an MCP server
  */
 export interface MCPConnection {
   client: Client;
-  transport: StdioClientTransport | SSEClientTransport;
+  transport: MCPTransport;
   tools: ToolDefinition[];
   serverInfo?: MCPServerInfo;
   lastUsed: number;
   connectTime: number;
   executionCount: number;
+  /** Session ID for Streamable HTTP connections */
+  sessionId?: string;
 }
 
 /**
