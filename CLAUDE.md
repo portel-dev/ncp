@@ -138,12 +138,13 @@ orchestrator.executeCode(code, timeout)
     ↓
 CodeExecutor.executeCode()
     ↓
-Creates Worker Thread with:
-  - Code to execute
-  - All 70+ MCP tools (from toolsProvider)
-  - Security bindings
+4-Tier Sandbox Selection (most secure available):
+  1. IsolatedVMSandbox (V8 Isolate via isolated-vm) - Cloudflare Workers tech
+  2. SubprocessSandbox (separate Node.js process)
+  3. Worker Threads (vm module isolation)
+  4. Direct VM (fallback)
     ↓
-Worker creates namespaces:
+Sandbox creates namespaces:
   - schedule.*  (for scheduling)
   - ncp.*       (for discovery)
   - analytics.* (for analytics)
@@ -191,11 +192,38 @@ const msg = await messages({ operation: "send", number: "..." });
    - Tool result: Main thread → Worker
    - Synchronous from code perspective (via Promise handling)
 
-4. **Security Hardening**:
-   - Dangerous patterns blocked (eval, require, import, etc.)
-   - Built-in prototypes frozen
-   - Direct filesystem/process access blocked
-   - Network requests routed through policy enforcement
+4. **Security Hardening** (Defense in Depth):
+
+   **Static Analysis (AST-based)**:
+   - TypeScript compiler API parses code before execution
+   - Blocks dangerous globals: eval, Function, process, require, __dirname, __filename
+   - Blocks metaprogramming: Reflect, Proxy, Symbol, WeakRef, FinalizationRegistry
+   - Blocks descriptor manipulation: defineProperty, setPrototypeOf, getOwnPropertyDescriptor
+   - Detects prototype pollution: __proto__, constructor, prototype access
+
+   **Semantic Validation (Pattern-based)**:
+   - Detects malicious intent patterns:
+     - Data exfiltration (read credentials + send externally)
+     - Credential harvesting (multiple secret/password accesses)
+     - Reconnaissance (system enumeration)
+     - Persistence mechanisms (cron, startup scripts)
+     - Backdoor patterns (reverse shells, remote access)
+     - Privilege escalation (sudo, admin, root)
+     - Data destruction (delete_all, rm -rf, truncate)
+   - Suspicious namespace+method combinations (shell.*, ssh.*, exec.*)
+
+   **Runtime Protection**:
+   - Built-in prototypes frozen (Object, Array, Function, RegExp, Error, Promise)
+   - Dangerous globals deleted from context
+   - Network requests routed through NetworkPolicyManager
+   - Memory limits enforced (128MB default)
+   - Execution timeout (30s default, 5min max)
+
+   **V8 Isolate Separation** (when isolated-vm available):
+   - Completely separate V8 isolate (no shared memory)
+   - Memory limits enforced at V8 level
+   - Same technology as Cloudflare Workers
+   - No access to Node.js APIs by design
 
 ### Code Tool vs code:run Tool
 
