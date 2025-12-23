@@ -4611,21 +4611,29 @@ const skillsCmd = program
     console.log(chalk.cyan('  ncp skills marketplace list') + '           List configured marketplaces');
     console.log(chalk.cyan('  ncp skills marketplace add <source>') + '    Add a new marketplace');
     console.log(chalk.cyan('  ncp skills marketplace remove <name>') + '  Remove a marketplace');
-    console.log(chalk.cyan('  ncp skills search [query]') + '             Search skills in marketplaces');
+    console.log(chalk.cyan('  ncp skills search [query]') + '             Search installed skills (or marketplace)');
     console.log(chalk.cyan('  ncp skills add <name>') + '                 Add a skill from marketplace');
+    console.log();
+    console.log(chalk.dim('Examples:'));
+    console.log(chalk.dim('  ncp skills search pdf                    Search installed skills'));
+    console.log(chalk.dim('  ncp skills search "pdf | canvas"         Multi-query search'));
+    console.log(chalk.dim('  ncp skills search --marketplace          Browse marketplace'));
+    console.log(chalk.dim('  ncp skills search --depth 0              Names only (compact)'));
+    console.log(chalk.dim('  ncp skills list --depth 2                Full details'));
     console.log();
   });
 
 skillsCmd
   .command('list')
   .description('List installed Anthropic Agent Skills')
-  .action(async () => {
+  .option('--depth <number>', 'Display depth: 0=names only, 1=names+description, 2=full details (default: 1)')
+  .action(async (options: { depth?: string }) => {
     const { SkillsManager } = await import('../services/skills-manager.js');
     const manager = new SkillsManager();
     await manager.initialize();
     await manager.loadAllSkills();
 
-    const skills = manager.listSkills();
+    const skills = manager.getLoadedSkills();
 
     if (skills.length === 0) {
       console.log(chalk.yellow('\n⚠️  No skills installed'));
@@ -4634,14 +4642,40 @@ skillsCmd
       return;
     }
 
+    const depth = parseInt(options.depth || '1');
     console.log(chalk.bold(`\n📚 Installed Skills (${skills.length})\n`));
 
     for (const skill of skills) {
-      console.log(chalk.cyan(`${skill.name}`));
-      console.log(chalk.white(`   ${skill.description || '(no description)'}`));
-      if (skill.plugin) {
-        console.log(chalk.dim(`   Plugin: ${skill.plugin}`));
+      const metadata = skill.metadata;
+
+      // Depth 0: Names only
+      if (depth === 0) {
+        console.log(chalk.cyan(`${metadata.name}`));
+        continue;
       }
+
+      // Depth 1+: Names + description
+      console.log(chalk.cyan(`${metadata.name}`));
+      if (depth >= 1) {
+        console.log(chalk.white(`   ${metadata.description || '(no description)'}`));
+      }
+
+      // Depth 2: Full details
+      if (depth >= 2) {
+        if (metadata.plugin) {
+          console.log(chalk.dim(`   Plugin: ${metadata.plugin}`));
+        }
+        if (metadata.version) {
+          console.log(chalk.dim(`   Version: ${metadata.version}`));
+        }
+        if (metadata.author) {
+          console.log(chalk.dim(`   Author: ${metadata.author}`));
+        }
+        if (metadata.tags && metadata.tags.length > 0) {
+          console.log(chalk.dim(`   Tags: ${metadata.tags.join(', ')}`));
+        }
+      }
+
       console.log();
     }
 
@@ -4661,7 +4695,7 @@ skillsCmd
       await manager.removeSkill(skillName);
 
       console.log(chalk.green(`\n✅ Removed skill: ${skillName}`));
-      console.log(chalk.yellow('⚠️  Restart NCP for changes to take effect'));
+      console.log(chalk.dim('💡 Skill has been removed'));
     } catch (error: any) {
       console.error(chalk.red(`Failed to remove skill: ${error.message}`));
       process.exit(1);
@@ -4743,35 +4777,173 @@ skillsCmd
 
 skillsCmd
   .command('search [query]')
-  .description('Search for skills in configured marketplaces')
-  .action(async (query?: string) => {
+  .description('Search installed skills (or marketplace if none found)')
+  .option('--marketplace', 'Search marketplace instead of installed skills')
+  .option('--refresh', 'Force refresh the marketplace cache')
+  .option('--depth <number>', 'Display depth: 0=names only, 1=names+description, 2=full details (default: 1)')
+  .action(async (query?: string, options?: { marketplace?: boolean; refresh?: boolean; depth?: string }) => {
     try {
       const { SkillsMarketplaceClient } = await import('../services/skills-marketplace-client.js');
       const client = new SkillsMarketplaceClient();
       await client.initialize();
 
-      console.log(chalk.cyan('\n🔍 Searching for skills...\n'));
-      const skills = await client.search(query);
+      // Refresh cache if requested
+      if (options?.refresh) {
+        console.log(chalk.cyan('\n🔄 Refreshing marketplace cache...\n'));
+        const count = await client.refreshCache();
+        console.log(chalk.green(`✅ Refreshed cache with ${count} skills\n`));
+      }
 
-      if (skills.length === 0) {
-        console.log(chalk.yellow(`No skills found${query ? ` for "${query}"` : ''}\n`));
+      const depth = parseInt(options?.depth || '1');
+
+      // Support multi-query with | separator (like MCP search)
+      const queries = query ? query.split('|').map(q => q.trim()).filter(q => q) : [];
+
+      // Helper function to display skill at specified depth
+      const displaySkill = async (skill: any, isInstalled: boolean, skillDir?: string) => {
+        // Depth 0: Names only
+        if (depth === 0) {
+          console.log(isInstalled ? chalk.green(`✓ ${skill.name}`) : chalk.cyan(`  ${skill.name}`));
+          return;
+        }
+
+        // Depth 1+: Names + description
+        console.log(isInstalled ? chalk.green(`✓ ${skill.name}`) : chalk.cyan(`  ${skill.name}`));
+        if (depth >= 1) {
+          console.log(chalk.dim(`    ${skill.description || '(no description)'}`));
+        }
+
+        // Depth 2: Full SKILL.md content + resources
+        if (depth >= 2 && isInstalled && skillDir) {
+          const fs = await import('fs/promises');
+          const path = await import('path');
+          
+          try {
+            // Read full SKILL.md content
+            const skillFile = path.join(skillDir, 'SKILL.md');
+            const content = await fs.readFile(skillFile, 'utf-8');
+            
+            console.log(chalk.dim(`\n    === Full Content ===\n`));
+            // Show full content at depth 2
+            const lines = content.split('\n');
+            lines.forEach(line => console.log(chalk.white(`    ${line}`)));
+            console.log();
+            
+            // List available resources
+            const entries = await fs.readdir(skillDir, { withFileTypes: true });
+            const resources: string[] = [];
+            
+            for (const entry of entries) {
+              if (entry.name === 'SKILL.md') continue;
+              
+              if (entry.isDirectory()) {
+                // List directory contents
+                const subPath = path.join(skillDir, entry.name);
+                const subEntries = await fs.readdir(subPath);
+                subEntries.forEach(file => {
+                  resources.push(`${entry.name}/${file}`);
+                });
+              } else {
+                resources.push(entry.name);
+              }
+            }
+            
+            if (resources.length > 0) {
+              console.log(chalk.dim(`    === Available Resources ===`));
+              resources.forEach(resource => {
+                console.log(chalk.dim(`    - ${resource}`));
+              });
+              console.log();
+              console.log(chalk.dim(`    💡 Read resources: skills:read_resource({ skill_name: "${skill.name}", file_path: "..." })`));
+              console.log(chalk.dim(`    💡 Execute code: Use examples in code mode directly`));
+            }
+          } catch (error: any) {
+            console.log(chalk.dim(`    (Could not load full content: ${error.message})`));
+          }
+        } else if (depth >= 2) {
+          // Depth 2 for marketplace skills (not installed)
+          if (skill.plugin) {
+            console.log(chalk.dim(`    Plugin: ${skill.plugin}`));
+          }
+          if (skill.version) {
+            console.log(chalk.dim(`    Version: ${skill.version}`));
+          }
+          if (skill.author) {
+            console.log(chalk.dim(`    Author: ${skill.author}`));
+          }
+          if (skill.tags && skill.tags.length > 0) {
+            console.log(chalk.dim(`    Tags: ${skill.tags.join(', ')}`));
+          }
+        }
+
+        console.log();
+      };
+
+      // Step 1: Search installed skills first (unless --marketplace flag)
+      if (!options?.marketplace) {
+        console.log(chalk.cyan('🔍 Searching installed skills...\n'));
+        const installed = await client.listInstalled();
+        
+        let matchedSkills = installed;
+        
+        // Filter by query if provided
+        if (queries.length > 0) {
+          matchedSkills = installed.filter(skill => {
+            const searchText = `${skill.name} ${skill.description || ''} ${skill.tags?.join(' ') || ''}`.toLowerCase();
+            // Match any query (OR logic)
+            return queries.some(q => searchText.includes(q.toLowerCase()));
+          });
+        }
+
+        // If we found installed skills, show them and exit
+        if (matchedSkills.length > 0) {
+          const searchInfo = query ? ` matching "${query}"` : '';
+          console.log(chalk.bold(`📚 Installed Skills (${matchedSkills.length})${searchInfo}\n`));
+
+          const path = await import('path');
+          const { getNcpBaseDirectory } = await import('../utils/ncp-paths.js');
+          const skillsDir = path.join(getNcpBaseDirectory(), 'skills');
+
+          for (const skill of matchedSkills) {
+            const skillDir = path.join(skillsDir, skill.name);
+            await displaySkill(skill, true, skillDir);
+          }
+          
+          console.log(chalk.dim(`💡 Use 'ncp skills search --marketplace' to browse available skills`));
+          console.log(chalk.dim(`💡 Use --depth 0|1|2 to control detail level (current: ${depth})`));
+          return;
+        }
+
+        // No installed skills found - inform and fallback to marketplace
+        if (query) {
+          console.log(chalk.yellow(`No installed skills found matching "${query}"`));
+          console.log(chalk.dim('🔍 Searching marketplace for suggestions...\n'));
+        } else {
+          console.log(chalk.yellow('No skills installed yet'));
+          console.log(chalk.dim('🔍 Browsing marketplace...\n'));
+        }
+      } else {
+        console.log(chalk.cyan('🔍 Searching marketplace...\n'));
+      }
+
+      // Step 2: Search marketplace (fallback or explicit)
+      const marketplaceSkills = await client.searchMarketplace(queries.length > 0 ? queries : undefined);
+
+      if (marketplaceSkills.length === 0) {
+        console.log(chalk.yellow(`No skills found in marketplace${query ? ` for "${query}"` : ''}\n`));
         return;
       }
 
       const searchInfo = query ? ` matching "${query}"` : '';
-      console.log(chalk.bold(`📚 Found ${skills.length} skill${skills.length !== 1 ? 's' : ''}${searchInfo}\n`));
+      console.log(chalk.bold(`📦 Available in Marketplace (${marketplaceSkills.length})${searchInfo}\n`));
 
-      for (const skill of skills) {
-        console.log(chalk.cyan(`  ${skill.name}`));
-        console.log(chalk.dim(`    ${skill.description || '(no description)'}`));
-        if (skill.plugin) {
-          console.log(chalk.dim(`    Plugin: ${skill.plugin}`));
-        }
-        if (skill.tags && skill.tags.length > 0) {
-          console.log(chalk.dim(`    Tags: ${skill.tags.join(', ')}`));
-        }
-        console.log();
+      for (const skill of marketplaceSkills) {
+        await displaySkill(skill, false);
       }
+      
+      console.log(chalk.dim(`💡 Install with: ncp skills add <skill-name>`));
+      console.log(chalk.dim(`💡 Use --depth 0|1|2 to control detail level (current: ${depth})`));
+      console.log(chalk.dim(`💡 Use --refresh to update marketplace cache (24h TTL)`));
     } catch (error: any) {
       console.error(chalk.red(`Failed to search skills: ${error.message}`));
       process.exit(1);
@@ -4792,7 +4964,7 @@ skillsCmd
 
       if (result.success) {
         console.log(chalk.green(`✅ ${result.message}`));
-        console.log(chalk.yellow('⚠️  Restart NCP for the skill to be loaded'));
+        console.log(chalk.dim('💡 Skill is now available for use'));
       } else {
         console.log(chalk.red(`❌ ${result.message}`));
         process.exit(1);
