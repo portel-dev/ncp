@@ -114,6 +114,7 @@
     "json-colorizer": "^3.0.1",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
+    "pdf-lib": "^1.17.1",
     "prettyjson": "^1.2.5",
     "prompts": "^2.4.2",
     "tsx": "^4.20.6",

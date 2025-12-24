@@ -596,6 +596,41 @@ ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/Documents
 }
 ```
 
+**OAuth 2.1 with PKCE** (MCP 2025-03-26 spec):
+```json
+{
+  "mcpServers": {
+    "oauth-mcp": {
+      "url": "https://mcp.example.com/api",
+      "auth": {
+        "type": "oauth",
+        "oauth21": {
+          "scopes": ["read", "write"],
+          "callbackPort": 9876,
+          "clientId": "optional-pre-registered-client-id",
+          "clientSecret": "optional-client-secret"
+        }
+      }
+    }
+  }
+}
+```
+
+**OAuth 2.1 Features:**
+- ✅ **PKCE (Proof Key for Code Exchange)** - Required by OAuth 2.1 for security
+- ✅ **Dynamic Client Registration (RFC 7591)** - Auto-registers if no clientId provided
+- ✅ **Token Storage & Auto-Refresh** - Tokens saved to `~/.ncp/auth/` and refreshed automatically
+- ✅ **Browser Authorization Flow** - Opens browser for user consent
+- ✅ **Headless Fallback** - Manual code entry for servers/CI environments
+- ✅ **Protected Resource Discovery (RFC 9728)** - Auto-discovers OAuth endpoints
+
+**First-time setup flow:**
+1. NCP opens browser to authorization URL
+2. You grant permissions
+3. Browser redirects to local callback (`http://localhost:9876`)
+4. NCP exchanges code for access token (with PKCE)
+5. Token saved and refreshed automatically for future requests
+
 **🔋 Hibernation-Enabled Servers:**
 
 NCP automatically supports hibernation-enabled MCP servers (like Cloudflare Durable Objects or Metorial):

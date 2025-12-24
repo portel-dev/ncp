@@ -318,9 +318,9 @@ export class NCPOrchestrator {
               properties: {
                 depth: {
                   type: 'number',
-                  enum: [1, 2, 3],
+                  enum: [1, 2],
                   default: 2,
-                  description: 'Progressive disclosure level: 1=metadata, 2=+content, 3=+files'
+                  description: 'Progressive disclosure: 1=metadata only, 2=full content+resources (max)'
                 }
               }
             }
@@ -1477,23 +1477,23 @@ export class NCPOrchestrator {
         output += `**Tools:** ${skill.metadata.tools.join(', ')}\n`;
       }
 
-      // Level 2: Full SKILL.md content (AI learns the skill!)
+      // Level 2: Full SKILL.md content + available resources (HIGHEST DEPTH)
       if (depth >= 2) {
         output += `\n**Full Content:**\n\n`;
         output += '```markdown\n';
         output += skill.content;
         output += '\n```\n';
-      }
 
-      // Level 3: File tree listing
-      if (depth >= 3) {
+        // List available resources (reference files, scripts, etc.)
         const fileTree = await this.getSkillFileTree(skill.directory);
         if (fileTree.length > 0) {
-          output += `\n**Available Files:**\n`;
+          output += `\n**Available Resources:**\n`;
           for (const file of fileTree) {
             output += `- ${file}\n`;
           }
-          output += `\n💡 Use \`skills:read_resource\` to read specific files.\n`;
+          output += `\n💡 **To read reference files or scripts**: Use \`skills:read_resource\` with skill_name="${cleanSkillName}" and file_path="reference/filename.md" or "scripts/script.js"\n`;
+          output += `💡 **To execute JavaScript/TypeScript code**: Use code mode directly - all code examples in this skill can be executed\n`;
+          output += `💡 **Installing npm packages**: Use \`npm install <package>\` or import directly in code mode\n`;
         }
       }
 

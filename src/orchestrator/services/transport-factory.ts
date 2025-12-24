@@ -12,10 +12,14 @@
 
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPClientTransportOptions,
+} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { logger } from '../../utils/logger.js';
 import { mcpWrapper } from '../../utils/mcp-wrapper.js';
 import { getRuntimeForExtension } from '../../utils/runtime-detector.js';
+import { MCPOAuthProvider, createMCPOAuthProvider } from '../../auth/mcp-oauth-provider.js';
 import type { MCPConfig, MCPTransport } from '../types/connection.js';
 import type { TransportFactory } from './connection-pool.js';
 
@@ -31,9 +35,33 @@ export type AuthTokenProvider = (config: MCPConfig) => Promise<string>;
  */
 export class DefaultTransportFactory implements TransportFactory {
   private authTokenProvider?: AuthTokenProvider;
+  private oauthProviders: Map<string, MCPOAuthProvider> = new Map();
 
   constructor(authTokenProvider?: AuthTokenProvider) {
     this.authTokenProvider = authTokenProvider;
+  }
+
+  /**
+   * Get or create an OAuth provider for a server
+   * Reuses existing providers to preserve token state
+   */
+  getOAuthProvider(config: MCPConfig): MCPOAuthProvider {
+    const key = config.url || config.name;
+    let provider = this.oauthProviders.get(key);
+
+    if (!provider) {
+      provider = createMCPOAuthProvider({
+        serverUrl: config.url!,
+        clientName: 'NCP - MCP Aggregator',
+        scopes: config.auth?.oauth21?.scopes,
+        callbackPort: config.auth?.oauth21?.callbackPort,
+        clientId: config.auth?.oauth21?.clientId,
+        clientSecret: config.auth?.oauth21?.clientSecret,
+      });
+      this.oauthProviders.set(key, provider);
+    }
+
+    return provider;
   }
 
   /**
@@ -121,6 +149,7 @@ export class DefaultTransportFactory implements TransportFactory {
    * - Automatic SSE upgrade for streaming responses
    * - Session management with Mcp-Session-Id header
    * - Reconnection with exponential backoff
+   * - OAuth 2.1 with PKCE (MCP 2025-03-26 spec)
    */
   private async createStreamableHTTPTransport(
     config: MCPConfig
@@ -128,8 +157,17 @@ export class DefaultTransportFactory implements TransportFactory {
     const url = new URL(config.url!);
     const headers: Record<string, string> = {};
 
-    // Handle authentication (non-OAuth - for OAuth, use authProvider)
-    if (config.auth && config.auth.type !== 'oauth') {
+    // Build transport options with proper typing
+    const options: StreamableHTTPClientTransportOptions = {};
+
+    // Handle OAuth 2.1 authentication via authProvider
+    if (config.auth?.type === 'oauth') {
+      const oauthProvider = this.getOAuthProvider(config);
+      options.authProvider = oauthProvider;
+      logger.debug(`Using OAuth 2.1 for ${config.name}`);
+    }
+    // Handle static authentication types
+    else if (config.auth) {
       const token = await this.getAuthToken(config);
 
       switch (config.auth.type) {
@@ -149,18 +187,6 @@ export class DefaultTransportFactory implements TransportFactory {
           break;
       }
     }
-
-    // Build transport options
-    const options: {
-      requestInit?: RequestInit;
-      sessionId?: string;
-      reconnectionOptions?: {
-        maxReconnectionDelay: number;
-        initialReconnectionDelay: number;
-        reconnectionDelayGrowFactor: number;
-        maxRetries: number;
-      };
-    } = {};
 
     // Add headers if present
     if (Object.keys(headers).length > 0) {

@@ -4909,7 +4909,7 @@ skillsCmd
             await displaySkill(skill, true, skillDir);
           }
           
-          console.log(chalk.dim(`💡 Use 'ncp skills search --marketplace' to browse available skills`));
+          console.log(chalk.dim(`💡 Browse marketplace: CLI → 'ncp skills search --marketplace' | MCP → marketplace:search({ type: "skills" })`));
           console.log(chalk.dim(`💡 Use --depth 0|1|2 to control detail level (current: ${depth})`));
           return;
         }

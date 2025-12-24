@@ -1,5 +1,36 @@
 # Changelog
 
+## [Unreleased]
+
+### Features
+
+* **OAuth 2.1 Support** - Full OAuth 2.1 with PKCE authentication for remote MCPs (MCP spec 2025-03-26)
+  - Implements `OAuthClientProvider` interface from @modelcontextprotocol/sdk
+  - Automatic Protected Resource Metadata discovery (RFC 9728)
+  - Dynamic Client Registration (RFC 7591)
+  - PKCE (Proof Key for Code Exchange) required by OAuth 2.1
+  - Browser-based authorization flow with local callback server
+  - Headless environment support with manual code entry
+  - Token storage and automatic refresh
+  - Tokens saved to `~/.ncp/auth/` with per-server isolation
+  - Integrated with `DefaultTransportFactory` for seamless transport creation
+  - Provider caching for efficient token reuse across connections
+
+  **Configuration:**
+  ```json
+  {
+    "auth": {
+      "type": "oauth",
+      "oauth21": {
+        "scopes": ["read", "write"],
+        "callbackPort": 9876,
+        "clientId": "optional-pre-registered-id",
+        "clientSecret": "optional-secret"
+      }
+    }
+  }
+  ```
+
 ## [1.8.0](https://github.com/portel-dev/ncp/compare/v1.6.0...1.8.0) (2025-12-14)
 
 ### ⚠ BREAKING CHANGES

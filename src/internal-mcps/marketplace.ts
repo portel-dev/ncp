@@ -23,6 +23,24 @@ export class MarketplaceMCP implements InternalMCP {
         type: 'object',
         properties: {}
       }
+    },
+    {
+      name: 'search',
+      description: 'Search all skill marketplaces for available skills to install',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Optional search query to filter skills. Supports "|" for multi-search (e.g., "pdf|excel"). If omitted, returns all available skills.'
+          },
+          limit: {
+            type: 'number',
+            default: 20,
+            description: 'Maximum number of results to return'
+          }
+        }
+      }
     }
   ];
 
@@ -45,10 +63,13 @@ export class MarketplaceMCP implements InternalMCP {
         case 'list':
           return await this.handleList(client);
 
+        case 'search':
+          return await this.handleSearch(client, params);
+
         default:
           return {
             success: false,
-            content: `Unknown marketplace tool: ${toolName}. Available: list`
+            content: `Unknown marketplace tool: ${toolName}. Available: list, search`
           };
       }
     } catch (error: any) {
@@ -82,6 +103,60 @@ export class MarketplaceMCP implements InternalMCP {
         output += `**Last Updated:** ${marketplace.lastUpdated}\n`;
       }
       output += '\n';
+    }
+
+    return {
+      success: true,
+      content: output
+    };
+  }
+
+  private async handleSearch(client: SkillsMarketplaceClient, params: any): Promise<InternalToolResult> {
+    const query = params.query;
+    const limit = params.limit || 20;
+
+    // Parse multi-query if present
+    const queries = query ? query.split('|').map((q: string) => q.trim()).filter((q: string) => q) : [];
+    
+    const skills = await client.searchMarketplace(queries.length > 0 ? queries : undefined);
+
+    if (skills.length === 0) {
+      const searchInfo = query ? ` matching "${query}"` : '';
+      return {
+        success: true,
+        content: `No skills found in marketplace${searchInfo}.\n\nTip: Use marketplace:list() to see configured marketplaces.`
+      };
+    }
+
+    // Limit results
+    const limitedSkills = skills.slice(0, limit);
+    const searchInfo = query ? ` matching "${query}"` : '';
+    
+    let output = `## Available Skills in Marketplace (${limitedSkills.length}${skills.length > limit ? ` of ${skills.length}` : ''})${searchInfo}\n\n`;
+
+    // Group by plugin
+    const byPlugin = new Map<string, typeof skills>();
+    for (const skill of limitedSkills) {
+      const plugin = skill.plugin || 'other';
+      if (!byPlugin.has(plugin)) {
+        byPlugin.set(plugin, []);
+      }
+      byPlugin.get(plugin)!.push(skill);
+    }
+
+    for (const [plugin, pluginSkills] of byPlugin) {
+      output += `### ${plugin}\n\n`;
+      for (const skill of pluginSkills) {
+        output += `**${skill.name}**`;
+        if (skill.version) output += ` (v${skill.version})`;
+        output += `\n`;
+        if (skill.description) output += `${skill.description}\n`;
+        output += `*Install:* \`skills:add({ skill_name: "${skill.name}" })\`\n\n`;
+      }
+    }
+
+    if (skills.length > limit) {
+      output += `\n*Showing ${limit} of ${skills.length} results. Use limit parameter to see more.*\n`;
     }
 
     return {

@@ -27,13 +27,41 @@ export interface MCPServerInfo {
 }
 
 /**
+ * OAuth 2.1 configuration for MCP connections
+ * Follows MCP 2025-03-26 authorization specification
+ */
+export interface MCPOAuth21Config {
+  /** Pre-registered client ID (optional - uses dynamic registration if not provided) */
+  clientId?: string;
+  /** Pre-registered client secret (optional - for confidential clients) */
+  clientSecret?: string;
+  /** Requested OAuth scopes */
+  scopes?: string[];
+  /** Local callback port for authorization (default: 9876) */
+  callbackPort?: number;
+}
+
+/**
  * Authentication configuration for MCP connections
  */
 export interface MCPAuthConfig {
+  /**
+   * Authentication type:
+   * - 'oauth': OAuth 2.1 with PKCE (MCP 2025-03-26 spec)
+   * - 'bearer': Static bearer token
+   * - 'apiKey': API key header
+   * - 'basic': HTTP Basic auth
+   */
   type: 'oauth' | 'bearer' | 'apiKey' | 'basic';
+  /** Legacy OAuth device flow config (deprecated, use oauth21 instead) */
   oauth?: OAuthConfig;
+  /** OAuth 2.1 configuration for MCP spec compliance */
+  oauth21?: MCPOAuth21Config;
+  /** Static bearer token */
   token?: string;
+  /** Basic auth username */
   username?: string;
+  /** Basic auth password */
   password?: string;
 }
 

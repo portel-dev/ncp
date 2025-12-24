@@ -7,6 +7,24 @@
 
 import { parentPort, workerData } from 'worker_threads';
 
+// Whitelisted npm packages for skills (document processing, data, etc.)
+const ALLOWED_PACKAGES = [
+  'pdf-lib',
+  'docx',
+  'pptxgenjs',
+  'xlsx',
+  'papaparse',
+  'cheerio',
+  'axios',
+  'lodash',
+  'date-fns',
+  'uuid',
+  'crypto-js',
+  'canvas',
+  'sharp',
+  'jimp'
+];
+
 interface ToolCallRequest {
   id: string;
   toolName: string;
@@ -114,11 +132,39 @@ function hardenContext(): void {
 
 // Validate code for dangerous patterns
 function validateCode(code: string): void {
-  const dangerousPatterns = [
+function isAllowedRequire(code: string): boolean {
+  // Extract all require() calls
+  const requireMatches = code.match(/require\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g);
+  if (!requireMatches) return true; // No requires = OK
+
+  for (const match of requireMatches) {
+    const packageMatch = match.match(/require\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+    if (!packageMatch) continue;
+    
+    const packageName = packageMatch[1];
+    
+    // Allow relative paths (./file.js, ../utils.js)
+    if (packageName.startsWith('./') || packageName.startsWith('../')) {
+      continue; // Relative imports are OK
+    }
+    
+    // Extract base package name (e.g., 'pdf-lib/subfolder' -> 'pdf-lib')
+    const basePkg = packageName.split('/')[0];
+    
+    // Check if it's in whitelist
+    if (!ALLOWED_PACKAGES.includes(basePkg)) {
+      return false; // Not allowed!
+    }
+  }
+  
+  return true; // All requires are whitelisted
+}
+
+const dangerousPatterns = [
     { pattern: /__proto__/g, name: 'Prototype pollution via __proto__' },
     { pattern: /\.constructor\s*\(/g, name: 'Constructor access' },
     { pattern: /process\./g, name: 'Process object access' },
-    { pattern: /require\s*\(/g, name: 'require() call' },
+    // require() is now validated separately - see isAllowedRequire()
     { pattern: /import\s+/g, name: 'import statement' },
     { pattern: /eval\s*\(/g, name: 'eval() call' },
     { pattern: /Function\s*\(/g, name: 'Function constructor' },
@@ -144,11 +190,17 @@ function validateCode(code: string): void {
     }
   }
 
+  // Check require() calls separately (allow whitelisted packages)
+  if (!isAllowedRequire(code)) {
+    violations.push('require() with non-whitelisted package (only document/data processing libraries allowed)');
+  }
+
   if (violations.length > 0) {
     throw new Error(
       `Code validation failed: Detected dangerous patterns:\n` +
       violations.map(v => `  - ${v}`).join('\n') +
-      '\n\nCode-Mode is sandboxed for safety. Use tool namespaces instead.'
+      '\n\nCode-Mode is sandboxed for safety. Use tool namespaces instead.' +
+      '\n\nAllowed packages: ' + ALLOWED_PACKAGES.join(', ')
     );
   }
 }
@@ -464,6 +516,30 @@ function createContext(tools: any[], bindings: any[], logs: string[]): Record<st
     // Attach binding to context
     context[validBindingName] = bindingObj;
   }
+
+  // Add safe require() for whitelisted packages
+  // This matches Anthropic's behavior where dependencies are assumed to be available
+  context.require = (moduleName: string) => {
+    const basePkg = moduleName.split('/')[0];
+    
+    if (!ALLOWED_PACKAGES.includes(basePkg)) {
+      throw new Error(
+        `Cannot require '${moduleName}': Package not in whitelist.\n` +
+        `Allowed packages: ${ALLOWED_PACKAGES.join(', ')}`
+      );
+    }
+    
+    // Use dynamic require (Node.js built-in)
+    // This works because Worker Thread has access to Node.js modules
+    try {
+      return require(moduleName);
+    } catch (error: any) {
+      throw new Error(
+        `Failed to load '${moduleName}': ${error.message}\n` +
+        `Make sure the package is installed: npm install ${basePkg}`
+      );
+    }
+  };
 
   return context;
 }
