@@ -95,11 +95,11 @@ class MCPClientSimulator {
     return new Promise((resolve, reject) => {
       logInfo('Starting NCP MCP server...');
 
-      this.ncp = spawn('node', ['dist/index.js', '--profile', TEST_PROFILE], {
+      this.ncp = spawn('node', ['dist/index-mcp.js'], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
-          NCP_MODE: 'mcp',
+          NCP_PROFILE: TEST_PROFILE,  // Use env var instead of CLI arg
           NO_COLOR: 'true',  // Disable colors in output
           NCP_DEBUG: 'true'  // Enable debug logging
         }
