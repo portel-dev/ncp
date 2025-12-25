@@ -3682,10 +3682,11 @@ export class NCPOrchestrator {
       // Return the first content item's text
       if (response.contents && response.contents.length > 0) {
         const content = response.contents[0];
-        if (content && typeof content.text === 'string') {
-          return content.text;
-        }
-        if (content && content.text) {
+        // Type guard to check if content has 'text' property
+        if ('text' in content && content.text) {
+          if (typeof content.text === 'string') {
+            return content.text;
+          }
           return String(content.text);
         }
       }

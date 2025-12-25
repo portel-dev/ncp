@@ -81,9 +81,11 @@ export class MCPServer implements ElicitationServer {
       {
         capabilities: {
           tools: {},
-          elicitation: {},  // Enable elicitation for credential collection
           prompts: {},      // Enable prompts for user confirmation dialogs
           resources: {},    // Enable resources for help docs and health status
+          experimental: {
+            elicitation: {},  // Enable elicitation for credential collection
+          },
         },
       }
     );
