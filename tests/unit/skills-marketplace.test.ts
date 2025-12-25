@@ -45,8 +45,8 @@ describe('SkillsMarketplaceClient', () => {
       const marketplaces = client.getAll();
 
       expect(marketplaces).toHaveLength(1);
-      expect(marketplaces[0].name).toBe('anthropic-skills');
-      expect(marketplaces[0].source).toBe('anthropics/skills');
+      expect(marketplaces[0].name).toBe('ncp-skills');
+      expect(marketplaces[0].source).toBe('portel-dev/skills');
     });
 
     test('should create config directory structure', async () => {
@@ -131,7 +131,7 @@ describe('SkillsMarketplaceClient', () => {
 
       const all = client.getAll();
       expect(all.length).toBeGreaterThanOrEqual(3);
-      expect(all.some(m => m.name === 'anthropic-skills')).toBe(true);
+      expect(all.some(m => m.name === 'ncp-skills')).toBe(true);
     });
 
     test('should get only enabled marketplaces', async () => {
