@@ -30,6 +30,11 @@ jobs:
             node-version: 18.x
           - os: macos-latest
             node-version: 18.x
+        include:
+          # Pin macOS to Node 20.9.0 for isolated-vm prebuilt binary compatibility
+          - os: macos-latest
+            node-version: 20.9.0
+            exact-version: true
 
     steps:
       - name: Checkout code
@@ -126,7 +131,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '20.9.0'
           cache: 'npm'
 
       - name: Install dependencies
