@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.1](https://github.com/portel-dev/ncp/compare/2.0.0...2.0.1) (2025-12-27)
+
+### Bug Fixes
+
+* resolve Windows CI failures ([3f13f91](https://github.com/portel-dev/ncp/commit/3f13f9152c4df175880c453be45075dc51bc97a8)), closes [#8](https://github.com/portel-dev/ncp/issues/8)
+
 ## [2.0.0](https://github.com/portel-dev/ncp/compare/1.8.0...2.0.0) (2025-12-27)
 
 ### ⚠ BREAKING CHANGES
