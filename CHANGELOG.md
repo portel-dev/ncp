@@ -1,5 +1,47 @@
 # Changelog
 
+## [2.0.0](https://github.com/portel-dev/ncp/compare/1.8.0...2.0.0) (2025-12-27)
+
+### ⚠ BREAKING CHANGES
+
+* Minimum Node version increased from 18.0.0 to 22.0.0
+
+### Features
+
+* add CacheService, ToolDiscoveryService and validation pipeline integration ([0f194ed](https://github.com/portel-dev/ncp/commit/0f194ed1f7a85901d8e745967eebf182bb03efd5))
+* add isolated-vm sandbox for true V8 Isolate separation ([dcb575e](https://github.com/portel-dev/ncp/commit/dcb575e05a3351c5156acc9ad5f4d9621d57c30b))
+* add ncp code command for CLI/MCP parity ([e24dccd](https://github.com/portel-dev/ncp/commit/e24dccd92cfd087f8003c547cd36dcd53ab54766))
+* add orchestrator service architecture and secure code sandbox ([15db685](https://github.com/portel-dev/ncp/commit/15db68535466c8a6452b44aba6f7a122e6b11f5b))
+* add runtime package approval with scoped elicitation ([39b4364](https://github.com/portel-dev/ncp/commit/39b4364fe0ed6d27bb1e7530a04946f02b95d57f))
+* add sandboxed file system for secure code execution ([b69d4c9](https://github.com/portel-dev/ncp/commit/b69d4c97563604cea050aec12f4538841ac0b320))
+* add schedule show/edit commands for code visibility ([cc62eba](https://github.com/portel-dev/ncp/commit/cc62ebada377eeb3d048894fbc1a671c3ae270fb))
+* add SkillsService for dynamic skill management ([cf6f2db](https://github.com/portel-dev/ncp/commit/cf6f2dbf56813041ac67979e92796c8b32558661))
+* add Streamable HTTP transport support (MCP 2025-03-26) ([5e34a53](https://github.com/portel-dev/ncp/commit/5e34a53c200420c7673d510a24dcd8043c3ee701))
+* auto-migrate runtime commands on Windows ([7f483df](https://github.com/portel-dev/ncp/commit/7f483df392664ba6b62a6110c98a82f03a5537b6)), closes [#7](https://github.com/portel-dev/ncp/issues/7)
+* enable automatic npm publishing when NPM_TOKEN is configured ([3ec58d6](https://github.com/portel-dev/ncp/commit/3ec58d6f4629883ed2e4cbead996dca944bb6299))
+* enhance code-mode security with metaprogramming blocks and malicious intent detection ([2f9672c](https://github.com/portel-dev/ncp/commit/2f9672cccc86c6eecba0e07dfef0ddc3bc8320b0))
+* **scheduler:** add manual trigger capability and fix docs parity ([fe3ffb3](https://github.com/portel-dev/ncp/commit/fe3ffb3c0f18a33edab451ab5e5e73e18311ccf8))
+
+### Bug Fixes
+
+* add syntax highlighting to schedule show command ([47b89df](https://github.com/portel-dev/ncp/commit/47b89dfc194a6956373deaa70916a74636f9cf0b))
+* Align documentation and usage messages with new CLI syntax ([8a21701](https://github.com/portel-dev/ncp/commit/8a21701735d669745eeae8636bee319943a92ab2))
+* apply runtime resolution to CLI add command for Windows ([bee2bd3](https://github.com/portel-dev/ncp/commit/bee2bd3dd4158bb2a7b6755f87739ed579ffbd1c)), closes [#7](https://github.com/portel-dev/ncp/issues/7)
+* config import now accepts HTTP/SSE servers and normalizes formats ([db1d7ed](https://github.com/portel-dev/ncp/commit/db1d7edf9b5e1e7854501543fa569f9a6fd3f425)), closes [#7](https://github.com/portel-dev/ncp/issues/7)
+* correct execution tracking and count display in scheduler ([44c0145](https://github.com/portel-dev/ncp/commit/44c0145cd42d26811aedfbad5c63c7a0153cfc5b))
+* correct test expectations for marketplace name and run command params ([3e6cd52](https://github.com/portel-dev/ncp/commit/3e6cd52b9962fd08cc5bdd39bfcc01728bcd3e32))
+* improve unknown command detection and typo suggestions ([021f126](https://github.com/portel-dev/ncp/commit/021f1267c2115378d23e8b96f4df47242d8946c6))
+* pin macOS CI to Node 20.9.0 for isolated-vm prebuilt binaries ([0f2e184](https://github.com/portel-dev/ncp/commit/0f2e184c5af506fa375ba1fec1d206ddb87671d0)), closes [#isolated-vm-compilation-failures](https://github.com/portel-dev/ncp/issues/isolated-vm-compilation-failures)
+* pre-load packages before freezing prototypes ([babc8de](https://github.com/portel-dev/ncp/commit/babc8de25b1d2a4a39dadb278453a6b314f5c8ce))
+* relax integration test timing for Windows/CI ([15e66a8](https://github.com/portel-dev/ncp/commit/15e66a895070b491d2839485dc6a759e72812009))
+* require Node >=22 for isolated-vm@6.0.2 compatibility ([bd20fd0](https://github.com/portel-dev/ncp/commit/bd20fd0c162c18fd25479cdf5906893f38ddb0ab))
+* resolve TypeScript errors and update all CI jobs to Node 22 ([39d25fa](https://github.com/portel-dev/ncp/commit/39d25faffd42cfc39aaa69d9cc335ecb1c197956))
+* stabilize test suite and improve initialization reliability ([11ae2a3](https://github.com/portel-dev/ncp/commit/11ae2a33c2bdc623108e0e663db71ff3c380ec3a))
+* use correct MCP server entry point in integration tests ([40e5ba2](https://github.com/portel-dev/ncp/commit/40e5ba24faedfa9175ae1a31c5ced5abeaa9c40c))
+* use cross-env for Windows compatibility in test scripts ([1dd1b2b](https://github.com/portel-dev/ncp/commit/1dd1b2b50111426b36acc44726ca704ee7240744))
+* use kebab-case for CLI options (--confidence-threshold) ([59e883e](https://github.com/portel-dev/ncp/commit/59e883ef3f89b75da6f5c9225a1c5564b1f0c82a))
+* validate command parameter before getRuntimeForExtension call ([ccd7be1](https://github.com/portel-dev/ncp/commit/ccd7be1061c7a4288ba0c7df81615ecfff3f90bf))
+
 ## [Unreleased]
 
 ### Features
