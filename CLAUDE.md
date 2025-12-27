@@ -337,6 +337,35 @@ return {
 
 ## Release Process
 
+### Pre-Release Checklist - MANDATORY
+
+Before making ANY release, verify ALL of these:
+
+```bash
+# 1. Check all GitHub issues are resolved
+gh issue list --state open
+# Must return empty - no open issues allowed before release
+
+# 2. Verify CI is passing on all platforms
+gh run list --limit 1
+# Must show "success" for the latest run
+
+# 3. Run full test suite locally
+npm run test:critical
+npm run test:e2e
+npm run test:integration
+npm run test:integration:dxt
+
+# 4. Build and test DXT package
+npm run build:dxt:patched
+npm run test:dxt
+```
+
+**If ANY check fails, DO NOT RELEASE. Fix the issue first.**
+
+### Release Guidelines
+
 - **No release until user confirms**: Build and test, but wait for explicit confirmation before releasing
 - **Test incrementally**: After each fix, rebuild and verify it works before moving to next issue
 - **Always use build:dxt**: Never manually run mcpb - use the tested build script
+- **Verify Windows CI**: Windows tests must pass - check `Run Tests (windows-latest)` job specifically
