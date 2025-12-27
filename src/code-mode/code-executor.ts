@@ -24,6 +24,8 @@ import { CodeAnalyzer } from './validation/code-analyzer.js';
 import { SemanticValidator } from './validation/semantic-validator.js';
 import { SubprocessSandbox } from './sandbox/subprocess-sandbox.js';
 import { IsolatedVMSandbox } from './sandbox/isolated-vm-sandbox.js';
+import { createSandboxedFS, getWorkspacePath, WORKSPACE_DIR_NAME } from './sandboxed-fs.js';
+import * as fs from 'fs/promises';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -62,13 +64,15 @@ export class CodeExecutor {
   private networkPolicyManager: NetworkPolicyManager;
   private codeAnalyzer: CodeAnalyzer;
   private semanticValidator: SemanticValidator;
+  private workspacePath: string;
 
   constructor(
     toolsProvider: () => Promise<ToolDefinition[]>,
     toolExecutor: (toolName: string, params: any) => Promise<any>,
     photonInstancesProvider?: () => Promise<PhotonInstance[]>,
     bindingsManager?: BindingsManager,
-    networkPolicyManager?: NetworkPolicyManager
+    networkPolicyManager?: NetworkPolicyManager,
+    ncpDir?: string
   ) {
     this.toolsProvider = toolsProvider;
     this.toolExecutor = toolExecutor;
@@ -77,6 +81,30 @@ export class CodeExecutor {
     this.networkPolicyManager = networkPolicyManager || new NetworkPolicyManager(SECURE_NETWORK_POLICY);
     this.codeAnalyzer = new CodeAnalyzer();
     this.semanticValidator = new SemanticValidator();
+
+    // Set workspace path for sandboxed file system
+    // Default to ~/.ncp/workspace if ncpDir not provided
+    const baseDir = ncpDir || join(process.env.HOME || process.env.USERPROFILE || '.', '.ncp');
+    this.workspacePath = getWorkspacePath(baseDir);
+  }
+
+  /**
+   * Ensure workspace directory exists
+   */
+  async ensureWorkspace(): Promise<void> {
+    try {
+      await fs.mkdir(this.workspacePath, { recursive: true });
+      logger.info(`📁 Workspace directory ready: ${this.workspacePath}`);
+    } catch (error: any) {
+      logger.warn(`Failed to create workspace: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get the workspace path for file operations
+   */
+  getWorkspacePath(): string {
+    return this.workspacePath;
   }
 
   /**
@@ -310,6 +338,9 @@ export class CodeExecutor {
 
     logger.info(`🔍 Executing code in Worker Thread with ${tools.length} tools, ${bindings.length} bindings (isolated process)`);
 
+    // Ensure workspace exists for sandboxed FS (before Promise)
+    await this.ensureWorkspace();
+
     return new Promise((resolve, reject) => {
       const logs: string[] = [];
       let worker: Worker | null = null;
@@ -319,7 +350,12 @@ export class CodeExecutor {
         const workerPath = join(__dirname, 'code-worker.js');
 
         worker = new Worker(workerPath, {
-          workerData: { code, tools, bindings },  // Phase 3: pass bindings (no credentials!)
+          workerData: {
+            code,
+            tools,
+            bindings,  // Phase 3: pass bindings (no credentials!)
+            workspacePath: this.workspacePath  // Sandboxed FS root
+          },
           resourceLimits: {
             maxOldGenerationSizeMb: 128,  // 128MB memory limit
             maxYoungGenerationSizeMb: 32,  // 32MB for young generation

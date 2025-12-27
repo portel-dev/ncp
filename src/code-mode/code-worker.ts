@@ -6,8 +6,22 @@
  */
 
 import { parentPort, workerData } from 'worker_threads';
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import * as nodePath from 'path';
 
-// Whitelisted npm packages for skills (document processing, data, etc.)
+import { createSandboxedFS, SandboxedFS } from './sandboxed-fs.js';
+
+// Create require function for ESM context (needed for dynamic package loading)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = nodePath.dirname(__filename);
+const require = createRequire(import.meta.url);
+
+// Whitelisted npm packages for require() in code execution
+// Must match the list in code-analyzer.ts
+//
+// NOTE: 'fs' is NOT included - we inject a sandboxed version instead.
+// Users should use the `fs` global which is automatically sandboxed to .ncp/workspace/
 const ALLOWED_PACKAGES = [
   'pdf-lib',
   'docx',
@@ -22,7 +36,8 @@ const ALLOWED_PACKAGES = [
   'crypto-js',
   'canvas',
   'sharp',
-  'jimp'
+  'jimp',
+  'path', // Safe path utilities (no file system access)
 ];
 
 interface ToolCallRequest {
@@ -169,7 +184,8 @@ const dangerousPatterns = [
     { pattern: /eval\s*\(/g, name: 'eval() call' },
     { pattern: /Function\s*\(/g, name: 'Function constructor' },
     { pattern: /child_process/g, name: 'child_process access' },
-    { pattern: /fs\./g, name: 'Direct filesystem access' },
+    // NOTE: fs. is now ALLOWED - we inject a sandboxed version
+    // { pattern: /fs\./g, name: 'Direct filesystem access' },
     // Metaprogramming APIs - can bypass sandbox protections
     { pattern: /\bReflect\b/g, name: 'Reflect API access (metaprogramming)' },
     { pattern: /\bProxy\b/g, name: 'Proxy API access (metaprogramming)' },
@@ -391,8 +407,13 @@ parentPort.on('message', (message: { type: string; data: any }) => {
   }
 });
 
-// Create execution context with tools and bindings
-function createContext(tools: any[], bindings: any[], logs: string[]): Record<string, any> {
+// Create execution context with tools, bindings, and sandboxed FS
+function createContext(
+  tools: any[],
+  bindings: any[],
+  logs: string[],
+  workspacePath?: string
+): Record<string, any> {
   const consoleObj = {
     log: (...args: any[]) => {
       const message = args.map(arg =>
@@ -475,8 +496,20 @@ function createContext(tools: any[], bindings: any[], logs: string[]): Record<st
         options?.method || 'GET',
         { headers: options?.headers, body: options?.body }
       );
-    }
+    },
+
+    // Path utilities (safe - no file system access)
+    path: nodePath,
   };
+
+  // Sandboxed file system - all operations confined to workspace directory
+  if (workspacePath) {
+    const sandboxedFs = createSandboxedFS(workspacePath);
+    context.fs = sandboxedFs;
+
+    // Also expose workspace path for user reference
+    context.__workspacePath = workspacePath;
+  }
 
   // Organize tools by namespace (mcp:tool convention)
   for (const tool of tools) {
@@ -578,13 +611,13 @@ function cleanup(): void {
     // Apply security hardening
     hardenContext();
 
-    const { code, tools, bindings } = workerData;
+    const { code, tools, bindings, workspacePath } = workerData;
 
     // Validate code
     validateCode(code);
 
-    // Create context with tools and bindings
-    const context = createContext(tools || [], bindings || [], logs);
+    // Create context with tools, bindings, and sandboxed FS
+    const context = createContext(tools || [], bindings || [], logs, workspacePath);
 
     // Execute code using a wrapper function instead of spreading parameters
     // This avoids "Arg string terminates parameters early" error from Function constructor

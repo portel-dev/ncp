@@ -551,8 +551,26 @@ export class SemanticValidator {
       for (const intent of intents) {
         if (intent.mcpCall) {
           const namespace = intent.mcpCall.namespace;
-          // Skip built-in namespaces
-          if (['ncp', 'schedule', 'analytics', 'skills', 'code'].includes(namespace)) {
+          // Skip built-in namespaces (internal MCPs, sandbox globals, and whitelisted packages)
+          const builtInNamespaces = new Set([
+            // Internal MCPs
+            'ncp', 'schedule', 'analytics', 'skills', 'code',
+            // Sandbox globals (fs is sandboxed, path is safe)
+            'fs', 'path', 'console', 'JSON', 'Math', 'Date',
+            'Promise', 'Array', 'Object', 'String', 'Number', 'Boolean',
+            // Whitelisted packages and common variable names (loaded via require())
+            'XLSX', 'xlsx', 'PDFDocument', 'pdfLib', 'pdfDoc', 'docx', 'pptxgenjs', 'pptx',
+            'papaparse', 'Papa', 'cheerio', '$', 'axios', 'lodash', '_', 'dateFns',
+            'uuid', 'cryptoJs', 'CryptoJS', 'canvas', 'sharp', 'jimp',
+            // Common user variable names for documents
+            'page', 'doc', 'wb', 'ws', 'workbook', 'worksheet', 'pdf', 'document',
+            'font', 'fonts', 'row', 'cell', 'table', 'data', 'result', 'response',
+            'buffer', 'bytes', 'content', 'text', 'image', 'img', 'file', 'output',
+            'stats', 'error', 'err', 'e', 'options', 'config', 'settings',
+            // Buffer is a global
+            'Buffer'
+          ]);
+          if (builtInNamespaces.has(namespace)) {
             continue;
           }
           if (!availableMCPs.includes(namespace)) {

@@ -79,7 +79,7 @@ const DANGEROUS_GLOBALS = new Set([
   'process',
   'global',
   'globalThis',
-  'require',
+  // 'require' is handled separately - allowed for whitelisted packages
   'module',
   '__dirname',
   '__filename',
@@ -90,6 +90,31 @@ const DANGEROUS_GLOBALS = new Set([
   // Weak references can be used to detect GC and leak info
   'WeakRef',
   'FinalizationRegistry',
+]);
+
+/**
+ * Whitelisted npm packages allowed for require() in code execution
+ * Must match the list in code-worker.ts
+ *
+ * NOTE: 'fs' is NOT in this list - we inject a sandboxed version instead.
+ * Users should use the `fs` global which is automatically sandboxed.
+ */
+const ALLOWED_PACKAGES = new Set([
+  'pdf-lib',
+  'docx',
+  'pptxgenjs',
+  'xlsx',
+  'papaparse',
+  'cheerio',
+  'axios',
+  'lodash',
+  'date-fns',
+  'uuid',
+  'crypto-js',
+  'canvas',
+  'sharp',
+  'jimp',
+  'path', // Safe path utilities
 ]);
 
 /**
@@ -511,17 +536,47 @@ export class CodeAnalyzer {
       }
     }
 
-    // require() calls
+    // require() calls - validate against whitelist
     if (ts.isCallExpression(node)) {
       const expr = node.expression;
       if (ts.isIdentifier(expr) && expr.text === 'require') {
-        violations.push({
-          type: 'require_import',
-          location: this.getLocation(node, sourceFile),
-          code: this.getCode(node, sourceFile),
-          severity: 'critical',
-          description: 'require() is not allowed in sandbox',
-        });
+        const firstArg = node.arguments[0];
+
+        // Check if it's a string literal (static require)
+        if (firstArg && ts.isStringLiteral(firstArg)) {
+          const moduleName = firstArg.text;
+
+          // Allow relative paths (./file.js, ../utils.js)
+          if (moduleName.startsWith('./') || moduleName.startsWith('../')) {
+            return; // Relative imports are OK
+          }
+
+          // Extract base package name (e.g., 'pdf-lib/subfolder' -> 'pdf-lib')
+          const basePkg = moduleName.split('/')[0];
+
+          // Check if it's in whitelist
+          if (ALLOWED_PACKAGES.has(basePkg)) {
+            return; // Whitelisted package is OK
+          }
+
+          // Not whitelisted - block it
+          violations.push({
+            type: 'require_import',
+            location: this.getLocation(node, sourceFile),
+            code: this.getCode(node, sourceFile),
+            severity: 'critical',
+            description: `require('${moduleName}') is not allowed. Allowed packages: ${[...ALLOWED_PACKAGES].join(', ')}`,
+          });
+        } else {
+          // Dynamic require (variable or expression) - block it
+          violations.push({
+            type: 'require_import',
+            location: this.getLocation(node, sourceFile),
+            code: this.getCode(node, sourceFile),
+            severity: 'critical',
+            description: 'Dynamic require() is not allowed - use static string literal',
+          });
+        }
       }
     }
   }

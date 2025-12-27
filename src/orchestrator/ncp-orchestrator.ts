@@ -4,7 +4,7 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { getCacheDirectory } from '../utils/ncp-paths.js';
+import { getCacheDirectory, getNcpBaseDirectory } from '../utils/ncp-paths.js';
 import { join } from 'path';
 import * as path from 'path';
 import { createHash } from 'crypto';
@@ -735,8 +735,14 @@ export class NCPOrchestrator {
         }
 
         return photons;
-      }
-                );
+      },
+      // Bindings Manager (Phase 3)
+      undefined,
+      // Network Policy Manager (Phase 4)
+      undefined,
+      // NCP Base Directory (for sandboxed FS)
+      getNcpBaseDirectory()
+    );
             }
           
             private async loadProfile(): Promise<Profile | null> {    try {
