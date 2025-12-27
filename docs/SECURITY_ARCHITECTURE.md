@@ -161,7 +161,19 @@ Network requests from Code-Mode are controlled:
 
 ## Runtime Hardening
 
+### Package Pre-Loading
+
+To ensure compatibility with whitelisted packages, the sandbox uses a pre-loading strategy:
+
+1. **Scan code** for `require()` calls before execution
+2. **Pre-load packages** that are in the whitelist BEFORE prototype freezing
+3. **Freeze prototypes** after packages have initialized their classes
+4. **Execute code** with pre-loaded packages available
+
+This solves compatibility issues with packages like `pdf-lib` that need to define class methods during initialization.
+
 ### Prototype Freezing
+
 Built-in prototypes are frozen to prevent pollution:
 - `Object.prototype`
 - `Array.prototype`
@@ -185,10 +197,10 @@ All code execution is logged for security monitoring:
 
 ## Known Limitations
 
-1. **Package Compatibility**: Some npm packages may conflict with prototype freezing
-2. **Dynamic Requires**: Only static `require('package-name')` is allowed
-3. **Import Statements**: ES6 `import` is blocked (use `require()`)
-4. **Symlinks**: Symlinks within workspace are not specially handled
+1. **Static Requires Only**: Only static `require('package-name')` is allowed (dynamic strings blocked)
+2. **Import Statements**: ES6 `import` is blocked (use `require()`)
+3. **Symlinks**: Symlinks within workspace are not specially handled
+4. **Non-Whitelisted Packages**: Packages not in the whitelist cannot be used even if installed
 
 ## Security Best Practices
 
