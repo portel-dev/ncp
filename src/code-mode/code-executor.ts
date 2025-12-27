@@ -27,9 +27,6 @@ import { IsolatedVMSandbox } from './sandbox/isolated-vm-sandbox.js';
 import { createSandboxedFS, getWorkspacePath, WORKSPACE_DIR_NAME } from './sandboxed-fs.js';
 import {
   getPackageApprovalManager,
-  ApprovalScope,
-  formatApprovalRequest,
-  getApprovalOptions,
   BLOCKED_PACKAGES,
 } from './package-approval.js';
 import * as fs from 'fs/promises';
@@ -63,16 +60,6 @@ export interface CodeExecutionResult {
   };
 }
 
-/**
- * Package approval elicitation callback
- * Returns the approval scope if user approves, or null/undefined to deny
- */
-export type PackageApprovalCallback = (
-  packages: string[],
-  message: string,
-  options: { label: string; value: ApprovalScope }[]
-) => Promise<ApprovalScope | null | undefined>;
-
 export class CodeExecutor {
   private toolExecutor: (toolName: string, params: any) => Promise<any>;
   private toolsProvider: () => Promise<ToolDefinition[]>;
@@ -82,7 +69,6 @@ export class CodeExecutor {
   private codeAnalyzer: CodeAnalyzer;
   private semanticValidator: SemanticValidator;
   private workspacePath: string;
-  private packageApprovalCallback?: PackageApprovalCallback;
 
   constructor(
     toolsProvider: () => Promise<ToolDefinition[]>,
@@ -104,15 +90,6 @@ export class CodeExecutor {
     // Default to ~/.ncp/workspace if ncpDir not provided
     const baseDir = ncpDir || join(process.env.HOME || process.env.USERPROFILE || '.', '.ncp');
     this.workspacePath = getWorkspacePath(baseDir);
-  }
-
-  /**
-   * Set the package approval callback for runtime elicitation
-   * Called from orchestrator after construction to wire up elicitation function
-   */
-  setPackageApprovalCallback(callback: PackageApprovalCallback): void {
-    this.packageApprovalCallback = callback;
-    logger.info('📦 Package approval elicitation enabled');
   }
 
   /**
@@ -145,6 +122,7 @@ export class CodeExecutor {
 
   /**
    * Check if code requires non-whitelisted packages and handle approval
+   * Uses MCP elicitation if available, falls back to native OS dialog
    * Returns the list of temporarily approved packages for this execution
    */
   private async checkPackageApproval(code: string): Promise<string[]> {
@@ -164,21 +142,8 @@ export class CodeExecutor {
       return [];
     }
 
-    // If no callback configured, deny by default
-    if (!this.packageApprovalCallback) {
-      throw new Error(
-        `Code requires packages not in the built-in whitelist: ${analysis.needsApproval.join(', ')}\n` +
-        `Package approval elicitation is not configured.`
-      );
-    }
-
-    // Elicit user for approval
-    const message = formatApprovalRequest(analysis.needsApproval);
-    const options = getApprovalOptions();
-
-    logger.info(`📦 Requesting approval for packages: ${analysis.needsApproval.join(', ')}`);
-
-    const scope = await this.packageApprovalCallback(analysis.needsApproval, message, options);
+    // Request approval from user (uses elicitation or native dialog)
+    const scope = await approvalManager.requestApproval(analysis.needsApproval);
 
     if (!scope) {
       throw new Error(
@@ -186,10 +151,6 @@ export class CodeExecutor {
         `User declined to approve the requested packages.`
       );
     }
-
-    // Grant approval with the selected scope
-    approvalManager.approveAll(analysis.needsApproval, scope);
-    logger.info(`✅ Packages approved with scope '${scope}': ${analysis.needsApproval.join(', ')}`);
 
     return analysis.needsApproval;
   }

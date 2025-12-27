@@ -4,12 +4,17 @@
  * Manages runtime package approvals with scoped expiration.
  * Approvals are stored in-memory only - no persistent security holes.
  *
+ * Uses MCP elicitation if available, falls back to native OS dialogs.
+ *
  * Approval Scopes:
  * - "operation": Approve for single code execution only
  * - "session": Approve until server restarts
  * - "hour": Approve for 1 hour
  * - "day": Approve for 24 hours
  */
+
+import { showNativeDialog } from '../utils/native-dialog.js';
+import { logger } from '../utils/logger.js';
 
 // Built-in whitelist - packages that are always allowed
 // Must match the list in code-worker.ts
@@ -55,6 +60,16 @@ export const BLOCKED_PACKAGES = new Set([
 ]);
 
 export type ApprovalScope = 'operation' | 'session' | 'hour' | 'day';
+
+/**
+ * Elicitation function type - same pattern as NetworkPolicy
+ * Takes title/message/options, returns selected option string or null
+ */
+export type PackageElicitationFunction = (params: {
+  title: string;
+  message: string;
+  options: string[];
+}) => Promise<string | null>;
 
 interface Approval {
   packageName: string;
@@ -108,6 +123,16 @@ export interface PackageAnalysis {
  */
 export class PackageApprovalManager {
   private approvals: Map<string, Approval> = new Map();
+  private elicitationFunction?: PackageElicitationFunction;
+
+  /**
+   * Set elicitation function for MCP-based prompts
+   * If not set, falls back to native OS dialogs
+   */
+  setElicitationFunction(fn: PackageElicitationFunction): void {
+    this.elicitationFunction = fn;
+    logger.info('📦 Package approval elicitation enabled');
+  }
 
   /**
    * Analyze code for package requirements
@@ -243,6 +268,69 @@ export class PackageApprovalManager {
    */
   getEffectiveWhitelist(): string[] {
     return [...BUILTIN_PACKAGES, ...this.getApprovedPackages()];
+  }
+
+  /**
+   * Request approval for packages from user
+   * Uses MCP elicitation if available, falls back to native OS dialog
+   *
+   * @returns The approval scope if approved, null if denied
+   */
+  async requestApproval(packages: string[]): Promise<ApprovalScope | null> {
+    const message = formatApprovalRequest(packages);
+    const options = getApprovalOptions();
+    const optionLabels = options.map(o => o.label);
+
+    logger.info(`📦 Requesting approval for packages: ${packages.join(', ')}`);
+
+    let selectedLabel: string | null = null;
+
+    // Try MCP elicitation first
+    if (this.elicitationFunction) {
+      try {
+        selectedLabel = await this.elicitationFunction({
+          title: 'Package Access Permission',
+          message: `${message}\n\nAllow this package access?`,
+          options: [...optionLabels, 'Deny'],
+        });
+      } catch (error: any) {
+        logger.warn(`MCP elicitation failed: ${error.message}, falling back to native dialog`);
+      }
+    }
+
+    // Fall back to native OS dialog
+    if (selectedLabel === null) {
+      try {
+        const result = await showNativeDialog({
+          title: 'Package Access Permission',
+          message: `${message}\n\nAllow this package access?`,
+          buttons: [...optionLabels, 'Deny'],
+          defaultButton: 0,
+          icon: 'question',
+        });
+
+        if (!result.cancelled && result.button !== 'Deny') {
+          selectedLabel = result.button;
+        }
+      } catch (error: any) {
+        logger.error(`Native dialog failed: ${error.message}`);
+        return null;
+      }
+    }
+
+    // Map selected label back to scope
+    if (selectedLabel && selectedLabel !== 'Deny') {
+      const option = options.find(o => o.label === selectedLabel);
+      if (option) {
+        // Grant approval with the selected scope
+        this.approveAll(packages, option.value);
+        logger.info(`✅ Packages approved with scope '${option.value}': ${packages.join(', ')}`);
+        return option.value;
+      }
+    }
+
+    logger.info(`❌ Package access denied: ${packages.join(', ')}`);
+    return null;
   }
 }
 

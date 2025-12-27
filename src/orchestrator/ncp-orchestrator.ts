@@ -81,6 +81,7 @@ import { spinner } from '../utils/progress-spinner.js';
 import { MCPUpdateChecker } from '../utils/mcp-update-checker.js';
 import { CodeExecutor } from '../code-mode/code-executor.js';
 import { NetworkPolicyManager, SECURE_NETWORK_POLICY, type ElicitationFunction } from '../code-mode/network-policy.js';
+import { getPackageApprovalManager, type PackageElicitationFunction } from '../code-mode/package-approval.js';
 import type { ElicitationServer } from '../utils/elicitation-helper.js';
 import { loadGlobalSettings } from '../utils/global-settings.js';
 import { ToolDiscoveryService } from './services/tool-discovery.js';
@@ -1185,6 +1186,40 @@ export class NCPOrchestrator {
     this.codeExecutor.setNetworkPolicyManager(networkPolicy);
 
     logger.info('✅ Runtime network permissions enabled via elicitations');
+
+    // Also wire up package approval elicitation using same adapter pattern
+    const packageElicitationAdapter: PackageElicitationFunction = async (params) => {
+      try {
+        const result = await elicitationServer.elicitInput({
+          message: params.message,
+          requestedSchema: {
+            type: 'object',
+            properties: {
+              choice: {
+                type: 'string',
+                enum: params.options,
+                description: params.title || 'Package Access Permission'
+              }
+            },
+            required: ['choice']
+          }
+        });
+
+        if (result.action === 'accept' && result.content && result.content.choice) {
+          return result.content.choice;
+        }
+
+        return null; // User declined or cancelled
+      } catch (error: any) {
+        logger.warn(`Package elicitation failed: ${error.message}`);
+        return null; // Fall back to native dialog
+      }
+    };
+
+    // Set elicitation function on PackageApprovalManager
+    getPackageApprovalManager().setElicitationFunction(packageElicitationAdapter);
+
+    logger.info('✅ Runtime package approval enabled via elicitations');
   }
 
   /**
