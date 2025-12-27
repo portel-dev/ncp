@@ -7,13 +7,13 @@
     "url": "https://github.com/portel-dev/ncp",
     "source": "github"
   },
-  "version": "1.8.0",
+  "version": "2.0.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@portel/ncp",
-      "version": "1.8.0",
+      "version": "2.0.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

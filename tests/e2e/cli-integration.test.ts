@@ -455,7 +455,18 @@ describe('CLI Integration Tests', () => {
       const testFile = path.join(testConfigPath, 'test-code.ts');
       fs.writeFileSync(testFile, 'return { sum: 1 + 2, product: 2 * 3 }');
 
-      const result = runCLI(`code --file "${testFile}"`);
+      // On Windows, convert backslashes to forward slashes for CLI argument
+      // (Node.js path operations work with both, and this avoids escaping issues)
+      const cliPath = testFile.replace(/\\/g, '/');
+      const result = runCLI(`code --file "${cliPath}"`);
+
+      // Log output for debugging if test fails
+      if (result.exitCode !== 0) {
+        console.log('File execution failed:');
+        console.log('  Path:', cliPath);
+        console.log('  stdout:', result.stdout);
+        console.log('  stderr:', result.stderr);
+      }
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('sum');

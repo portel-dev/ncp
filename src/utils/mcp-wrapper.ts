@@ -117,9 +117,14 @@ const logStream = fs.createWriteStream(logFile, { flags: 'a' });
 logStream.write(\`\\n--- MCP \${process.argv[2] || '${mcpName}'} Session Started: \${new Date().toISOString()} ---\\n\`);
 
 // Spawn the actual MCP server
+// On Windows, .cmd/.bat files require shell execution
+const isWindows = process.platform === 'win32';
+const needsShell = isWindows && /\\.(cmd|bat)$/i.test(command);
+
 const child = spawn(command, args, {
   env: process.env,
-  stdio: ['pipe', 'pipe', 'pipe']
+  stdio: ['pipe', 'pipe', 'pipe'],
+  shell: needsShell
 });
 
 // Forward stdin to child (for JSON-RPC requests)
