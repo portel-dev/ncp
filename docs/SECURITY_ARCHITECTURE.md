@@ -143,6 +143,25 @@ The `require()` function is available for whitelisted packages only:
 | `jimp` | Image processing |
 | `path` | Path utilities (safe) |
 
+### Runtime Package Approval
+
+When code requires a package not in the built-in whitelist:
+
+1. **Pre-execution scan**: Code is analyzed for `require()` calls before execution
+2. **Blocked packages rejected**: Node.js built-ins (fs, child_process, etc.) cannot be approved
+3. **User elicitation**: User is prompted to approve with scoped options:
+   - "This operation only" - Approved for single execution
+   - "This session" - Approved until server restarts
+   - "1 hour" - Approved with 1-hour TTL
+   - "24 hours" - Approved with 24-hour TTL
+4. **Temporary approval**: Approvals are stored in-memory only (no persistent security holes)
+5. **Execution proceeds**: If approved, the package is added to the effective whitelist for this run
+
+This approach ensures:
+- No permanent expansion of security permissions
+- Case-by-case user control
+- If a package is constantly needed, it signals a candidate for the built-in whitelist
+
 ### Adding Packages
 
 Users must install packages in their project:

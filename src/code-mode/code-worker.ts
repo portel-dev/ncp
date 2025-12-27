@@ -17,12 +17,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = nodePath.dirname(__filename);
 const require = createRequire(import.meta.url);
 
-// Whitelisted npm packages for require() in code execution
-// Must match the list in code-analyzer.ts
+// Built-in whitelisted npm packages for require() in code execution
+// This is the default list - it can be extended at runtime via allowedPackages in workerData
 //
 // NOTE: 'fs' is NOT included - we inject a sandboxed version instead.
 // Users should use the `fs` global which is automatically sandboxed to .ncp/workspace/
-const ALLOWED_PACKAGES = [
+const BUILTIN_PACKAGES = [
   'pdf-lib',
   'docx',
   'pptxgenjs',
@@ -39,6 +39,9 @@ const ALLOWED_PACKAGES = [
   'jimp',
   'path', // Safe path utilities (no file system access)
 ];
+
+// Effective allowed packages - populated from workerData.allowedPackages or falls back to BUILTIN_PACKAGES
+let ALLOWED_PACKAGES: string[] = BUILTIN_PACKAGES;
 
 interface ToolCallRequest {
   id: string;
@@ -644,7 +647,13 @@ function cleanup(): void {
   const logs: string[] = [];
 
   try {
-    const { code, tools, bindings, workspacePath } = workerData;
+    const { code, tools, bindings, workspacePath, allowedPackages } = workerData;
+
+    // Phase 6: Use dynamic whitelist from main thread if provided
+    // This allows runtime-approved packages to be used for this execution
+    if (allowedPackages && Array.isArray(allowedPackages) && allowedPackages.length > 0) {
+      ALLOWED_PACKAGES = allowedPackages;
+    }
 
     // Pre-load whitelisted packages BEFORE freezing prototypes
     // This allows packages like pdf-lib to define their class methods

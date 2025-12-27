@@ -25,6 +25,13 @@ import { SemanticValidator } from './validation/semantic-validator.js';
 import { SubprocessSandbox } from './sandbox/subprocess-sandbox.js';
 import { IsolatedVMSandbox } from './sandbox/isolated-vm-sandbox.js';
 import { createSandboxedFS, getWorkspacePath, WORKSPACE_DIR_NAME } from './sandboxed-fs.js';
+import {
+  getPackageApprovalManager,
+  ApprovalScope,
+  formatApprovalRequest,
+  getApprovalOptions,
+  BLOCKED_PACKAGES,
+} from './package-approval.js';
 import * as fs from 'fs/promises';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -56,6 +63,16 @@ export interface CodeExecutionResult {
   };
 }
 
+/**
+ * Package approval elicitation callback
+ * Returns the approval scope if user approves, or null/undefined to deny
+ */
+export type PackageApprovalCallback = (
+  packages: string[],
+  message: string,
+  options: { label: string; value: ApprovalScope }[]
+) => Promise<ApprovalScope | null | undefined>;
+
 export class CodeExecutor {
   private toolExecutor: (toolName: string, params: any) => Promise<any>;
   private toolsProvider: () => Promise<ToolDefinition[]>;
@@ -65,6 +82,7 @@ export class CodeExecutor {
   private codeAnalyzer: CodeAnalyzer;
   private semanticValidator: SemanticValidator;
   private workspacePath: string;
+  private packageApprovalCallback?: PackageApprovalCallback;
 
   constructor(
     toolsProvider: () => Promise<ToolDefinition[]>,
@@ -86,6 +104,15 @@ export class CodeExecutor {
     // Default to ~/.ncp/workspace if ncpDir not provided
     const baseDir = ncpDir || join(process.env.HOME || process.env.USERPROFILE || '.', '.ncp');
     this.workspacePath = getWorkspacePath(baseDir);
+  }
+
+  /**
+   * Set the package approval callback for runtime elicitation
+   * Called from orchestrator after construction to wire up elicitation function
+   */
+  setPackageApprovalCallback(callback: PackageApprovalCallback): void {
+    this.packageApprovalCallback = callback;
+    logger.info('📦 Package approval elicitation enabled');
   }
 
   /**
@@ -117,6 +144,57 @@ export class CodeExecutor {
   }
 
   /**
+   * Check if code requires non-whitelisted packages and handle approval
+   * Returns the list of temporarily approved packages for this execution
+   */
+  private async checkPackageApproval(code: string): Promise<string[]> {
+    const approvalManager = getPackageApprovalManager();
+    const analysis = approvalManager.analyzeCode(code);
+
+    // Check for blocked packages first (these can never be approved)
+    if (analysis.blocked.length > 0) {
+      throw new Error(
+        `Code uses blocked packages that cannot be approved: ${analysis.blocked.join(', ')}\n` +
+        `These Node.js built-in modules are not allowed for security reasons.`
+      );
+    }
+
+    // If no packages need approval, return empty (will use built-in whitelist)
+    if (analysis.needsApproval.length === 0) {
+      return [];
+    }
+
+    // If no callback configured, deny by default
+    if (!this.packageApprovalCallback) {
+      throw new Error(
+        `Code requires packages not in the built-in whitelist: ${analysis.needsApproval.join(', ')}\n` +
+        `Package approval elicitation is not configured.`
+      );
+    }
+
+    // Elicit user for approval
+    const message = formatApprovalRequest(analysis.needsApproval);
+    const options = getApprovalOptions();
+
+    logger.info(`📦 Requesting approval for packages: ${analysis.needsApproval.join(', ')}`);
+
+    const scope = await this.packageApprovalCallback(analysis.needsApproval, message, options);
+
+    if (!scope) {
+      throw new Error(
+        `Package access denied: ${analysis.needsApproval.join(', ')}\n` +
+        `User declined to approve the requested packages.`
+      );
+    }
+
+    // Grant approval with the selected scope
+    approvalManager.approveAll(analysis.needsApproval, scope);
+    logger.info(`✅ Packages approved with scope '${scope}': ${analysis.needsApproval.join(', ')}`);
+
+    return analysis.needsApproval;
+  }
+
+  /**
    * Execute TypeScript code with tool access
    *
    * Execution hierarchy (most secure first):
@@ -126,13 +204,32 @@ export class CodeExecutor {
    * 4. VM Module - Same-process sandbox (fallback)
    *
    * Phase 5: Audit logging for security monitoring
+   * Phase 6: Runtime package approval with elicitation
    */
   async executeCode(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
     const startTime = Date.now();
     const auditLogger = getAuditLogger();
+    const approvalManager = getPackageApprovalManager();
+
+    // Phase 6: Check for non-whitelisted packages and elicit approval
+    // This happens BEFORE execution starts
+    let temporaryApprovals: string[] = [];
+    try {
+      temporaryApprovals = await this.checkPackageApproval(code);
+    } catch (error: any) {
+      // Package approval failed - return as error result
+      return {
+        result: null,
+        logs: [`[ERROR] ${error.message}`],
+        error: error.message,
+      };
+    }
 
     // Phase 5: Log code execution start
     await auditLogger.logCodeExecutionStart(code, { mcpName: 'code-mode' });
+
+    // Get effective whitelist (built-in + temporarily approved)
+    const effectiveWhitelist = approvalManager.getEffectiveWhitelist();
 
     // Try IsolatedVMSandbox first (most secure - true V8 Isolate)
     if (IsolatedVMSandbox.isAvailable()) {
@@ -320,6 +417,7 @@ export class CodeExecutor {
    * Phase 2: True process isolation
    * Phase 3: Bindings for credential isolation
    * Phase 5: AST-based validation pipeline
+   * Phase 6: Dynamic package whitelist from approval manager
    */
   private async executeWithWorkerThread(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
     // Get all available tools first (needed for validation)
@@ -336,7 +434,11 @@ export class CodeExecutor {
     // Get bindings (Phase 3: credentials stay in main thread)
     const bindings = this.bindingsManager.getBindingsForWorker();
 
-    logger.info(`🔍 Executing code in Worker Thread with ${tools.length} tools, ${bindings.length} bindings (isolated process)`);
+    // Phase 6: Get effective whitelist (built-in + temporarily approved)
+    const approvalManager = getPackageApprovalManager();
+    const allowedPackages = approvalManager.getEffectiveWhitelist();
+
+    logger.info(`🔍 Executing code in Worker Thread with ${tools.length} tools, ${bindings.length} bindings, ${allowedPackages.length} allowed packages`);
 
     // Ensure workspace exists for sandboxed FS (before Promise)
     await this.ensureWorkspace();
@@ -354,7 +456,8 @@ export class CodeExecutor {
             code,
             tools,
             bindings,  // Phase 3: pass bindings (no credentials!)
-            workspacePath: this.workspacePath  // Sandboxed FS root
+            workspacePath: this.workspacePath,  // Sandboxed FS root
+            allowedPackages,  // Phase 6: dynamic whitelist from approval manager
           },
           resourceLimits: {
             maxOldGenerationSizeMb: 128,  // 128MB memory limit
