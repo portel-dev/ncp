@@ -6,9 +6,9 @@ We actively support the following versions of NCP with security updates:
 
 | Version | Supported          |
 | ------- | ------------------ |
+| 1.8.x   | :white_check_mark: |
 | 1.7.x   | :white_check_mark: |
-| 1.6.x   | :white_check_mark: |
-| < 1.6   | :x:                |
+| < 1.7   | :x:                |
 
 **Note:** We support the current version and the previous major.minor version with security updates. Older versions are not supported.
 
@@ -20,9 +20,9 @@ We take security vulnerabilities seriously. If you discover a security vulnerabi
 
 **Please do NOT report security vulnerabilities through public GitHub issues.**
 
-Instead, please report security vulnerabilities by email to:
+Instead, please report security vulnerabilities via GitHub Security Advisory:
 
-**security@luracast.com**
+**https://github.com/anthropics/ncp/security/advisories/new**
 
 Include the following information in your report:
 - Type of issue (e.g., buffer overflow, SQL injection, cross-site scripting, etc.)
@@ -71,7 +71,7 @@ Currently, we do not offer a paid bug bounty program. However, we deeply appreci
 
 ### Questions
 
-If you have questions about this security policy, please contact us at security@luracast.com.
+If you have questions about this security policy, please open a GitHub issue or use the security advisory link above.
 
 ---
 

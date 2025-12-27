@@ -98,8 +98,15 @@ scripts/
 /profiles/
 /ecosystem-repo-setup/
 test-*.js
+test-*.mjs
 experiment-*.js
 *-ecosystem.json
+
+# Backup and old files (should not be committed)
+*-OLD.ts
+*-backup.ts
+*-OLD.js
+*-backup.js
 
 # Date-prefixed conversation exports (move to ~/Projects/ncp/ instead of deleting!)
 # See .conversation-exports.md for details
