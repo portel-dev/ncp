@@ -93,7 +93,38 @@ if (!parentPort) {
   throw new Error('This module must be run as a Worker Thread');
 }
 
-// Apply security hardening
+/**
+ * Pre-load whitelisted packages from code BEFORE freezing prototypes.
+ * This allows packages like pdf-lib to define their class methods.
+ */
+function preloadPackages(code: string): Map<string, any> {
+  const packages = new Map<string, any>();
+
+  // Extract all require() calls from the code
+  const requireMatches = code.match(/require\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g);
+  if (!requireMatches) return packages;
+
+  for (const match of requireMatches) {
+    const packageMatch = match.match(/require\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/);
+    if (!packageMatch) continue;
+
+    const packageName = packageMatch[1];
+    const basePkg = packageName.split('/')[0];
+
+    // Only pre-load whitelisted packages
+    if (ALLOWED_PACKAGES.includes(basePkg)) {
+      try {
+        packages.set(packageName, require(packageName));
+      } catch (e) {
+        // Package not installed - will be caught later with better error
+      }
+    }
+  }
+
+  return packages;
+}
+
+// Apply security hardening (called AFTER packages are pre-loaded)
 function hardenContext(): void {
   // Freeze built-in prototypes
   Object.freeze(Object.prototype);
@@ -407,12 +438,13 @@ parentPort.on('message', (message: { type: string; data: any }) => {
   }
 });
 
-// Create execution context with tools, bindings, and sandboxed FS
+// Create execution context with tools, bindings, sandboxed FS, and pre-loaded packages
 function createContext(
   tools: any[],
   bindings: any[],
   logs: string[],
-  workspacePath?: string
+  workspacePath?: string,
+  preloadedPackages?: Map<string, any>
 ): Record<string, any> {
   const consoleObj = {
     log: (...args: any[]) => {
@@ -551,19 +583,23 @@ function createContext(
   }
 
   // Add safe require() for whitelisted packages
-  // This matches Anthropic's behavior where dependencies are assumed to be available
+  // Uses pre-loaded packages to avoid prototype freezing issues
   context.require = (moduleName: string) => {
     const basePkg = moduleName.split('/')[0];
-    
+
     if (!ALLOWED_PACKAGES.includes(basePkg)) {
       throw new Error(
         `Cannot require '${moduleName}': Package not in whitelist.\n` +
         `Allowed packages: ${ALLOWED_PACKAGES.join(', ')}`
       );
     }
-    
-    // Use dynamic require (Node.js built-in)
-    // This works because Worker Thread has access to Node.js modules
+
+    // Check pre-loaded packages first (loaded before prototype freezing)
+    if (preloadedPackages?.has(moduleName)) {
+      return preloadedPackages.get(moduleName);
+    }
+
+    // Fallback to dynamic require (may fail if package modifies prototypes)
     try {
       return require(moduleName);
     } catch (error: any) {
@@ -608,16 +644,20 @@ function cleanup(): void {
   const logs: string[] = [];
 
   try {
-    // Apply security hardening
-    hardenContext();
-
     const { code, tools, bindings, workspacePath } = workerData;
+
+    // Pre-load whitelisted packages BEFORE freezing prototypes
+    // This allows packages like pdf-lib to define their class methods
+    const preloadedPackages = preloadPackages(code);
+
+    // Apply security hardening AFTER packages are loaded
+    hardenContext();
 
     // Validate code
     validateCode(code);
 
-    // Create context with tools, bindings, and sandboxed FS
-    const context = createContext(tools || [], bindings || [], logs, workspacePath);
+    // Create context with tools, bindings, sandboxed FS, and pre-loaded packages
+    const context = createContext(tools || [], bindings || [], logs, workspacePath, preloadedPackages);
 
     // Execute code using a wrapper function instead of spreading parameters
     // This avoids "Arg string terminates parameters early" error from Function constructor
