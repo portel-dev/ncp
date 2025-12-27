@@ -119,6 +119,14 @@ export class CSVCache {
         indexedMCPs: new Map(),
         failedMCPs: new Map()
       };
+
+      // Persist brand-new metadata immediately so cache files exist for tooling/tests
+      await this.saveMetadata();
+    }
+
+    // Ensure metadata is persisted even when file already existed
+    if (this.metadata) {
+      await this.saveMetadata();
     }
   }
 

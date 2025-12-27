@@ -2236,6 +2236,7 @@ program
     const orchestrator = new NCPOrchestrator(profileName, false); // Silent indexing for run command
 
     await orchestrator.initialize();
+    await orchestrator.waitForInitialization();
 
     // If tool doesn't contain a colon, try to find matching tools first
     if (!toolName.includes(':')) {

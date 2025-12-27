@@ -68,13 +68,11 @@ describe('DoctorCommand', () => {
   });
 
   describe('integration with CLI', () => {
-    test('doctor command should be async and return void', () => {
-      // Verify the diagnose method signature
+    test('doctor command should be declared as an async function', () => {
       expect(typeof DoctorCommand.diagnose).toBe('function');
-
-      // Verify it returns a Promise
-      const result = DoctorCommand.diagnose();
-      expect(result instanceof Promise).toBe(true);
+      // Async functions use the AsyncFunction constructor, so we can
+      // assert this without actually invoking the heavy diagnostics.
+      expect(DoctorCommand.diagnose.constructor.name).toBe('AsyncFunction');
     });
   });
 });

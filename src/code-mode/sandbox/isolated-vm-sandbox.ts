@@ -326,12 +326,18 @@ export class IsolatedVMSandbox {
    * Check if the sandbox is available (isolated-vm is installed)
    */
   static isAvailable(): boolean {
+    if (process.env.NCP_DISABLE_ISOLATED_VM === 'true') {
+      logger.warn('isolated-vm sandbox disabled via NCP_DISABLE_ISOLATED_VM');
+      return false;
+    }
+
     try {
       // Try to create a minimal isolate to verify the module works
       const testIsolate = new ivm.Isolate({ memoryLimit: 8 });
       testIsolate.dispose();
       return true;
     } catch (e) {
+      logger.warn(`isolated-vm unavailable: ${(e as Error)?.message ?? e}`);
       return false;
     }
   }

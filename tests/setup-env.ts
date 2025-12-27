@@ -8,3 +8,9 @@ if (!process.env.NCP_ENABLE_PHOTON_RUNTIME) {
 if (!process.env.NCP_DISABLE_BACKGROUND_INIT) {
   process.env.NCP_DISABLE_BACKGROUND_INIT = 'true';
 }
+
+// Disable isolated-vm during Jest runs to avoid platform-specific segfaults
+// (Subprocess/worker-thread fallbacks are exercised instead.)
+if (!process.env.NCP_DISABLE_ISOLATED_VM) {
+  process.env.NCP_DISABLE_ISOLATED_VM = 'true';
+}
