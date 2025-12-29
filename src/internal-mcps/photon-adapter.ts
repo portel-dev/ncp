@@ -6,8 +6,18 @@
  */
 
 import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
-import { PhotonMCP, SchemaExtractor } from '@portel/photon-core';
+import {
+  PhotonMCP,
+  SchemaExtractor,
+  executeGenerator,
+  isAsyncGenerator,
+  isAsyncGeneratorFunction,
+  isInputYield,
+  type PhotonYield,
+  type InputProvider,
+} from '@portel/photon-core';
 import { logger } from '../utils/logger.js';
+import { ElicitationServer } from '../utils/elicitation-helper.js';
 import * as path from 'path';
 
 /**
@@ -21,6 +31,7 @@ export class PhotonAdapter implements InternalMCP {
   private instance: PhotonMCP;
   private mcpClass: typeof PhotonMCP;
   private sourceFilePath?: string;
+  private elicitationServer?: ElicitationServer;
 
   private constructor(
     mcpClass: typeof PhotonMCP,
@@ -196,24 +207,156 @@ export class PhotonAdapter implements InternalMCP {
   }
 
   /**
-   * Execute a tool (supports both Photon subclasses and plain classes)
+   * Set the elicitation server for generator input prompts
+   */
+  setElicitationServer(server: ElicitationServer): void {
+    this.elicitationServer = server;
+  }
+
+  /**
+   * Create input provider for generator yields using MCP elicitation
+   */
+  private createInputProvider(): InputProvider {
+    return async (yielded: PhotonYield): Promise<any> => {
+      if (!isInputYield(yielded)) return undefined;
+
+      // If no elicitation server, throw error with yield info
+      if (!this.elicitationServer) {
+        const message = 'prompt' in yielded ? yielded.prompt :
+                       'confirm' in yielded ? yielded.confirm :
+                       'select' in yielded ? (yielded as any).select : 'Input required';
+        throw new Error(`Interactive input required but no elicitation server available: ${message}`);
+      }
+
+      // Handle different yield types via MCP elicitation
+      if ('prompt' in yielded) {
+        const result = await this.elicitationServer.elicitInput({
+          message: yielded.prompt,
+          requestedSchema: {
+            type: 'object',
+            properties: {
+              value: {
+                type: 'string',
+                description: yielded.prompt,
+                default: yielded.default,
+              }
+            },
+            required: yielded.required ? ['value'] : []
+          }
+        });
+
+        if (result.action !== 'accept') {
+          throw new Error(`User ${result.action} input request`);
+        }
+        return result.content?.value ?? yielded.default ?? null;
+      }
+
+      if ('confirm' in yielded) {
+        const result = await this.elicitationServer.elicitInput({
+          message: yielded.confirm,
+          requestedSchema: {
+            type: 'object',
+            properties: {
+              confirmed: {
+                type: 'boolean',
+                description: yielded.confirm,
+              }
+            },
+            required: ['confirmed']
+          }
+        });
+
+        if (result.action !== 'accept') {
+          return false;
+        }
+        return result.content?.confirmed ?? false;
+      }
+
+      if ('select' in yielded) {
+        const options = (yielded as any).options || [];
+        const values = options.map((o: any) => typeof o === 'string' ? o : o.value);
+
+        const result = await this.elicitationServer.elicitInput({
+          message: (yielded as any).select,
+          requestedSchema: {
+            type: 'object',
+            properties: {
+              selection: (yielded as any).multi ? {
+                type: 'array',
+                items: { type: 'string', enum: values }
+              } : {
+                type: 'string',
+                enum: values
+              }
+            },
+            required: ['selection']
+          }
+        });
+
+        if (result.action !== 'accept') {
+          throw new Error(`User ${result.action} selection`);
+        }
+        return result.content?.selection;
+      }
+
+      return undefined;
+    };
+  }
+
+  /**
+   * Execute a tool (supports both Photon subclasses, plain classes, and generators)
    */
   async executeTool(toolName: string, parameters: any): Promise<InternalToolResult> {
     try {
       let result: any;
 
+      // Get the method
+      const method = (this.instance as any)[toolName];
+
+      if (!method || typeof method !== 'function') {
+        throw new Error(`Tool not found: ${toolName}`);
+      }
+
+      // Check if method is an async generator function
+      if (isAsyncGeneratorFunction(method)) {
+        logger.debug(`Executing generator tool: ${toolName}`);
+        const generator = method.call(this.instance, parameters) as AsyncGenerator<PhotonYield, any, any>;
+        result = await executeGenerator(generator, {
+          inputProvider: this.createInputProvider(),
+          outputHandler: (yielded) => {
+            // Log progress/stream/log yields
+            if ('progress' in yielded) {
+              logger.debug(`[${toolName}] Progress: ${yielded.progress}%`);
+            } else if ('log' in yielded) {
+              logger.debug(`[${toolName}] ${yielded.log}`);
+            }
+          }
+        });
+      }
       // Check if instance has Photon's executeTool method
-      if (typeof this.instance.executeTool === 'function') {
+      else if (typeof this.instance.executeTool === 'function') {
         result = await this.instance.executeTool(toolName, parameters);
-      } else {
-        // Plain class - call method directly
-        const method = (this.instance as any)[toolName];
+      }
+      // Plain method - call directly
+      else {
+        const maybeGenerator = method.call(this.instance, parameters);
 
-        if (!method || typeof method !== 'function') {
-          throw new Error(`Tool not found: ${toolName}`);
+        // Check if result is already an async generator
+        if (isAsyncGenerator(maybeGenerator)) {
+          logger.debug(`Executing returned generator for: ${toolName}`);
+          result = await executeGenerator(maybeGenerator as AsyncGenerator<PhotonYield, any, any>, {
+            inputProvider: this.createInputProvider(),
+            outputHandler: (yielded) => {
+              if ('progress' in yielded) {
+                logger.debug(`[${toolName}] Progress: ${yielded.progress}%`);
+              } else if ('log' in yielded) {
+                logger.debug(`[${toolName}] ${yielded.log}`);
+              }
+            }
+          });
+        } else {
+          result = await maybeGenerator;
         }
-
-        result = await method.call(this.instance, parameters);
       }
 
       // Normalize result to InternalToolResult format
