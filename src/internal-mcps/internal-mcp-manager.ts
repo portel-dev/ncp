@@ -25,6 +25,7 @@ import { SkillsManagementMCP } from './skills.js';
 import { MarketplaceMCP } from './marketplace.js';
 import { CodeMCP } from './code.js';
 import { PhotonLoader } from './photon-loader.js';
+import { createMCPClientFactory, type OrchestratorInterface } from './mcp-client-factory.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
@@ -239,6 +240,24 @@ export class InternalMCPManager {
   setOrchestratorOnCodeMCP(orchestrator: any): void {
     this.codeMCP.setOrchestrator(orchestrator);
     logger.debug('Orchestrator connected to CodeMCP');
+  }
+
+  /**
+   * Set MCP client factory for Photons
+   * Enables this.mcp() calls within Photon classes
+   * Called after orchestrator is initialized
+   */
+  setMCPClientFactory(orchestrator: OrchestratorInterface): void {
+    const factory = createMCPClientFactory(orchestrator);
+    this.simpleMCPLoader.setMCPClientFactory(factory);
+    logger.debug('MCP client factory connected to PhotonLoader');
+  }
+
+  /**
+   * Get an internal MCP by name
+   */
+  getInternalMCP(mcpName: string): InternalMCP | undefined {
+    return this.internalMCPs.get(mcpName);
   }
 
   /**

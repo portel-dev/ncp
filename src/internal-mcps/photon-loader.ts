@@ -11,7 +11,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as crypto from 'crypto';
-import { PhotonMCP, DependencyManager } from '@portel/photon-core';
+import { PhotonMCP, DependencyManager, type MCPClientFactory } from '@portel/photon-core';
 import { PhotonAdapter } from './photon-adapter.js';
 import { InternalMCP } from './types.js';
 import { logger } from '../utils/logger.js';
@@ -20,9 +20,18 @@ import envPaths from 'env-paths';
 export class PhotonLoader {
   private loadedMCPs: Map<string, InternalMCP> = new Map();
   private dependencyManager: DependencyManager;
+  private mcpClientFactory?: MCPClientFactory;
 
-  constructor() {
+  constructor(mcpClientFactory?: MCPClientFactory) {
     this.dependencyManager = new DependencyManager();
+    this.mcpClientFactory = mcpClientFactory;
+  }
+
+  /**
+   * Set the MCP client factory for enabling this.mcp() in Photons
+   */
+  setMCPClientFactory(factory: MCPClientFactory): void {
+    this.mcpClientFactory = factory;
   }
 
   /**
@@ -203,7 +212,8 @@ export class PhotonLoader {
       }
 
       // Create adapter (async initialization)
-      const adapter = await PhotonAdapter.create(MCPClass, instance, sourceFilePath);
+      // Pass MCP client factory to enable this.mcp() calls in Photons
+      const adapter = await PhotonAdapter.create(MCPClass, instance, sourceFilePath, this.mcpClientFactory);
 
       logger.info(`✅ Loaded Photon: ${adapter.name} (${adapter.tools.length} tools)`);
 

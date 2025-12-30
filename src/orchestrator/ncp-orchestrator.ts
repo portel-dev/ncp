@@ -785,6 +785,13 @@ export class NCPOrchestrator {
           logger.info('[NCPOrchestrator] Injecting orchestrator into CodeMCP');
           this.internalMCPManager.setOrchestratorOnCodeMCP(this);
         }
+
+        // Inject MCP client factory into PhotonLoader
+        // This enables this.mcp() calls within Photon classes
+        if ('setMCPClientFactory' in this.internalMCPManager) {
+          logger.info('[NCPOrchestrator] Injecting MCP client factory for Photons');
+          this.internalMCPManager.setMCPClientFactory(this);
+        }
       }
 
       const profile = await this.profileManager.getProfile(this.profileName);
@@ -3777,6 +3784,110 @@ export class NCPOrchestrator {
    */
   private hashString(str: string): string {
     return createHash('sha256').update(str).digest('hex');
+  }
+
+  // ============================================
+  // MCP Client Factory Interface Methods
+  // These enable Photons to call external MCPs via this.mcp()
+  // ============================================
+
+  /**
+   * Get names of all connected/configured MCP servers
+   * Used by MCPClientFactory to list available servers
+   */
+  getConnectionNames(): string[] {
+    const names = new Set<string>();
+
+    // Add connected MCPs
+    for (const name of this.connections.keys()) {
+      names.add(name);
+    }
+
+    // Add configured MCPs (may not be connected yet)
+    for (const name of this.definitions.keys()) {
+      names.add(name);
+    }
+
+    // Add internal MCPs
+    const internalMCPs = this.internalMCPManager.getAllEnabledInternalMCPs();
+    for (const mcp of internalMCPs) {
+      names.add(mcp.name);
+    }
+
+    return Array.from(names);
+  }
+
+  /**
+   * Check if an MCP server is connected/available
+   * Used by MCPClient to verify connectivity before calls
+   */
+  isConnected(mcpName: string): boolean {
+    // Check active connections
+    if (this.connections.has(mcpName)) {
+      return true;
+    }
+
+    // Check if it's an internal MCP (always available)
+    const internalMCP = this.internalMCPManager.getInternalMCP(mcpName);
+    if (internalMCP) {
+      return true;
+    }
+
+    // Check if it's configured (can be connected on demand)
+    if (this.definitions.has(mcpName)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Get tools for a specific MCP server
+   * Used by MCPClient.list() to discover available tools
+   */
+  getToolsForMCP(mcpName: string): Array<{ name: string; description?: string; inputSchema?: any }> {
+    const tools: Array<{ name: string; description?: string; inputSchema?: any }> = [];
+
+    // Check active connection first
+    const connection = this.connections.get(mcpName);
+    if (connection && connection.tools) {
+      for (const tool of connection.tools) {
+        tools.push({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: (tool as any).inputSchema,
+        });
+      }
+      return tools;
+    }
+
+    // Check internal MCPs
+    const internalMCP = this.internalMCPManager.getInternalMCP(mcpName);
+    if (internalMCP) {
+      for (const tool of internalMCP.tools) {
+        tools.push({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+        });
+      }
+      return tools;
+    }
+
+    // Check cached definitions
+    const definition = this.definitions.get(mcpName);
+    if (definition && definition.tools) {
+      for (const tool of definition.tools) {
+        tools.push({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: (tool as any).inputSchema,
+        });
+      }
+      return tools;
+    }
+
+    return tools;
   }
 }
 

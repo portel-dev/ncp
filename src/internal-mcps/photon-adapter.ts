@@ -19,6 +19,7 @@ import {
   type EmitYield,
   type InputProvider,
   type OutputHandler,
+  type MCPClientFactory,
 } from '@portel/photon-core';
 import { logger } from '../utils/logger.js';
 import { ElicitationServer } from '../utils/elicitation-helper.js';
@@ -36,15 +37,18 @@ export class PhotonAdapter implements InternalMCP {
   private mcpClass: typeof PhotonMCP;
   private sourceFilePath?: string;
   private elicitationServer?: ElicitationServer;
+  private mcpClientFactory?: MCPClientFactory;
 
   private constructor(
     mcpClass: typeof PhotonMCP,
     instance: PhotonMCP,
-    sourceFilePath?: string
+    sourceFilePath?: string,
+    mcpClientFactory?: MCPClientFactory
   ) {
     this.mcpClass = mcpClass;
     this.instance = instance;
     this.sourceFilePath = sourceFilePath;
+    this.mcpClientFactory = mcpClientFactory;
 
     // Get MCP name from class (handle both Photon subclasses and plain classes)
     this.name = this.getMCPName(mcpClass);
@@ -54,6 +58,25 @@ export class PhotonAdapter implements InternalMCP {
 
     // Tools will be initialized asynchronously
     this.tools = [];
+
+    // Inject MCP client factory if instance supports it
+    this.injectMCPFactory();
+  }
+
+  /**
+   * Inject MCP client factory into the Photon instance
+   * Enables this.mcp('name') calls within Photons
+   */
+  private injectMCPFactory(): void {
+    if (!this.mcpClientFactory) {
+      return;
+    }
+
+    // Check if instance has setMCPFactory method (PhotonMCP subclass)
+    if (typeof (this.instance as any).setMCPFactory === 'function') {
+      (this.instance as any).setMCPFactory(this.mcpClientFactory);
+      logger.debug(`Injected MCP factory into ${this.name}`);
+    }
   }
 
   /**
@@ -76,13 +99,19 @@ export class PhotonAdapter implements InternalMCP {
 
   /**
    * Create and initialize a PhotonAdapter
+   *
+   * @param mcpClass The Photon class
+   * @param instance Instance of the Photon class
+   * @param sourceFilePath Path to the source file (for schema extraction)
+   * @param mcpClientFactory Optional MCP client factory for enabling this.mcp() calls
    */
   static async create(
     mcpClass: typeof PhotonMCP,
     instance: PhotonMCP,
-    sourceFilePath?: string
+    sourceFilePath?: string,
+    mcpClientFactory?: MCPClientFactory
   ): Promise<PhotonAdapter> {
-    const adapter = new PhotonAdapter(mcpClass, instance, sourceFilePath);
+    const adapter = new PhotonAdapter(mcpClass, instance, sourceFilePath, mcpClientFactory);
     await adapter.initializeTools();
     return adapter;
   }
