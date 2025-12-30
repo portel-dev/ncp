@@ -12,9 +12,13 @@ import {
   executeGenerator,
   isAsyncGenerator,
   isAsyncGeneratorFunction,
-  isInputYield,
+  isAskYield,
+  isEmitYield,
   type PhotonYield,
+  type AskYield,
+  type EmitYield,
   type InputProvider,
+  type OutputHandler,
 } from '@portel/photon-core';
 import { logger } from '../utils/logger.js';
 import { ElicitationServer } from '../utils/elicitation-helper.js';
@@ -214,92 +218,187 @@ export class PhotonAdapter implements InternalMCP {
   }
 
   /**
-   * Create input provider for generator yields using MCP elicitation
+   * Create input provider for generator ask yields using MCP elicitation
+   * Supports the new ask/emit pattern from photon-core 1.2.0
    */
   private createInputProvider(): InputProvider {
-    return async (yielded: PhotonYield): Promise<any> => {
-      if (!isInputYield(yielded)) return undefined;
-
+    return async (ask: AskYield): Promise<any> => {
       // If no elicitation server, throw error with yield info
       if (!this.elicitationServer) {
-        const message = 'prompt' in yielded ? yielded.prompt :
-                       'confirm' in yielded ? yielded.confirm :
-                       'select' in yielded ? (yielded as any).select : 'Input required';
-        throw new Error(`Interactive input required but no elicitation server available: ${message}`);
+        throw new Error(`Interactive input required but no elicitation server available: ${ask.message}`);
       }
 
-      // Handle different yield types via MCP elicitation
-      if ('prompt' in yielded) {
-        const result = await this.elicitationServer.elicitInput({
-          message: yielded.prompt,
-          requestedSchema: {
-            type: 'object',
-            properties: {
-              value: {
-                type: 'string',
-                description: yielded.prompt,
-                default: yielded.default,
-              }
-            },
-            required: yielded.required ? ['value'] : []
+      // Handle different ask types via MCP elicitation
+      switch (ask.ask) {
+        case 'text':
+        case 'password': {
+          const result = await this.elicitationServer.elicitInput({
+            message: ask.message,
+            requestedSchema: {
+              type: 'object',
+              properties: {
+                value: {
+                  type: 'string',
+                  description: ask.message,
+                  default: 'default' in ask ? ask.default : undefined,
+                }
+              },
+              required: ask.required !== false ? ['value'] : []
+            }
+          });
+
+          if (result.action !== 'accept') {
+            throw new Error(`User ${result.action} input request`);
           }
-        });
-
-        if (result.action !== 'accept') {
-          throw new Error(`User ${result.action} input request`);
+          return result.content?.value ?? ('default' in ask ? ask.default : null);
         }
-        return result.content?.value ?? yielded.default ?? null;
-      }
 
-      if ('confirm' in yielded) {
-        const result = await this.elicitationServer.elicitInput({
-          message: yielded.confirm,
-          requestedSchema: {
-            type: 'object',
-            properties: {
-              confirmed: {
-                type: 'boolean',
-                description: yielded.confirm,
-              }
-            },
-            required: ['confirmed']
+        case 'confirm': {
+          const result = await this.elicitationServer.elicitInput({
+            message: ask.message,
+            requestedSchema: {
+              type: 'object',
+              properties: {
+                confirmed: {
+                  type: 'boolean',
+                  description: ask.message,
+                }
+              },
+              required: ['confirmed']
+            }
+          });
+
+          if (result.action !== 'accept') {
+            return false;
           }
-        });
-
-        if (result.action !== 'accept') {
-          return false;
+          return result.content?.confirmed ?? ('default' in ask ? ask.default : false);
         }
-        return result.content?.confirmed ?? false;
-      }
 
-      if ('select' in yielded) {
-        const options = (yielded as any).options || [];
-        const values = options.map((o: any) => typeof o === 'string' ? o : o.value);
+        case 'select': {
+          const options = ask.options || [];
+          const values = options.map((o: any) => typeof o === 'string' ? o : o.value);
 
-        const result = await this.elicitationServer.elicitInput({
-          message: (yielded as any).select,
-          requestedSchema: {
-            type: 'object',
-            properties: {
-              selection: (yielded as any).multi ? {
-                type: 'array',
-                items: { type: 'string', enum: values }
-              } : {
-                type: 'string',
-                enum: values
-              }
-            },
-            required: ['selection']
+          const result = await this.elicitationServer.elicitInput({
+            message: ask.message,
+            requestedSchema: {
+              type: 'object',
+              properties: {
+                selection: ask.multi ? {
+                  type: 'array',
+                  items: { type: 'string', enum: values }
+                } : {
+                  type: 'string',
+                  enum: values
+                }
+              },
+              required: ['selection']
+            }
+          });
+
+          if (result.action !== 'accept') {
+            throw new Error(`User ${result.action} selection`);
           }
-        });
-
-        if (result.action !== 'accept') {
-          throw new Error(`User ${result.action} selection`);
+          return result.content?.selection ?? ('default' in ask ? ask.default : undefined);
         }
-        return result.content?.selection;
-      }
 
-      return undefined;
+        case 'number': {
+          const result = await this.elicitationServer.elicitInput({
+            message: ask.message,
+            requestedSchema: {
+              type: 'object',
+              properties: {
+                value: {
+                  type: 'number',
+                  description: ask.message,
+                  minimum: ask.min,
+                  maximum: ask.max,
+                  default: ask.default,
+                }
+              },
+              required: ask.required !== false ? ['value'] : []
+            }
+          });
+
+          if (result.action !== 'accept') {
+            throw new Error(`User ${result.action} input request`);
+          }
+          return result.content?.value ?? ask.default ?? 0;
+        }
+
+        case 'date': {
+          const result = await this.elicitationServer.elicitInput({
+            message: ask.message,
+            requestedSchema: {
+              type: 'object',
+              properties: {
+                value: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: ask.message,
+                  default: ask.default,
+                }
+              },
+              required: ask.required !== false ? ['value'] : []
+            }
+          });
+
+          if (result.action !== 'accept') {
+            throw new Error(`User ${result.action} input request`);
+          }
+          return result.content?.value ?? ask.default ?? new Date().toISOString();
+        }
+
+        case 'file': {
+          // File input is not well supported via MCP elicitation
+          // Return null and log a warning
+          logger.warn(`File input not supported via MCP elicitation: ${ask.message}`);
+          return null;
+        }
+
+        default:
+          logger.warn(`Unknown ask type: ${(ask as any).ask}`);
+          return undefined;
+      }
+    };
+  }
+
+  /**
+   * Create output handler for generator emit yields
+   * Logs progress, status, and other output types
+   */
+  private createOutputHandler(toolName: string): OutputHandler {
+    return (emit: EmitYield) => {
+      switch (emit.emit) {
+        case 'progress':
+          logger.debug(`[${toolName}] Progress: ${Math.round(emit.value * 100)}%${emit.message ? ` - ${emit.message}` : ''}`);
+          break;
+        case 'status':
+          logger.info(`[${toolName}] ${emit.message}`);
+          break;
+        case 'log': {
+          const level = emit.level || 'info';
+          const logFn = (logger as any)[level];
+          if (typeof logFn === 'function') {
+            logFn(`[${toolName}] ${emit.message}`);
+          } else {
+            logger.info(`[${toolName}] ${emit.message}`);
+          }
+          break;
+        }
+        case 'toast':
+          logger.info(`[${toolName}] Toast: ${emit.message} (${emit.type || 'info'})`);
+          break;
+        case 'thinking':
+          logger.debug(`[${toolName}] Thinking: ${emit.active ? 'started' : 'stopped'}`);
+          break;
+        case 'stream':
+          // For streaming data, just log that we received it
+          logger.debug(`[${toolName}] Stream chunk received${emit.final ? ' (final)' : ''}`);
+          break;
+        case 'artifact':
+          logger.info(`[${toolName}] Artifact: ${emit.title || emit.type}`);
+          break;
+      }
     };
   }
 
@@ -323,14 +422,7 @@ export class PhotonAdapter implements InternalMCP {
         const generator = method.call(this.instance, parameters) as AsyncGenerator<PhotonYield, any, any>;
         result = await executeGenerator(generator, {
           inputProvider: this.createInputProvider(),
-          outputHandler: (yielded) => {
-            // Log progress/stream/log yields
-            if ('progress' in yielded) {
-              logger.debug(`[${toolName}] Progress: ${yielded.progress}%`);
-            } else if ('log' in yielded) {
-              logger.debug(`[${toolName}] ${yielded.log}`);
-            }
-          }
+          outputHandler: this.createOutputHandler(toolName)
         });
       }
       // Check if instance has Photon's executeTool method
@@ -346,13 +438,7 @@ export class PhotonAdapter implements InternalMCP {
           logger.debug(`Executing returned generator for: ${toolName}`);
           result = await executeGenerator(maybeGenerator as AsyncGenerator<PhotonYield, any, any>, {
             inputProvider: this.createInputProvider(),
-            outputHandler: (yielded) => {
-              if ('progress' in yielded) {
-                logger.debug(`[${toolName}] Progress: ${yielded.progress}%`);
-              } else if ('log' in yielded) {
-                logger.debug(`[${toolName}] ${yielded.log}`);
-              }
-            }
+            outputHandler: this.createOutputHandler(toolName)
           });
         } else {
           result = await maybeGenerator;
