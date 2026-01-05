@@ -61,27 +61,42 @@ export class ProfileManager {
     // Store token/API key
     if (config.auth.token) {
       const type: CredentialType = config.auth.type === 'bearer' ? 'bearer_token' : 'api_key';
-      await this.credentialStore.setCredential(
+      const success = await this.credentialStore.setCredential(
         mcpName,
         type,
         config.auth.token,
         `${config.auth.type} credential for ${mcpName}`
       );
-      // Replace with secure reference
-      securConfig.auth.token = '_USE_SECURE_STORAGE_';
+
+      if (success) {
+        // Only replace with secure reference if storage succeeded
+        securConfig.auth.token = '_USE_SECURE_STORAGE_';
+        logger.debug(`Stored ${type} for ${mcpName} in secure storage`);
+      } else {
+        // Storage failed - keep the token in the config as fallback
+        // This is less secure but ensures the MCP can still work
+        logger.warn(`Failed to store ${type} for ${mcpName} in secure storage - keeping in profile`);
+      }
     }
 
     // Store basic auth credentials
     if (config.auth.username && config.auth.password) {
-      await this.credentialStore.setCredential(
+      const success = await this.credentialStore.setCredential(
         mcpName,
         'basic_auth',
         { username: config.auth.username, password: config.auth.password },
         `Basic auth credentials for ${mcpName}`
       );
-      // Replace with secure references
-      securConfig.auth.username = '_USE_SECURE_STORAGE_';
-      securConfig.auth.password = '_USE_SECURE_STORAGE_';
+
+      if (success) {
+        // Only replace with secure references if storage succeeded
+        securConfig.auth.username = '_USE_SECURE_STORAGE_';
+        securConfig.auth.password = '_USE_SECURE_STORAGE_';
+        logger.debug(`Stored basic auth for ${mcpName} in secure storage`);
+      } else {
+        // Storage failed - keep credentials in the config as fallback
+        logger.warn(`Failed to store basic auth for ${mcpName} in secure storage - keeping in profile`);
+      }
     }
 
     return securConfig;
@@ -262,11 +277,25 @@ export class ProfileManager {
 
         try {
           // Remove metadata fields before adding (internal use only)
-          const cleanConfig = {
-            command: config.command,
-            args: config.args || [],
-            env: config.env || {}
-          };
+          // Support both stdio (command) and HTTP (url) transport types
+          const cleanConfig: MCPConfig = {};
+
+          // Stdio transport fields
+          if (config.command) {
+            cleanConfig.command = config.command;
+            cleanConfig.args = config.args || [];
+            cleanConfig.env = config.env || {};
+          }
+
+          // HTTP/SSE transport fields
+          if (config.url) {
+            cleanConfig.url = config.url;
+          }
+
+          // Auth configuration (for HTTP MCPs)
+          if (config.auth) {
+            cleanConfig.auth = config.auth;
+          }
 
           // Use addMCPToProfile to ensure cache updates happen
           await this.addMCPToProfile('all', name, cleanConfig);
