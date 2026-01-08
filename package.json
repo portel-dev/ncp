@@ -122,7 +122,7 @@
     "yaml": "^2.8.1"
   },
   "devDependencies": {
-    "@agent-infra/mcp-server-browser": "^1.2.23",
+    "@agent-infra/mcp-server-browser": "^1.1.10",
     "@amap/amap-maps-mcp-server": "^0.0.8",
     "@anthropic-ai/mcpb": "^2.1.2",
     "@apify/actors-mcp-server": "^0.4.15",
@@ -151,7 +151,7 @@
     "mcp-evals": "^2.0.1",
     "mcp-hello-world": "^1.1.2",
     "mcp-server": "^0.0.9",
-    "mcp-server-kubernetes": "^2.9.6",
+    "mcp-server-kubernetes": "^3.1.0",
     "release-it": "^19.0.4",
     "rss-parser": "^3.13.0",
     "ts-jest": "^29.4.2",
