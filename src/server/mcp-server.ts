@@ -330,8 +330,7 @@ export class MCPServer implements ElicitationServer {
           },
           depth: {
             type: 'number',
-            description: 'Detail level: 0=names, 1=+descriptions, 2=+parameters (default: 2)',
-            enum: [0, 1, 2],
+            description: 'Detail level: 0=names, 1=+descriptions, 2=+parameters (default: 2)'
           }
         }
       }

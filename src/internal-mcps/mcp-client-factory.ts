@@ -1,18 +1,62 @@
 /**
  * MCP Client Factory for NCP
  *
- * Implements the MCPTransport and MCPClientFactory interfaces from photon-core
- * to enable Photons to call external MCPs via the orchestrator.
+ * Defines MCP client interfaces to enable Photons to call external MCPs via the orchestrator.
+ * These types were removed from @portel/photon-core@1.2.0 to separate concerns.
  */
 
-import {
-  MCPClient,
-  MCPTransport,
-  MCPClientFactory,
-  MCPToolInfo,
-  MCPToolResult,
-} from '@portel/photon-core';
 import { logger } from '../utils/logger.js';
+
+/**
+ * Result of calling an MCP tool
+ */
+export interface MCPToolResult {
+  content: Array<{
+    type: 'text' | 'image' | 'resource';
+    text?: string;
+    data?: string;
+    mimeType?: string;
+  }>;
+  isError?: boolean;
+}
+
+/**
+ * Information about an MCP tool
+ */
+export interface MCPToolInfo {
+  name: string;
+  description?: string;
+  inputSchema?: {
+    type: 'object';
+    properties: Record<string, any>;
+    required?: string[];
+  };
+}
+
+/**
+ * MCP Transport interface for communicating with MCP servers
+ */
+export interface MCPTransport {
+  callTool(mcpName: string, toolName: string, parameters: Record<string, any>): Promise<MCPToolResult>;
+  listTools(mcpName: string): Promise<MCPToolInfo[]>;
+  isConnected(mcpName: string): Promise<boolean>;
+}
+
+/**
+ * MCP Client interface for a single MCP server connection
+ */
+export interface MCPClient {
+  callTool(toolName: string, parameters: Record<string, any>): Promise<MCPToolResult>;
+  listTools(): Promise<MCPToolInfo[]>;
+}
+
+/**
+ * MCP Client Factory interface for creating MCP clients
+ */
+export interface MCPClientFactory {
+  create(mcpName: string): MCPClient;
+  listServers(): Promise<string[]>;
+}
 
 /**
  * Interface for orchestrator - kept minimal to avoid circular dependencies
@@ -26,6 +70,24 @@ export interface OrchestratorInterface {
   getConnectionNames(): string[];
   isConnected(mcpName: string): boolean;
   getToolsForMCP(mcpName: string): Array<{ name: string; description?: string; inputSchema?: any }>;
+}
+
+/**
+ * MCP Client implementation for a single MCP server
+ */
+export class MCPClientImpl implements MCPClient {
+  constructor(
+    private mcpName: string,
+    private transport: MCPTransport
+  ) {}
+
+  async callTool(toolName: string, parameters: Record<string, any>): Promise<MCPToolResult> {
+    return this.transport.callTool(this.mcpName, toolName, parameters);
+  }
+
+  async listTools(): Promise<MCPToolInfo[]> {
+    return this.transport.listTools(this.mcpName);
+  }
 }
 
 /**
@@ -112,7 +174,7 @@ export class NCPMCPClientFactory implements MCPClientFactory {
     }
 
     // Create new client
-    client = new MCPClient(mcpName, this.transport);
+    client = new MCPClientImpl(mcpName, this.transport);
     this.clients.set(mcpName, client);
 
     logger.debug(`[MCPClientFactory] Created client for MCP: ${mcpName}`);

@@ -19,8 +19,8 @@ import {
   type EmitYield,
   type InputProvider,
   type OutputHandler,
-  type MCPClientFactory,
 } from '@portel/photon-core';
+import type { MCPClientFactory } from './mcp-client-factory.js';
 import { logger } from '../utils/logger.js';
 import { ElicitationServer } from '../utils/elicitation-helper.js';
 import * as path from 'path';
