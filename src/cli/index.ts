@@ -10,7 +10,7 @@ import { ProfileManager } from '../profiles/profile-manager.js';
 import { MCPServer } from '../server/mcp-server.js';
 import { ConfigManager } from '../utils/config-manager.js';
 import { formatCommandDisplay } from '../utils/security.js';
-import { TextUtils } from '../utils/text-utils.js';
+import { TextUtils } from '@portel/photon-core';
 import { UIMessages } from '../utils/ui-messages.js';
 import { OutputFormatter } from '../services/output-formatter.js';
 import { ErrorHandler } from '../services/error-handler.js';
@@ -4980,7 +4980,7 @@ skillsCmd
 // Error handling for unknown commands with fuzzy suggestions
 program.on('command:*', async (operands: string[]) => {
   const unknownCommand = operands[0];
-  const { FuzzyMatcher } = await import('../utils/fuzzy-matcher.js');
+  const { FuzzyMatcher } = await import('@portel/photon-core');
   const matcher = new FuzzyMatcher();
 
   // Get all available command names (excluding hidden commands)

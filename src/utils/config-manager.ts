@@ -6,7 +6,7 @@ import { ProfileManager } from '../profiles/profile-manager.js';
 import { OutputFormatter } from '../services/output-formatter.js';
 import { ErrorHandler } from '../services/error-handler.js';
 import { formatCommandDisplay } from '../utils/security.js';
-import { TextUtils } from '../utils/text-utils.js';
+import { TextUtils } from '@portel/photon-core';
 import { UIMessages } from './ui-messages.js';
 import { logger } from '../utils/logger.js';
 import { getRuntimeForExtension } from './runtime-detector.js';
