@@ -15,6 +15,7 @@ import { PhotonMCP, DependencyManager, type MCPClientFactory } from '@portel/pho
 import { PhotonAdapter } from './photon-adapter.js';
 import { InternalMCP } from './types.js';
 import { logger } from '../utils/logger.js';
+import { loadPhotonConfig, applyPhotonEnvVars } from '../utils/photon-config.js';
 import envPaths from 'env-paths';
 
 export class PhotonLoader {
@@ -204,6 +205,20 @@ export class PhotonLoader {
 
       // Use the first Photon class found
       const MCPClass = mcpClasses[0];
+
+      // Apply photon-specific env vars from config.json before instantiation
+      const photonName = path.basename(filePath).replace(/\.(photon|micro)\.(ts|js)$/, '');
+      try {
+        const config = await loadPhotonConfig();
+        const envVars = config.photons[photonName];
+        if (envVars && Object.keys(envVars).length > 0) {
+          applyPhotonEnvVars(envVars);
+          logger.debug(`Applied ${Object.keys(envVars).length} env vars for ${photonName}`);
+        }
+      } catch (error: any) {
+        logger.debug(`No config found for ${photonName}: ${error.message}`);
+      }
+
       const instance = new MCPClass();
 
       // Call lifecycle hook if present
