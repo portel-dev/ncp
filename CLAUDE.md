@@ -1,3 +1,291 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Quick Reference - Common Commands
+
+### Development Workflow
+```bash
+# Build the project
+npm run build
+
+# Run tests
+npm run test                    # Unit tests
+npm run test:integration        # CLI entry point integration tests
+npm run test:integration:dxt    # DXT entry point integration tests
+npm run test:critical           # Critical protocol and timeout tests
+npm run test:e2e               # End-to-end tests
+
+# Development mode
+npm run dev                    # Build and start CLI
+
+# DXT build
+npm run build:dxt              # Build DXT package (uses build-dxt-clean.sh)
+npm run build:dxt:patched      # Build with build directory patches
+npm run test:dxt               # Test DXT package
+```
+
+### Single Test Execution
+```bash
+# Jest single test file
+npx jest tests/path/to/test.test.ts
+
+# Debug specific test
+NODE_OPTIONS=--experimental-vm-modules npx jest tests/your-test.test.ts --verbose --detectOpenHandles
+```
+
+### CLI Commands (after npm run build)
+```bash
+# Tool discovery
+node dist/index.js find "search query"
+node dist/index.js find                    # List all tools
+
+# Tool execution
+node dist/index.js run mcp:tool --params '{"key": "value"}'
+node dist/index.js run mcp:tool --dry-run  # Preview without executing
+
+# Configuration
+node dist/index.js list                    # List all MCPs
+node dist/index.js add mcp-name npx @package/name
+node dist/index.js remove mcp-name
+```
+
+## Project Architecture - Entry Points and Core Components
+
+### Dual Entry Point Architecture
+
+NCP has two entry points serving different use cases:
+
+1. **CLI Entry** (`src/index.ts` → `src/cli/index.ts`)
+   - Purpose: Command-line tools (`ncp find`, `ncp add`, `ncp list`, etc.)
+   - Installation: `npm install -g @portel/ncp`
+   - Build output: `dist/index.js`
+   - Includes: Full CLI functionality + MCP server
+
+2. **MCP Server Entry** (`src/index-mcp.ts`)
+   - Purpose: DXT package (.mcpb), runs as MCP server only
+   - Installation: Claude Desktop and other MCP clients
+   - Build output: `dist/index-mcp.js`
+   - Includes: MCP server only (no CLI to minimize bundle size)
+
+**Important**: Both entry points use the SAME `MCPServer` class from `src/server/mcp-server.ts`. This ensures consistent behavior across CLI and DXT environments.
+
+### Core Component Relationships
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         Client                                │
+│  (Claude Desktop, Cursor, VS Code, or CLI commands)          │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      MCPServer                               │
+│  (src/server/mcp-server.ts)                                  │
+│  - MCP protocol handling (uses official @modelcontextprotocol/sdk) │
+│  - Request routing (find/run/code)                           │
+│  - Tool definition exposure                                  │
+│  - Prompts/Resources handling                                │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    NCPOrchestrator                           │
+│  (src/orchestrator/ncp-orchestrator.ts)                      │
+│  - Core orchestration logic                                  │
+│  - MCP connection management                                 │
+│  - Tool discovery and execution                              │
+│  - Health monitoring                                         │
+└───┬───────────────┬───────────────┬───────────────┬─────────┘
+    │               │               │               │
+    ▼               ▼               ▼               ▼
+┌─────────┐   ┌──────────┐   ┌──────────┐   ┌──────────────┐
+│Discovery│   │  Internal│   │    Code  │   │    Photon    │
+│ Engine  │   │    MCP   │   │ Executor │   │    Runtime   │
+└─────────┘   └──────────┘   └──────────┘   └──────────────┘
+    │               │               │               │
+    ▼               ▼               ▼               ▼
+ Vector search    Internal MCP    TypeScript    .photon.ts files
+ Tool discovery    (schedule,     Sandbox        Dynamic loading
+                   skills, etc.)  Worker Threads  and execution
+```
+
+### Key Service Components
+
+- **ToolDiscoveryService** (`src/orchestrator/services/tool-discovery.ts`)
+  - Tool search and discovery logic
+  - Vector similarity matching
+  - Multi-query support
+
+- **CacheService** (`src/orchestrator/services/cache-service.ts`)
+  - CSV cache management for fast loading
+  - Schema cache for tool metadata
+  - Incremental cache updates
+
+- **ConnectionPoolManager** (`src/orchestrator/services/connection-pool.ts`)
+  - MCP connection pool management
+  - Health checks and reconnection
+  - Transport factory (stdio, SSE, HTTP)
+
+- **SkillsService** (`src/orchestrator/services/skills-service.ts`)
+  - Skills discovery and management
+  - Marketplace integration
+  - Resource loading
+
+- **PhotonService** (`src/orchestrator/services/photon-service.ts`)
+  - Photon loading and execution
+  - Custom MCP support via .photon.ts files
+  - Dynamic adapter creation
+
+## Directory Structure Overview
+
+```
+src/
+├── cli/                    # CLI command-line interface
+│   ├── index.ts           # CLI entry point router
+│   └── commands/          # CLI command implementations (add, find, list, etc.)
+├── server/                # MCP server
+│   ├── mcp-server.ts     # Main server implementation (SDK-based)
+│   └── mcp-prompts.ts    # Prompt definitions for user interactions
+├── orchestrator/          # Core orchestration logic
+│   ├── ncp-orchestrator.ts  # Main orchestrator class
+│   └── services/         # Orchestrator services
+│       ├── tool-discovery.ts
+│       ├── cache-service.ts
+│       ├── connection-pool.ts
+│       ├── skills-service.ts
+│       └── photon-service.ts
+├── internal-mcps/         # Internal MCP implementations
+│   ├── scheduler.ts      # Scheduling MCP (cron jobs)
+│   ├── skills.ts         # Skills management MCP
+│   ├── analytics.ts      # Usage analytics MCP
+│   ├── ncp-management.ts # NCP management (add/remove/list)
+│   ├── code.ts           # Code execution MCP
+│   ├── marketplace.ts    # MCP registry client
+│   ├── *.photon.ts       # Photon runtime files (intelligence, shell)
+│   ├── internal-mcp-manager.ts  # Internal MCP coordinator
+│   └── photon-loader.ts  # Photon file loader
+├── code-mode/            # Code execution mode
+│   ├── code-executor.ts  # Main code execution engine
+│   ├── code-worker.ts    # Worker thread implementation
+│   ├── sandbox/          # Sandbox implementations
+│   │   ├── index.ts      # Sandbox selection (4-tier)
+│   │   └── subprocess-sandbox.ts
+│   ├── validation/       # Code security validation
+│   │   ├── code-analyzer.ts      # AST-based static analysis
+│   │   └── semantic-validator.ts # Pattern-based validation
+│   └── network-policy.ts # Network permission manager
+├── discovery/            # Tool discovery engine
+│   ├── engine.ts         # Main discovery engine
+│   ├── rag-engine.ts     # Vector search engine
+│   └── semantic-enhancement-engine.ts
+├── cache/                # Caching system
+│   ├── csv-cache.ts      # CSV cache for tool metadata
+│   ├── schema-cache.ts   # Schema cache for tool definitions
+│   ├── cache-patcher.ts  # Incremental cache updates
+│   └── version-aware-validator.ts
+├── auth/                 # Authentication handling
+│   ├── oauth-device-flow.ts      # OAuth 2.0 Device Flow
+│   ├── oauth-auth-code-flow.ts   # OAuth 2.1 Auth Code + PKCE
+│   ├── mcp-oauth-provider.ts     # OAuth provider integration
+│   ├── token-store.ts            # Secure token storage
+│   └── secure-credential-store.ts
+├── services/             # Various services
+│   ├── tool-finder.ts    # Tool finding and search
+│   ├── cli-*.ts          # CLI-related services
+│   └── ...
+├── profiles/             # Profile management
+│   └── profile-manager.ts
+├── utils/                # Utility functions
+│   ├── logger.ts
+│   ├── ncp-paths.ts
+│   └── ...
+├── index.ts              # CLI entry point
+└── index-mcp.ts          # MCP server entry point
+```
+
+## Photon Runtime
+
+Photon is NCP's custom TypeScript MCP system that allows users to write `.photon.ts` files to extend NCP functionality without publishing npm packages.
+
+### Photon Loading Flow
+
+1. **Discovery**: Scan `~/.ncp/photons/` and project-local `.ncp/photons/` directories
+2. **Load**: Dynamic import of `.photon.ts` files using ES modules
+3. **Adapt**: Convert Photon to internal MCP using `PhotonAdapter`
+4. **Expose**: Photon tools exposed via `find`/`run` to AI clients
+
+### Photon File Structure
+
+```typescript
+// ~/.ncp/photons/my-tool.photon.ts
+
+// Manifest (required)
+export const manifest = {
+  name: 'my-tool',
+  version: '1.0.0',
+  description: 'My custom tool',
+  author: 'Your Name'
+};
+
+// Tool functions (exported async functions become MCP tools)
+export async function myFunction(params: { input: string }) {
+  return { result: `Processed: ${params.input}` };
+}
+
+export async function anotherTool(params: { x: number; y: number }) {
+  return { sum: params.x + params.y };
+}
+```
+
+### Photon Tool Schema
+
+Photon function parameters are automatically converted to JSON schemas using TypeScript type inference:
+
+- Parameter names → Schema property names
+- TypeScript types → JSON Schema types
+- JSDoc comments → Schema descriptions
+
+### Enabling Photon Runtime
+
+- **CLI/DXT global**: Set `enablePhotonRuntime: true` in `~/.ncp/settings.json`
+- **Environment variable**: `NCP_ENABLE_PHOTON_RUNTIME=true`
+- **DXT bundle**: Set env var in client config (DXT ignores settings.json):
+
+```json
+{
+  "mcpServers": {
+    "ncp": {
+      "command": "ncp-mcp",
+      "env": {
+        "NCP_ENABLE_PHOTON_RUNTIME": "true"
+      }
+    }
+  }
+}
+```
+
+### Built-in Photons
+
+NCP includes built-in Photons in `src/internal-mcps/`:
+
+- **intelligence.photon.ts** - AI-powered tool discovery
+- **shell.photon.ts** - Shell command execution
+
+These are loaded automatically when Photon runtime is enabled.
+
+### Photon vs Internal MCPs
+
+| Aspect | Photon | Internal MCP |
+|--------|--------|--------------|
+| Location | `~/.ncp/photons/` or `.ncp/photons/` | `src/internal-mcps/*.ts` |
+| Purpose | User extensions | Core NCP functionality |
+| Loading | Dynamic import | Built-in compilation |
+| Distribution | User-created | Shipped with NCP |
+| Examples | Custom tools, integrations | scheduler, skills, analytics |
+
+---
+
 ## PRE-COMMIT CHECKLIST - MANDATORY FOR ALL CHANGES
 
 Before committing ANY changes to server code, verify ALL of these:
