@@ -128,14 +128,19 @@ export class PhotonAdapter implements InternalMCP {
     // Fallback: implement convention for plain classes
     const prototype = mcpClass.prototype;
     const methods: string[] = [];
+    const conventionMethods = new Set([
+      'constructor',
+      'onInitialize',
+      'onShutdown',
+      'configure',
+      'getConfig',
+    ]);
 
     Object.getOwnPropertyNames(prototype).forEach((name) => {
-      // Skip constructor, private methods (starting with _), and lifecycle hooks
+      // Skip private methods (starting with _) and convention methods
       if (
-        name !== 'constructor' &&
         !name.startsWith('_') &&
-        name !== 'onInitialize' &&
-        name !== 'onShutdown' &&
+        !conventionMethods.has(name) &&
         typeof prototype[name] === 'function'
       ) {
         methods.push(name);
