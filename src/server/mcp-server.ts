@@ -1054,10 +1054,10 @@ export class MCPServer implements ElicitationServer {
 
         output += `\n🚀 **To install:**\n\n`;
 
-        // Check if query is a simple MCP name (single word, likely a direct MCP name)
-        const isMicroMCPName = description.trim().split(/\s+/).length === 1;
+        // Check if query is a single word (likely a direct MCP name)
+        const isSingleWordQuery = description.trim().split(/\s+/).length === 1;
 
-        if (isMicroMCPName) {
+        if (isSingleWordQuery) {
           // For simple queries like "canva", prioritize direct add
           output += `**Option 1: Try direct add (recommended for exact names):**\n`;
           output += `\`\`\`\nrun("ncp:add", {\n`;
@@ -1096,9 +1096,9 @@ export class MCPServer implements ElicitationServer {
     }
 
     // Fallback: No registry results, suggest direct add or show samples
-    const isMicroMCPName = description.trim().split(/\s+/).length === 1;
+    const isSingleWordQuery = description.trim().split(/\s+/).length === 1;
 
-    if (isMicroMCPName) {
+    if (isSingleWordQuery) {
       // For simple queries, suggest trying direct add first
       output += `💡 **Try adding directly:**\n\n`;
       output += `\`\`\`\nrun("ncp:add", {\n`;

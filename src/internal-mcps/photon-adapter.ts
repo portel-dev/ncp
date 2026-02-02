@@ -53,8 +53,7 @@ export class PhotonAdapter implements InternalMCP {
     // Get MCP name from class (handle both Photon subclasses and plain classes)
     this.name = this.getMCPName(mcpClass);
 
-    // Get description from class JSDoc or use default
-    this.description = this.extractClassDescription() || `${this.name} Photon (built-in)`;
+    this.description = `${this.name} Photon (built-in)`;
 
     // Tools will be initialized asynchronously
     this.tools = [];
@@ -228,15 +227,6 @@ export class PhotonAdapter implements InternalMCP {
         },
       });
     }
-  }
-
-  /**
-   * Extract class description from JSDoc comment
-   */
-  private extractClassDescription(): string | null {
-    // Try to get description from class metadata if available
-    // This would require decorator or other mechanism
-    return null;
   }
 
   /**

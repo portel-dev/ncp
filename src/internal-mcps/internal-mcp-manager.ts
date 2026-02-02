@@ -40,11 +40,11 @@ export class InternalMCPManager {
   private internalMCPs: Map<string, InternalMCP> = new Map();
   private disabledInternalMCPs: Set<string> = new Set();
   private ragEngine: any = null; // PersistentRAGEngine instance (set via setRAGEngine)
-  private simpleMCPLoader: PhotonLoader;
+  private photonLoader: PhotonLoader;
   private codeMCP: CodeMCP; // Keep reference for setting orchestrator later
 
   constructor() {
-    this.simpleMCPLoader = new PhotonLoader();
+    this.photonLoader = new PhotonLoader();
 
     // Register legacy internal MCPs (will be migrated to Photon)
     this.registerInternalMCP(new NCPManagementMCP());
@@ -97,7 +97,7 @@ export class InternalMCPManager {
       logger.info('ℹ️  Photon runtime disabled - loading built-in photons only');
     }
 
-    const mcps = await this.simpleMCPLoader.loadAll(directories);
+    const mcps = await this.photonLoader.loadAll(directories);
 
     // Register loaded MCPs
     for (const mcp of mcps) {
@@ -249,7 +249,7 @@ export class InternalMCPManager {
    */
   setMCPClientFactory(orchestrator: OrchestratorInterface): void {
     const factory = createMCPClientFactory(orchestrator);
-    this.simpleMCPLoader.setMCPClientFactory(factory);
+    this.photonLoader.setMCPClientFactory(factory);
     logger.debug('MCP client factory connected to PhotonLoader');
   }
 

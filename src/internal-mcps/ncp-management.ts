@@ -222,7 +222,7 @@ export class NCPManagementMCP implements InternalMCP {
     // 3. File path detection → import from file
     // 3a. Photon file (.photon.ts)
     if (!command && !url && mcpName.endsWith('.photon.ts')) {
-      return await this.importMicroMCPFromFile(mcpName, profile);
+      return await this.importPhotonFromFile(mcpName, profile);
     }
 
     // 3b. JSON config file (.json or paths)
@@ -242,7 +242,7 @@ export class NCPManagementMCP implements InternalMCP {
     )) {
       // 4a. Check if it's a .photon.ts file URL → download Photon
       if (mcpName.endsWith('.photon.ts')) {
-        return await this.downloadMicroMCPFromURL(mcpName, profile);
+        return await this.downloadPhotonFromURL(mcpName, profile);
       }
 
       // 4b. Otherwise → HTTP/SSE MCP server URL
@@ -301,15 +301,15 @@ export class NCPManagementMCP implements InternalMCP {
             success: false,
             error: `Provider "${mcpName}" not found in registry. Either:\n` +
                    `1. Use a known provider name (e.g., "canva", "github", "notion")\n` +
-                   `2. Provide file path for Photon: "${mcpName}.photon.ts" or "~/.ncp/micromcps/${mcpName}.photon.ts"\n` +
+                   `2. Provide file path for Photon: "${mcpName}.photon.ts" or "~/.ncp/photons/${mcpName}.photon.ts"\n` +
                    `3. Provide manual configuration with command (for stdio) or url (for HTTP/SSE)\n\n` +
-                   `💡 Tip: MicroMCPs in ~/.ncp/micromcps/ are auto-discovered on NCP startup`
+                   `💡 Tip: Photons in ~/.ncp/photons/ are auto-discovered on NCP startup`
           };
         }
 
         // Handle Photon installation (different flow)
-        if (provider._meta?.isMicroMCP && provider._meta?.sourceUrl) {
-          return await this.installMicroMCP(mcpName, provider, profile);
+        if (provider._meta?.isPhoton && provider._meta?.sourceUrl) {
+          return await this.installPhoton(mcpName, provider, profile);
         }
 
         // Use provider metadata to build config
@@ -821,12 +821,12 @@ Do you want to remove this MCP?`;
 
       // Detect format: TypeScript (Photon) vs JSON (config)
       // TypeScript indicators: contains "export class", "implements Photon", etc.
-      const isMicroMCP = trimmed.includes('export class') &&
+      const isPhoton = trimmed.includes('export class') &&
                         (trimmed.includes('implements Photon') || trimmed.includes('@tool'));
 
-      if (isMicroMCP) {
+      if (isPhoton) {
         // Import as Photon TypeScript code
-        return await this.importMicroMCPFromClipboard(trimmed);
+        return await this.importPhotonFromClipboard(trimmed);
       }
 
       // Try to parse as JSON config
@@ -863,7 +863,7 @@ Do you want to remove this MCP?`;
   /**
    * Import Photon from clipboard containing TypeScript code
    */
-  private async importMicroMCPFromClipboard(tsContent: string): Promise<InternalToolResult> {
+  private async importPhotonFromClipboard(tsContent: string): Promise<InternalToolResult> {
     try {
       const fs = await import('fs/promises');
       const path = await import('path');
@@ -886,10 +886,10 @@ Do you want to remove this MCP?`;
         .replace(/^-/, '');  // Remove leading dash
 
       // Create destination directory
-      const microDir = path.join(getNcpBaseDirectory(), 'micromcps');
-      await fs.mkdir(microDir, { recursive: true });
+      const photonDir = path.join(getNcpBaseDirectory(), 'photons');
+      await fs.mkdir(photonDir, { recursive: true });
 
-      const destFile = path.join(microDir, `${baseName}.photon.ts`);
+      const destFile = path.join(photonDir, `${baseName}.photon.ts`);
 
       // Write TypeScript code to file
       await fs.writeFile(destFile, tsContent, 'utf8');
@@ -991,10 +991,10 @@ Do you want to remove this MCP?`;
         const options = uniqueCandidates.map(c => {
           // Build label with security indicators
           const trustBadge = c.isTrusted ? '✓ ' : '';
-          const isMicroMCP = c._meta?.isMicroMCP;
-          const transportBadge = isMicroMCP ? '📦' : (c.transport === 'stdio' ? '💻' : '🌐');
+          const isPhoton = c._meta?.isPhoton;
+          const transportBadge = isPhoton ? '📦' : (c.transport === 'stdio' ? '💻' : '🌐');
           const envInfo = c.envVars?.length ? ` (${c.envVars.length} env vars)` : '';
-          const transportInfo = isMicroMCP ? ' [Photon]' : (c.transport !== 'stdio' ? ` [${c.transport.toUpperCase()}]` : '');
+          const transportInfo = isPhoton ? ' [Photon]' : (c.transport !== 'stdio' ? ` [${c.transport.toUpperCase()}]` : '');
 
           return {
             value: c.name,
@@ -1059,8 +1059,8 @@ Do you want to remove this MCP?`;
           const details = await registryClient.getDetailedInfo(candidate.name);
 
           // Check if this is a Photon (different installation flow)
-          if (details._meta?.isMicroMCP && details._meta?.sourceUrl) {
-            const result = await this.installMicroMCP(candidate.name, details, 'all');
+          if (details._meta?.isPhoton && details._meta?.sourceUrl) {
+            const result = await this.installPhoton(candidate.name, details, 'all');
             if (result.success) {
               imported++;
               importedNames.push(candidate.displayName);
@@ -1619,20 +1619,20 @@ Do you want to remove this MCP?`;
 
   /**
    * Install Photon from registry
-   * Downloads .photon.ts file and optional schema, saves to ~/.ncp/micromcps/
+   * Downloads .photon.ts file and optional schema, saves to ~/.ncp/photons/
    */
-  private async installMicroMCP(name: string, provider: any, profile: string): Promise<InternalToolResult> {
+  private async installPhoton(name: string, provider: any, profile: string): Promise<InternalToolResult> {
     try {
       const fs = await import('fs/promises');
       const path = await import('path');
       const os = await import('os');
 
-      // Create micromcps directory
-      const microDir = path.join(getNcpBaseDirectory(), 'micromcps');
-      await fs.mkdir(microDir, { recursive: true });
+      // Create photons directory
+      const photonDir = path.join(getNcpBaseDirectory(), 'photons');
+      await fs.mkdir(photonDir, { recursive: true });
 
-      const microFile = path.join(microDir, `${name}.photon.ts`);
-      const schemaFile = path.join(microDir, `${name}.micro.schema.json`);
+      const photonFile = path.join(photonDir, `${name}.photon.ts`);
+      const schemaFile = path.join(photonDir, `${name}.photon.schema.json`);
 
       logger.info(`Installing Photon "${name}" from ${provider._meta.sourceUrl}`);
 
@@ -1642,7 +1642,7 @@ Do you want to remove this MCP?`;
         throw new Error(`Failed to download Photon source: ${sourceResponse.statusText}`);
       }
       const sourceContent = await sourceResponse.text();
-      await fs.writeFile(microFile, sourceContent, 'utf8');
+      await fs.writeFile(photonFile, sourceContent, 'utf8');
 
       // Download schema if available
       let schemaDownloaded = false;
@@ -1660,14 +1660,14 @@ Do you want to remove this MCP?`;
         }
       }
 
-      // MicroMCPs are auto-loaded from ~/.ncp/micromcps/ directory
+      // Photons are auto-loaded from ~/.ncp/photons/ directory
       // No need to track in profile - they'll be discovered on next startup
 
       return {
         success: true,
         content: [
           { type: 'text', text: `${UIMessages.photonInstalled(name)}\n\n` +
-            `📍 Location: ${microFile}\n` +
+            `📍 Location: ${photonFile}\n` +
             (schemaDownloaded ? `📋 Schema: ${schemaFile}\n` : '') +
             `\n${UIMessages.photonUsage(name)}` +
             `\n${UIMessages.photonDiscovery(name)}` }
@@ -1684,9 +1684,9 @@ Do you want to remove this MCP?`;
 
   /**
    * Import Photon from a local .photon.ts file
-   * Copies the file (and optional schema) to ~/.ncp/micromcps/
+   * Copies the file (and optional schema) to ~/.ncp/photons/
    */
-  private async importMicroMCPFromFile(filePath: string, profile: string): Promise<InternalToolResult> {
+  private async importPhotonFromFile(filePath: string, profile: string): Promise<InternalToolResult> {
     try {
       const fs = await import('fs/promises');
       const path = await import('path');
@@ -1721,11 +1721,11 @@ Do you want to remove this MCP?`;
       const baseName = fileName.replace('.photon.ts', '');
 
       // Create destination directory
-      const microDir = path.join(getNcpBaseDirectory(), 'micromcps');
-      await fs.mkdir(microDir, { recursive: true });
+      const photonDir = path.join(getNcpBaseDirectory(), 'photons');
+      await fs.mkdir(photonDir, { recursive: true });
 
-      const destFile = path.join(microDir, fileName);
-      const destSchema = path.join(microDir, `${baseName}.micro.schema.json`);
+      const destFile = path.join(photonDir, fileName);
+      const destSchema = path.join(photonDir, `${baseName}.photon.schema.json`);
 
       // Copy .photon.ts file
       await fs.copyFile(resolvedPath, destFile);
@@ -1734,13 +1734,13 @@ Do you want to remove this MCP?`;
       // Check for optional schema file in same directory
       let schemaImported = false;
       const sourceDir = path.dirname(resolvedPath);
-      const sourceSchema = path.join(sourceDir, `${baseName}.micro.schema.json`);
+      const sourceSchema = path.join(sourceDir, `${baseName}.photon.schema.json`);
 
       try {
         await fs.access(sourceSchema);
         await fs.copyFile(sourceSchema, destSchema);
         schemaImported = true;
-        logger.info(`Copied schema file: ${baseName}.micro.schema.json`);
+        logger.info(`Copied schema file: ${baseName}.photon.schema.json`);
       } catch {
         // Schema file is optional
         logger.debug(`No schema file found for ${baseName}`);
@@ -1769,7 +1769,7 @@ Do you want to remove this MCP?`;
    * Download Photon from a URL
    * Downloads .photon.ts file and optional schema from HTTP(S) URL
    */
-  private async downloadMicroMCPFromURL(fileUrl: string, profile: string): Promise<InternalToolResult> {
+  private async downloadPhotonFromURL(fileUrl: string, profile: string): Promise<InternalToolResult> {
     try {
       const fs = await import('fs/promises');
       const path = await import('path');
@@ -1790,11 +1790,11 @@ Do you want to remove this MCP?`;
       const baseName = fileName.replace('.photon.ts', '');
 
       // Create destination directory
-      const microDir = path.join(getNcpBaseDirectory(), 'micromcps');
-      await fs.mkdir(microDir, { recursive: true });
+      const photonDir = path.join(getNcpBaseDirectory(), 'photons');
+      await fs.mkdir(photonDir, { recursive: true });
 
-      const destFile = path.join(microDir, fileName);
-      const destSchema = path.join(microDir, `${baseName}.micro.schema.json`);
+      const destFile = path.join(photonDir, fileName);
+      const destSchema = path.join(photonDir, `${baseName}.photon.schema.json`);
 
       // Save the .photon.ts file
       await fs.writeFile(destFile, tsContent, 'utf8');
@@ -1802,7 +1802,7 @@ Do you want to remove this MCP?`;
 
       // Try to download optional schema file
       let schemaDownloaded = false;
-      const schemaUrl = fileUrl.replace('.photon.ts', '.micro.schema.json');
+      const schemaUrl = fileUrl.replace('.photon.ts', '.photon.schema.json');
       try {
         const schemaResponse = await fetch(schemaUrl);
         if (schemaResponse.ok) {

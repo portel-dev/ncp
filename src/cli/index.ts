@@ -1030,22 +1030,22 @@ Examples:
           const baseName = fileName.replace('.photon.ts', '');
 
           // Create destination directory
-          const microDir = path.join(getNcpBaseDirectory(), 'micromcps');
-          await fs.mkdir(microDir, { recursive: true });
+          const photonDir = path.join(getNcpBaseDirectory(), 'photons');
+          await fs.mkdir(photonDir, { recursive: true });
 
-          const destFile = path.join(microDir, fileName);
+          const destFile = path.join(photonDir, fileName);
 
           // Save the file
           await fs.writeFile(destFile, tsContent, 'utf8');
 
           // Try to download optional schema file
           let schemaImported = false;
-          const schemaUrl = providerName.replace('.photon.ts', '.micro.schema.json');
+          const schemaUrl = providerName.replace('.photon.ts', '.photon.schema.json');
           try {
             const schemaResponse = await fetch(schemaUrl);
             if (schemaResponse.ok) {
               const schemaContent = await schemaResponse.text();
-              const destSchema = path.join(microDir, `${baseName}.micro.schema.json`);
+              const destSchema = path.join(photonDir, `${baseName}.photon.schema.json`);
               await fs.writeFile(destSchema, schemaContent, 'utf8');
               schemaImported = true;
               console.log(chalk.green(`✅ Downloaded schema`));
@@ -1057,7 +1057,7 @@ Examples:
           console.log(chalk.green(`\n✅ Photon "${baseName}" downloaded successfully!`));
           console.log(chalk.dim(`📍 Location: ${destFile}`));
           if (schemaImported) {
-            console.log(chalk.dim(`📋 Schema: ${path.join(microDir, `${baseName}.micro.schema.json`)}`));
+            console.log(chalk.dim(`📋 Schema: ${path.join(photonDir, `${baseName}.photon.schema.json`)}`));
           }
           console.log(chalk.blue(`\n${UIMessages.photonUsage(baseName)}`));
           console.log(chalk.blue(UIMessages.photonDiscovery(baseName)));

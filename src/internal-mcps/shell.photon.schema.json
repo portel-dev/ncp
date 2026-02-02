@@ -1,29 +1,5 @@
 [
   {
-    "name": "shouldLoad",
-    "description": "Check if this MCP should be loaded based on environment",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "command": {
-          "type": "string"
-        },
-        "cwd": {
-          "type": "string"
-        },
-        "timeout": {
-          "type": "number"
-        },
-        "env": {
-          "type": "object"
-        }
-      },
-      "required": [
-        "command"
-      ]
-    }
-  },
-  {
     "name": "execute",
     "description": "Execute a shell command",
     "inputSchema": {
@@ -121,17 +97,7 @@
     "description": "Get current working directory",
     "inputSchema": {
       "type": "object",
-      "properties": {
-        "path": {
-          "type": "string"
-        },
-        "command": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "path"
-      ]
+      "properties": {}
     }
   },
   {
