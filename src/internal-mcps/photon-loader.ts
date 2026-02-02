@@ -10,8 +10,15 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import * as crypto from 'crypto';
-import { PhotonMCP, DependencyManager, type MCPClientFactory } from '@portel/photon-core';
+import {
+  PhotonMCP,
+  DependencyManager,
+  type MCPClientFactory,
+  isClass,
+  hasAsyncMethods,
+  findPhotonClasses,
+  compilePhotonTS,
+} from '@portel/photon-core';
 import { PhotonAdapter } from './photon-adapter.js';
 import { InternalMCP } from './types.js';
 import { logger } from '../utils/logger.js';
@@ -243,99 +250,22 @@ export class PhotonLoader {
 
   /**
    * Compile TypeScript file to JavaScript and cache it
+   * Delegates to shared compilePhotonTS from photon-core
    */
   private async compileTypeScript(tsFilePath: string, nodeModulesPath?: string): Promise<string> {
-    // Generate cache path based on file content hash
-    const tsContent = await fs.readFile(tsFilePath, 'utf-8');
-    const hash = crypto.createHash('sha256').update(tsContent).digest('hex').slice(0, 16);
-
-    // IMPORTANT: Store compiled file in same directory as dependencies for module resolution
-    // This allows Node to find npm packages when the compiled code imports them
-    const mcpName = path.basename(tsFilePath, '.photon.ts');
     const cacheDir = nodeModulesPath
       ? path.dirname(nodeModulesPath)  // Same dir as node_modules
       : path.join(envPaths('ncp', { suffix: '' }).cache, 'compiled-mcp'); // Fallback
-    const fileName = path.basename(tsFilePath, '.ts');
-    const cachedJsPath = path.join(cacheDir, `${fileName}.${hash}.mjs`);
 
-    // Check if cached version exists
-    try {
-      await fs.access(cachedJsPath);
-      logger.debug(`Using cached compiled version: ${path.basename(cachedJsPath)}`);
-      return cachedJsPath;
-    } catch {
-      // Cache miss - compile it
-    }
-
-    // Compile TypeScript to JavaScript (no bundling - dependencies resolved at runtime)
-    logger.debug(`Compiling ${path.basename(tsFilePath)} with esbuild...`);
-
-    const esbuild = await import('esbuild');
-    const result = await esbuild.transform(tsContent, {
-      loader: 'ts',
-      format: 'esm',
-      target: 'es2022',
-      sourcemap: 'inline'
-    });
-
-    // Ensure cache directory exists
-    await fs.mkdir(cacheDir, { recursive: true });
-
-    // Write compiled JavaScript to cache
-    await fs.writeFile(cachedJsPath, result.code, 'utf-8');
-    logger.debug(`Cached compiled JS: ${path.basename(cachedJsPath)}`);
-
-    return cachedJsPath;
+    return compilePhotonTS(tsFilePath, { cacheDir });
   }
 
   /**
    * Find all classes in a module
-   *
-   * Accepts ANY class - no base class requirement!
-   * Just like PHP Restler, we use pure convention.
+   * Delegates to shared findPhotonClasses from photon-core
    */
   private findMCPClasses(module: any): Array<any> {
-    const classes: Array<any> = [];
-
-    for (const exportedItem of Object.values(module)) {
-      if (typeof exportedItem === 'function' && this.isClass(exportedItem)) {
-        // Check if it has async methods (indication it's a Photon)
-        if (this.hasAsyncMethods(exportedItem)) {
-          classes.push(exportedItem);
-        }
-      }
-    }
-
-    return classes;
-  }
-
-  /**
-   * Check if a function is a class constructor
-   */
-  private isClass(fn: any): boolean {
-    return typeof fn === 'function' && /^\s*class\s+/.test(fn.toString());
-  }
-
-  /**
-   * Check if a class has async methods
-   */
-  private hasAsyncMethods(ClassConstructor: any): boolean {
-    const prototype = ClassConstructor.prototype;
-
-    for (const key of Object.getOwnPropertyNames(prototype)) {
-      if (key === 'constructor') continue;
-
-      const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
-      if (descriptor && typeof descriptor.value === 'function') {
-        // Check if it's an async function
-        const fn = descriptor.value;
-        if (fn.constructor.name === 'AsyncFunction') {
-          return true;
-        }
-      }
-    }
-
-    return false;
+    return findPhotonClasses(module);
   }
 
   /**
