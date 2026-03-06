@@ -1,37 +1,11 @@
 /**
  * MCP Client Factory for NCP
  *
- * Defines MCP client interfaces to enable Photons to call external MCPs via the orchestrator.
- * These types were removed from @portel/photon-core@1.2.0 to separate concerns.
+ * Provides implementation for enabling Photons to call external MCPs via the orchestrator.
  */
 
+import { type MCPClientFactory as PhotonMCPClientFactory, type MCPToolResult, type MCPToolInfo } from '@portel/photon-core';
 import { logger } from '../utils/logger.js';
-
-/**
- * Result of calling an MCP tool
- */
-export interface MCPToolResult {
-  content: Array<{
-    type: 'text' | 'image' | 'resource';
-    text?: string;
-    data?: string;
-    mimeType?: string;
-  }>;
-  isError?: boolean;
-}
-
-/**
- * Information about an MCP tool
- */
-export interface MCPToolInfo {
-  name: string;
-  description?: string;
-  inputSchema?: {
-    type: 'object';
-    properties: Record<string, any>;
-    required?: string[];
-  };
-}
 
 /**
  * MCP Transport interface for communicating with MCP servers
@@ -44,6 +18,7 @@ export interface MCPTransport {
 
 /**
  * MCP Client interface for a single MCP server connection
+ * Simplified version for NCP's orchestrator use
  */
 export interface MCPClient {
   callTool(toolName: string, parameters: Record<string, any>): Promise<MCPToolResult>;
@@ -52,6 +27,7 @@ export interface MCPClient {
 
 /**
  * MCP Client Factory interface for creating MCP clients
+ * NCP-specific version (compatible with photon-core's pattern)
  */
 export interface MCPClientFactory {
   create(mcpName: string): MCPClient;
@@ -75,7 +51,7 @@ export interface OrchestratorInterface {
 /**
  * MCP Client implementation for a single MCP server
  */
-export class MCPClientImpl implements MCPClient {
+export class MCPClientImpl {
   constructor(
     private mcpName: string,
     private transport: MCPTransport

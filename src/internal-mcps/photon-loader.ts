@@ -13,12 +13,12 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import {
   PhotonMCP,
   DependencyManager,
-  type MCPClientFactory,
   isClass,
   hasAsyncMethods,
   findPhotonClasses,
   compilePhotonTS,
 } from '@portel/photon-core';
+import type { MCPClientFactory } from './mcp-client-factory.js';
 import { PhotonAdapter } from './photon-adapter.js';
 import { InternalMCP } from './types.js';
 import { logger } from '../utils/logger.js';
