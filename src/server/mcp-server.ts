@@ -463,13 +463,33 @@ export class MCPServer implements ElicitationServer {
 
     const codeTool: Tool = {
       name: 'code',
-      description: 'Execute TypeScript with MCPs as namespaces (e.g., github.get_repo()). Use ncp.find() for discovery. Console captured.',
+      description: `Execute TypeScript code with automatic tool discovery and parameter mapping.
+
+**PRIMARY METHOD - ncp.do(intent, params):**
+Single-call execution with embedding-based param matching.
+No need to know exact tool names or param schemas!
+
+ncp.do("send email", {
+  recipient: "john@example.com",  // Auto-maps to "to"
+  title: "Meeting",               // Auto-maps to "subject"
+  message: "Let's meet"           // Auto-maps to "body"
+})
+
+**Returns on success:** { success: true, tool, result, paramMappings }
+**Returns on failure:** { success: false, tool, schema, hint }
+  - schema shows actual params needed
+  - hint suggests corrections
+  - Retry with correct params!
+
+**FALLBACK - Direct namespace calls (when you know exact tools):**
+- ncp.find("query"): Returns Tool[] with { toolName, schema, confidence }
+- namespace.tool(): Direct call e.g., gmail.send_email({ to, subject, body })`,
       inputSchema: {
         type: 'object',
         properties: {
           code: {
             type: 'string',
-            description: 'TypeScript code. MCPs available as namespaces. Example: await gmail.send_email({to, subject, body})'
+            description: 'TypeScript code. Use ncp.do("intent", { params }) for automatic tool discovery and param mapping.'
           },
           timeout: {
             type: 'number',

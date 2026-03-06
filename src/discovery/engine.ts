@@ -13,7 +13,14 @@ export class DiscoveryEngine {
   constructor() {
     this.ragEngine = new PersistentRAGEngine();
   }
-  
+
+  /**
+   * Get the embedding model for external use (e.g., IntentExecutor param matching)
+   */
+  getEmbeddingModel(): any {
+    return this.ragEngine.getModel();
+  }
+
   async initialize(currentConfig?: any): Promise<void> {
     const startTime = Date.now();
     logger.info('[Discovery] Initializing RAG-powered discovery engine...');

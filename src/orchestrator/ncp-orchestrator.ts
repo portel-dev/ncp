@@ -237,17 +237,34 @@ export class NCPOrchestrator {
         // Add NCP core tools for progressive disclosure
         tools.push({
           name: 'ncp:find',
-          description: 'Search or list tools. Progressive disclosure pattern.',
+          description: `Discover available tools via semantic search. Returns array of matching tools.
+
+**Usage:** ncp.find("query") or ncp.find("q1 | q2 | q3") for multi-search
+
+**Returns:** Tool[] where each tool has:
+- toolName: string     // e.g., "github:create_issue"
+- mcpName: string      // e.g., "github"
+- description: string  // What the tool does
+- schema: object       // Input parameters schema { properties, required }
+- confidence: number   // Match confidence 0-1
+
+**Example:**
+const tools = await ncp.find("send email | create issue");
+const emailTool = tools.find(t => t.mcpName === "gmail");
+if (emailTool) {
+  console.log(emailTool.schema.properties); // See required params
+  await gmail.send_email({ to: "...", subject: "..." });
+}`,
           inputSchema: {
             type: 'object',
             properties: {
               description: {
                 type: 'string',
-                description: 'Search query or MCP filter. Omit to list all.'
+                description: 'Search query (pipe-separated for multiple). Omit to list all tools.'
               },
               limit: {
                 type: 'number',
-                description: 'Max results (default: 5 search, 20 list)'
+                description: 'Max results (default: 5 for search, 20 for list)'
               },
               page: {
                 type: 'number',
@@ -281,6 +298,43 @@ export class NCPOrchestrator {
               }
             },
             required: ['tool']
+          }
+        });
+
+        tools.push({
+          name: 'ncp:do',
+          description: `Execute intent with automatic tool discovery and parameter mapping.
+
+**Single-call discovery + execution via embedding-based param matching.**
+
+Usage: ncp.do("intent", { param1: value1, param2: value2 })
+
+The system will:
+1. Find the best matching tool for your intent
+2. Map your params to the tool's schema via semantic similarity
+3. Execute and return the result
+
+**Example:**
+ncp.do("send email", {
+  recipient: "john@example.com",  // Maps to "to" param
+  title: "Meeting",               // Maps to "subject" param
+  message: "Let's meet at 3pm"    // Maps to "body" param
+})
+
+Returns: { success, tool, mappedParams, paramMappings, result, error }`,
+          inputSchema: {
+            type: 'object',
+            properties: {
+              intent: {
+                type: 'string',
+                description: 'What you want to do (e.g., "send email", "read file", "create issue")'
+              },
+              context: {
+                type: 'object',
+                description: 'Parameters with any names - will be mapped to tool schema via embedding similarity'
+              }
+            },
+            required: ['intent']
           }
         });
 
@@ -419,6 +473,37 @@ export class NCPOrchestrator {
               (typeof result.content === 'string' && result.content ? result.content : `Failed to execute tool: ${params.tool}`);
             throw new Error(errorMessage);
           }
+        } else if (toolName === 'ncp:do') {
+          // Intent-based execution with embedding-based param matching
+          const { IntentExecutor } = await import('../discovery/intent-executor.js');
+          const { ToolFinder } = await import('../services/tool-finder.js');
+
+          const finder = new ToolFinder(this);
+          const intentExecutor = new IntentExecutor(
+            // Tool finder function
+            async (query: string, limit: number) => {
+              const result = await finder.find({ query, limit, depth: 2 });
+              return result.tools;
+            },
+            // Tool executor function
+            async (tool: string, toolParams: any) => {
+              const result = await this.run(tool, toolParams);
+              if (result.success) {
+                return result.content;
+              } else {
+                throw new Error(result.error || `Failed to execute tool: ${tool}`);
+              }
+            }
+          );
+
+          // Initialize with embedding model if available
+          // The IntentExecutor will use embeddings for parameter mapping if model is provided,
+          // otherwise it falls back to string-based matching
+          await intentExecutor.initialize(null);
+
+          // Execute intent
+          const result = await intentExecutor.execute(params.intent, params.context || {});
+          return result;
         }
 
         // Handle scheduler tools specially in Code-Mode - return structured objects
