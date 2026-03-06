@@ -1167,6 +1167,17 @@ export class MCPServer implements ElicitationServer {
       return this.handleMultiQuery(queries, { page, limit, depth, confidenceThreshold });
     }
 
+    // MCP 2025-11-25: Send progress notification about indexing status
+    const initialProgress = this.orchestrator.getIndexingProgress();
+    if (initialProgress && this.supportsCapability('progressNotifications')) {
+      await this.sendProgressNotification(
+        'find:indexing',
+        initialProgress.current,
+        initialProgress.total,
+        `Indexing: ${initialProgress.currentMCP || 'scanning'}`
+      );
+    }
+
     // Use ToolFinder service for single-query search logic
     const finder = new ToolFinder(this.orchestrator);
     const findResult = await finder.find({
@@ -1209,6 +1220,17 @@ export class MCPServer implements ElicitationServer {
     this.tokenTracker.trackFind(text, structured.tools.length, description).catch(() => {
       // Ignore tracking errors - don't fail the request
     });
+
+    // MCP 2025-11-25: Send final progress notification if indexing is complete
+    const finalProgress = this.orchestrator.getIndexingProgress();
+    if (!finalProgress && this.supportsCapability('progressNotifications')) {
+      await this.sendProgressNotification(
+        'find:indexing',
+        100,
+        100,
+        'Indexing complete'
+      );
+    }
 
     // MCP 2025-11-25: Return structured output if client supports it
     // This enables Claude to parse typed results instead of parsing markdown
