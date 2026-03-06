@@ -153,7 +153,7 @@
     "mcp-evals": "^2.0.1",
     "mcp-hello-world": "^1.1.2",
     "mcp-server": "^0.0.9",
-    "mcp-server-kubernetes": "^3.1.0",
+    "mcp-server-kubernetes": "^3.3.0",
     "release-it": "^19.0.4",
     "rss-parser": "^3.13.0",
     "ts-jest": "^29.4.2",
