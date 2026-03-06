@@ -909,7 +909,7 @@ export class MCPServer implements ElicitationServer {
   /**
    * Convert raw tool result to structured ToolResult
    */
-  private convertToStructuredTool(tool: any): ToolResult {
+  private convertToStructuredTool(tool: any): any {
     const [mcpName, ...toolParts] = tool.toolName.split(':');
     const toolName = toolParts.join(':');
 
@@ -925,7 +925,11 @@ export class MCPServer implements ElicitationServer {
       }));
     }
 
-    return {
+    // MCP 2025-11-25: Add UI metadata for better rendering in Claude Desktop
+    // Infer category and icon from tool name and description
+    const uiMetadata = this.inferToolUIMetadata(mcpName, toolName, tool.description || '');
+
+    const toolObj: Record<string, any> = {
       name: tool.toolName,
       mcp: mcpName,
       tool: toolName,
@@ -934,6 +938,90 @@ export class MCPServer implements ElicitationServer {
       parameters,
       schema: tool.schema,
       healthy: tool.healthy !== false
+    };
+
+    // Add UI metadata only when client supports structured content
+    if (this.supportsCapability('structuredContent')) {
+      toolObj._meta = {
+        ui: uiMetadata
+      };
+    }
+
+    return toolObj;
+  }
+
+  /**
+   * Infer UI metadata for tools based on name and description
+   * Used for rendering hints in Claude Desktop
+   */
+  private inferToolUIMetadata(mcpName: string, toolName: string, description: string): any {
+    const lowerName = `${mcpName} ${toolName}`.toLowerCase();
+    const lowerDesc = description.toLowerCase();
+
+    // Infer category from MCP or tool name
+    let category = 'other';
+    let icon = '🔧';
+    let actionVerb = 'execute';
+    let priority = 5;
+
+    // Category detection
+    if (lowerName.includes('email') || lowerName.includes('mail')) {
+      category = 'email';
+      icon = '✉️';
+      actionVerb = 'send';
+      priority = 8;
+    } else if (lowerName.includes('slack') || lowerName.includes('chat') || lowerName.includes('message')) {
+      category = 'messaging';
+      icon = '💬';
+      actionVerb = 'send';
+      priority = 7;
+    } else if (lowerName.includes('github') || lowerName.includes('git') || lowerName.includes('repo')) {
+      category = 'vcs';
+      icon = '🐙';
+      actionVerb = 'create';
+      priority = 8;
+    } else if (lowerName.includes('google') || lowerName.includes('drive') || lowerName.includes('sheet') || lowerName.includes('doc')) {
+      category = 'productivity';
+      icon = '📄';
+      actionVerb = 'create';
+      priority = 7;
+    } else if (lowerName.includes('file') || lowerName.includes('filesystem') || lowerName.includes('read') || lowerName.includes('write')) {
+      category = 'files';
+      icon = '📁';
+      actionVerb = 'read';
+      priority = 8;
+    } else if (lowerName.includes('sql') || lowerName.includes('database') || lowerName.includes('db')) {
+      category = 'database';
+      icon = '🗄️';
+      actionVerb = 'query';
+      priority = 7;
+    } else if (lowerName.includes('web') || lowerName.includes('http') || lowerName.includes('api')) {
+      category = 'web';
+      icon = '🌐';
+      actionVerb = 'fetch';
+      priority = 7;
+    } else if (lowerName.includes('ai') || lowerName.includes('llm') || lowerName.includes('claude')) {
+      category = 'ai';
+      icon = '🤖';
+      actionVerb = 'generate';
+      priority = 9;
+    } else if (lowerDesc.includes('list') || lowerDesc.includes('get') || lowerDesc.includes('read')) {
+      category = 'read';
+      icon = '📖';
+      actionVerb = 'read';
+      priority = 5;
+    } else if (lowerDesc.includes('create') || lowerDesc.includes('write') || lowerDesc.includes('send')) {
+      category = 'write';
+      icon = '✍️';
+      actionVerb = 'create';
+      priority = 6;
+    }
+
+    return {
+      category,
+      icon,
+      actionVerb,
+      priority
     };
   }
 
@@ -1122,6 +1210,17 @@ export class MCPServer implements ElicitationServer {
       // Ignore tracking errors - don't fail the request
     });
 
+    // MCP 2025-11-25: Return structured output if client supports it
+    // This enables Claude to parse typed results instead of parsing markdown
+    if (this.supportsCapability('structuredContent')) {
+      logger.debug(`Returning structured find results (${structured.tools.length} tools)`);
+      return {
+        content: [{ type: 'text', text }],  // Include text fallback for compatibility
+        structuredContent: structured  // Return typed structure for parsing
+      };
+    }
+
+    // Fallback: Return text-only for clients without structured support
     return {
       content: [{ type: 'text', text }]
     };
