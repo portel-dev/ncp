@@ -14,6 +14,7 @@ import {
   isAsyncGeneratorFunction,
   isAskYield,
   isEmitYield,
+  InstanceStore,
   type PhotonYield,
   type AskYield,
   type EmitYield,
@@ -38,6 +39,7 @@ export class PhotonAdapter implements InternalMCP {
   private sourceFilePath?: string;
   private elicitationServer?: ElicitationServer;
   private mcpClientFactory?: MCPClientFactory;
+  private instanceStore?: InstanceStore;
 
   /**
    * Settings schema from Photon's `protected settings = {...}` declaration
@@ -143,6 +145,21 @@ export class PhotonAdapter implements InternalMCP {
       settingsSchema,
       notificationSubscriptions
     );
+
+    // Initialize InstanceStore for state persistence
+    adapter.instanceStore = new InstanceStore(adapter.name);
+
+    // Restore saved state if available and instance supports setState
+    try {
+      const savedState = await adapter.instanceStore.load('default');
+      if (savedState && typeof (instance as any).setState === 'function') {
+        (instance as any).setState(savedState);
+        logger.debug(`Restored state for ${adapter.name}`);
+      }
+    } catch (error: any) {
+      logger.debug(`No saved state for ${adapter.name}: ${error.message}`);
+    }
+
     await adapter.initializeTools();
     return adapter;
   }
@@ -588,6 +605,17 @@ export class PhotonAdapter implements InternalMCP {
           });
         } else {
           result = await maybeGenerator;
+        }
+      }
+
+      // Save state after successful execution if instance supports getState
+      if (this.instanceStore && typeof (this.instance as any).getState === 'function') {
+        try {
+          const state = (this.instance as any).getState();
+          await this.instanceStore.save('default', state);
+          logger.debug(`Saved state for ${this.name}`);
+        } catch (error: any) {
+          logger.debug(`Could not save state for ${this.name}: ${error.message}`);
         }
       }
 

@@ -3859,6 +3859,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
     result: any;
     logs: string[];
     error?: string;
+    runId?: string;
   }> {
     return await this.codeExecutor.executeCode(code, timeout);
   }

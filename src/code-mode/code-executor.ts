@@ -16,6 +16,7 @@ import { Worker } from 'worker_threads';
 import { createContext, runInContext } from 'vm';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { StateLog, generateRunId } from '@portel/photon-core';
 import { logger } from '../utils/logger.js';
 import { BindingsManager } from './bindings-manager.js';
 import { NetworkPolicyManager, SECURE_NETWORK_POLICY } from './network-policy.js';
@@ -50,6 +51,7 @@ export interface CodeExecutionResult {
   result: any;
   logs: string[];
   error?: string;
+  runId?: string; // Unique ID for this execution (enables save-as-photon)
   errorDetails?: {
     originalError: any;
     pendingCalls?: {
@@ -169,8 +171,19 @@ export class CodeExecutor {
    */
   async executeCode(code: string, timeout: number = 30000): Promise<CodeExecutionResult> {
     const startTime = Date.now();
+    const runId = generateRunId();
+    const stateLog = new StateLog(runId);
     const auditLogger = getAuditLogger();
     const approvalManager = getPackageApprovalManager();
+
+    // Initialize state log for this execution (enables code:save-as-photon)
+    try {
+      await stateLog.init();
+      await stateLog.writeStart('code', { code });
+      logger.debug(`Code execution started with run ID: ${runId}`);
+    } catch (error: any) {
+      logger.debug(`Could not initialize state log: ${error.message}`);
+    }
 
     // Phase 6: Check for non-whitelisted packages and elicit approval
     // This happens BEFORE execution starts
@@ -179,10 +192,16 @@ export class CodeExecutor {
       temporaryApprovals = await this.checkPackageApproval(code);
     } catch (error: any) {
       // Package approval failed - return as error result
+      try {
+        await stateLog.writeError(error.message, error.stack);
+      } catch (logError) {
+        logger.debug(`Could not log error to state log: ${logError}`);
+      }
       return {
         result: null,
         logs: [`[ERROR] ${error.message}`],
         error: error.message,
+        runId,
       };
     }
 
@@ -192,75 +211,121 @@ export class CodeExecutor {
     // Get effective whitelist (built-in + temporarily approved)
     const effectiveWhitelist = approvalManager.getEffectiveWhitelist();
 
-    // Try IsolatedVMSandbox first (most secure - true V8 Isolate)
-    if (IsolatedVMSandbox.isAvailable()) {
+    try {
+      // Try IsolatedVMSandbox first (most secure - true V8 Isolate)
+      if (IsolatedVMSandbox.isAvailable()) {
+        try {
+          const result = await this.executeWithIsolatedVM(code, timeout);
+
+          // Phase 5: Log success
+          const duration = Date.now() - startTime;
+          await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
+            mcpName: 'code-mode',
+            userId: 'isolated-vm'
+          });
+
+          // Log to state log and include runId in response
+          try {
+            await stateLog.writeReturn(result.result);
+          } catch (logError) {
+            logger.debug(`Could not log return to state log: ${logError}`);
+          }
+
+          return { ...result, runId };
+        } catch (isolatedVMError: any) {
+          logger.warn(`IsolatedVM execution failed: ${isolatedVMError.message}, falling back to Subprocess`);
+        }
+      }
+
+      // Try SubprocessSandbox (second most secure - true process isolation)
       try {
-        const result = await this.executeWithIsolatedVM(code, timeout);
+        const result = await this.executeWithSubprocess(code, timeout);
 
         // Phase 5: Log success
         const duration = Date.now() - startTime;
         await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
           mcpName: 'code-mode',
-          userId: 'isolated-vm'
+          userId: 'subprocess'
         });
 
-        return result;
-      } catch (isolatedVMError: any) {
-        logger.warn(`IsolatedVM execution failed: ${isolatedVMError.message}, falling back to Subprocess`);
-      }
-    }
-
-    // Try SubprocessSandbox (second most secure - true process isolation)
-    try {
-      const result = await this.executeWithSubprocess(code, timeout);
-
-      // Phase 5: Log success
-      const duration = Date.now() - startTime;
-      await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
-        mcpName: 'code-mode',
-        userId: 'subprocess'
-      });
-
-      return result;
-    } catch (subprocessError: any) {
-      logger.warn(`Subprocess execution failed: ${subprocessError.message}, falling back to Worker Thread`);
-
-      // Fallback to Worker Thread (third most secure)
-      try {
-        const result = await this.executeWithWorkerThread(code, timeout);
-
-        const duration = Date.now() - startTime;
-        await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
-          mcpName: 'code-mode',
-          userId: 'worker-fallback'
-        });
-
-        return result;
-      } catch (workerError: any) {
-        logger.warn(`Worker Thread execution failed: ${workerError.message}, falling back to VM`);
-
-        // Final fallback to VM module (least secure but stable)
+        // Log to state log and include runId in response
         try {
-          const result = await this.executeWithVM(code, timeout);
+          await stateLog.writeReturn(result.result);
+        } catch (logError) {
+          logger.debug(`Could not log return to state log: ${logError}`);
+        }
+
+        return { ...result, runId };
+      } catch (subprocessError: any) {
+        logger.warn(`Subprocess execution failed: ${subprocessError.message}, falling back to Worker Thread`);
+
+        // Fallback to Worker Thread (third most secure)
+        try {
+          const result = await this.executeWithWorkerThread(code, timeout);
 
           const duration = Date.now() - startTime;
           await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
             mcpName: 'code-mode',
-            userId: 'vm-fallback'
+            userId: 'worker-fallback'
           });
 
-          return result;
-        } catch (vmError: any) {
-          logger.error(`[VM Execution Error Details]`, {
-            message: vmError.message,
-            stack: vmError.stack,
-            name: vmError.name,
-            code: code.substring(0, 100)
-          });
-          await auditLogger.logCodeExecutionError(code, vmError.message, { mcpName: 'code-mode' });
-          throw vmError;
+          // Log to state log and include runId in response
+          try {
+            await stateLog.writeReturn(result.result);
+          } catch (logError) {
+            logger.debug(`Could not log return to state log: ${logError}`);
+          }
+
+          return { ...result, runId };
+        } catch (workerError: any) {
+          logger.warn(`Worker Thread execution failed: ${workerError.message}, falling back to VM`);
+
+          // Final fallback to VM module (least secure but stable)
+          try {
+            const result = await this.executeWithVM(code, timeout);
+
+            const duration = Date.now() - startTime;
+            await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
+              mcpName: 'code-mode',
+              userId: 'vm-fallback'
+            });
+
+            // Log to state log and include runId in response
+            try {
+              await stateLog.writeReturn(result.result);
+            } catch (logError) {
+              logger.debug(`Could not log return to state log: ${logError}`);
+            }
+
+            return { ...result, runId };
+          } catch (vmError: any) {
+            logger.error(`[VM Execution Error Details]`, {
+              message: vmError.message,
+              stack: vmError.stack,
+              name: vmError.name,
+              code: code.substring(0, 100)
+            });
+            await auditLogger.logCodeExecutionError(code, vmError.message, { mcpName: 'code-mode' });
+
+            // Log error to state log
+            try {
+              await stateLog.writeError(vmError.message, vmError.stack);
+            } catch (logError) {
+              logger.debug(`Could not log error to state log: ${logError}`);
+            }
+
+            throw vmError;
+          }
         }
       }
+    } catch (error: any) {
+      // Final error handler - ensure runId is included in error response
+      return {
+        result: null,
+        logs: [`[ERROR] ${error.message}`],
+        error: error.message,
+        runId,
+      };
     }
   }
 

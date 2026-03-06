@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.3.0](https://github.com/portel-dev/ncp/compare/2.2.0...2.3.0) (2026-03-06)
+
+### Features
+
+* **file-watcher:** replace chokidar with PhotonWatcher from photon-core for improved cross-platform support
+* **daemon-broker:** add cross-process event distribution via DaemonBroker for photon daemon integration
+* **state-persistence:** add InstanceStore for Photon state persistence across execution sessions
+* **stateful-code:** add StateLog and runId tracking for code executions enabling code-to-Photon conversion
+* **code-tools:** add `code:list-runs`, `code:get-run`, and `code:save-as-photon` tools for workflow automation
+* **mcp-apps:** add basic MCP Apps protocol capability detection for client compatibility
+
+### Architecture
+
+* Leverage photon-core 2.9.4 infrastructure instead of building custom solutions
+* Enable cross-process event routing when photon daemon is running
+* Support Code-to-Photon conversion workflow: execute code → save as reusable Photon → use in future workflows
+
+## [2.2.0] (2025-12-27)
+
+### Features
+
+* merge intent-based execution, auth improvements, and resource generation features
+
 ## [2.0.1](https://github.com/portel-dev/ncp/compare/2.0.0...2.0.1) (2025-12-27)
 
 ### Bug Fixes

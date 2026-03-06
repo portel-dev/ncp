@@ -3,10 +3,10 @@
  *
  * Watches ~/.ncp/skills/ and ~/.ncp/photons/ directories and triggers
  * incremental index updates when files are added, modified, or deleted.
- * Uses chokidar for cross-platform support (Windows, macOS, Linux).
+ * Uses PhotonWatcher from photon-core for cross-platform support (Windows, macOS, Linux).
  */
 
-import chokidar, { FSWatcher } from 'chokidar';
+import { PhotonWatcher } from '@portel/photon-core';
 import * as path from 'path';
 import { logger } from '../utils/logger.js';
 import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
@@ -29,8 +29,7 @@ export interface FileWatcherCallbacks {
 }
 
 export class FileWatcher {
-  private skillsWatcher: FSWatcher | null = null;
-  private photonsWatcher: FSWatcher | null = null;
+  private photonWatcher: PhotonWatcher | null = null;
   private callbacks: FileWatcherCallbacks;
   private isInitialized = false;
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -189,46 +188,48 @@ export class FileWatcher {
     const photonsDir = path.join(ncpDir, 'photons');
 
     try {
-      // Watch skills directory
-      this.skillsWatcher = chokidar.watch(skillsDir, {
-        persistent: true,
-        ignored: /(^|[/\\])\.|node_modules|\.git/,
-        awaitWriteFinish: {
-          stabilityThreshold: 100,
-          pollInterval: 100
+      // Use PhotonWatcher for both directories
+      this.photonWatcher = new PhotonWatcher({
+        directories: [skillsDir, photonsDir],
+        debounceMs: this.debounceMs
+      });
+
+      // Handle photon file changes (for photons directory)
+      this.photonWatcher.on('add', (photonName, filePath) => {
+        const directory = filePath.includes('skills') ? 'skills' : 'photons';
+        if (directory === 'photons') {
+          this.handlePhotonEvent('add', filePath);
+        } else {
+          this.handleSkillEvent('add', filePath);
         }
       });
 
-      this.skillsWatcher.on('add', (filePath) => this.handleSkillEvent('add', filePath));
-      this.skillsWatcher.on('change', (filePath) => this.handleSkillEvent('change', filePath));
-      this.skillsWatcher.on('unlink', (filePath) => this.handleSkillEvent('unlink', filePath));
-      this.skillsWatcher.on('error', (error: any) => {
-        logger.error(`Skills watcher error: ${error?.message || error}`);
+      this.photonWatcher.on('change', (photonName, filePath) => {
+        const directory = filePath.includes('skills') ? 'skills' : 'photons';
+        if (directory === 'photons') {
+          this.handlePhotonEvent('change', filePath);
+        } else {
+          this.handleSkillEvent('change', filePath);
+        }
+      });
+
+      this.photonWatcher.on('remove', (photonName, filePath) => {
+        const directory = filePath.includes('skills') ? 'skills' : 'photons';
+        if (directory === 'photons') {
+          this.handlePhotonEvent('unlink', filePath);
+        } else {
+          this.handleSkillEvent('unlink', filePath);
+        }
+      });
+
+      this.photonWatcher.on('error', (error: any) => {
+        logger.error(`File watcher error: ${error?.message || error}`);
         if (error instanceof Error) {
           this.callbacks.onError?.(error);
         }
       });
 
-      // Watch photons directory
-      this.photonsWatcher = chokidar.watch(photonsDir, {
-        persistent: true,
-        ignored: /(^|[/\\])\.|node_modules|\.git/,
-        awaitWriteFinish: {
-          stabilityThreshold: 100,
-          pollInterval: 100
-        }
-      });
-
-      this.photonsWatcher.on('add', (filePath) => this.handlePhotonEvent('add', filePath));
-      this.photonsWatcher.on('change', (filePath) => this.handlePhotonEvent('change', filePath));
-      this.photonsWatcher.on('unlink', (filePath) => this.handlePhotonEvent('unlink', filePath));
-      this.photonsWatcher.on('error', (error: any) => {
-        logger.error(`Photons watcher error: ${error?.message || error}`);
-        if (error instanceof Error) {
-          this.callbacks.onError?.(error);
-        }
-      });
-
+      await this.photonWatcher.start();
       this.isInitialized = true;
       logger.info(`📁 File watcher started for skills and photons directories (debounce: ${this.debounceMs}ms)`);
     } catch (error: any) {
@@ -260,8 +261,7 @@ export class FileWatcher {
         this.completeBatch(); // Finalize any pending batch
       }
 
-      await this.skillsWatcher?.close();
-      await this.photonsWatcher?.close();
+      await this.photonWatcher?.stop();
       this.isInitialized = false;
       logger.info('📁 File watcher stopped');
     } catch (error: any) {

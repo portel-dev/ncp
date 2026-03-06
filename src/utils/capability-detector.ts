@@ -14,6 +14,7 @@ export interface ClientCapabilities {
   completions?: Record<string, unknown>;
   progressNotifications?: boolean;
   structuredContent?: boolean;
+  mcpApps?: Record<string, unknown>;
 }
 
 export class CapabilityDetector {
@@ -51,6 +52,11 @@ export class CapabilityDetector {
     if (experimental.roots) {
       this.capabilities.roots = experimental.roots;
       this.supported.add('roots');
+    }
+
+    if (experimental.mcpApps) {
+      this.capabilities.mcpApps = experimental.mcpApps;
+      this.supported.add('mcpApps');
     }
 
     // Note: Progress and structured content are always supported by modern SDK

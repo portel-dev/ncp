@@ -26,6 +26,7 @@ import { MarketplaceMCP } from './marketplace.js';
 import { CodeMCP } from './code.js';
 import { PhotonLoader } from './photon-loader.js';
 import { createMCPClientFactory, type OrchestratorInterface } from './mcp-client-factory.js';
+import { getBroker } from '@portel/photon-core';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
@@ -117,6 +118,47 @@ export class InternalMCPManager {
     }
 
     logger.info(`✅ Loaded ${mcps.length} Photon(s)`);
+
+    // Subscribe to external daemon events (if daemon running)
+    this.subscribeToExternalEvents().catch(error => {
+      logger.debug(`External event subscription skipped: ${error.message}`);
+    });
+  }
+
+  /**
+   * Subscribe to external daemon events for registered event types
+   * Only subscribes when daemon is running; when daemon not running, subscription is a no-op
+   */
+  private async subscribeToExternalEvents(): Promise<void> {
+    const broker = getBroker();
+    const eventTypes = Array.from(this.notificationSubscribers.keys());
+
+    if (eventTypes.length === 0) {
+      logger.debug('No event subscriptions to register with daemon');
+      return;
+    }
+
+    for (const eventType of eventTypes) {
+      try {
+        await broker.subscribe(`ncp:notifications:${eventType}`, async (msg: any) => {
+          logger.debug(`Received cross-process event from daemon: ${eventType}`);
+          // Route only to local subscribers to avoid loops
+          const subscribers = this.notificationSubscribers.get(eventType) || [];
+          for (const mcp of subscribers) {
+            try {
+              if (mcp.onNotification) {
+                await mcp.onNotification(msg.event, msg.data);
+              }
+            } catch (error: any) {
+              logger.error(`Failed to deliver daemon event to ${mcp.name}: ${error.message}`);
+            }
+          }
+        });
+        logger.debug(`Subscribed to daemon event: ${eventType}`);
+      } catch (error: any) {
+        logger.debug(`Could not subscribe to daemon event ${eventType}: ${error.message}`);
+      }
+    }
   }
 
   /**
@@ -163,13 +205,9 @@ export class InternalMCPManager {
   async dispatchNotification(eventType: string, payload: any): Promise<void> {
     const subscribers = this.getSubscribersFor(eventType);
 
-    if (subscribers.length === 0) {
-      logger.debug(`No subscribers for event: ${eventType}`);
-      return;
-    }
+    logger.debug(`Dispatching ${eventType} notification to ${subscribers.length} local subscriber(s)`);
 
-    logger.debug(`Dispatching ${eventType} notification to ${subscribers.length} subscriber(s)`);
-
+    // Deliver to local subscribers
     for (const mcp of subscribers) {
       try {
         if (mcp.onNotification && typeof mcp.onNotification === 'function') {
@@ -179,6 +217,20 @@ export class InternalMCPManager {
       } catch (error: any) {
         logger.error(`Failed to deliver notification to ${mcp.name}: ${error.message}`);
       }
+    }
+
+    // Publish to daemon broker for cross-process delivery (if daemon is running)
+    // When daemon not running, NoOpBroker is auto-selected (zero overhead)
+    try {
+      const broker = getBroker();
+      await broker.publish({
+        channel: `ncp:notifications:${eventType}`,
+        event: eventType,
+        data: payload
+      });
+      logger.debug(`Published ${eventType} to cross-process daemon broker`);
+    } catch (error: any) {
+      logger.debug(`Daemon broker publish skipped (daemon likely not running): ${error.message}`);
     }
   }
 
