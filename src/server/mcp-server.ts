@@ -35,6 +35,7 @@ import { SessionNotificationManager } from '../utils/session-notifications.js';
 import { FindResultStructured, MultiQueryResult, ToolResult, ToolParameter } from '../types/find-result.js';
 import { FindResultRenderer } from '../services/find-result-renderer.js';
 import { TokenMetricsTracker } from '../analytics/token-metrics.js';
+import { CapabilityDetector } from '../utils/capability-detector.js';
 
 // Get the directory of the current file
 const __filename = fileURLToPath(import.meta.url);
@@ -63,15 +64,19 @@ export class MCPServer implements ElicitationServer {
   private elicitationSupported: boolean | null = null; // null = unknown, true = supported, false = not supported
   private tokenTracker: TokenMetricsTracker;
   private enableCodeMode: boolean = false; // false = find-and-run, true = find-and-code
+  private capabilityDetector: CapabilityDetector; // Track client capabilities for feature negotiation
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
     // Initialize session-scoped notification manager
     this.notifications = new SessionNotificationManager();
 
+    // Initialize capability detector for client feature negotiation
+    this.capabilityDetector = new CapabilityDetector();
+
     // Load icon data URI
     const iconDataURI = getIconDataURI();
 
-    // Create SDK Server instance with elicitation capability
+    // Create SDK Server instance with full capability set
     this.server = new Server(
       {
         name: 'ncp',
@@ -83,7 +88,15 @@ export class MCPServer implements ElicitationServer {
           tools: {},
           prompts: {},      // Enable prompts for user confirmation dialogs
           resources: {},    // Enable resources for help docs and health status
+          logging: {},      // Enable logging capability for debug output
+          completions: {}, // Enable parameter completions
+
           experimental: {
+            // MCP 2025-11-25 advanced features (in experimental until officially released)
+            sampling: {},    // Server-initiated LLM calls
+            roots: {         // Filesystem hints for file pickers
+              listChanged: true
+            },
             elicitation: {},  // Enable elicitation for credential collection
           },
         },
@@ -101,6 +114,14 @@ export class MCPServer implements ElicitationServer {
     // IMPORTANT: Must be set AFTER orchestrator creation to avoid race condition
     this.server.oninitialized = () => {
       const clientVersion = this.server.getClientVersion();
+      const clientCapabilities = this.server.getClientCapabilities();
+
+      // Detect and store client capabilities for feature negotiation
+      if (clientCapabilities) {
+        this.capabilityDetector.updateFromClientCapabilities(clientCapabilities);
+        logger.debug(`Client capabilities detected: ${this.capabilityDetector.getSupportedCapabilities().join(', ')}`);
+      }
+
       if (clientVersion) {
         const clientInfo = {
           name: clientVersion.name || 'unknown',
@@ -115,7 +136,7 @@ export class MCPServer implements ElicitationServer {
           version,
           ...(iconDataURI && { icon: { src: iconDataURI } })
         };
-        mcpProtocolLogger.logInitialize(clientInfo, serverInfo, '2024-11-05').catch(error => {
+        mcpProtocolLogger.logInitialize(clientInfo, serverInfo, '2025-11-25').catch(error => {
           logger.error('Failed to log initialize handshake', error);
         });
 
@@ -305,7 +326,7 @@ export class MCPServer implements ElicitationServer {
   }
 
   private getToolDefinitions(): Tool[] {
-    // Define all core NCP tools
+    // Define all core NCP tools with outputSchema for structured outputs
     const findTool: Tool = {
       name: 'find',
       description: 'Search or list MCP tools. Call as find() - no prefix needed. With description param: vector search tools by capability. Without description: list all available tools. Use pipe separator for multi-query ("gmail | slack").',
@@ -333,6 +354,47 @@ export class MCPServer implements ElicitationServer {
             description: 'Detail level: 0=names, 1=+descriptions, 2=+parameters (default: 2)'
           }
         }
+      },
+      // MCP 2025-11-25: Declare result structure for structured outputs
+      outputSchema: {
+        type: 'object',
+        title: 'ToolSearchResults',
+        description: 'Structured tool search results with metadata',
+        properties: {
+          tools: {
+            type: 'array',
+            description: 'Array of matching tools',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'Tool identifier (mcp:tool format)' },
+                description: { type: 'string', description: 'Tool description' },
+                parameters: { type: 'object', description: 'Tool parameter schema' },
+                _meta: { type: 'object', description: 'Tool metadata including UI hints' }
+              }
+            }
+          },
+          health: {
+            type: 'object',
+            description: 'Indexing health status',
+            properties: {
+              indexingInProgress: { type: 'boolean' },
+              indexedCount: { type: 'number' },
+              totalCount: { type: 'number' },
+              percentComplete: { type: 'number' }
+            }
+          },
+          pagination: {
+            type: 'object',
+            description: 'Pagination info',
+            properties: {
+              page: { type: 'number' },
+              limit: { type: 'number' },
+              total: { type: 'number' },
+              hasMore: { type: 'boolean' }
+            }
+          }
+        }
       }
     };
 
@@ -356,6 +418,30 @@ export class MCPServer implements ElicitationServer {
           }
         },
         required: ['tool']
+      },
+      // MCP 2025-11-25: Declare result structure for generic tool results
+      outputSchema: {
+        type: 'object',
+        title: 'ToolExecutionResult',
+        description: 'Result from tool execution',
+        properties: {
+          content: {
+            type: 'array',
+            description: 'Tool output content (text, images, resources, etc.)',
+            items: {
+              type: 'object',
+              properties: {
+                type: { type: 'string', enum: ['text', 'image', 'audio', 'resource', 'resource_link'] },
+                text: { type: 'string', description: 'Text content' },
+                data: { type: 'string', description: 'Base64-encoded binary data' },
+                mimeType: { type: 'string', description: 'MIME type for binary data' },
+                uri: { type: 'string', description: 'Resource URI' }
+              }
+            }
+          },
+          isError: { type: 'boolean', description: 'Whether result is an error' },
+          _meta: { type: 'object', description: 'Result metadata' }
+        }
       }
     };
 
@@ -375,6 +461,31 @@ export class MCPServer implements ElicitationServer {
           }
         },
         required: ['code']
+      },
+      // MCP 2025-11-25: Declare result structure for code execution
+      outputSchema: {
+        type: 'object',
+        title: 'CodeExecutionResult',
+        description: 'Result from TypeScript code execution',
+        properties: {
+          result: {
+            description: 'Return value from code execution (any type)'
+          },
+          logs: {
+            type: 'array',
+            description: 'Captured console output',
+            items: { type: 'string' }
+          },
+          errors: {
+            type: 'array',
+            description: 'Any errors that occurred',
+            items: { type: 'string' }
+          },
+          executionTime: {
+            type: 'number',
+            description: 'Execution time in milliseconds'
+          }
+        }
       }
     };
 
@@ -1524,6 +1635,46 @@ This operation may modify data or have side effects.`;
     }
 
     return preview;
+  }
+
+  /**
+   * Send a progress notification to the client (MCP 2025-11-25)
+   * Used for long-running operations like indexing
+   */
+  async sendProgressNotification(token: string, progress: number, total: number, message?: string): Promise<void> {
+    if (!this.capabilityDetector.supports('progressNotifications')) {
+      logger.debug(`Progress notification not supported by client: ${token} ${progress}/${total}`);
+      return;
+    }
+
+    try {
+      await this.server.notification({
+        method: 'notifications/progress',
+        params: {
+          progressToken: token,
+          progress,
+          total,
+          ...(message && { message })
+        }
+      });
+      logger.debug(`Progress notification sent: ${token} ${progress}/${total}${message ? ` - ${message}` : ''}`);
+    } catch (error: any) {
+      logger.warn(`Failed to send progress notification: ${error.message}`);
+    }
+  }
+
+  /**
+   * Check if client supports a specific capability
+   */
+  supportsCapability(capability: string): boolean {
+    return this.capabilityDetector.supports(capability as any);
+  }
+
+  /**
+   * Get all client-supported capabilities
+   */
+  getClientCapabilities(): string[] {
+    return this.capabilityDetector.getSupportedCapabilities();
   }
 
   async connect(): Promise<void> {
