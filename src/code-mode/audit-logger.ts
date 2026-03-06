@@ -154,8 +154,8 @@ export class AuditLogger {
       const line = JSON.stringify(event) + '\n';
       await appendFile(this.currentFile, line, 'utf-8');
 
-      // Check file rotation
-      await this.checkRotation();
+      // Note: File rotation happens automatically via daily date-stamped filenames
+      // See getAuditFileName() which includes date in format: audit-YYYY-MM-DD.jsonl
     } catch (error: any) {
       logger.error(`Failed to write audit log: ${error.message}`);
     }
