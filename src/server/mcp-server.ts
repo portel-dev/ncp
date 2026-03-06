@@ -13,6 +13,7 @@ import {
   GetPromptRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
+  ListRootsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
@@ -322,6 +323,11 @@ export class MCPServer implements ElicitationServer {
         }).catch(() => {});
         throw error;
       }
+    });
+
+    // MCP 2025-11-25: Handle roots/list for file picker integration
+    this.server.setRequestHandler(ListRootsRequestSchema, async () => {
+      return this.handleListRoots();
     });
   }
 
@@ -1862,6 +1868,42 @@ This operation may modify data or have side effects.`;
 
     // Return just NCP resources if still initializing
     return ncpResources;
+  }
+
+  /**
+   * MCP 2025-11-25: Handle roots/list request for file picker integration
+   * Exposes filesystem boundaries that Claude Desktop uses for file selection UI
+   */
+  private async handleListRoots(): Promise<{ roots: Array<{ uri: string; name?: string }> }> {
+    const roots: Array<{ uri: string; name?: string }> = [];
+
+    // Add home directory as a root
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '/';
+    roots.push({
+      uri: `file://${homeDir}`,
+      name: 'Home'
+    });
+
+    // Add current working directory as a root (for project-local access)
+    const cwd = process.cwd();
+    if (cwd !== homeDir) {
+      roots.push({
+        uri: `file://${cwd}`,
+        name: 'Current Workspace'
+      });
+    }
+
+    // Add .ncp directory in home as a root (for NCP configuration)
+    const ncpDir = `${homeDir}/.ncp`;
+    if (ncpDir !== cwd && ncpDir !== homeDir) {
+      roots.push({
+        uri: `file://${ncpDir}`,
+        name: 'NCP Config'
+      });
+    }
+
+    logger.debug(`Listed ${roots.length} filesystem roots for file picker`);
+    return { roots };
   }
 
   /**
