@@ -90,6 +90,48 @@
 * ensure settings are properly injected into Photon instances before tool execution
 * prevent settings elicitation loops with caching mechanism
 
+## [2.2.0](https://github.com/portel-dev/ncp/compare/2.1.0...2.2.0) (2026-03-06)
+
+### Features
+
+* **MCP 2025-11-25 Specification Alignment** - Full implementation of latest MCP protocol features
+  - Capability Negotiation: Server detects client feature support (sampling, roots, logging, completions, progress) and adapts responses gracefully
+  - Structured Outputs: Tools return typed data structures via `FindResultStructured` instead of markdown text, with automatic fallback for text-only clients
+  - Tool Metadata (_meta.ui): Automatic category and icon assignment for better client rendering (email→✉️, vcs→🐙, productivity→📄, etc.)
+  - Progress Notifications: Real-time feedback during long-running operations via `notifications/progress` with progress token tracking
+  - Roots Support: File picker integration exposing home directory, workspace, and NCP config paths via `resources/list_roots`
+  - Logging Capability: Debug logs streamed to MCP clients via `notifications/logging` for real-time debugging in Claude Desktop
+
+* **ncp.do() Intent-Based Execution** - Single-call semantic tool matching and execution
+  - Intent-based CLI syntax: `ncp do "find and send me recent emails"` automatically routes to appropriate tools
+  - Embedding-powered parameter matching with fallback string similarity for robust intent parsing
+  - Orchestrated via IntentExecutor with RAG-enhanced tool discovery
+  - Supports complex workflows: code mode integration allows `await ncp.do("intent", { context })`
+  - Enhanced ncp.find() with detailed return type documentation and capability awareness
+
+* **Authentication & Resources** - Improved credential handling and resource management
+  - OAuth 2.1 Device Flow authentication for MCPs requiring authorization (improved from 2.1)
+  - On-demand credential prompting: credentials requested only when tools actually need them, not at startup
+  - Automatic authentication detection via HTTP/SSE endpoint probing with graceful fallback
+  - OAuth configuration parsing from WWW-Authenticate headers and .well-known metadata endpoints
+  - Token storage in ~/.ncp/tokens/ with automatic refresh for long-running sessions
+  - Resource auto-discovery with comprehensive schema support
+  - Notification system for resource lifecycle events (created, updated, deleted)
+
+* **CI Stability & Test Reliability** - Comprehensive test improvements
+  - Enhanced test fixtures and deterministic test setup across platforms
+  - Improved error reporting for tool execution failures with detailed stack traces
+  - Better handling of concurrent test execution and timing-sensitive operations
+  - Cross-platform Windows/macOS/Linux test coverage with platform-specific workarounds
+
+### Bug Fixes
+
+* resolve tool metadata extraction and formatting consistency across different client versions
+* ensure structured outputs format correctly for all capability-aware clients
+* improve error handling and progress notification reliability during index operations
+* stabilize concurrent operations in test environment and fix race conditions
+* correct MCP protocol response timing to prevent client timeouts
+
 ## [Unreleased]
 
 ### Features
