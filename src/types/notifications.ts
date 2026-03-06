@@ -1,9 +1,41 @@
 /**
- * Notification System Types
+ * Session-Aware Notification System Types
  *
- * Defines comprehensive types for session-aware notification delivery
- * with intelligent routing and contextual relevance scoring.
+ * Handles notifications with intelligent session routing:
+ * 1. Primary: MCP client-provided session IDs
+ * 2. Fallback: Contextual relevance (process + recent usage + timing)
  */
+
+export enum NotificationType {
+  // Authentication events
+  AUTH_PROVIDED = 'AUTH_PROVIDED',
+  AUTH_EXPIRED = 'AUTH_EXPIRED',
+  AUTH_FAILED = 'AUTH_FAILED',
+
+  // MCP health and status
+  MCP_HEALTH_CHANGED = 'MCP_HEALTH_CHANGED',
+  MCP_CONNECTED = 'MCP_CONNECTED',
+  MCP_DISCONNECTED = 'MCP_DISCONNECTED',
+
+  // Rate limiting and throttling
+  RATE_LIMIT_HIT = 'RATE_LIMIT_HIT',
+  RATE_LIMIT_CLEARED = 'RATE_LIMIT_CLEARED',
+
+  // Operation retries and recovery
+  OPERATION_RETRY_SUCCESS = 'OPERATION_RETRY_SUCCESS',
+  OPERATION_RETRY_FAILED = 'OPERATION_RETRY_FAILED',
+
+  // System events
+  SYSTEM_UPDATE = 'SYSTEM_UPDATE',
+  CREDENTIAL_EXPIRES_SOON = 'CREDENTIAL_EXPIRES_SOON',
+
+  // General information
+  INFO = 'INFO',
+  WARNING = 'WARNING',
+  ERROR = 'ERROR'
+}
+
+export type NotificationPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface Notification {
   id: string;
@@ -12,73 +44,73 @@ export interface Notification {
   message: string;
   timestamp: number;
   priority: NotificationPriority;
-  sessionId?: string;
+  sessionId?: string; // If provided by MCP client
   metadata?: Record<string, any>;
+
+  // Delivery tracking
+  attempts?: number;
+  delivered?: boolean;
+  deliveredAt?: number;
 }
 
-export enum NotificationType {
-  AUTH_PROVIDED = 'auth_provided',
-  AUTH_FAILED = 'auth_failed',
-  MCP_HEALTH_RESTORED = 'mcp_health_restored',
-  MCP_HEALTH_DEGRADED = 'mcp_health_degraded',
-  RATE_LIMIT_APPROACHING = 'rate_limit_approaching',
-  RATE_LIMIT_RESET = 'rate_limit_reset',
-  OPERATION_RETRY_SUCCESS = 'operation_retry_success',
-  OPERATION_RETRY_FAILED = 'operation_retry_failed',
-  CREDENTIAL_EXPIRED = 'credential_expired',
-  CREDENTIAL_UPDATED = 'credential_updated',
-  CONNECTION_RESTORED = 'connection_restored',
-  CONNECTION_LOST = 'connection_lost'
-}
-
-export enum NotificationPriority {
-  HIGH = 'HIGH',
-  MEDIUM = 'MEDIUM',
-  LOW = 'LOW'
-}
-
+/**
+ * Session context for routing decisions
+ */
 export interface SessionContext {
-  sessionId?: string;
+  // Primary identification
+  sessionId?: string; // From MCP client if available
+
+  // Process identification
   processId: number;
   workingDirectory: string;
   startTime: number;
-  recentMCPs: Map<string, number>;
+
+  // Usage tracking for contextual relevance
+  recentMCPs: Map<string, number>; // mcpName -> lastUsedTimestamp
+
+  // Activity tracking
   lastActivity: number;
   totalOperations: number;
 }
 
+/**
+ * Notification delivery assessment
+ */
+export interface DeliveryAssessment {
+  shouldDeliver: boolean;
+  confidence: number; // 0-1 confidence score
+  reasoning: string[];
+  deliveryMethod: 'immediate' | 'contextual' | 'skip';
+}
+
+/**
+ * Configuration for notification behavior
+ */
 export interface NotificationConfig {
+  // Relevance windows
+  mcpUsageRelevanceWindow: number; // milliseconds (default: 15 minutes)
+  notificationMaxAge: number; // milliseconds (default: 10 minutes)
+
+  // Confidence thresholds
+  immediateDeliveryThreshold: number; // default: 0.8
+  contextualDeliveryThreshold: number; // default: 0.4
+
+  // Delivery limits
+  maxNotificationsPerResponse: number; // default: 3
+  maxRetryAttempts: number; // default: 2
+
+  // Debug options
   enableDebugLogging: boolean;
-  maxNotificationAge: number;
-  maxSessionAge: number;
-  mcpUsageRelevanceWindow: number;
   logDeliveryDecisions: boolean;
-  notificationTtl: number;
-  batchDeliverySize: number;
 }
 
 export const DEFAULT_NOTIFICATION_CONFIG: NotificationConfig = {
+  mcpUsageRelevanceWindow: 15 * 60 * 1000, // 15 minutes
+  notificationMaxAge: 10 * 60 * 1000, // 10 minutes
+  immediateDeliveryThreshold: 0.8,
+  contextualDeliveryThreshold: 0.4,
+  maxNotificationsPerResponse: 3,
+  maxRetryAttempts: 2,
   enableDebugLogging: false,
-  maxNotificationAge: 1 * 60 * 60 * 1000, // 1 hour
-  maxSessionAge: 24 * 60 * 60 * 1000, // 24 hours
-  mcpUsageRelevanceWindow: 30 * 60 * 1000, // 30 minutes
-  logDeliveryDecisions: false,
-  notificationTtl: 5 * 60 * 1000, // 5 minutes
-  batchDeliverySize: 10
+  logDeliveryDecisions: false
 };
-
-export interface DeliveryAssessment {
-  shouldDeliver: boolean;
-  confidence: number;
-  reasoning: string[];
-}
-
-export interface NotificationDeliveryContext {
-  currentOperation?: string;
-  recentMcpUsage: string[];
-  sessionRelevance: number;
-  timeContext: {
-    sessionAge: number;
-    timeSinceLastActivity: number;
-  };
-}

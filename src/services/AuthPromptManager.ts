@@ -10,7 +10,7 @@
 import inquirer from 'inquirer';
 import { NotificationQueue } from './NotificationQueue.js';
 import { SessionManager } from './SessionManager.js';
-import { NotificationType, NotificationPriority } from '../types/notifications.js';
+import { NotificationType } from '../types/notifications.js';
 
 interface AuthPromptConfig {
   field: string;
@@ -272,7 +272,7 @@ export class AuthPromptManager {
           type: NotificationType.AUTH_PROVIDED,
           mcpName,
           message: `✅ ${mcpName} is now authenticated and ready to use`,
-          priority: NotificationPriority.HIGH
+          priority: 'HIGH'
         });
 
         // Try to retry failed operation
@@ -303,7 +303,7 @@ export class AuthPromptManager {
         type: NotificationType.OPERATION_RETRY_SUCCESS,
         mcpName,
         message: `🔄 Previous ${mcpName} operation can be retried with new credentials`,
-        priority: NotificationPriority.MEDIUM
+        priority: 'MEDIUM'
       });
 
       this.lastFailedOperations.delete(mcpName);
@@ -315,7 +315,7 @@ export class AuthPromptManager {
         type: NotificationType.OPERATION_RETRY_FAILED,
         mcpName,
         message: `❌ Failed to retry ${mcpName} operation even with new credentials`,
-        priority: NotificationPriority.MEDIUM
+        priority: 'MEDIUM'
       });
     }
   }

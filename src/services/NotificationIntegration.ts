@@ -1,260 +1,207 @@
 /**
- * Notification Integration API
+ * Notification Integration
  *
- * Provides a clean interface for integrating the notification system
- * with NCP's tool execution and error handling.
+ * Integration point for the notification system with NCP's main tool execution.
+ * Shows how notifications are delivered seamlessly with AI interactions.
  */
 
 import { NotificationQueue } from './NotificationQueue.js';
 import { SessionManager } from './SessionManager.js';
 import { AuthPromptManager } from './AuthPromptManager.js';
-import {
-  NotificationType,
-  NotificationPriority,
-  NotificationConfig,
-  Notification
-} from '../types/notifications.js';
 
-export class NotificationAPI {
+/**
+ * Enhanced tool execution with notification integration
+ */
+export class NotificationIntegration {
+  private static instance: NotificationIntegration;
   private notificationQueue: NotificationQueue;
   private sessionManager: SessionManager;
   private authPromptManager: AuthPromptManager;
-  private debugEnabled = false;
 
-  constructor(config?: Partial<NotificationConfig>) {
-    this.notificationQueue = NotificationQueue.getInstance(config);
-    this.sessionManager = SessionManager.getInstance(config);
+  private constructor() {
+    this.notificationQueue = NotificationQueue.getInstance();
+    this.sessionManager = SessionManager.getInstance();
     this.authPromptManager = AuthPromptManager.getInstance();
+
+    // Periodic cleanup
+    setInterval(() => {
+      this.notificationQueue.cleanupOldSessions();
+    }, 5 * 60 * 1000); // Every 5 minutes
   }
 
-  /**
-   * Execute a tool with notification integration
-   */
-  async execute(tool: string, params: any = {}): Promise<string> {
-    // Get pending notifications and clear them
-    const notifications = this.notificationQueue.getAndClear();
-
-    // Format notifications for response
-    let notificationText = '';
-    if (notifications.length > 0) {
-      notificationText = this.notificationQueue.formatForResponse(notifications);
+  static getInstance(): NotificationIntegration {
+    if (!NotificationIntegration.instance) {
+      NotificationIntegration.instance = new NotificationIntegration();
     }
-
-    // Execute the actual tool (mock implementation for testing)
-    const result = await this.executeTool(tool, params);
-
-    // Combine notifications with tool result
-    return notificationText + result;
+    return NotificationIntegration.instance;
   }
 
   /**
-   * Mock tool execution for testing and demonstration
+   * Enhanced tool execution that includes notifications
    */
-  private async executeTool(tool: string, params: any = {}): Promise<string> {
-    // Record MCP usage for session tracking
-    const mcpName = tool.split(':')[0];
-    this.sessionManager.recordMCPUsage(mcpName);
+  async executeToolWithNotifications(tool: string, params: any = {}): Promise<string> {
+    try {
+      // Record MCP usage for session context
+      const mcpName = this.extractMCPName(tool);
+      if (mcpName) {
+        this.sessionManager.recordMCPUsage(mcpName);
+      }
 
-    // Simulate different scenarios based on tool
-    switch (tool) {
-      case 'supabase:create_table':
-        // Simulate auth error for Supabase
-        const supabaseError = new Error('SUPABASE_URL environment variable is required');
-        return await this.authPromptManager.handleAuthError('supabase', supabaseError, params);
+      // Get any pending notifications first
+      const notifications = this.notificationQueue.getAndClear();
+      let notificationText = '';
+      if (notifications.length > 0) {
+        notificationText = this.notificationQueue.formatForResponse(notifications);
+      }
 
-      case 'supabase:list_tables':
-        // Check if we have credentials
-        if (this.authPromptManager.hasCredentials('supabase')) {
-          return '📋 Supabase Tables:\n- users\n- posts\n- comments';
-        } else {
-          const supabaseError = new Error('SUPABASE_ANON_KEY is required');
-          return await this.authPromptManager.handleAuthError('supabase', supabaseError, params);
+      // Execute the actual tool
+      const result = await this.executeTool(tool, params);
+
+      // Combine notifications with result
+      return notificationText + result;
+
+    } catch (error) {
+      // Check if this is an authentication error
+      const mcpName = this.extractMCPName(tool);
+      if (mcpName && this.isAuthError(error)) {
+        const authMessage = await this.authPromptManager.handleAuthError(
+          mcpName,
+          error as Error,
+          { tool, params }
+        );
+
+        // Include any notifications that arrived
+        const notifications = this.notificationQueue.getAndClear();
+        let notificationText = '';
+        if (notifications.length > 0) {
+          notificationText = this.notificationQueue.formatForResponse(notifications);
         }
 
-      case 'figma:get_file':
-        // Simulate Figma auth error
-        const figmaError = new Error('Figma API token is required');
-        return await this.authPromptManager.handleAuthError('figma', figmaError, params);
+        return notificationText + authMessage;
+      }
 
-      case 'slack:send_message':
-        // Simulate Slack auth error
-        const slackError = new Error('Slack API token is required');
-        return await this.authPromptManager.handleAuthError('slack', slackError, params);
-
-      case 'filesystem:read_file':
-        // Simulate successful filesystem operation
-        if (params.path === './package.json') {
-          return JSON.stringify({
-            name: "@portel/ncp",
-            version: "1.2.1",
-            description: "Natural Context Provider - N-to-1 MCP Orchestration for AI Assistants"
-          }, null, 2);
-        } else if (params.path === './README.md') {
-          return '# NCP - Natural Context Provider\n\nRevolutionary MCP orchestration system...';
-        }
-        return `📄 File content from ${params.path}`;
-
-      case 'filesystem:list_directory':
-        // Simulate directory listing
-        if (params.path === './src') {
-          return '📁 Source Directory:\n- cli/\n- services/\n- types/\n- utils/';
-        }
-        return `📁 Directory listing for ${params.path}`;
-
-      default:
-        return `🔧 Executed ${tool} with parameters: ${JSON.stringify(params)}`;
+      // Re-throw non-auth errors
+      throw error;
     }
   }
 
   /**
-   * Add a notification to the queue
+   * Extract MCP name from tool identifier
    */
-  notify(message: string, priority: 'high' | 'medium' | 'low' = 'medium', mcpName?: string): void {
-    const priorityMap = {
-      'high': NotificationPriority.HIGH,
-      'medium': NotificationPriority.MEDIUM,
-      'low': NotificationPriority.LOW
-    };
+  private extractMCPName(tool: string): string | null {
+    // Assuming tool format is "mcpName:toolName"
+    const parts = tool.split(':');
+    return parts.length > 1 ? parts[0] : null;
+  }
 
-    this.notificationQueue.add({
-      type: NotificationType.MCP_HEALTH_RESTORED, // Default type
-      message,
-      priority: priorityMap[priority],
-      mcpName
-    });
+  /**
+   * Check if error is authentication-related
+   */
+  private isAuthError(error: any): boolean {
+    const authIndicators = [
+      /api.*key/i,
+      /token/i,
+      /auth/i,
+      /credential/i,
+      /unauthorized/i,
+      /forbidden/i,
+      /access.*denied/i,
+      /invalid.*key/i,
+      /missing.*url/i,
+      /connection.*string/i
+    ];
 
-    if (this.debugEnabled) {
-      console.debug(`[NotificationAPI] Added notification: ${message}`);
+    const errorMessage = error?.message || error?.toString() || '';
+    return authIndicators.some(pattern => pattern.test(errorMessage));
+  }
+
+  /**
+   * Mock tool execution (to be replaced with actual NCP tool execution)
+   */
+  private async executeTool(tool: string, params: any): Promise<string> {
+    // This is a mock - in real integration, this would call NCP's tool execution
+    const mcpName = this.extractMCPName(tool);
+
+    // Simulate some MCPs requiring auth
+    if (mcpName === 'supabase' && !this.authPromptManager.hasCredentials('supabase')) {
+      throw new Error('SUPABASE_URL environment variable is required');
     }
+
+    if (mcpName === 'figma' && !this.authPromptManager.hasCredentials('figma')) {
+      throw new Error('Figma API key required');
+    }
+
+    // Mock successful execution
+    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate work
+    return `✅ ${tool} executed successfully with params: ${JSON.stringify(params)}`;
   }
 
   /**
-   * Handle authentication error
+   * Add a notification (for external use)
    */
-  async handleAuthError(mcpName: string, error: Error, operation?: any): Promise<string> {
-    return await this.authPromptManager.handleAuthError(mcpName, error, operation);
+  addNotification(notification: Parameters<typeof NotificationQueue.prototype.add>[0]): void {
+    this.notificationQueue.add(notification);
   }
 
   /**
-   * Get system status including all components
+   * Get system statistics
    */
-  status(): any {
+  getSystemStats() {
     return {
       session: this.sessionManager.getSessionStats(),
       notifications: this.notificationQueue.getStats(),
-      auth: this.authPromptManager.getAuthStatus(),
-      timestamp: new Date().toISOString()
+      auth: this.authPromptManager.getAuthStatus()
     };
   }
 
   /**
    * Enable debug logging
    */
-  debug(enabled = true): void {
-    this.debugEnabled = enabled;
-    this.notificationQueue.updateConfig({
-      enableDebugLogging: enabled,
-      logDeliveryDecisions: enabled
-    });
-    this.sessionManager.updateConfig({
-      enableDebugLogging: enabled
-    });
-  }
-
-  /**
-   * Clear all notifications (for testing)
-   */
-  clear(): void {
-    this.notificationQueue.clear();
-  }
-
-  /**
-   * Reset session (for testing)
-   */
-  resetSession(): void {
-    this.sessionManager.resetSession();
-  }
-
-  /**
-   * Get cached credentials for an MCP
-   */
-  getCredentials(mcpName: string): any {
-    return this.authPromptManager.getCachedCredentials(mcpName);
-  }
-
-  /**
-   * Clear credentials for an MCP
-   */
-  clearCredentials(mcpName: string): void {
-    this.authPromptManager.clearCredentials(mcpName);
-  }
-
-  /**
-   * Check if MCP has credentials
-   */
-  hasCredentials(mcpName: string): boolean {
-    return this.authPromptManager.hasCredentials(mcpName);
-  }
-
-  /**
-   * Record MCP usage manually (for session tracking)
-   */
-  recordMCPUsage(mcpName: string): void {
-    this.sessionManager.recordMCPUsage(mcpName);
-  }
-
-  /**
-   * Add specific notification types
-   */
-  notifyAuthProvided(mcpName: string): void {
-    this.notificationQueue.add({
-      type: NotificationType.AUTH_PROVIDED,
-      mcpName,
-      message: `✅ ${mcpName} authentication successful`,
-      priority: NotificationPriority.HIGH
-    });
-  }
-
-  notifyAuthFailed(mcpName: string, reason?: string): void {
-    const message = reason
-      ? `❌ ${mcpName} authentication failed: ${reason}`
-      : `❌ ${mcpName} authentication failed`;
-
-    this.notificationQueue.add({
-      type: NotificationType.AUTH_FAILED,
-      mcpName,
-      message,
-      priority: NotificationPriority.HIGH
-    });
-  }
-
-  notifyHealthRestored(mcpName: string): void {
-    this.notificationQueue.add({
-      type: NotificationType.MCP_HEALTH_RESTORED,
-      mcpName,
-      message: `✅ ${mcpName} connection restored`,
-      priority: NotificationPriority.MEDIUM
-    });
-  }
-
-  notifyHealthDegraded(mcpName: string, issue: string): void {
-    this.notificationQueue.add({
-      type: NotificationType.MCP_HEALTH_DEGRADED,
-      mcpName,
-      message: `⚠️ ${mcpName} having issues: ${issue}`,
-      priority: NotificationPriority.HIGH
-    });
-  }
-
-  notifyRateLimitApproaching(mcpName: string, remaining: number): void {
-    this.notificationQueue.add({
-      type: NotificationType.RATE_LIMIT_APPROACHING,
-      mcpName,
-      message: `⚠️ ${mcpName} rate limit approaching (${remaining} requests remaining)`,
-      priority: NotificationPriority.MEDIUM
-    });
+  enableDebugLogging(): void {
+    this.sessionManager.updateConfig({ enableDebugLogging: true });
+    this.notificationQueue = NotificationQueue.getInstance({ enableDebugLogging: true });
   }
 }
 
-// Export singleton instance for easy usage
+/**
+ * Simple API for external integration
+ */
+export class NotificationAPI {
+  private integration = NotificationIntegration.getInstance();
+
+  /**
+   * Execute tool with full notification support
+   */
+  async execute(tool: string, params?: any): Promise<string> {
+    return this.integration.executeToolWithNotifications(tool, params);
+  }
+
+  /**
+   * Add system notification
+   */
+  notify(message: string, type: 'info' | 'warning' | 'error' = 'info', mcpName?: string): void {
+    this.integration.addNotification({
+      type: type.toUpperCase() as any,
+      message,
+      mcpName,
+      priority: type === 'error' ? 'HIGH' : 'MEDIUM'
+    });
+  }
+
+  /**
+   * Get system status
+   */
+  status() {
+    return this.integration.getSystemStats();
+  }
+
+  /**
+   * Enable debug output
+   */
+  debug(): void {
+    this.integration.enableDebugLogging();
+  }
+}
+
+// Export singleton instance for easy access
 export const notificationAPI = new NotificationAPI();
