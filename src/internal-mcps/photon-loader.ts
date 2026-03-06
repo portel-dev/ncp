@@ -229,9 +229,39 @@ export class PhotonLoader {
         await instance.onInitialize();
       }
 
+      // Extract full metadata including settings and notification subscriptions
+      let settingsSchema = undefined;
+      let notificationSubscriptions = undefined;
+
+      if (sourceFilePath) {
+        try {
+          const extractor = new (await import('@portel/photon-core')).SchemaExtractor();
+          const metadata = await extractor.extractAllFromSource(sourceFilePath);
+          settingsSchema = metadata.settingsSchema;
+          notificationSubscriptions = metadata.notificationSubscriptions;
+
+          if (settingsSchema) {
+            logger.debug(`Extracted settings schema for ${path.basename(sourceFilePath)}`);
+          }
+          if (notificationSubscriptions) {
+            logger.debug(`Extracted notification subscriptions for ${path.basename(sourceFilePath)}`);
+          }
+        } catch (error: any) {
+          logger.debug(`Could not extract metadata from ${sourceFilePath}: ${error.message}`);
+        }
+      }
+
       // Create adapter (async initialization)
       // Pass MCP client factory to enable this.mcp() calls in Photons
-      const adapter = await PhotonAdapter.create(MCPClass, instance, sourceFilePath, this.mcpClientFactory);
+      // Pass metadata for settings and notifications support
+      const adapter = await PhotonAdapter.create(
+        MCPClass,
+        instance,
+        sourceFilePath,
+        this.mcpClientFactory,
+        settingsSchema,
+        notificationSubscriptions
+      );
 
       logger.info(`✅ Loaded Photon: ${adapter.name} (${adapter.tools.length} tools)`);
 

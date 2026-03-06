@@ -5,7 +5,7 @@
  * Handles schema extraction and tool registration
  */
 
-import { InternalMCP, InternalTool, InternalToolResult } from './types.js';
+import { InternalMCP, InternalTool, InternalToolResult, SettingsSchema, NotificationSubscription } from './types.js';
 import {
   PhotonMCP,
   SchemaExtractor,
@@ -39,16 +39,37 @@ export class PhotonAdapter implements InternalMCP {
   private elicitationServer?: ElicitationServer;
   private mcpClientFactory?: MCPClientFactory;
 
+  /**
+   * Settings schema from Photon's `protected settings = {...}` declaration
+   * Extracted via photon-core's extractAllFromSource
+   */
+  public readonly settingsSchema?: SettingsSchema;
+
+  /**
+   * Notification subscriptions from Photon's @notify-on JSDoc tag
+   */
+  public readonly notificationSubscriptions?: NotificationSubscription;
+
+  /**
+   * Resolved settings instance - stores user-provided values
+   * Prevents re-elicitation on every tool call
+   */
+  private resolvedSettings?: Record<string, any>;
+
   private constructor(
     mcpClass: typeof PhotonMCP,
     instance: PhotonMCP,
     sourceFilePath?: string,
-    mcpClientFactory?: MCPClientFactory
+    mcpClientFactory?: MCPClientFactory,
+    settingsSchema?: SettingsSchema,
+    notificationSubscriptions?: NotificationSubscription
   ) {
     this.mcpClass = mcpClass;
     this.instance = instance;
     this.sourceFilePath = sourceFilePath;
     this.mcpClientFactory = mcpClientFactory;
+    this.settingsSchema = settingsSchema;
+    this.notificationSubscriptions = notificationSubscriptions;
 
     // Get MCP name from class (handle both Photon subclasses and plain classes)
     this.name = this.getMCPName(mcpClass);
@@ -103,14 +124,25 @@ export class PhotonAdapter implements InternalMCP {
    * @param instance Instance of the Photon class
    * @param sourceFilePath Path to the source file (for schema extraction)
    * @param mcpClientFactory Optional MCP client factory for enabling this.mcp() calls
+   * @param settingsSchema Optional settings schema from photon-core
+   * @param notificationSubscriptions Optional notification subscriptions from photon-core
    */
   static async create(
     mcpClass: typeof PhotonMCP,
     instance: PhotonMCP,
     sourceFilePath?: string,
-    mcpClientFactory?: MCPClientFactory
+    mcpClientFactory?: MCPClientFactory,
+    settingsSchema?: SettingsSchema,
+    notificationSubscriptions?: NotificationSubscription
   ): Promise<PhotonAdapter> {
-    const adapter = new PhotonAdapter(mcpClass, instance, sourceFilePath, mcpClientFactory);
+    const adapter = new PhotonAdapter(
+      mcpClass,
+      instance,
+      sourceFilePath,
+      mcpClientFactory,
+      settingsSchema,
+      notificationSubscriptions
+    );
     await adapter.initializeTools();
     return adapter;
   }
@@ -166,52 +198,69 @@ export class PhotonAdapter implements InternalMCP {
 
   /**
    * Extract schemas from .schema.json or TypeScript source code
+   * Uses extractAllFromSource to get full metadata including settings and notifications
    */
   private async extractSchemasFromSource(methodNames: string[]) {
     if (!this.sourceFilePath) return;
 
     try {
-      let schemas: any[] = [];
+      let metadata: any = null;
 
-      // First, try loading from pre-generated .schema.json file
+      // First, try loading from pre-generated .schema.json file (contains full metadata)
       // This is used in packaged DXT where .ts files aren't included
-      const schemaJsonPath = this.sourceFilePath.replace(/\.ts$/, '.schema.json');
+      const schemaJsonPath = this.sourceFilePath.replace(/\.ts$/, '.photon.schema.json').replace(/\.js$/, '.photon.schema.json');
       try {
         const fs = await import('fs/promises');
         const schemaContent = await fs.readFile(schemaJsonPath, 'utf-8');
-        schemas = JSON.parse(schemaContent);
-        logger.debug(`Loaded ${schemas.length} schemas from ${path.basename(schemaJsonPath)}`);
+        const parsed = JSON.parse(schemaContent);
+        // The pre-generated schema is already the full metadata structure
+        metadata = parsed;
+        logger.debug(`Loaded metadata from ${path.basename(schemaJsonPath)}`);
       } catch (jsonError: any) {
         // .schema.json doesn't exist, try extracting from .ts source
         if (jsonError.code === 'ENOENT') {
           logger.debug(`No .schema.json file found, trying .ts source`);
           const extractor = new SchemaExtractor();
-          schemas = await extractor.extractFromFile(this.sourceFilePath);
-          logger.debug(`Extracted ${schemas.length} schemas from ${path.basename(this.sourceFilePath)}`);
+          metadata = await extractor.extractAllFromSource(this.sourceFilePath);
+          logger.debug(`Extracted metadata from ${path.basename(this.sourceFilePath)}`);
         } else {
           throw jsonError;
         }
       }
 
-      // If no schemas found, use basic tools fallback
-      if (schemas.length === 0) {
+      // If no metadata found, use basic tools fallback
+      if (!metadata || !metadata.tools || metadata.tools.length === 0) {
         logger.debug(`No schemas available for ${path.basename(this.sourceFilePath)}, using basic tools`);
         this.createBasicTools(methodNames);
         return;
       }
 
-      // Create tools from schemas
-      for (const schema of schemas) {
+      // Create tools from schemas, including middleware metadata
+      for (const schema of metadata.tools) {
         if (methodNames.includes(schema.name)) {
           this.tools.push({
             name: schema.name,
             description: schema.description,
             inputSchema: schema.inputSchema,
+            // Preserve middleware metadata for client visibility
+            middleware: schema.middleware,
           });
         }
       }
 
-      logger.debug(`Created ${this.tools.length} tools with schemas`);
+      // Store settings schema if present (allows settings elicitation)
+      if (metadata.settingsSchema) {
+        (this as any).settingsSchema = metadata.settingsSchema;
+        logger.debug(`Found settings schema with ${Object.keys(metadata.settingsSchema.properties || {}).length} properties`);
+      }
+
+      // Store notification subscriptions if present
+      if (metadata.notificationSubscriptions) {
+        (this as any).notificationSubscriptions = metadata.notificationSubscriptions;
+        logger.debug(`Found notification subscriptions for ${metadata.notificationSubscriptions.watchFor.length} events`);
+      }
+
+      logger.debug(`Created ${this.tools.length} tools with metadata (${this.tools.filter(t => t.middleware).length} with middleware)`);
     } catch (error: any) {
       logger.warn(`Failed to load schemas: ${error.message}. Using basic tools.`);
       this.createBasicTools(methodNames);
@@ -235,10 +284,76 @@ export class PhotonAdapter implements InternalMCP {
   }
 
   /**
-   * Set the elicitation server for generator input prompts
+   * Set the elicitation server for generator input prompts and settings elicitation
    */
   setElicitationServer(server: ElicitationServer): void {
     this.elicitationServer = server;
+  }
+
+  /**
+   * Elicit required settings from user if not already resolved
+   * Returns resolved settings to be injected into Photon instance
+   */
+  private async elicitRequiredSettings(): Promise<Record<string, any> | null> {
+    // Already elicited, don't prompt again
+    if (this.resolvedSettings) {
+      return this.resolvedSettings;
+    }
+
+    // No settings schema, nothing to elicit
+    if (!this.settingsSchema) {
+      return null;
+    }
+
+    const required = this.settingsSchema.required || [];
+    if (required.length === 0) {
+      return null;
+    }
+
+    // No elicitation server, can't prompt user
+    if (!this.elicitationServer) {
+      logger.warn(`Settings required for ${this.name} but no elicitation server available`);
+      return null;
+    }
+
+    try {
+      const result = await this.elicitationServer.elicitInput({
+        message: `Configure settings for ${this.name}`,
+        requestedSchema: {
+          type: 'object',
+          properties: this.settingsSchema.properties,
+          required,
+        },
+      });
+
+      if (result.action !== 'accept' || !result.content) {
+        logger.warn(`User declined or cancelled settings elicitation for ${this.name}`);
+        return null;
+      }
+
+      // Cache resolved settings for subsequent tool calls
+      this.resolvedSettings = result.content;
+      logger.debug(`Resolved settings for ${this.name}: ${Object.keys(result.content).join(', ')}`);
+      return result.content;
+    } catch (error: any) {
+      logger.error(`Failed to elicit settings for ${this.name}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Inject resolved settings into Photon instance
+   */
+  private injectSettings(settings: Record<string, any>): void {
+    if (!settings || Object.keys(settings).length === 0) {
+      return;
+    }
+
+    // Try to set settings on instance if it has a settings property
+    if (typeof (this.instance as any).settings === 'object') {
+      Object.assign((this.instance as any).settings, settings);
+      logger.debug(`Injected settings into ${this.name} instance`);
+    }
   }
 
   /**
@@ -428,9 +543,16 @@ export class PhotonAdapter implements InternalMCP {
 
   /**
    * Execute a tool (supports both Photon subclasses, plain classes, and generators)
+   * Automatically elicits and injects required settings before execution
    */
   async executeTool(toolName: string, parameters: any): Promise<InternalToolResult> {
     try {
+      // Elicit required settings if not already done
+      const settings = await this.elicitRequiredSettings();
+      if (settings) {
+        this.injectSettings(settings);
+      }
+
       let result: any;
 
       // Get the method

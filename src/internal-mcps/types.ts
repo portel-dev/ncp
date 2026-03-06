@@ -13,6 +13,15 @@ export interface InternalTool {
     properties: Record<string, any>;
     required?: string[];
   };
+  /**
+   * Middleware declarations (e.g., @cached, @retryable, @circuitBreaker)
+   * Preserved from photon-core schema extraction for client visibility
+   */
+  middleware?: Array<{
+    name: string;
+    config?: Record<string, any>;
+    phase?: 'before' | 'after' | 'around';
+  }>;
 }
 
 export interface InternalToolResult {
@@ -61,6 +70,21 @@ export interface InternalMCPCapabilities {
   [key: string]: any;
 }
 
+/**
+ * Settings schema for Photons - defines configuration required before tool execution
+ */
+export interface SettingsSchema {
+  properties: Record<string, any>;
+  required?: string[];
+}
+
+/**
+ * Notification subscription - defines events a Photon wants to receive
+ */
+export interface NotificationSubscription {
+  watchFor: string[];
+}
+
 export interface InternalMCP {
   name: string;
   description: string;
@@ -73,6 +97,18 @@ export interface InternalMCP {
   capabilities?: InternalMCPCapabilities;
 
   /**
+   * Settings schema - defines configuration required for this MCP
+   * Extracted from Photon's `protected settings = {...}` declaration
+   */
+  settingsSchema?: SettingsSchema;
+
+  /**
+   * Notification subscriptions - defines events this MCP wants to receive
+   * Extracted from Photon's @notify-on JSDoc tag
+   */
+  notificationSubscriptions?: NotificationSubscription;
+
+  /**
    * Execute a tool from this internal MCP
    */
   executeTool(toolName: string, parameters: any): Promise<InternalToolResult>;
@@ -82,4 +118,10 @@ export interface InternalMCP {
    * Used by management tools to show confirmation dialogs
    */
   setElicitationServer?(server: ElicitationCapable): void;
+
+  /**
+   * Optionally handle notifications when events are dispatched
+   * Called by InternalMCPManager when subscribed events occur
+   */
+  onNotification?(type: string, payload: any): Promise<void>;
 }

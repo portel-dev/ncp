@@ -43,6 +43,12 @@ export class InternalMCPManager {
   private photonLoader: PhotonLoader;
   private codeMCP: CodeMCP; // Keep reference for setting orchestrator later
 
+  /**
+   * Notification subscription registry: event type → list of subscribed MCPs
+   * Built from notificationSubscriptions metadata during loadPhotons()
+   */
+  private notificationSubscribers: Map<string, InternalMCP[]> = new Map();
+
   constructor() {
     this.photonLoader = new PhotonLoader();
 
@@ -99,9 +105,15 @@ export class InternalMCPManager {
 
     const mcps = await this.photonLoader.loadAll(directories);
 
-    // Register loaded MCPs
+    // Register loaded MCPs and build notification subscription registry
     for (const mcp of mcps) {
       this.registerInternalMCP(mcp);
+      this.registerNotificationSubscriptions(mcp);
+    }
+
+    // Log subscription registry status
+    if (this.notificationSubscribers.size > 0) {
+      logger.info(`📢 Notification subscriptions registered: ${this.notificationSubscribers.size} event type(s)`);
     }
 
     logger.info(`✅ Loaded ${mcps.length} Photon(s)`);
@@ -113,6 +125,72 @@ export class InternalMCPManager {
   private registerInternalMCP(mcp: InternalMCP): void {
     this.internalMCPs.set(mcp.name, mcp);
     logger.debug(`Registered internal MCP: ${mcp.name}`);
+  }
+
+  /**
+   * Register notification subscriptions for a loaded MCP
+   * Builds the subscription registry: event type → list of subscriber MCPs
+   */
+  private registerNotificationSubscriptions(mcp: InternalMCP): void {
+    if (!mcp.notificationSubscriptions || !mcp.notificationSubscriptions.watchFor) {
+      return;
+    }
+
+    const { watchFor } = mcp.notificationSubscriptions;
+    for (const eventType of watchFor) {
+      if (!this.notificationSubscribers.has(eventType)) {
+        this.notificationSubscribers.set(eventType, []);
+      }
+      this.notificationSubscribers.get(eventType)!.push(mcp);
+      logger.debug(`Registered ${mcp.name} as subscriber for event: ${eventType}`);
+    }
+  }
+
+  /**
+   * Get all MCPs subscribed to a specific event type
+   * @param eventType The event type (e.g., "deadlines", "mentions")
+   * @returns Array of MCPs that have subscribed to this event
+   */
+  getSubscribersFor(eventType: string): InternalMCP[] {
+    return this.notificationSubscribers.get(eventType) || [];
+  }
+
+  /**
+   * Dispatch a notification to all subscribed MCPs
+   * @param eventType The event type
+   * @param payload Event data to pass to subscribers
+   */
+  async dispatchNotification(eventType: string, payload: any): Promise<void> {
+    const subscribers = this.getSubscribersFor(eventType);
+
+    if (subscribers.length === 0) {
+      logger.debug(`No subscribers for event: ${eventType}`);
+      return;
+    }
+
+    logger.debug(`Dispatching ${eventType} notification to ${subscribers.length} subscriber(s)`);
+
+    for (const mcp of subscribers) {
+      try {
+        if (mcp.onNotification && typeof mcp.onNotification === 'function') {
+          await mcp.onNotification(eventType, payload);
+          logger.debug(`Delivered ${eventType} notification to ${mcp.name}`);
+        }
+      } catch (error: any) {
+        logger.error(`Failed to deliver notification to ${mcp.name}: ${error.message}`);
+      }
+    }
+  }
+
+  /**
+   * Get all registered event types and their subscriber counts
+   */
+  getNotificationRegistryStatus(): Record<string, number> {
+    const status: Record<string, number> = {};
+    for (const [eventType, subscribers] of this.notificationSubscribers) {
+      status[eventType] = subscribers.length;
+    }
+    return status;
   }
 
   /**

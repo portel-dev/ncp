@@ -48,6 +48,48 @@
 * use kebab-case for CLI options (--confidence-threshold) ([59e883e](https://github.com/portel-dev/ncp/commit/59e883ef3f89b75da6f5c9225a1c5564b1f0c82a))
 * validate command parameter before getRuntimeForExtension call ([ccd7be1](https://github.com/portel-dev/ncp/commit/ccd7be1061c7a4288ba0c7df81615ecfff3f90bf))
 
+## [2.1.0](https://github.com/portel-dev/ncp/compare/2.0.1...2.1.0) (2026-03-06)
+
+### Features
+
+* **photon-core sync to v2.9.3** - Full integration with latest photon-core capabilities:
+  - Bumped `@portel/photon-core` from ^2.3.0 → ^2.9.3
+  - Comprehensive type system enhancements and new metadata support
+
+* **Settings schema support for Photons** - Photons can now declare required configuration
+  - Photons declare settings via `protected settings = {...}` in photon-core
+  - NCP extracts `settingsSchema` via `extractAllFromSource()` during Photon loading
+  - Automatic elicitation: when required settings are missing, NCP prompts user before tool execution
+  - Settings cached per-Photon to avoid re-prompting on every tool call
+  - Exposed via `InternalMCP.settingsSchema` for client visibility
+  - Example: database connection strings, API keys, or user preferences required before execution
+
+* **Notification subscription system** - Photons can subscribe to events via @notify-on
+  - Photons declare subscriptions using `@notify-on eventType1, eventType2` JSDoc tag
+  - NCP builds a subscription registry: event type → list of subscribed Photons
+  - `InternalMCPManager.getSubscribersFor(eventType)` finds interested Photons
+  - `InternalMCPManager.dispatchNotification(eventType, payload)` routes events
+  - Photons receive notifications via `onNotification(type, payload)` method
+  - Enables reactive Photon behavior: reminders, deadline alerts, mention notifications, etc.
+
+* **Middleware metadata preservation** - NCP now preserves middleware declarations
+  - `@cached`, `@retryable`, `@circuitBreaker`, `@rateLimit`, etc. from photon-core are extracted
+  - Middleware metadata stored in `InternalTool.middleware` array
+  - Exposed to AI clients via tool discovery for informed decision-making
+  - Example: AI can recognize cached operations and optimize call patterns
+
+* **Enhanced schema extraction pipeline**
+  - Switched from `extractFromFile()` (tools-only) → `extractAllFromSource()` (full metadata)
+  - Single call now retrieves: tools, settingsSchema, notificationSubscriptions, and middleware
+  - Pre-generated `.photon.schema.json` files in DXT bundles contain full metadata for production
+  - Backward compatible: graceful fallback to basic tools if metadata unavailable
+
+### Bug Fixes
+
+* correct photon-core metadata extraction to use full `extractAllFromSource` API
+* ensure settings are properly injected into Photon instances before tool execution
+* prevent settings elicitation loops with caching mechanism
+
 ## [Unreleased]
 
 ### Features
