@@ -208,12 +208,12 @@ export class ConfigManager {
         const fileName = basename(expandedPath);
         const baseName = fileName.replace('.photon.ts', '');
 
-        // Create micromcps directory
-        const microDir = join(homedir(), '.ncp', 'micromcps');
-        await mkdir(microDir, { recursive: true });
+        // Create photons directory
+        const photonDir = join(homedir(), '.ncp', 'photons');
+        await mkdir(photonDir, { recursive: true });
 
-        const destFile = join(microDir, fileName);
-        const destSchema = join(microDir, `${baseName}.micro.schema.json`);
+        const destFile = join(photonDir, fileName);
+        const destSchema = join(photonDir, `${baseName}.photon.schema.json`);
 
         if (dryRun) {
           console.log(chalk.blue('\n📋 Dry-run mode: Would import Photon:'));
@@ -229,13 +229,13 @@ export class ConfigManager {
         // Check for optional schema file
         let schemaImported = false;
         const sourceDir = dirname(expandedPath);
-        const sourceSchema = join(sourceDir, `${baseName}.micro.schema.json`);
+        const sourceSchema = join(sourceDir, `${baseName}.photon.schema.json`);
 
         try {
           await access(sourceSchema);
           await copyFile(sourceSchema, destSchema);
           schemaImported = true;
-          console.log(chalk.green(`✅ Copied ${baseName}.micro.schema.json`));
+          console.log(chalk.green(`✅ Copied ${baseName}.photon.schema.json`));
         } catch {
           // Schema is optional
         }
@@ -303,12 +303,12 @@ export class ConfigManager {
 
       // Detect format: TypeScript (Photon) vs JSON (config)
       const trimmed = clipboardContent.trim();
-      const isMicroMCP = trimmed.includes('export class') &&
+      const isPhoton = trimmed.includes('export class') &&
                         (trimmed.includes('implements Photon') || trimmed.includes('@tool'));
 
-      if (isMicroMCP) {
+      if (isPhoton) {
         // Handle Photon TypeScript code
-        await this.importMicroMCPFromClipboard(trimmed);
+        await this.importPhotonFromClipboard(trimmed);
         return;
       }
 
@@ -421,7 +421,7 @@ export class ConfigManager {
   /**
    * Import Photon from clipboard containing TypeScript code
    */
-  private async importMicroMCPFromClipboard(tsContent: string): Promise<void> {
+  private async importPhotonFromClipboard(tsContent: string): Promise<void> {
     const { basename, join } = await import('path');
     const { homedir } = await import('os');
     const { writeFile, mkdir } = await import('fs/promises');
@@ -442,10 +442,10 @@ export class ConfigManager {
       .replace(/^-/, '');  // Remove leading dash
 
     // Create destination directory
-    const microDir = join(homedir(), '.ncp', 'micromcps');
-    await mkdir(microDir, { recursive: true });
+    const photonDir = join(homedir(), '.ncp', 'photons');
+    await mkdir(photonDir, { recursive: true });
 
-    const destFile = join(microDir, `${baseName}.photon.ts`);
+    const destFile = join(photonDir, `${baseName}.photon.ts`);
 
     // Write TypeScript code to file
     await writeFile(destFile, tsContent, 'utf8');

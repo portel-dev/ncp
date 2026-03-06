@@ -47,7 +47,7 @@ export interface RegistryServer {
       updatedAt?: string;
     };
     // Photon metadata
-    isMicroMCP?: boolean;
+    isPhoton?: boolean;
     sourceUrl?: string;
     schemaUrl?: string;
     [key: string]: any; // Allow additional metadata
@@ -80,7 +80,7 @@ export interface ServerSearchResult {
       updatedAt?: string;
     };
     // Photon metadata
-    isMicroMCP?: boolean;
+    isPhoton?: boolean;
     sourceUrl?: string;
     schemaUrl?: string;
     [key: string]: any; // Allow additional metadata

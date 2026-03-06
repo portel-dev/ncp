@@ -125,8 +125,7 @@ export class PhotonLoader {
    * Check if file is a Photon file
    */
   private isMCPFile(filename: string): boolean {
-    return filename.endsWith('.photon.ts') || filename.endsWith('.photon.js') ||
-           filename.endsWith('.photon.ts') || filename.endsWith('.photon.js'); // Backward compat during migration
+    return filename.endsWith('.photon.ts') || filename.endsWith('.photon.js');
   }
 
   /**
@@ -137,24 +136,21 @@ export class PhotonLoader {
       // Find source .ts file if we're loading from dist
       let sourceFilePath = filePath;
       if (filePath.includes('/dist/') && filePath.endsWith('.js')) {
-        const isPhoton = filePath.endsWith('.photon.js');
-        const ext = isPhoton ? '.photon' : '.micro';
-
         // First try .schema.json in dist (for packaged DXT)
         // If not found, will fall back to src/*.ts in development
-        sourceFilePath = filePath.replace(`${ext}.js`, `${ext}.ts`);
+        sourceFilePath = filePath.replace('.photon.js', '.photon.ts');
 
         // Check if we should try src/ instead (development mode)
-        const schemaInDist = filePath.replace(`${ext}.js`, `${ext}.schema.json`);
+        const schemaInDist = filePath.replace('.photon.js', '.photon.schema.json');
         try {
           await fs.access(schemaInDist);
           // Schema file exists in dist, use dist path
-          sourceFilePath = filePath.replace(`${ext}.js`, `${ext}.ts`);
+          sourceFilePath = filePath.replace('.photon.js', '.photon.ts');
         } catch {
           // No schema in dist, try src/ (development mode)
           sourceFilePath = filePath
             .replace('/dist/', '/src/')
-            .replace(`${ext}.js`, `${ext}.ts`);
+            .replace('.photon.js', '.photon.ts');
         }
       }
 

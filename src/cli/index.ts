@@ -33,6 +33,18 @@ import type { CredentialType } from '../auth/secure-credential-store.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
+
+/**
+ * Parse profile option value into an array of profile names.
+ * Supports comma-separated values: "profile1,profile2" -> ["profile1", "profile2"]
+ * Returns ['all'] if no value provided.
+ */
+function parseProfiles(profileOption: string | undefined): string[] {
+  if (!profileOption) {
+    return ['all'];
+  }
+  return profileOption.split(',').map(p => p.trim()).filter(p => p.length > 0);
+}
 if (noColor) {
   chalk.level = 0; // Disable colors globally
 } else {
@@ -776,7 +788,7 @@ async function handleKnownProvider(provider: any, options: any) {
       }
     }
 
-    const profiles = options.profile || ['all'];
+    const profiles = parseProfiles(options.profile);
     for (const profileName of profiles) {
       await manager.addMCPToProfile(profileName, provider.id, mcpConfig);
       console.log(chalk.green(`   ✅ Added ${provider.name} to profile: ${profileName}`));
@@ -819,7 +831,7 @@ async function handleKnownProvider(provider: any, options: any) {
       console.log(chalk.dim(`   Note: ${provider.http.notes}`));
     }
 
-    const profiles = options.profile || ['all'];
+    const profiles = parseProfiles(options.profile);
     for (const profileName of profiles) {
       await manager.addMCPToProfile(profileName, provider.id, httpConfig);
       console.log(chalk.green(`   ✅ Added ${provider.name} to profile: ${profileName}`));
@@ -908,7 +920,7 @@ async function handleManualAdd(name: string, command: string, args: string[], op
     }
   }
 
-  const profiles = options.profile || ['all'];
+  const profiles = parseProfiles(options.profile);
   for (const profileName of profiles) {
     await manager.addMCPToProfile(profileName, name, mcpConfig);
     console.log(chalk.green(`\n✅ Added ${name} to profile: ${profileName}`));
@@ -923,7 +935,7 @@ async function handleManualAdd(name: string, command: string, args: string[], op
 program
   .command('add <provider> [command] [args...]')
   .description('Add MCP server(s) to a profile')
-  .option('--profile <names...>', 'Profile(s) to add to (can specify multiple, default: all)')
+  .option('--profile <names>', 'Profile(s) to add to (comma-separated, e.g., "work,personal", default: all)')
   .option('--transport <type>', 'Force transport type: stdio or http')
   .option('--env <vars...>', 'Environment variables (KEY=value)')
   .option('--token <value>', 'Bearer token for HTTP MCPs (skips interactive prompt)')
@@ -987,7 +999,7 @@ Examples:
       console.log(chalk.blue(`\n📥 Importing from file: ${providerName}`));
       try {
         const manager = new ConfigManager();
-        await manager.importConfig(providerName, options.profile?.[0] || 'all', false);
+        await manager.importConfig(providerName, parseProfiles(options.profile)[0], false);
         return;
       } catch (error: any) {
         console.log(chalk.red(`\n✗ Import failed: ${error.message}`));
@@ -1018,22 +1030,22 @@ Examples:
           const baseName = fileName.replace('.photon.ts', '');
 
           // Create destination directory
-          const microDir = path.join(getNcpBaseDirectory(), 'micromcps');
-          await fs.mkdir(microDir, { recursive: true });
+          const photonDir = path.join(getNcpBaseDirectory(), 'photons');
+          await fs.mkdir(photonDir, { recursive: true });
 
-          const destFile = path.join(microDir, fileName);
+          const destFile = path.join(photonDir, fileName);
 
           // Save the file
           await fs.writeFile(destFile, tsContent, 'utf8');
 
           // Try to download optional schema file
           let schemaImported = false;
-          const schemaUrl = providerName.replace('.photon.ts', '.micro.schema.json');
+          const schemaUrl = providerName.replace('.photon.ts', '.photon.schema.json');
           try {
             const schemaResponse = await fetch(schemaUrl);
             if (schemaResponse.ok) {
               const schemaContent = await schemaResponse.text();
-              const destSchema = path.join(microDir, `${baseName}.micro.schema.json`);
+              const destSchema = path.join(photonDir, `${baseName}.photon.schema.json`);
               await fs.writeFile(destSchema, schemaContent, 'utf8');
               schemaImported = true;
               console.log(chalk.green(`✅ Downloaded schema`));
@@ -1045,7 +1057,7 @@ Examples:
           console.log(chalk.green(`\n✅ Photon "${baseName}" downloaded successfully!`));
           console.log(chalk.dim(`📍 Location: ${destFile}`));
           if (schemaImported) {
-            console.log(chalk.dim(`📋 Schema: ${path.join(microDir, `${baseName}.micro.schema.json`)}`));
+            console.log(chalk.dim(`📋 Schema: ${path.join(photonDir, `${baseName}.photon.schema.json`)}`));
           }
           console.log(chalk.blue(`\n${UIMessages.photonUsage(baseName)}`));
           console.log(chalk.blue(UIMessages.photonDiscovery(baseName)));
@@ -1539,7 +1551,7 @@ function formatTypeScriptCodeWithLineNumbers(code: string): string {
 program
   .command('remove <name>')
   .description('Remove an MCP server from profiles')
-  .option('--profile <names...>', 'Profile(s) to remove from (can specify multiple, default: all)')
+  .option('--profile <names>', 'Profile(s) to remove from (comma-separated, e.g., "work,personal", default: all)')
   .action(async (name, options) => {
     // Set branded terminal title
     setNCPTitle('Remove', name);
@@ -1549,8 +1561,8 @@ program
     const manager = new ProfileManager();
     await manager.initialize();
 
-    // ⚠️ CRITICAL: Default MUST be ['all'] - DO NOT CHANGE!
-    const profiles = options.profile || ['all'];
+    /// ⚠️ CRITICAL: Default MUST be ['all'] - DO NOT CHANGE!
+    const profiles = parseProfiles(options.profile);
 
     // Validate if MCP exists and get suggestions
     const validation = await validateRemoveCommand(name, manager, profiles);
