@@ -81,7 +81,8 @@
   },
   "types": "dist/index.d.ts",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.0.0",
+    "bun": ">=1.0.0"
   },
   "files": [
     "dist",
