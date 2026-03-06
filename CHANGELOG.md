@@ -1,5 +1,56 @@
 # Changelog
 
+## [2.3.0](https://github.com/portel-dev/ncp/compare/2.0.0...2.0.1) (2026-03-06)
+
+### Features
+
+* add Bun runtime support to NCP ([6418f73](https://github.com/portel-dev/ncp/commit/6418f73ae85ce889228f383246fc70d45b2489b0))
+* add comprehensive plan for auth-prompt-on-demand feature ([6edae79](https://github.com/portel-dev/ncp/commit/6edae7971e70187fa8ba93f8169386869fc764e1))
+* add conditional resource discovery system ([e1bde21](https://github.com/portel-dev/ncp/commit/e1bde214e6dfb261025a3851374ffd0d15803dea))
+* add generator support to PhotonAdapter ([7d81371](https://github.com/portel-dev/ncp/commit/7d81371b1b2eba4f033be33608f79e23d8a312df))
+* add ncp.do() for single-call intent execution with embedding-based param matching ([2b8a975](https://github.com/portel-dev/ncp/commit/2b8a97519d409f4c1988d9445e07721f564ec043))
+* add notification and auth prompt components ([23ac825](https://github.com/portel-dev/ncp/commit/23ac825a9d83b7b76dcbf35084482ddbd60e42c8))
+* add progress notifications during tool discovery ([c4919bd](https://github.com/portel-dev/ncp/commit/c4919bd91ff12db6ad680827e5e4de4dbe2a6232))
+* add rich feedback for ncp.do() mapping failures ([1542ca4](https://github.com/portel-dev/ncp/commit/1542ca4051d57ba127298e9a1fa2ee20df05bb87))
+* Add smart renderer utility for HTML content in MCP responses ([39f6714](https://github.com/portel-dev/ncp/commit/39f67141d72d9b519ed4736c7c19514464dddc1e))
+* add string-based fallback for ncp.do() param matching ([0515b77](https://github.com/portel-dev/ncp/commit/0515b77c99a029f803a9b9c359f3b59a5b88ffc3))
+* add structured outputs and tool metadata for MCP 2025-11-25 compliance ([3f2254d](https://github.com/portel-dev/ncp/commit/3f2254d95056f72d465f613e77bde4d7755ff9c7))
+* add tree-formatted output for find results ([de2ae81](https://github.com/portel-dev/ncp/commit/de2ae81fad65808eea402e9989eb3e2fdfe0ca1f))
+* Add unified config.json for photon secrets ([c7a775f](https://github.com/portel-dev/ncp/commit/c7a775f986bc4776ed49de56b91d06d02baa8a37))
+* allow ncp.find() to accept string directly in code mode ([b5fbf1b](https://github.com/portel-dev/ncp/commit/b5fbf1baee9c74165c4b91dcd6384d5eb97ebccb))
+* bump photon-core to ^2.3.0, use shared smart rendering ([f05e439](https://github.com/portel-dev/ncp/commit/f05e4394f1e05e13490de3a062d7e8929994af08))
+* bump photon-core to ^2.9.4 for stateful execution, auto-UI, and MCP Apps support ([10e50b6](https://github.com/portel-dev/ncp/commit/10e50b65a647f29fb3c90cb57c35bda049ec88fb))
+* enable Photons to call external MCPs via protocol ([a11437b](https://github.com/portel-dev/ncp/commit/a11437b92968345d8d6536211e89b89165585745))
+* implement logging capability for real-time debug streaming ([b50c563](https://github.com/portel-dev/ncp/commit/b50c563c303ea7abbe47c965618d250a2c67abce))
+* implement MCP 2025-11-25 capability negotiation and tool outputSchema (Phase 1) ([31082c1](https://github.com/portel-dev/ncp/commit/31082c1b9e1ace3bb888eafa1a62d9e030aeef45))
+* implement roots support for file picker integration ([e7bf820](https://github.com/portel-dev/ncp/commit/e7bf8201dca1c136c08564402193de5d0bd1106f))
+* implement session-aware notification system with auth prompts ([ac2bbf5](https://github.com/portel-dev/ncp/commit/ac2bbf51d638a63a7da044d03216c0dfd6a178cd))
+* integrate photon-core 2.9.4 features (PhotonWatcher, DaemonBroker, InstanceStore, StatefulExecution) ([a012214](https://github.com/portel-dev/ncp/commit/a012214c98dd0ca85f29392004178782351bb85b))
+* resource generation system ([f8889cd](https://github.com/portel-dev/ncp/commit/f8889cd7d16b6ae5d44c59143e4d6cd79b7a1787))
+* sync photon-core to v2.9.3 with settings, notifications, and middleware support ([d8a0507](https://github.com/portel-dev/ncp/commit/d8a05071e3a67c92036bab25062734c121380909))
+* update to photon-core 1.2.0 with ask/emit pattern ([0a7de0b](https://github.com/portel-dev/ncp/commit/0a7de0b3d97fb48ddce82fef4fc98fa02e98d516))
+* Use shared utilities from @portel/photon-core v2 ([868a4be](https://github.com/portel-dev/ncp/commit/868a4bec6e3b175ee64a973ee2d7ffcc732bcea2))
+
+### Bug Fixes
+
+* address npm security vulnerabilities with automated patches ([37e0b24](https://github.com/portel-dev/ncp/commit/37e0b247350dbefd67ec17dfc41d7d5898d99568))
+* address PR review feedback ([9aaa4bb](https://github.com/portel-dev/ncp/commit/9aaa4bb776c28b1cb71763ec8ef88956734c633d))
+* adjust coverage thresholds for js-yaml refactoring ([c581569](https://github.com/portel-dev/ncp/commit/c581569a7f6af02cada7efc8840994cc7ef584f7))
+* apply all available security fixes with npm audit fix --force ([0e01a0d](https://github.com/portel-dev/ncp/commit/0e01a0dc7f7909aceb1adbe2eea105738a9b22ba))
+* Filter configure/getConfig from fallback getToolMethods ([665d18c](https://github.com/portel-dev/ncp/commit/665d18cb47152f171ba3b219a4877735ee2ed00e))
+* further lower coverage thresholds to 24%/29% for CI stability ([d3c6deb](https://github.com/portel-dev/ncp/commit/d3c6deb219eb1488b67db44ad3cca64acbea516f))
+* handle isolated-vm compatibility issues and HTTP MCP import bugs ([9bfd724](https://github.com/portel-dev/ncp/commit/9bfd724303892c1dabee8ff7c427e30ad3bf41e2)), closes [#9](https://github.com/portel-dev/ncp/issues/9) [#10](https://github.com/portel-dev/ncp/issues/10) [#11](https://github.com/portel-dev/ncp/issues/11)
+* lower coverage thresholds for CI environment variance ([7962c66](https://github.com/portel-dev/ncp/commit/7962c6607f066dc83a6a00809574170369710642))
+* resolve --profile flag parsing issue in add/remove commands ([a640e0f](https://github.com/portel-dev/ncp/commit/a640e0f2cb9c1e4ab87aea3308fe8df481ca365c)), closes [#13](https://github.com/portel-dev/ncp/issues/13)
+* resolve compatibility issues with photon-core 1.2.0 and AI APIs ([924a8b9](https://github.com/portel-dev/ncp/commit/924a8b9fd77998fd79abe2ab2dfc3e970a384ed7))
+* resolve MCPClientFactory type compatibility after merge ([04a9fe5](https://github.com/portel-dev/ncp/commit/04a9fe5341105fb90ba95a2ad1ddccce54293ecc))
+* return tools array directly from ncp.find() in code mode ([3bad10d](https://github.com/portel-dev/ncp/commit/3bad10daca118b4486f1435a75c54a99e5b7b994))
+## [2.0.1](https://github.com/portel-dev/ncp/compare/2.0.0...2.0.1) (2025-12-27)
+
+### Bug Fixes
+
+* resolve Windows CI failures ([3f13f91](https://github.com/portel-dev/ncp/commit/3f13f9152c4df175880c453be45075dc51bc97a8)), closes [#8](https://github.com/portel-dev/ncp/issues/8)
+
 ## [2.3.0](https://github.com/portel-dev/ncp/compare/2.2.0...2.3.0) (2026-03-06)
 
 ### Features
