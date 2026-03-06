@@ -121,6 +121,16 @@ export class MCPServer implements ElicitationServer {
       if (clientCapabilities) {
         this.capabilityDetector.updateFromClientCapabilities(clientCapabilities);
         logger.debug(`Client capabilities detected: ${this.capabilityDetector.getSupportedCapabilities().join(', ')}`);
+
+        // MCP 2025-11-25: Register logging callback if client supports it
+        if (this.capabilityDetector.supports('logging')) {
+          logger.setLogCallback((level: string, message: string) => {
+            this.sendLoggingNotification(level, message).catch(() => {
+              // Ignore notification failures - don't impact core functionality
+            });
+          });
+          logger.debug('Logging capability enabled - client supports log notifications');
+        }
       }
 
       if (clientVersion) {
@@ -1787,6 +1797,26 @@ This operation may modify data or have side effects.`;
       logger.debug(`Progress notification sent: ${token} ${progress}/${total}${message ? ` - ${message}` : ''}`);
     } catch (error: any) {
       logger.warn(`Failed to send progress notification: ${error.message}`);
+    }
+  }
+
+  /**
+   * MCP 2025-11-25: Send a logging notification to the client
+   * Used to send debug logs to Claude Desktop, Cursor, etc.
+   */
+  private async sendLoggingNotification(level: string, message: string): Promise<void> {
+    try {
+      await this.server.notification({
+        method: 'notifications/logging',
+        params: {
+          level,
+          logger: 'ncp',
+          timestamp: new Date().toISOString(),
+          data: message
+        }
+      });
+    } catch (error: any) {
+      // Silently ignore notification failures - don't disrupt core operations
     }
   }
 

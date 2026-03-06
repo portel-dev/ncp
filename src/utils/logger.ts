@@ -19,6 +19,7 @@ export class Logger {
   private isCLIMode: boolean = false;
   private debugMode: boolean = false;
   private logFilePath: string | null = null;
+  private logCallback: ((level: string, message: string) => void) | null = null;
 
   private constructor() {
     // Check if running CLI commands (list, find, run, add, remove, config, etc.)
@@ -136,7 +137,22 @@ export class Logger {
     const timestamp = new Date().toISOString();
     return `[${timestamp}] [${level}] ${message}\n`;
   }
-  
+
+  /**
+   * MCP 2025-11-25: Register a callback for log notifications
+   * Used to send debug logs to MCP clients (Claude Desktop, Cursor, etc.)
+   */
+  setLogCallback(callback: (level: string, message: string) => void): void {
+    this.logCallback = callback;
+  }
+
+  /**
+   * Remove the log callback
+   */
+  clearLogCallback(): void {
+    this.logCallback = null;
+  }
+
   static getInstance(): Logger {
     if (!Logger.instance) {
       Logger.instance = new Logger();
@@ -149,11 +165,15 @@ export class Logger {
    * Completely suppressed in MCP mode and CLI mode unless debugging
    */
   info(message: string): void {
-    if (this.debugMode) {
+    if (this.debugMode || this.logCallback) {
       if (this.logFilePath) {
         this.writeToFile(this.formatLogMessage('INFO', message));
-      } else {
+      } else if (this.debugMode) {
         console.error(`[NCP] ${message}`);
+      }
+      // Send to MCP client if callback registered
+      if (this.logCallback) {
+        this.logCallback('INFO', message);
       }
     }
   }
@@ -177,11 +197,15 @@ export class Logger {
    * Only shown in debug mode
    */
   debug(message: string): void {
-    if (this.debugMode) {
+    if (this.debugMode || this.logCallback) {
       if (this.logFilePath) {
         this.writeToFile(this.formatLogMessage('DEBUG', message));
-      } else {
+      } else if (this.debugMode) {
         console.error(`[NCP DEBUG] ${message}`);
+      }
+      // Send to MCP client if callback registered
+      if (this.logCallback) {
+        this.logCallback('DEBUG', message);
       }
     }
   }
@@ -191,29 +215,23 @@ export class Logger {
    * Always shown (but minimal in MCP mode)
    */
   error(message: string, error?: any): void {
-    if (this.isMCPMode && !this.debugMode) {
-      // In MCP mode, only log critical errors
-      if (error?.critical) {
-        if (this.logFilePath) {
-          this.writeToFile(this.formatLogMessage('ERROR', message));
-          if (error) {
-            this.writeToFile(this.formatLogMessage('ERROR', JSON.stringify(error, null, 2)));
-          }
-        } else {
-          console.error(`[NCP ERROR] ${message}`);
-        }
-      }
-    } else {
+    const shouldLog = (this.isMCPMode && !this.debugMode && error?.critical) || !this.isMCPMode || this.debugMode || this.logCallback;
+
+    if (shouldLog) {
       if (this.logFilePath) {
         this.writeToFile(this.formatLogMessage('ERROR', message));
         if (error) {
           this.writeToFile(this.formatLogMessage('ERROR', JSON.stringify(error, null, 2)));
         }
-      } else {
+      } else if (!(this.isMCPMode && !this.debugMode && !error?.critical)) {
         console.error(`[NCP ERROR] ${message}`);
         if (error) {
           console.error(error);
         }
+      }
+      // Send to MCP client if callback registered
+      if (this.logCallback) {
+        this.logCallback('ERROR', message);
       }
     }
   }
@@ -223,11 +241,15 @@ export class Logger {
    * Completely suppressed in MCP mode and CLI mode unless debugging
    */
   warn(message: string): void {
-    if (this.debugMode) {
+    if (this.debugMode || this.logCallback) {
       if (this.logFilePath) {
         this.writeToFile(this.formatLogMessage('WARN', message));
-      } else {
+      } else if (this.debugMode) {
         console.error(`[NCP WARN] ${message}`);
+      }
+      // Send to MCP client if callback registered
+      if (this.logCallback) {
+        this.logCallback('WARN', message);
       }
     }
   }
