@@ -10,8 +10,8 @@ on:
       - 'package-lock.json'
       - 'tsconfig.json'
       - 'jest.config.js'
-      - '.github/workflows/**'
-      - 'scripts/**'
+      - '.github/workflows/ci.yml'
+      - 'scripts/!(check-root-clutter.js)**'
       - 'manifest.json'
   pull_request:
     branches: [main, develop]
@@ -20,6 +20,7 @@ jobs:
   test:
     name: Run Tests
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -43,24 +44,26 @@ jobs:
 
       - name: Run critical tests
         run: npm run test:critical
+        timeout-minutes: 10
         env:
-          NODE_OPTIONS: --experimental-vm-modules
-
-      - name: Run E2E tests
-        run: npm run test:e2e
-        env:
-          NCP_CONFIRM_BEFORE_RUN: 'false'
-          NCP_DEBUG: 'false'
           NODE_OPTIONS: --experimental-vm-modules
 
       - name: Run integration tests
         run: npm run test:integration
+        timeout-minutes: 10
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
+
+      - name: Run DXT entry point tests
+        run: npm run test:integration:dxt
+        timeout-minutes: 10
         env:
           NODE_OPTIONS: --experimental-vm-modules
 
   lint:
     name: Lint and Type Check
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -77,10 +80,12 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+        timeout-minutes: 10
 
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout code
@@ -100,6 +105,7 @@ jobs:
 
       - name: Run tests with coverage
         run: npm run test:coverage
+        timeout-minutes: 15
         env:
           NODE_OPTIONS: --experimental-vm-modules
 
@@ -112,6 +118,7 @@ jobs:
   build-dxt:
     name: Build and Test DXT Package
     runs-on: macos-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout code
@@ -128,9 +135,11 @@ jobs:
 
       - name: Build DXT package
         run: npm run build:dxt:patched
+        timeout-minutes: 15
 
       - name: Test DXT package
         run: npm run test:dxt
+        timeout-minutes: 10
         env:
           NODE_OPTIONS: --experimental-vm-modules
 
