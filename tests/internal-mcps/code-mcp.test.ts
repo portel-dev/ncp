@@ -27,13 +27,22 @@ describe('CodeMCP', () => {
       expect(codeMCP.description).toContain('TypeScript');
     });
 
-    test('should have run tool defined', () => {
-      expect(codeMCP.tools).toHaveLength(1);
-      expect(codeMCP.tools[0].name).toBe('run');
+    test('should have code execution tools defined', () => {
+      expect(codeMCP.tools.length).toBeGreaterThanOrEqual(4);
+      const runTool = codeMCP.tools.find(t => t.name === 'run');
+      expect(runTool).toBeDefined();
+      expect(runTool!.name).toBe('run');
+
+      // Verify all code execution tools exist
+      const toolNames = codeMCP.tools.map(t => t.name);
+      expect(toolNames).toContain('run');
+      expect(toolNames).toContain('list-runs');
+      expect(toolNames).toContain('get-run');
+      expect(toolNames).toContain('save-as-photon');
     });
 
     test('run tool should have correct input schema', () => {
-      const runTool = codeMCP.tools[0];
+      const runTool = codeMCP.tools.find(t => t.name === 'run')!;
       expect(runTool.inputSchema).toBeDefined();
       expect(runTool.inputSchema.properties).toHaveProperty('code');
       expect(runTool.inputSchema.properties).toHaveProperty('timeout');
