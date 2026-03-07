@@ -9,7 +9,7 @@
 
 <div align="center">
 
-<img src="./ncp.svg" alt="NCP Logo" width="200" height="200">
+<img src="./assets/ncp.svg" alt="NCP Logo" width="200" height="200">
 
 # NCP - Natural Context Provider
 

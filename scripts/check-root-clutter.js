@@ -35,7 +35,6 @@ const ALLOWED_AT_ROOT = new Set([
   'CONTRIBUTING.md',
   'CODE_OF_CONDUCT.md',
   'SECURITY.md',
-  'ncp.svg',  // Logo referenced in README
 
   // Hidden directories/files
   '.git',
