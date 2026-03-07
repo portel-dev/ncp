@@ -79,6 +79,7 @@ scripts/
 !scripts/*.ts
 !scripts/*.sh
 !scripts/cleanup/
+!scripts/check-*.js
 !scripts/test-*.js
 !scripts/test-*.sh
 !scripts/patch-dxt-zip.sh
