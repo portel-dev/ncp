@@ -51,18 +51,22 @@ node dist/index.js remove mcp-name
 ```
 
 ### Repository Root Organization
-The project root contains ONLY essentials:
+
+**GitHub (Public):** Only essentials
 - Package files (package.json, package-lock.json)
 - TypeScript config (tsconfig.json, jest.config.js)
 - Public documentation (README.md, LICENSE, CLAUDE.md, CHANGELOG.md, etc.)
 - Source & tests (src/, tests/, docs/)
 
-**All other files go in `_internal/`:**
-- `_internal/scripts/` - Python/shell build utilities
-- `_internal/planning/` - Feature plans, research docs
-- `_internal/schemas/` - MCP schema examples
+**Local Only (`_internal/` - gitignored):** Development/experimental files
+- `_internal/scripts/` - One-time testing utilities (profile builders, ecosystem tests)
+- `_internal/planning/` - Research docs, feature plans, analysis
+- `_internal/schemas/` - MCP configuration examples, test data
 - `_internal/archives/` - Backups, old metadata
-- `_internal/artifacts/` - Build outputs (gitignored)
+- `_internal/artifacts/` - Build outputs
+- `_internal/test-configs/` - Test configuration files
+
+These are never committed to GitHub—keep development clutter local.
 
 **Before committing or releasing:**
 ```bash
