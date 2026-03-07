@@ -25,12 +25,13 @@ coverage/
 .ncp/
 .ncp-back/
 back.ncp/
-_internal/archives/ncp-back/
-_internal/artifacts/
 *.cache
 *.tmp
 *.temp
 *.backup.*
+
+# Local development only (not for GitHub)
+_internal/
 
 # Claude-specific configuration (personal, not for OSS)
 .claude/
