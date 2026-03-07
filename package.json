@@ -58,10 +58,11 @@
     "build:mcpb:prod": "npm run build:mcpb && npx @anthropic-ai/mcpb sign ncp.mcpb --cert cert.pem --key key.pem && npm run test:mcpb",
     "build:dxt:prod": "npm run build:mcpb:prod",
     "stats": "node scripts/check-dxt-downloads.js",
+    "check:root": "node scripts/check-root-clutter.js",
     "prepack": "npm run build && npm run test:pre-publish",
-    "prepublishOnly": "npm run build && npm run test:pre-publish && node scripts/sync-server-version.cjs",
-    "release": "release-it",
-    "release:dry": "release-it --dry-run"
+    "prepublishOnly": "npm run build && npm run test:pre-publish && npm run check:root && node scripts/sync-server-version.cjs",
+    "release": "npm run check:root && release-it",
+    "release:dry": "npm run check:root && release-it --dry-run"
   },
   "keywords": [
     "mcp",

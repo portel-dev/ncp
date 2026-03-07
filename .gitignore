@@ -25,6 +25,8 @@ coverage/
 .ncp/
 .ncp-back/
 back.ncp/
+_internal/archives/ncp-back/
+_internal/artifacts/
 *.cache
 *.tmp
 *.temp

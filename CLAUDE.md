@@ -50,6 +50,27 @@ node dist/index.js add mcp-name npx @package/name
 node dist/index.js remove mcp-name
 ```
 
+### Repository Root Organization
+The project root contains ONLY essentials:
+- Package files (package.json, package-lock.json)
+- TypeScript config (tsconfig.json, jest.config.js)
+- Public documentation (README.md, LICENSE, CLAUDE.md, CHANGELOG.md, etc.)
+- Source & tests (src/, tests/, docs/)
+
+**All other files go in `_internal/`:**
+- `_internal/scripts/` - Python/shell build utilities
+- `_internal/planning/` - Feature plans, research docs
+- `_internal/schemas/` - MCP schema examples
+- `_internal/archives/` - Backups, old metadata
+- `_internal/artifacts/` - Build outputs (gitignored)
+
+**Before committing or releasing:**
+```bash
+npm run check:root    # Validates repository cleanliness
+```
+
+The check runs automatically before `npm run release` and `npm run prepublishOnly`.
+
 ## Project Architecture - Entry Points and Core Components
 
 ### Dual Entry Point Architecture
