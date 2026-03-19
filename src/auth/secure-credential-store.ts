@@ -62,11 +62,26 @@ export class SecureCredentialStore {
       const keyring = await import('@napi-rs/keyring');
       this.Entry = keyring.Entry;
 
-      // Test if keychain is accessible
+      // Test if keychain is accessible with a timeout.
+      // On Linux without a display (e.g. SSH sessions), the keyring daemon may be
+      // running but locked — libsecret waits indefinitely for the GUI unlock dialog
+      // that never appears. A 3s timeout lets us fall back to encrypted file storage.
       const testEntry = new this.Entry(SERVICE_NAME, '_ncp_test_');
-      await testEntry.setPassword('test');
-      await testEntry.getPassword();
-      await testEntry.deletePassword();
+      const timeoutMs = 3000;
+      const timeoutError = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Keychain test timed out after ${timeoutMs}ms — keyring locked or no display?`)),
+          timeoutMs
+        )
+      );
+      await Promise.race([
+        (async () => {
+          await testEntry.setPassword('test');
+          await testEntry.getPassword();
+          await testEntry.deletePassword();
+        })(),
+        timeoutError
+      ]);
 
       this.keychainAvailable = true;
       logger.debug('OS keychain initialized successfully');
