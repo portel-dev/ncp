@@ -58,30 +58,26 @@ export class SecureCredentialStore {
    */
   private async initializeKeychain(): Promise<void> {
     try {
+      // On Linux without a display session, libsecret's D-Bus call to the Secret
+      // Service blocks the Node.js event loop indefinitely — the keyring daemon is
+      // running but locked, and the GUI unlock dialog never appears in SSH/headless
+      // environments. Since @napi-rs/keyring uses native N-API (not async I/O),
+      // Promise.race cannot interrupt it. Bail out early instead.
+      if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+        this.keychainAvailable = false;
+        logger.debug('Skipping OS keychain: Linux without display (headless/SSH) — using encrypted file storage');
+        return;
+      }
+
       // Dynamically import keyring
       const keyring = await import('@napi-rs/keyring');
       this.Entry = keyring.Entry;
 
-      // Test if keychain is accessible with a timeout.
-      // On Linux without a display (e.g. SSH sessions), the keyring daemon may be
-      // running but locked — libsecret waits indefinitely for the GUI unlock dialog
-      // that never appears. A 3s timeout lets us fall back to encrypted file storage.
+      // Test if keychain is accessible
       const testEntry = new this.Entry(SERVICE_NAME, '_ncp_test_');
-      const timeoutMs = 3000;
-      const timeoutError = new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error(`Keychain test timed out after ${timeoutMs}ms — keyring locked or no display?`)),
-          timeoutMs
-        )
-      );
-      await Promise.race([
-        (async () => {
-          await testEntry.setPassword('test');
-          await testEntry.getPassword();
-          await testEntry.deletePassword();
-        })(),
-        timeoutError
-      ]);
+      await testEntry.setPassword('test');
+      await testEntry.getPassword();
+      await testEntry.deletePassword();
 
       this.keychainAvailable = true;
       logger.debug('OS keychain initialized successfully');
