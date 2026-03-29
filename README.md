@@ -774,3 +774,8 @@ Help make NCP even better:
 Elastic License 2.0 - [Full License](LICENSE)
 
 **TLDR:** Free for all use including commercial. Cannot be offered as a hosted service to third parties.
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/portel-dev-ncp).
+
