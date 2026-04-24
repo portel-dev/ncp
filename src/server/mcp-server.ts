@@ -385,7 +385,19 @@ export class MCPServer implements ElicitationServer {
               properties: {
                 name: { type: 'string', description: 'Tool identifier (mcp:tool format)' },
                 description: { type: 'string', description: 'Tool description' },
-                parameters: { type: 'object', description: 'Tool parameter schema' },
+                parameters: {
+                  type: 'array',
+                  description: 'Tool parameter list',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string', description: 'Parameter name' },
+                      type: { type: 'string', description: 'Parameter type' },
+                      description: { type: 'string', description: 'Parameter description' },
+                      required: { type: 'boolean', description: 'Whether parameter is required' }
+                    }
+                  }
+                },
                 _meta: { type: 'object', description: 'Tool metadata including UI hints' }
               }
             }
