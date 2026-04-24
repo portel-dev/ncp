@@ -58,6 +58,17 @@ export class SecureCredentialStore {
    */
   private async initializeKeychain(): Promise<void> {
     try {
+      // On Linux without a display session, libsecret's D-Bus call to the Secret
+      // Service blocks the Node.js event loop indefinitely — the keyring daemon is
+      // running but locked, and the GUI unlock dialog never appears in SSH/headless
+      // environments. Since @napi-rs/keyring uses native N-API (not async I/O),
+      // Promise.race cannot interrupt it. Bail out early instead.
+      if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+        this.keychainAvailable = false;
+        logger.debug('Skipping OS keychain: Linux without display (headless/SSH) — using encrypted file storage');
+        return;
+      }
+
       // Dynamically import keyring
       const keyring = await import('@napi-rs/keyring');
       this.Entry = keyring.Entry;
