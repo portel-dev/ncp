@@ -3,7 +3,7 @@
  * Tests Levenshtein distance and suggestion algorithms
  */
 
-import { FuzzyMatcher } from '../../src/utils/fuzzy-matcher';
+import { FuzzyMatcher } from '@portel/photon-core';
 
 describe('FuzzyMatcher', () => {
   let matcher: FuzzyMatcher;

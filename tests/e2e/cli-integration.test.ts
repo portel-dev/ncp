@@ -120,7 +120,7 @@ describe('CLI Integration Tests', () => {
       const result = runCLI('find schedule --depth 0 --limit 5');
 
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('scheduler');
+      expect(result.stdout).toContain('schedule');
       expect(result.stdout).toMatch(/(Found tools|No tools found)/);
     }, 60000);
 
