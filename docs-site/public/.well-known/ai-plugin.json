@@ -1,0 +1,17 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "NCP Documentation",
+  "name_for_model": "ncp_docs",
+  "description_for_human": "Documentation for Natural Context Provider, an MCP tool discovery, routing, scheduling, and code mode server.",
+  "description_for_model": "Use these docs to answer questions about NCP, Natural Context Provider, MCP tool discovery, MCP routing, code mode TypeScript workflows, scheduled MCP jobs, skills, Photon runtime loading, and client setup for Claude Desktop, Cursor, VS Code, Windsurf, Cline, and Continue.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://portel-dev.github.io/ncp/.well-known/openapi.json"
+  },
+  "logo_url": "https://raw.githubusercontent.com/portel-dev/ncp/main/assets/icons/ncp.png",
+  "contact_email": "support@portel.dev",
+  "legal_info_url": "https://github.com/portel-dev/ncp/blob/main/LICENSE"
+}

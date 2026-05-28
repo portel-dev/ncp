@@ -1,0 +1,38 @@
+{
+  "schema_version": "0.1",
+  "name": "NCP Documentation",
+  "description": "Machine-readable discovery manifest for Natural Context Provider docs.",
+  "homepage_url": "https://portel-dev.github.io/ncp/",
+  "manifest_url": "https://portel-dev.github.io/ncp/.well-known/webmcp.json",
+  "documentation_url": "https://portel-dev.github.io/ncp/readme",
+  "tags": [
+    "mcp",
+    "model-context-protocol",
+    "tool-discovery",
+    "ai-orchestration",
+    "developer-tools"
+  ],
+  "tools": [
+    {
+      "name": "read_ncp_llms",
+      "description": "Read the AI-oriented NCP documentation summary.",
+      "method": "GET",
+      "url": "https://portel-dev.github.io/ncp/llms.txt",
+      "output_type": "text/markdown"
+    },
+    {
+      "name": "read_ncp_docs_index",
+      "description": "Read the generated JSON index of NCP documentation pages.",
+      "method": "GET",
+      "url": "https://portel-dev.github.io/ncp/ncp-docs-index.json",
+      "output_type": "application/json"
+    },
+    {
+      "name": "read_ncp_sitemap",
+      "description": "Read the XML sitemap for the NCP documentation site.",
+      "method": "GET",
+      "url": "https://portel-dev.github.io/ncp/sitemap.xml",
+      "output_type": "application/xml"
+    }
+  ]
+}

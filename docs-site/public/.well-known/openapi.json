@@ -1,0 +1,61 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "NCP Documentation Discovery",
+    "version": "1.0.0",
+    "description": "Static discovery metadata for Natural Context Provider documentation."
+  },
+  "servers": [
+    {
+      "url": "https://portel-dev.github.io/ncp"
+    }
+  ],
+  "paths": {
+    "/llms.txt": {
+      "get": {
+        "summary": "AI-readable NCP documentation summary",
+        "operationId": "getLlmsTxt",
+        "responses": {
+          "200": {
+            "description": "NCP LLM documentation summary",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ncp-docs-index.json": {
+      "get": {
+        "summary": "NCP documentation page index",
+        "operationId": "getDocsIndex",
+        "responses": {
+          "200": {
+            "description": "JSON index of documentation pages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "title": { "type": "string" },
+                      "route": { "type": "string" },
+                      "excerpt": { "type": "string" },
+                      "section": { "type": "string" }
+                    },
+                    "required": ["title", "route", "section"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

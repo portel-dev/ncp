@@ -1,0 +1,23 @@
+{
+  "name": "NCP Documentation",
+  "description": "Agent-readable metadata for Natural Context Provider documentation and setup resources.",
+  "url": "https://portel-dev.github.io/ncp/",
+  "provider": {
+    "name": "Portel",
+    "url": "https://github.com/portel-dev"
+  },
+  "version": "1.0.0",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "defaultInputModes": ["text/plain", "text/markdown"],
+  "defaultOutputModes": ["text/plain", "text/markdown", "application/json"],
+  "skills": [
+    {
+      "id": "ncp-docs-search",
+      "name": "NCP docs discovery",
+      "description": "Use llms.txt, llms-full.txt, the sitemap, and the docs index to answer setup and product questions about NCP."
+    }
+  ]
+}

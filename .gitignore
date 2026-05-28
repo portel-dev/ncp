@@ -94,6 +94,17 @@ scripts/
 # Keep documentation images
 !docs/images/**
 
+# Generated documentation site content
+docs-site/.vitepress/dist/
+docs-site/assets/
+docs-site/docs/
+docs-site/llms.md
+docs-site/readme.md
+docs-site/public/assets/
+docs-site/public/llms.txt
+docs-site/public/llms-full.txt
+docs-site/public/ncp-docs-index.json
+
 # User runtime data (created when users run NCP)
 .ncp/
 ~/.ncp/

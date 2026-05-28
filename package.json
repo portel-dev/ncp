@@ -62,13 +62,27 @@
     "prepack": "npm run build && npm run test:pre-publish",
     "prepublishOnly": "npm run build && npm run test:pre-publish && npm run check:root && node scripts/sync-server-version.cjs",
     "release": "npm run check:root && release-it",
-    "release:dry": "npm run check:root && release-it --dry-run"
+    "release:dry": "npm run check:root && release-it --dry-run",
+    "docs:sync": "node scripts/sync-docs-site.mjs",
+    "docs:dev": "npm run docs:sync && vitepress dev docs-site",
+    "docs:build": "npm run docs:sync && vitepress build docs-site && node scripts/fix-docs-site-build.mjs",
+    "docs:preview": "vitepress preview docs-site"
   },
   "keywords": [
     "mcp",
     "model-context-protocol",
     "ai-orchestration",
-    "tool-discovery"
+    "tool-discovery",
+    "mcp-router",
+    "mcp-server",
+    "mcp-tool-discovery",
+    "claude-desktop",
+    "cursor",
+    "vscode",
+    "code-mode",
+    "scheduler",
+    "skills",
+    "photon-runtime"
   ],
   "author": "Portel",
   "license": "Elastic-2.0",
@@ -76,7 +90,7 @@
     "type": "git",
     "url": "git+https://github.com/portel-dev/ncp.git"
   },
-  "homepage": "https://github.com/portel-dev/ncp#readme",
+  "homepage": "https://portel-dev.github.io/ncp/",
   "bugs": {
     "url": "https://github.com/portel-dev/ncp/issues"
   },
@@ -158,6 +172,7 @@
     "release-it": "^19.0.4",
     "rss-parser": "^3.13.0",
     "ts-jest": "^29.4.2",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitepress": "^1.6.4"
   }
 }

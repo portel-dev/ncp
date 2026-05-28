@@ -1,0 +1,34 @@
+{
+  "name": "NCP Documentation",
+  "description": "Discovery metadata for Natural Context Provider documentation. NCP itself is installed as a local stdio MCP server with npm or an MCP desktop bundle; this static site publishes docs and AI-readable indexes.",
+  "homepage": "https://portel-dev.github.io/ncp/",
+  "repository": "https://github.com/portel-dev/ncp",
+  "package": {
+    "registry": "npm",
+    "name": "@portel/ncp",
+    "install": "npm install -g @portel/ncp",
+    "commands": ["ncp", "ncp-mcp"]
+  },
+  "protocol": {
+    "name": "Model Context Protocol",
+    "transports": ["stdio"],
+    "remote": false
+  },
+  "documentation": {
+    "llms": "https://portel-dev.github.io/ncp/llms.txt",
+    "llmsFull": "https://portel-dev.github.io/ncp/llms-full.txt",
+    "index": "https://portel-dev.github.io/ncp/ncp-docs-index.json",
+    "sitemap": "https://portel-dev.github.io/ncp/sitemap.xml"
+  },
+  "keywords": [
+    "NCP",
+    "Natural Context Provider",
+    "MCP",
+    "Model Context Protocol",
+    "MCP tool discovery",
+    "MCP router",
+    "code mode",
+    "MCP scheduler",
+    "AI tool orchestration"
+  ]
+}
