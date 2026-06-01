@@ -144,6 +144,7 @@ export default defineConfig({
       { text: 'Getting Started', link: '/readme' },
       { text: 'Clients', link: '/docs/clients/claude-desktop' },
       { text: 'Code Mode', link: '/docs/ADVANCED_USAGE_GUIDE' },
+      { text: 'Photon', link: 'https://photon.portel.dev/' },
       { text: 'GitHub', link: 'https://github.com/portel-dev/ncp' },
       { text: 'npm', link: 'https://www.npmjs.com/package/@portel/ncp' },
     ],

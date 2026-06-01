@@ -19,7 +19,7 @@
 
 Your MCPs, [supercharged](#-supercharged-features). Find any tool instantly, execute with code mode, run on schedule, discover skills, load Photons, ready for any client. Smart loading saves tokens and energy.
 
-**Related Portel project:** [Photon](https://github.com/portel-dev/photon) turns TypeScript methods into reliable agent-facing capabilities: MCP tools, embedded app UIs, CLI commands, web routes, schedules, webhooks, retries, and Beam interfaces. NCP helps agents discover and operate tools; Photon helps developers build the tools and apps agents can trust.
+**Related Portel project:** [Photon](https://photon.portel.dev/) turns TypeScript methods into reliable agent-facing capabilities: MCP tools, embedded app UIs, CLI commands, web routes, schedules, webhooks, retries, and Beam interfaces. NCP helps agents discover and operate tools; Photon helps developers build the tools and apps agents can trust.
 
 ## 💍 **What is NCP?**
 

@@ -20,6 +20,9 @@ hero:
     - theme: alt
       text: GitHub
       link: https://github.com/portel-dev/ncp
+    - theme: alt
+      text: Photon
+      link: https://photon.portel.dev/
 
 features:
   - title: MCP tool discovery
@@ -46,3 +49,7 @@ features:
 NCP, the Natural Context Provider, is an MCP server and CLI that reduces tool overload for AI assistants. Instead of loading every MCP tool schema into Claude Desktop, Cursor, VS Code, or another MCP client, NCP exposes a small interface for discovery and execution.
 
 Important product keywords covered by this documentation include MCP router, MCP tool discovery, Model Context Protocol, AI tool orchestration, code mode, scheduled MCP jobs, MCP skills, Photon runtime, Claude Desktop MCP setup, Cursor MCP setup, VS Code MCP setup, and context-efficient AI tools.
+
+## Works With Photon
+
+[Photon](https://photon.portel.dev/) is the companion Portel project for creating trusted capabilities. Use Photon to turn TypeScript methods into MCP tools, embedded app UIs, CLI commands, Beam interfaces, web routes, schedules, webhooks, and retries. Use NCP when agents need one natural interface to discover and run those capabilities alongside the rest of an MCP ecosystem.
