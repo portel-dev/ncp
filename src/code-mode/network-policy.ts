@@ -242,12 +242,23 @@ export class NetworkPolicyManager {
 
       logger.info(`🔐 Requesting network permission: ${url}`);
 
-      // Show elicitation
-      const response = await this.elicitationFunction({
-        title: 'Network Access Permission',
-        message,
-        options: ['Allow Once', 'Allow Always', 'Deny']
-      });
+      // Show elicitation, but never let a hung prompt stall code execution
+      // indefinitely - deny by default after the deadline
+      const ELICITATION_TIMEOUT_MS = 120000;
+      let timeoutHandle: NodeJS.Timeout;
+      const response = await Promise.race([
+        this.elicitationFunction({
+          title: 'Network Access Permission',
+          message,
+          options: ['Allow Once', 'Allow Always', 'Deny']
+        }),
+        new Promise<string>((_, reject) => {
+          timeoutHandle = setTimeout(
+            () => reject(new Error(`Permission prompt timed out after ${ELICITATION_TIMEOUT_MS / 1000}s`)),
+            ELICITATION_TIMEOUT_MS
+          );
+        })
+      ]).finally(() => clearTimeout(timeoutHandle!));
 
       // Parse response
       const approved = response === 'Allow Once' || response === 'Allow Always';

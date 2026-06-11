@@ -299,11 +299,12 @@ export class CodeExecutor {
 
             return { ...result, runId };
           } catch (vmError: any) {
+            // Don't log the code itself - user code can contain secrets
             logger.error(`[VM Execution Error Details]`, {
               message: vmError.message,
               stack: vmError.stack,
               name: vmError.name,
-              code: code.substring(0, 100)
+              codeLength: code.length
             });
             await auditLogger.logCodeExecutionError(code, vmError.message, { mcpName: 'code-mode' });
 
