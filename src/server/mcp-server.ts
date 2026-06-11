@@ -42,17 +42,24 @@ import { CapabilityDetector } from '../utils/capability-detector.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load and encode the NCP icon as a data URI
+// Load and encode the NCP icon as a data URI.
+// Sync read is acceptable here: memoized, and first call happens in the
+// constructor before the stdio transport connects.
+let cachedIconDataURI: string | null = null;
 function getIconDataURI(): string {
+  if (cachedIconDataURI !== null) {
+    return cachedIconDataURI;
+  }
   try {
     const iconPath = join(__dirname, '..', '..', 'assets', 'icons', 'ncp.png');
     const iconBuffer = readFileSync(iconPath);
     const base64Icon = iconBuffer.toString('base64');
-    return `data:image/png;base64,${base64Icon}`;
+    cachedIconDataURI = `data:image/png;base64,${base64Icon}`;
   } catch (error) {
     logger.warn(`Failed to load icon: ${error}`);
-    return '';
+    cachedIconDataURI = '';
   }
+  return cachedIconDataURI;
 }
 
 export class MCPServer implements ElicitationServer {

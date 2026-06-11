@@ -3120,7 +3120,16 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
   async waitForInitialization(): Promise<void> {
     if (this.backgroundInitPromise) {
       logger.info('[NCPOrchestrator] Waiting for background initialization to complete...');
-      await this.backgroundInitPromise;
+      try {
+        await this.backgroundInitPromise;
+      } catch (error: any) {
+        throw new Error(
+          `NCP initialization failed: ${error?.message || error}. ` +
+          `Tool discovery and execution are unavailable. ` +
+          `Check the NCP logs for details and restart the server to retry.`,
+          { cause: error }
+        );
+      }
       logger.info('[NCPOrchestrator] Background initialization completed');
     }
   }

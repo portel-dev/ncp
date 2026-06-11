@@ -3,8 +3,8 @@
  * Enables resumable indexing by appending each MCP as it's indexed
  */
 
-import { createWriteStream, WriteStream, fsync, openSync, fsyncSync, closeSync } from 'fs';
-import { mkdir, readFile, writeFile, access, constants } from 'fs/promises';
+import { createWriteStream, WriteStream, fsync } from 'fs';
+import { mkdir, readFile, writeFile, access, constants, open, rm } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
@@ -56,12 +56,7 @@ export class CSVCache {
   private metadata: CacheMetadata | null = null;
 
   constructor(private cacheDir: string, private profileName: string) {
-    // Debug logging to track profile name
-    if (process.env.NCP_DEBUG === 'true') {
-      console.error(`[DEBUG CSV] CSVCache initialized with profileName: ${profileName}`);
-      console.error(`[DEBUG CSV] csvPath: ${join(cacheDir, `${profileName}-tools.csv`)}`);
-      console.error(`[DEBUG CSV] metaPath: ${join(cacheDir, `${profileName}-cache-meta.json`)}`);
-    }
+    logger.debug(`CSVCache initialized with profileName: ${profileName} (dir: ${cacheDir})`);
     this.csvPath = join(cacheDir, `${profileName}-tools.csv`);
     this.metaPath = join(cacheDir, `${profileName}-cache-meta.json`);
   }
@@ -334,7 +329,7 @@ export class CSVCache {
       this.metadata.lastUpdated = new Date().toISOString();
 
       // Save metadata after each MCP (for crash safety)
-      this.saveMetadata();
+      await this.saveMetadata();
     }
 
     logger.info(`📝 Appended ${tools.length} tools from ${mcpName} to cache`);
@@ -364,23 +359,8 @@ export class CSVCache {
    */
   async clear(): Promise<void> {
     try {
-      // Try to delete CSV file
-      try {
-        await access(this.csvPath, constants.F_OK);
-        const fs = await import('fs/promises');
-        await fs.unlink(this.csvPath);
-      } catch {
-        // File doesn't exist, skip
-      }
-
-      // Try to delete metadata file
-      try {
-        await access(this.metaPath, constants.F_OK);
-        const fs = await import('fs/promises');
-        await fs.unlink(this.metaPath);
-      } catch {
-        // File doesn't exist, skip
-      }
+      await rm(this.csvPath, { force: true });
+      await rm(this.metaPath, { force: true });
 
       this.metadata = null;
       logger.info('Cache cleared');
@@ -406,15 +386,13 @@ export class CSVCache {
       // Write metadata file asynchronously
       await writeFile(this.metaPath, JSON.stringify(metaToSave, null, 2), 'utf-8');
 
-      // Force sync to disk (open file, fsync, close)
-      const fd = openSync(this.metaPath, 'r+');
-      await new Promise<void>((resolve, reject) => {
-        fsync(fd, (err) => {
-          closeSync(fd);
-          if (err) reject(err);
-          else resolve();
-        });
-      });
+      // Force sync to disk for crash safety
+      const fh = await open(this.metaPath, 'r+');
+      try {
+        await fh.sync();
+      } finally {
+        await fh.close();
+      }
     } catch (error) {
       logger.error(`Failed to save metadata: ${error}`);
     }

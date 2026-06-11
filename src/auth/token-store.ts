@@ -23,11 +23,16 @@ export interface StoredToken {
 }
 
 export class TokenStore {
-  private encryptionKey: Buffer;
+  private encryptionKeyPromise: Promise<Buffer> | null = null;
 
-  constructor() {
-    this.encryptionKey = this.getOrCreateEncryptionKey();
-    this.ensureTokenDir();
+  /**
+   * Lazily load or create the encryption key (memoized)
+   */
+  private getEncryptionKey(): Promise<Buffer> {
+    if (!this.encryptionKeyPromise) {
+      this.encryptionKeyPromise = this.getOrCreateEncryptionKey();
+    }
+    return this.encryptionKeyPromise;
   }
 
   /**
@@ -44,9 +49,10 @@ export class TokenStore {
       scope: tokenResponse.scope
     };
 
-    const encrypted = this.encrypt(JSON.stringify(storedToken));
+    const encrypted = await this.encrypt(JSON.stringify(storedToken));
     const tokenPath = this.getTokenPath(mcpName);
 
+    await this.ensureTokenDir();
     await fs.promises.writeFile(tokenPath, encrypted, { mode: 0o600 });
     logger.debug(`Token stored for ${mcpName}, expires at ${new Date(expiresAt).toISOString()}`);
   }
@@ -58,14 +64,9 @@ export class TokenStore {
   async getToken(mcpName: string): Promise<StoredToken | null> {
     const tokenPath = this.getTokenPath(mcpName);
 
-    if (!fs.existsSync(tokenPath)) {
-      logger.debug(`No token found for ${mcpName}`);
-      return null;
-    }
-
     try {
       const encrypted = await fs.promises.readFile(tokenPath, 'utf-8');
-      const decrypted = this.decrypt(encrypted);
+      const decrypted = await this.decrypt(encrypted);
       const token: StoredToken = JSON.parse(decrypted);
 
       // Check expiration (with 5 minute buffer)
@@ -77,7 +78,11 @@ export class TokenStore {
 
       return token;
     } catch (error) {
-      logger.error(`Failed to read token for ${mcpName}:`, error);
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        logger.debug(`No token found for ${mcpName}`);
+      } else {
+        logger.error(`Failed to read token for ${mcpName}:`, error);
+      }
       return null;
     }
   }
@@ -96,9 +101,13 @@ export class TokenStore {
   async deleteToken(mcpName: string): Promise<void> {
     const tokenPath = this.getTokenPath(mcpName);
 
-    if (fs.existsSync(tokenPath)) {
+    try {
       await fs.promises.unlink(tokenPath);
       logger.debug(`Token deleted for ${mcpName}`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
     }
   }
 
@@ -106,22 +115,26 @@ export class TokenStore {
    * List all MCPs with stored tokens
    */
   async listTokens(): Promise<string[]> {
-    if (!fs.existsSync(TOKEN_DIR)) {
-      return [];
+    try {
+      const files = await fs.promises.readdir(TOKEN_DIR);
+      return files
+        .filter(f => f.endsWith('.token'))
+        .map(f => f.replace('.token', ''));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return [];
+      }
+      throw error;
     }
-
-    const files = await fs.promises.readdir(TOKEN_DIR);
-    return files
-      .filter(f => f.endsWith('.token'))
-      .map(f => f.replace('.token', ''));
   }
 
   /**
    * Encrypt data using AES-256-CBC
    */
-  private encrypt(text: string): string {
+  private async encrypt(text: string): Promise<string> {
+    const key = await this.getEncryptionKey();
     const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv(ALGORITHM, this.encryptionKey, iv);
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
 
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
@@ -133,12 +146,13 @@ export class TokenStore {
   /**
    * Decrypt data using AES-256-CBC
    */
-  private decrypt(text: string): string {
+  private async decrypt(text: string): Promise<string> {
+    const key = await this.getEncryptionKey();
     const parts = text.split(':');
     const iv = Buffer.from(parts[0], 'hex');
     const encrypted = parts[1];
 
-    const decipher = crypto.createDecipheriv(ALGORITHM, this.encryptionKey, iv);
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
 
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
@@ -150,25 +164,36 @@ export class TokenStore {
    * Get or create encryption key (32 bytes for AES-256)
    * Stored in ~/.ncp/encryption.key with restricted permissions
    */
-  private getOrCreateEncryptionKey(): Buffer {
+  private async getOrCreateEncryptionKey(): Promise<Buffer> {
     const keyPath = path.join(process.env.HOME || process.env.USERPROFILE || '', '.ncp', 'encryption.key');
     const keyDir = path.dirname(keyPath);
 
-    if (!fs.existsSync(keyDir)) {
-      fs.mkdirSync(keyDir, { recursive: true, mode: 0o700 });
-    }
+    await fs.promises.mkdir(keyDir, { recursive: true, mode: 0o700 });
 
-    if (fs.existsSync(keyPath)) {
-      const key = fs.readFileSync(keyPath);
+    try {
+      const key = await fs.promises.readFile(keyPath);
       if (key.length !== 32) {
         throw new Error('Invalid encryption key length');
       }
       return key;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
     }
 
     // Generate new key
     const key = crypto.randomBytes(32);
-    fs.writeFileSync(keyPath, key, { mode: 0o600 });
+    // wx flag: fail if another process created the key between read and write,
+    // so two processes never end up trusting different keys
+    try {
+      await fs.promises.writeFile(keyPath, key, { mode: 0o600, flag: 'wx' });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        return fs.promises.readFile(keyPath);
+      }
+      throw error;
+    }
     logger.debug('Generated new encryption key');
 
     return key;
@@ -177,10 +202,8 @@ export class TokenStore {
   /**
    * Ensure token directory exists with proper permissions
    */
-  private ensureTokenDir(): void {
-    if (!fs.existsSync(TOKEN_DIR)) {
-      fs.mkdirSync(TOKEN_DIR, { recursive: true, mode: 0o700 });
-    }
+  private async ensureTokenDir(): Promise<void> {
+    await fs.promises.mkdir(TOKEN_DIR, { recursive: true, mode: 0o700 });
   }
 
   /**

@@ -42,8 +42,7 @@ export class SecureCredentialStore {
   private initPromise: Promise<void>;
 
   constructor() {
-    this.loadIndex();
-    this.initPromise = this.initializeKeychain();
+    this.initPromise = this.loadIndex().then(() => this.initializeKeychain());
   }
 
   /**
@@ -90,14 +89,14 @@ export class SecureCredentialStore {
   /**
    * Load credential index from disk
    */
-  private loadIndex(): void {
+  private async loadIndex(): Promise<void> {
     try {
-      if (fs.existsSync(CREDENTIAL_INDEX_FILE)) {
-        const data = JSON.parse(fs.readFileSync(CREDENTIAL_INDEX_FILE, 'utf-8'));
-        this.index = new Map(Object.entries(data));
-      }
+      const content = await fs.promises.readFile(CREDENTIAL_INDEX_FILE, 'utf-8');
+      this.index = new Map(Object.entries(JSON.parse(content)));
     } catch (error) {
-      logger.error('Failed to load credential index:', error);
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger.error('Failed to load credential index:', error);
+      }
       this.index = new Map();
     }
   }
@@ -105,15 +104,13 @@ export class SecureCredentialStore {
   /**
    * Save credential index to disk
    */
-  private saveIndex(): void {
+  private async saveIndex(): Promise<void> {
     try {
       const dir = path.dirname(CREDENTIAL_INDEX_FILE);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-      }
+      await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
 
       const data = Object.fromEntries(this.index);
-      fs.writeFileSync(CREDENTIAL_INDEX_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
+      await fs.promises.writeFile(CREDENTIAL_INDEX_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
     } catch (error) {
       logger.error('Failed to save credential index:', error);
     }
@@ -168,7 +165,7 @@ export class SecureCredentialStore {
         createdAt: this.index.get(accountId)?.createdAt || Date.now(),
         updatedAt: Date.now()
       });
-      this.saveIndex();
+      await this.saveIndex();
 
       return true;
     } catch (error) {
@@ -239,7 +236,7 @@ export class SecureCredentialStore {
 
       // Remove from index
       this.index.delete(accountId);
-      this.saveIndex();
+      await this.saveIndex();
 
       logger.debug(`Deleted credential: ${accountId}`);
       return true;
@@ -253,6 +250,7 @@ export class SecureCredentialStore {
    * List all stored credentials (metadata only)
    */
   async listCredentials(mcpName?: string): Promise<CredentialMetadata[]> {
+    await this.ensureInitialized();
     const credentials: CredentialMetadata[] = [];
 
     for (const [accountId, metadata] of this.index.entries()) {
@@ -268,6 +266,7 @@ export class SecureCredentialStore {
    * Check if credential exists
    */
   async hasCredential(mcpName: string, type: CredentialType): Promise<boolean> {
+    await this.ensureInitialized();
     const accountId = this.getAccountId(mcpName, type);
     return this.index.has(accountId);
   }

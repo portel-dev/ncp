@@ -4,7 +4,7 @@
  * Enables fast startup by avoiding full re-indexing
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFile, writeFile, rename, mkdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { createHash } from 'crypto';
 import { getCacheDirectory } from '../utils/ncp-paths.js';
@@ -72,11 +72,13 @@ export class CachePatcher {
     this.toolMetadataCachePath = join(this.cacheDir, 'all-tools.json');
     this.embeddingsCachePath = join(this.cacheDir, 'embeddings.json');
     this.embeddingsMetadataCachePath = join(this.cacheDir, 'embeddings-metadata.json');
+  }
 
-    // Ensure cache directory exists
-    if (!existsSync(this.cacheDir)) {
-      mkdirSync(this.cacheDir, { recursive: true });
-    }
+  /**
+   * Ensure cache directory exists (lazy, called before writes)
+   */
+  private async ensureCacheDir(): Promise<void> {
+    await mkdir(this.cacheDir, { recursive: true });
   }
 
   /**
@@ -104,17 +106,16 @@ export class CachePatcher {
    */
   private async loadCache<T>(path: string, defaultValue: T): Promise<T> {
     try {
-      if (!existsSync(path)) {
-        logger.debug(`Cache file not found: ${path}, using default`);
-        return defaultValue;
-      }
-
-      const content = readFileSync(path, 'utf-8');
+      const content = await readFile(path, 'utf-8');
       const parsed = JSON.parse(content);
       logger.debug(`Loaded cache from ${path}`);
       return parsed as T;
     } catch (error: any) {
-      logger.warn(`Failed to load cache from ${path}: ${error.message}, using default`);
+      if (error.code === 'ENOENT') {
+        logger.debug(`Cache file not found: ${path}, using default`);
+      } else {
+        logger.warn(`Failed to load cache from ${path}: ${error.message}, using default`);
+      }
       return defaultValue;
     }
   }
@@ -124,28 +125,20 @@ export class CachePatcher {
    */
   private async saveCache<T>(path: string, data: T): Promise<void> {
     try {
+      await this.ensureCacheDir();
+
       const tmpPath = `${path}.tmp`;
       const content = JSON.stringify(data, null, 2);
 
-      // Write to temporary file first
-      writeFileSync(tmpPath, content, 'utf-8');
-
-      // Atomic replacement
-      await this.atomicReplace(tmpPath, path);
+      // Write to temporary file first, then atomic replacement
+      await writeFile(tmpPath, content, 'utf-8');
+      await rename(tmpPath, path);
 
       logger.debug(`Saved cache to ${path}`);
     } catch (error: any) {
       logger.error(`Failed to save cache to ${path}: ${error.message}`);
       throw error;
     }
-  }
-
-  /**
-   * Atomic file replacement to prevent corruption
-   */
-  private async atomicReplace(tmpPath: string, finalPath: string): Promise<void> {
-    const fs = await import('fs/promises');
-    await fs.rename(tmpPath, finalPath);
   }
 
   /**
@@ -398,8 +391,8 @@ export class CachePatcher {
     embeddingCount: number;
     lastModified: Date | null;
   }> {
-    const toolMetadataExists = existsSync(this.toolMetadataCachePath);
-    const embeddingsExists = existsSync(this.embeddingsCachePath);
+    const toolMetadataExists = await stat(this.toolMetadataCachePath).then(() => true, () => false);
+    const embeddingsExists = await stat(this.embeddingsCachePath).then(() => true, () => false);
 
     let mcpCount = 0;
     let toolCount = 0;
