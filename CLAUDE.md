@@ -235,37 +235,39 @@ Photon is NCP's custom TypeScript MCP system that allows users to write `.photon
 
 ### Photon Loading Flow
 
-1. **Discovery**: Scan `~/.ncp/photons/` and project-local `.ncp/photons/` directories
-2. **Load**: Dynamic import of `.photon.ts` files using ES modules
-3. **Adapt**: Convert Photon to internal MCP using `PhotonAdapter`
+1. **Discovery**: Scan `~/.ncp/photons/` (registry installs), `~/.ncp/internal/` (global user MCPs), and project-local `.ncp/internal/` directories (see `internal-mcp-manager.ts`)
+2. **Load**: `PhotonLoader` compiles and imports `.photon.ts`/`.photon.js` files via `@portel/photon-core` (`findPhotonClasses`)
+3. **Adapt**: Convert Photon class to internal MCP using `PhotonAdapter`
 4. **Expose**: Photon tools exposed via `find`/`run` to AI clients
 
 ### Photon File Structure
 
+A Photon is a default-exported class. The class fields provide metadata; async methods become MCP tools. An optional `shouldLoad()` gates loading (e.g. on env vars).
+
 ```typescript
 // ~/.ncp/photons/my-tool.photon.ts
 
-// Manifest (required)
-export const manifest = {
-  name: 'my-tool',
-  version: '1.0.0',
-  description: 'My custom tool',
-  author: 'Your Name'
-};
+export default class MyToolMCP {
+  name = 'my-tool';
+  description = 'My custom tool';
 
-// Tool functions (exported async functions become MCP tools)
-export async function myFunction(params: { input: string }) {
-  return { result: `Processed: ${params.input}` };
-}
+  // Optional: decide at load time whether this Photon is active
+  async shouldLoad(): Promise<boolean> {
+    return process.env.MY_TOOL_ENABLED === 'true';
+  }
 
-export async function anotherTool(params: { x: number; y: number }) {
-  return { sum: params.x + params.y };
+  /**
+   * JSDoc becomes the tool description
+   */
+  async myFunction(params: { input: string }) {
+    return { result: `Processed: ${params.input}` };
+  }
 }
 ```
 
 ### Photon Tool Schema
 
-Photon function parameters are automatically converted to JSON schemas using TypeScript type inference:
+Photon method parameters are automatically converted to JSON schemas using TypeScript type inference:
 
 - Parameter names → Schema property names
 - TypeScript types → JSON Schema types
