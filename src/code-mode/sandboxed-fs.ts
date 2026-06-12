@@ -28,7 +28,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { createReadStream, createWriteStream, mkdirSync, ReadStream, WriteStream } from 'fs';
+import { createReadStream, createWriteStream, mkdirSync, realpathSync, ReadStream, WriteStream } from 'fs';
 
 /**
  * Error thrown when a path violates sandbox boundaries
@@ -133,6 +133,80 @@ export function createSandboxedFS(sandboxRoot: string): SandboxedFS {
   }
 
   /**
+   * Resolve symlinks in the deepest existing ancestor of a path, then
+   * re-append the non-existing tail. Lexical checks can't see symlinks,
+   * so this is what actually catches a link pointing outside the sandbox.
+   */
+  async function realResolve(resolvedPath: string): Promise<string> {
+    let current = resolvedPath;
+    const suffix: string[] = [];
+    while (true) {
+      try {
+        const real = await fs.realpath(current);
+        return suffix.length ? path.join(real, ...suffix) : real;
+      } catch {
+        const parent = path.dirname(current);
+        if (parent === current) {
+          return resolvedPath;
+        }
+        suffix.unshift(path.basename(current));
+        current = parent;
+      }
+    }
+  }
+
+  function realResolveSync(resolvedPath: string): string {
+    let current = resolvedPath;
+    const suffix: string[] = [];
+    while (true) {
+      try {
+        const real = realpathSync(current);
+        return suffix.length ? path.join(real, ...suffix) : real;
+      } catch {
+        const parent = path.dirname(current);
+        if (parent === current) {
+          return resolvedPath;
+        }
+        suffix.unshift(path.basename(current));
+        current = parent;
+      }
+    }
+  }
+
+  function assertWithinRealRoot(realPath: string, realRoot: string, userPath: string): void {
+    const relativePath = path.relative(realRoot, realPath);
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+      throw new SandboxEscapeError(userPath, normalizedRoot);
+    }
+  }
+
+  /**
+   * Full validation: lexical check plus symlink resolution.
+   * Returns the symlink-resolved path so operations cannot be redirected
+   * by a link that swaps targets between validation and use.
+   */
+  async function resolveSafePathReal(userPath: string): Promise<string> {
+    const resolvedPath = resolveSafePath(userPath);
+    const realRoot = await fs.realpath(normalizedRoot).catch(() => normalizedRoot);
+    const realPath = await realResolve(resolvedPath);
+    assertWithinRealRoot(realPath, realRoot, userPath);
+    return realPath;
+  }
+
+  function resolveSafePathRealSync(userPath: string): string {
+    const resolvedPath = resolveSafePath(userPath);
+    let realRoot: string;
+    try {
+      realRoot = realpathSync(normalizedRoot);
+    } catch {
+      realRoot = normalizedRoot;
+    }
+    const realPath = realResolveSync(resolvedPath);
+    assertWithinRealRoot(realPath, realRoot, userPath);
+    return realPath;
+  }
+
+  /**
    * Ensure parent directory exists for a file path
    */
   async function ensureParentDir(filePath: string): Promise<void> {
@@ -143,7 +217,7 @@ export function createSandboxedFS(sandboxRoot: string): SandboxedFS {
   return {
     // Read operations
     async readFile(filePath: string, encoding?: BufferEncoding): Promise<string | Buffer> {
-      const safePath = resolveSafePath(filePath);
+      const safePath = await resolveSafePathReal(filePath);
       if (encoding) {
         return fs.readFile(safePath, { encoding });
       }
@@ -151,18 +225,18 @@ export function createSandboxedFS(sandboxRoot: string): SandboxedFS {
     },
 
     async readdir(dirPath: string): Promise<string[]> {
-      const safePath = resolveSafePath(dirPath);
+      const safePath = await resolveSafePathReal(dirPath);
       return fs.readdir(safePath);
     },
 
     async stat(filePath: string) {
-      const safePath = resolveSafePath(filePath);
+      const safePath = await resolveSafePathReal(filePath);
       return fs.stat(safePath);
     },
 
     async exists(filePath: string): Promise<boolean> {
       try {
-        const safePath = resolveSafePath(filePath);
+        const safePath = await resolveSafePathReal(filePath);
         await fs.access(safePath);
         return true;
       } catch {
@@ -172,7 +246,7 @@ export function createSandboxedFS(sandboxRoot: string): SandboxedFS {
 
     // Write operations
     async writeFile(filePath: string, data: string | Buffer, encoding?: BufferEncoding): Promise<void> {
-      const safePath = resolveSafePath(filePath);
+      const safePath = await resolveSafePathReal(filePath);
       await ensureParentDir(safePath);
       if (encoding) {
         await fs.writeFile(safePath, data, { encoding });
@@ -182,7 +256,7 @@ export function createSandboxedFS(sandboxRoot: string): SandboxedFS {
     },
 
     async appendFile(filePath: string, data: string | Buffer, encoding?: BufferEncoding): Promise<void> {
-      const safePath = resolveSafePath(filePath);
+      const safePath = await resolveSafePathReal(filePath);
       await ensureParentDir(safePath);
       if (encoding) {
         await fs.appendFile(safePath, data, { encoding });
@@ -192,49 +266,49 @@ export function createSandboxedFS(sandboxRoot: string): SandboxedFS {
     },
 
     async mkdir(dirPath: string, options?: { recursive?: boolean }): Promise<string | undefined> {
-      const safePath = resolveSafePath(dirPath);
+      const safePath = await resolveSafePathReal(dirPath);
       return fs.mkdir(safePath, options);
     },
 
     // Delete operations
     async unlink(filePath: string): Promise<void> {
-      const safePath = resolveSafePath(filePath);
+      const safePath = await resolveSafePathReal(filePath);
       return fs.unlink(safePath);
     },
 
     async rmdir(dirPath: string, options?: { recursive?: boolean }): Promise<void> {
-      const safePath = resolveSafePath(dirPath);
+      const safePath = await resolveSafePathReal(dirPath);
       return fs.rmdir(safePath, options);
     },
 
     async rm(filePath: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
-      const safePath = resolveSafePath(filePath);
+      const safePath = await resolveSafePathReal(filePath);
       return fs.rm(safePath, options);
     },
 
     // Move/Copy operations
     async rename(oldPath: string, newPath: string): Promise<void> {
-      const safeOldPath = resolveSafePath(oldPath);
-      const safeNewPath = resolveSafePath(newPath);
+      const safeOldPath = await resolveSafePathReal(oldPath);
+      const safeNewPath = await resolveSafePathReal(newPath);
       await ensureParentDir(safeNewPath);
       return fs.rename(safeOldPath, safeNewPath);
     },
 
     async copyFile(src: string, dest: string): Promise<void> {
-      const safeSrc = resolveSafePath(src);
-      const safeDest = resolveSafePath(dest);
+      const safeSrc = await resolveSafePathReal(src);
+      const safeDest = await resolveSafePathReal(dest);
       await ensureParentDir(safeDest);
       return fs.copyFile(safeSrc, safeDest);
     },
 
     // Stream operations
     createReadStream(filePath: string): ReadStream {
-      const safePath = resolveSafePath(filePath);
+      const safePath = resolveSafePathRealSync(filePath);
       return createReadStream(safePath);
     },
 
     createWriteStream(filePath: string): WriteStream {
-      const safePath = resolveSafePath(filePath);
+      const safePath = resolveSafePathRealSync(filePath);
       // Ensure parent directory exists synchronously for streams
       const parentDir = path.dirname(safePath);
       try {
