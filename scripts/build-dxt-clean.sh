@@ -20,10 +20,15 @@ echo "📋 Copying production files..."
 rsync -a \
   --exclude='node_modules' \
   --exclude='.git' \
+  --exclude='.codex' \
+  --exclude='.omx' \
+  --exclude='_internal' \
   --exclude='*.test.ts' \
   --exclude='*.test.js' \
   --exclude='tests/' \
   --exclude='*.dxt' \
+  --exclude='*.mcpb' \
+  --exclude='*.pdf' \
   --exclude='.ncp/' \
   ./ "$TEMP_DIR/"
 

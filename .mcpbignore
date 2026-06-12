@@ -1,6 +1,9 @@
 # Development files
 .git/
 .github/
+.codex/
+.omx/
+_internal/
 coverage/
 test/
 docs/
@@ -29,7 +32,9 @@ dist/index.js.map
 # Build artifacts
 *.tgz
 *.dxt
+*.mcpb
 *.backup
+*.pdf
 
 # IDE
 .vscode/

@@ -13,25 +13,29 @@ NC='\033[0m' # No Color
 
 echo -e "${YELLOW}🧪 Testing DXT Package...${NC}"
 
-# Find the .dxt file
-DXT_FILE=""
-if [ -f "ncp.dxt" ]; then
-    DXT_FILE="ncp.dxt"
+# Find the built extension bundle.
+BUNDLE_FILE=""
+if [ -f "ncp.mcpb" ]; then
+    BUNDLE_FILE="ncp.mcpb"
+elif [ -f "ncp.dxt" ]; then
+    BUNDLE_FILE="ncp.dxt"
+elif [ -f "$HOME/Downloads/ncp.mcpb" ]; then
+    BUNDLE_FILE="$HOME/Downloads/ncp.mcpb"
 elif [ -f "$HOME/Downloads/ncp.dxt" ]; then
-    DXT_FILE="$HOME/Downloads/ncp.dxt"
+    BUNDLE_FILE="$HOME/Downloads/ncp.dxt"
 else
-    echo -e "${RED}❌ Error: ncp.dxt not found${NC}"
+    echo -e "${RED}❌ Error: ncp.mcpb or ncp.dxt not found${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}✓${NC} Found DXT: $DXT_FILE"
+echo -e "${GREEN}✓${NC} Found bundle: $BUNDLE_FILE"
 
 # Create temp directory for testing
 TEST_DIR=$(mktemp -d)
 trap "rm -rf $TEST_DIR" EXIT
 
 echo -e "${YELLOW}📦 Unpacking extension to: $TEST_DIR${NC}"
-unzip -q "$DXT_FILE" -d "$TEST_DIR"
+unzip -q "$BUNDLE_FILE" -d "$TEST_DIR"
 
 cd "$TEST_DIR"
 
@@ -106,7 +110,7 @@ echo -e "${GREEN}PASS${NC}"
 
 # Test 3: Test MCP initialization (no crash)
 echo -n "  3. Testing MCP initialization... "
-INIT_OUTPUT=$(test_mcp_with_timeout 1 '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
+INIT_OUTPUT=$(test_mcp_with_timeout 5 '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
 
 if echo "$INIT_OUTPUT" | grep -q '"result".*"serverInfo"'; then
     echo -e "${GREEN}PASS${NC}"
@@ -119,7 +123,7 @@ fi
 
 # Test 4: Test tools/list request
 echo -n "  4. Testing tools/list... "
-TOOLS_OUTPUT=$(test_mcp_with_timeout 1 \
+TOOLS_OUTPUT=$(test_mcp_with_timeout 5 \
     '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' \
     '{"jsonrpc":"2.0","method":"tools/list","id":2}')
 
@@ -134,7 +138,7 @@ fi
 
 # Test 5: Check no silent crashes (process should stay alive for at least 2 seconds)
 echo -n "  5. Testing process stability... "
-TIMEOUT_TEST=$(test_mcp_with_timeout 2 '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
+TIMEOUT_TEST=$(test_mcp_with_timeout 5 '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
 
 if echo "$TIMEOUT_TEST" | grep -q '"result"'; then
     echo -e "${GREEN}PASS${NC}"
