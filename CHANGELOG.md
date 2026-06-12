@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.3.1](https://github.com/portel-dev/ncp/compare/2.3.0...2.3.1) (2026-06-12)
+
+### Bug Fixes
+
+* close symlink escape in sandboxed filesystem ([11ac189](https://github.com/portel-dev/ncp/commit/11ac189331d18d0576f9db5a95ec6870c16533fc))
+* detect MCP filter from loaded MCPs instead of hardcoded list ([69f6d9e](https://github.com/portel-dev/ncp/commit/69f6d9e0a74eff9b000efdc49ba79322e6f17bd7))
+* harden code-mode sandbox edge cases ([a656372](https://github.com/portel-dev/ncp/commit/a65637291c60ee8a14a26e0154a13d3dc9d729e1))
+* move ncp.svg logo to assets folder and reference correctly in README ([b322a6e](https://github.com/portel-dev/ncp/commit/b322a6e044656f8cc9126178991bcce6cffcc7af))
+* remove sync fs calls from MCP server paths and surface init failures ([ae3b87f](https://github.com/portel-dev/ncp/commit/ae3b87fea9b4dd30d1cee7b6da19b50296df4e06))
+* repair CI test failures from photon-core refactor ([c4d1838](https://github.com/portel-dev/ncp/commit/c4d183876ec5411a479746c21549b792f2806baf))
+* resolve GitHub Actions failures and registry validation ([70317de](https://github.com/portel-dev/ncp/commit/70317de0aec3097efa8b6db24cf74cdf23300797))
+* restore ncp.svg logo to root (referenced in README) ([14b7c3a](https://github.com/portel-dev/ncp/commit/14b7c3a3bd920450b33f9e5633a2027ac84e53ca))
+* restore npm 10 compatible lockfile peer resolution ([d443469](https://github.com/portel-dev/ncp/commit/d44346960c17ac867777e39e7cc6b58ffcf3f6be))
+* skip OS keychain on headless Linux (SSH without display) to prevent hang ([e297990](https://github.com/portel-dev/ncp/commit/e297990bc1f0f26ab1b457b60d9206ed1ef8296b))
+* update code-mcp test to reflect new code execution tools ([c84aaa3](https://github.com/portel-dev/ncp/commit/c84aaa37174e65488325e47895748b4d3fbbaaa7))
+
 ## [2.3.0](https://github.com/portel-dev/ncp/compare/2.0.0...2.0.1) (2026-03-06)
 
 ### Features
