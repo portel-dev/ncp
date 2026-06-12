@@ -55,6 +55,10 @@ export class ToolFinder {
       confidenceThreshold = 0.35
     } = options;
 
+    // MCP filter detection reads the loaded MCP list, which is only
+    // populated once background initialization completes
+    await this.orchestrator.waitForInitialization();
+
     // Detect MCP-specific search if not explicitly provided
     const detectedMCPFilter = mcpFilter || this.detectMCPFilter(query);
 
@@ -139,15 +143,11 @@ export class ToolFinder {
 
     const lowerQuery = query.toLowerCase().trim();
 
-    // Common MCP names to check
-    const knownMCPs = [
-      'filesystem', 'memory', 'shell', 'portel', 'tavily',
-      'desktop-commander', 'stripe', 'sequential-thinking',
-      'context7-mcp', 'github', 'gitlab', 'slack'
-    ];
+    // Match against the MCPs actually loaded, not a hardcoded list
+    const loadedMCPs = this.orchestrator.getMCPHealthStatus().mcps.map(m => m.name.toLowerCase());
 
     // Check for exact MCP name match
-    for (const mcp of knownMCPs) {
+    for (const mcp of loadedMCPs) {
       if (lowerQuery === mcp || lowerQuery === `${mcp}:`) {
         return mcp;
       }
@@ -156,7 +156,7 @@ export class ToolFinder {
     // Check if query starts with MCP:tool pattern
     if (lowerQuery.includes(':')) {
       const [potentialMCP] = lowerQuery.split(':');
-      if (knownMCPs.includes(potentialMCP)) {
+      if (loadedMCPs.includes(potentialMCP)) {
         return potentialMCP;
       }
     }
