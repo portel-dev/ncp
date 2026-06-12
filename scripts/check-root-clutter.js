@@ -32,6 +32,7 @@ const ALLOWED_AT_ROOT = new Set([
   'LICENSE',
   'CHANGELOG.md',
   'CLAUDE.md',
+  'AGENTS.md',  // agent instructions standard - tools only read it at root
   'CONTRIBUTING.md',
   'CODE_OF_CONDUCT.md',
   'SECURITY.md',
@@ -59,6 +60,7 @@ const ALLOWED_AT_ROOT = new Set([
   'node_modules',
   'coverage',
   'scripts',
+  'docs-site',  // VitePress site, tracked and deployed by the Pages workflow
   '_internal'
 ]);
 
