@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/portel-dev-ncp-badge.png)](https://mseep.ai/app/portel-dev-ncp)
+
 [![npm version](https://img.shields.io/npm/v/%40portel%2Fncp.svg)](https://www.npmjs.com/package/@portel/ncp)
 [![npm downloads](https://img.shields.io/npm/dt/@portel/ncp?label=downloads)](https://www.npmjs.com/package/@portel/ncp)
 [![GitHub release downloads](https://img.shields.io/github/downloads/portel-dev/ncp/total?label=.dxt%20downloads)](https://github.com/portel-dev/ncp/releases)
