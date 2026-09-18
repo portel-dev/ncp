@@ -2,6 +2,10 @@
 
 NCP supports authentication for MCPs that require API keys, tokens, or credentials. This guide shows you how to provide credentials non-interactively.
 
+When credentials are requested through MCP, copy them to the local clipboard and confirm readiness in the MCP form. The form carries only the acknowledgement; NCP reads the secret locally, clears the clipboard after capture, and stores it in the OS keychain or encrypted credential store. Profile files keep `_USE_SECURE_STORAGE_` references.
+
+This isolation requires NCP to run in the same local user session as the clipboard. Remote NCP deployments require a client-side secret broker and cannot use the server host's clipboard as a substitute for the user's clipboard.
+
 ## Quick Reference
 
 ```bash
@@ -31,7 +35,7 @@ Most HTTP/SSE MCPs use bearer token authentication.
 ncp add canva --token "your-canva-token"
 
 # Registry auto-detects that Canva uses HTTP transport
-# Token is saved to your profile configuration
+# Token is stored in the OS keychain or encrypted credential store
 ```
 
 ### Manual HTTP URLs

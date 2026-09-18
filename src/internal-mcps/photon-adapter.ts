@@ -23,7 +23,8 @@ import {
 } from '@portel/photon-core';
 import type { MCPClientFactory } from './mcp-client-factory.js';
 import { logger } from '../utils/logger.js';
-import { UserInputProvider } from '../utils/elicitation-helper.js';
+import { collectCredential, collectCredentials, UserInputProvider } from '../utils/elicitation-helper.js';
+import { isSensitiveKey } from '../utils/redact-sensitive.js';
 import * as path from 'path';
 
 /**
@@ -334,24 +335,56 @@ export class PhotonAdapter implements InternalMCP {
     }
 
     try {
-      const result = await this.elicitationServer.requestInput({
-        message: `Configure settings for ${this.name}`,
-        requestedSchema: {
-          type: 'object',
-          properties: this.settingsSchema.properties,
-          required,
-        },
-      });
+      const propertyEntries = Object.entries(this.settingsSchema.properties || {});
+      const sensitiveEntries = propertyEntries.filter(([name, schema]) =>
+        isSensitiveKey(name) || schema?.format === 'password' || schema?.writeOnly === true
+      );
+      const publicEntries = propertyEntries.filter(([name]) =>
+        !sensitiveEntries.some(([sensitiveName]) => sensitiveName === name)
+      );
+      const resolved: Record<string, any> = {};
 
-      if (result.action !== 'accept' || !result.content) {
-        logger.warn(`User declined or cancelled settings elicitation for ${this.name}`);
-        return null;
+      if (publicEntries.length > 0) {
+        const publicProperties = Object.fromEntries(publicEntries);
+        const publicRequired = required.filter((name) => Object.hasOwn(publicProperties, name));
+        const result = await this.elicitationServer.requestInput({
+          message: `Configure non-sensitive settings for ${this.name}`,
+          requestedSchema: {
+            type: 'object',
+            properties: publicProperties,
+            required: publicRequired,
+          },
+        });
+
+        if (result.action !== 'accept' || !result.content) {
+          logger.warn(`User declined or cancelled settings input for ${this.name}`);
+          return null;
+        }
+        Object.assign(resolved, result.content);
       }
 
-      // Cache resolved settings for subsequent tool calls
-      this.resolvedSettings = result.content;
-      logger.debug(`Resolved settings for ${this.name}: ${Object.keys(result.content).join(', ')}`);
-      return result.content;
+      if (sensitiveEntries.length > 0) {
+        const sensitiveSettings = await collectCredentials(
+          this.elicitationServer,
+          sensitiveEntries.map(([name, schema]) => ({
+            envVarName: name,
+            displayName: schema?.title || schema?.description || name,
+            required: required.includes(name),
+          })),
+        );
+        const requiredSensitive = sensitiveEntries.some(([name]) => required.includes(name));
+        if (sensitiveSettings === null && requiredSensitive) {
+          logger.warn(`User cancelled required sensitive settings input for ${this.name}`);
+          return null;
+        }
+        Object.assign(resolved, sensitiveSettings || {});
+      }
+
+      // Cache resolved settings for subsequent calls in this process. Sensitive
+      // values remain transient and are never sent through MCP input responses.
+      this.resolvedSettings = resolved;
+      logger.debug(`Resolved settings for ${this.name}: ${Object.keys(resolved).join(', ')}`);
+      return resolved;
     } catch (error: any) {
       logger.error(`Failed to elicit settings for ${this.name}: ${error.message}`);
       return null;
@@ -386,8 +419,31 @@ export class PhotonAdapter implements InternalMCP {
 
       // Handle different ask types via MCP elicitation
       switch (ask.ask) {
-        case 'text':
         case 'password': {
+          const value = await collectCredential(
+            this.elicitationServer,
+            ask.message,
+            'PHOTON_SECRET',
+          );
+          if (value === null && ask.required !== false) {
+            throw new Error('User cancelled required password input');
+          }
+          return value ?? ('default' in ask ? ask.default : null);
+        }
+
+        case 'text': {
+          if (isSensitiveKey(ask.message)) {
+            const value = await collectCredential(
+              this.elicitationServer,
+              ask.message,
+              'PHOTON_SECRET',
+            );
+            if (value === null && ask.required !== false) {
+              throw new Error('User cancelled required sensitive text input');
+            }
+            return value ?? ('default' in ask ? ask.default : null);
+          }
+
           const result = await this.elicitationServer.requestInput({
             message: ask.message,
             requestedSchema: {

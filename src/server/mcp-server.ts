@@ -22,6 +22,7 @@ import { FindResultRenderer } from '../services/find-result-renderer.js';
 import { TokenMetricsTracker } from '../analytics/token-metrics.js';
 import { CapabilityDetector } from '../utils/capability-detector.js';
 import { InputRequiredCoordinator } from './input-required-coordinator.js';
+import { redactSensitiveData } from '../utils/redact-sensitive.js';
 
 // Get the directory of the current file
 const __filename = fileURLToPath(import.meta.url);
@@ -1517,7 +1518,8 @@ ncp.do("send email", {
             if (Object.keys(parameters).length > 0) {
               parametersText = '\n\nParameters:';
               for (const [key, value] of Object.entries(parameters)) {
-                const valueStr = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+                const safeValue = redactSensitiveData(value, key);
+                const valueStr = typeof safeValue === 'string' ? safeValue : JSON.stringify(safeValue, null, 2);
                 parametersText += `\n  ${key}: ${valueStr}`;
               }
             } else {

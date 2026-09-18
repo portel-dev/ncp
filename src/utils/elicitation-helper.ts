@@ -6,6 +6,7 @@
  */
 
 import { logger } from './logger.js';
+import clipboardy from 'clipboardy';
 export interface UserInputRequest {
   message: string;
   requestedSchema: {
@@ -22,17 +23,74 @@ export interface UserInputProvider {
   }>;
 }
 
+type CredentialDescriptor = {
+  envVarName: string;
+  displayName: string;
+  example?: string;
+  required?: boolean;
+};
+
+async function readClipboardSecret(): Promise<string | null> {
+  try {
+    const value = await clipboardy.read();
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  } catch {
+    logger.error('Failed to read credential data from the local clipboard');
+    return null;
+  }
+}
+
+async function clearClipboardAfterCapture(): Promise<void> {
+  try {
+    await clipboardy.write('');
+  } catch {
+    logger.warn('Credential was captured, but NCP could not clear the local clipboard');
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function requestClipboardReady(
+  server: UserInputProvider,
+  message: string,
+): Promise<boolean> {
+  const result = await server.requestInput({
+    message,
+    requestedSchema: {
+      type: 'object',
+      properties: {
+        ready: {
+          type: 'boolean',
+          description: 'I copied the requested credential data to my local clipboard',
+        },
+      },
+      required: ['ready'],
+    },
+  });
+
+  return result.action === 'accept' && result.content?.ready === true;
+}
+
+function credentialList(credentials: CredentialDescriptor[]): string {
+  return credentials.map((credential) =>
+    `- ${credential.envVarName}: ${credential.displayName}${credential.required === false ? ' (optional)' : ''}`
+  ).join('\n');
+}
+
 /**
  * Collect a single credential value from user via elicitation dialog
  *
- * Shows a structured input form. The value is returned directly to the active
- * request workflow and is never placed in requestState or chat output.
+ * The MCP form carries only a readiness acknowledgement. NCP reads the actual
+ * value from the local clipboard so it never crosses the model-visible MCP
+ * request/response boundary.
  *
  * @param server request-scoped MCP input provider
  * @param credentialName Human-readable name (e.g., "GitHub Token", "API Key")
  * @param envVarName Environment variable name (e.g., "GITHUB_TOKEN")
  * @param example Optional example value to show user
- * @returns The credential value, or null if user cancelled
+ * @returns The credential value from the local clipboard, or null if cancelled
  */
 export async function collectCredential(
   server: UserInputProvider,
@@ -40,34 +98,31 @@ export async function collectCredential(
   envVarName: string,
   example?: string
 ): Promise<string | null> {
-  const result = await server.requestInput({
-    message: `Please provide your ${credentialName}. The value is stored locally by NCP and is not included in chat output.`,
-    requestedSchema: {
-      type: 'object',
-      properties: {
-        value: {
-          type: 'string',
-          minLength: 1,
-          description: `${credentialName}${example ? ` (for example: ${example})` : ''}`
-        }
-      },
-      required: ['value']
-    }
-  });
-
-  if (result.action !== 'accept') {
-    logger.info(`User ${result.action} providing ${credentialName}`);
+  const ready = await requestClipboardReady(
+    server,
+    `Copy your ${credentialName} to your local clipboard, then confirm readiness.${example ? `\n\nExample format: ${example}` : ''}\n\nThe credential is read locally by NCP. It is not sent in MCP input responses or conversation history.`,
+  );
+  if (!ready) {
+    logger.info(`User cancelled providing ${credentialName}`);
     return null;
   }
 
-  const value = result.content?.value;
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+  const value = await readClipboardSecret();
+  if (value === null) {
+    logger.warn(`Local clipboard was empty while collecting ${credentialName}`);
+    return null;
+  }
+
+  await clearClipboardAfterCapture();
+  logger.info(`Collected ${envVarName} from the local clipboard`);
+  return value;
 }
 
 /**
- * Collect multiple credentials from one structured form
+ * Collect multiple credentials from one local clipboard payload
  *
- * Returns a map of environment variable names to values from one form.
+ * The user copies a JSON object keyed by environment variable name. The MCP
+ * form contains only a boolean acknowledgement.
  *
  * @param server MCP server instance
  * @param credentials Array of credentials to collect
@@ -84,38 +139,55 @@ export async function collectCredentials(
 ): Promise<Record<string, string> | null> {
   if (credentials.length === 0) return {};
 
-  const properties: Record<string, any> = {};
-  const required: string[] = [];
-  for (const credential of credentials) {
-    properties[credential.envVarName] = {
-      type: 'string',
-      ...(credential.required === false ? {} : { minLength: 1 }),
-      description: `${credential.displayName}${credential.example ? ` (for example: ${credential.example})` : ''}`,
-    };
-    if (credential.required !== false) required.push(credential.envVarName);
-  }
+  const singleCredential = credentials.length === 1;
+  const format = singleCredential
+    ? `Copy the ${credentials[0].displayName} value directly.`
+    : `Copy one JSON object keyed by environment variable name, for example:\n${JSON.stringify(Object.fromEntries(credentials.map((credential) => [credential.envVarName, credential.example || 'value'])), null, 2)}`;
+  const ready = await requestClipboardReady(
+    server,
+    `Prepare these credentials on your local clipboard:\n\n${credentialList(credentials)}\n\n${format}\n\nNCP reads the clipboard locally and clears it after successful capture. Secret values are not sent in MCP input responses or conversation history.`,
+  );
+  if (!ready) return null;
 
-  const result = await server.requestInput({
-    message: 'Provide the credentials required by this MCP. Values are stored locally and are not included in chat output.',
-    requestedSchema: { type: 'object', properties, required },
-  });
-  if (result.action !== 'accept') return null;
+  const clipboardValue = await readClipboardSecret();
+  if (clipboardValue === null) return null;
+  await clearClipboardAfterCapture();
+
+  let source: Record<string, unknown>;
+  if (singleCredential) {
+    source = { [credentials[0].envVarName]: clipboardValue };
+  } else {
+    try {
+      const parsed = JSON.parse(clipboardValue);
+      if (!isRecord(parsed)) return null;
+      source = parsed;
+    } catch {
+      logger.warn('Credential clipboard payload must be a JSON object');
+      return null;
+    }
+  }
 
   const collected: Record<string, string> = {};
   for (const credential of credentials) {
-    const value = result.content?.[credential.envVarName];
+    const value = Object.hasOwn(source, credential.envVarName)
+      ? source[credential.envVarName]
+      : undefined;
     if (typeof value === 'string' && value.trim().length > 0) {
       collected[credential.envVarName] = value.trim();
+    } else if (credential.required !== false) {
+      logger.warn(`Credential clipboard payload is missing required field ${credential.envVarName}`);
+      return null;
     }
   }
+
   return collected;
 }
 
 /**
- * Collect ALL credentials for multiple MCPs in ONE form
+ * Collect all credentials for multiple MCPs from one clipboard payload
  *
- * Shows a single consolidated elicitation dialog with all credential fields.
- * Much better UX than separate dialogs for each credential.
+ * The MCP dialog carries only a readiness acknowledgement. The clipboard
+ * payload can use flat `mcp:variable` keys or nested MCP objects.
  *
  * @param server MCP server instance
  * @param bulkCredentials Map of MCP names to their required credentials
@@ -131,9 +203,7 @@ export async function collectBulkCredentials(
     transport?: 'stdio' | 'http';
   }>>
 ): Promise<Record<string, string> | null> {
-  // Build consolidated schema with all credential fields
-  const properties: Record<string, any> = {};
-  const fieldKeys: string[] = [];
+  const fields: Array<{ fieldKey: string; mcpName: string; envVarName: string }> = [];
   const requiredFieldKeys: string[] = [];
   let message = '📋 Credential Collection for Bulk Import\n\n';
   message += 'Please provide credentials for the following MCPs:\n\n';
@@ -146,15 +216,8 @@ export async function collectBulkCredentials(
     for (const cred of credentials) {
       // Create unique field key: mcpName:envVarName
       const fieldKey = `${mcpName}:${cred.envVarName}`;
-      fieldKeys.push(fieldKey);
+      fields.push({ fieldKey, mcpName, envVarName: cred.envVarName });
       if (cred.required !== false) requiredFieldKeys.push(fieldKey);
-
-      // Add to schema
-      properties[fieldKey] = {
-        type: 'string',
-        ...(cred.required === false ? {} : { minLength: 1 }),
-        description: `${cred.displayName}${cred.example ? ` (e.g., ${cred.example})` : ''}`
-      };
 
       message += `  • ${cred.displayName}${cred.required === false ? ' (optional)' : ''}\n`;
     }
@@ -162,36 +225,45 @@ export async function collectBulkCredentials(
     message += '\n';
   }
 
-  message += '💡 Leave fields empty to skip optional credentials.\n';
-  message += '🔐 Credentials are stored in the OS keychain or NCP encrypted credential store.';
+  if (fields.length === 0) return {};
 
-  // Show consolidated form
-  const result = await server.requestInput({
-    message,
-    requestedSchema: {
-      type: 'object',
-      properties,
-      required: requiredFieldKeys
-    }
-  });
+  message += 'Copy a single JSON object to your local clipboard. Use either flat keys such as "github:GITHUB_TOKEN" or nested objects such as {"github":{"GITHUB_TOKEN":"..."}}.\n\n';
+  message += 'NCP reads and clears the clipboard locally. Secret values are not sent in MCP input responses or conversation history.';
+  if (!await requestClipboardReady(server, message)) return null;
 
-  if (result.action !== 'accept') {
-    logger.info(`User ${result.action} bulk credential collection`);
+  const clipboardValue = await readClipboardSecret();
+  if (clipboardValue === null) return null;
+  await clearClipboardAfterCapture();
+
+  let content: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(clipboardValue);
+    if (!isRecord(parsed)) return null;
+    content = parsed;
+  } catch {
+    logger.warn('Bulk credential clipboard payload must be a JSON object');
     return null;
   }
 
-  // Extract collected values
   const collected: Record<string, string> = {};
-  const content = result.content || {};
-
-  for (const fieldKey of fieldKeys) {
-    const value = content[fieldKey];
-    if (value && typeof value === 'string' && value.trim().length > 0) {
+  for (const { fieldKey, mcpName, envVarName } of fields) {
+    const nested = isRecord(content[mcpName]) ? content[mcpName] : undefined;
+    const value = Object.hasOwn(content, fieldKey)
+      ? content[fieldKey]
+      : nested && Object.hasOwn(nested, envVarName)
+        ? nested[envVarName]
+        : undefined;
+    if (typeof value === 'string' && value.trim().length > 0) {
       collected[fieldKey] = value.trim();
     }
   }
 
-  logger.info(`Collected ${Object.keys(collected).length} credentials from bulk form`);
+  if (requiredFieldKeys.some((fieldKey) => !Object.hasOwn(collected, fieldKey))) {
+    logger.warn('Bulk credential clipboard payload is missing one or more required fields');
+    return null;
+  }
+
+  logger.info(`Collected ${Object.keys(collected).length} credentials from the local clipboard`);
   return collected;
 }
 

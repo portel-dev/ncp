@@ -1,15 +1,53 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { afterEach, describe, expect, it, jest } from '@jest/globals';
+import clipboardy from 'clipboardy';
 import {
   collectBulkCredentials,
+  collectCredential,
   collectCredentials,
   type UserInputProvider,
 } from '../src/utils/elicitation-helper.js';
 
 describe('request-scoped credential collection', () => {
-  it('collects required and optional credentials in one form', async () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('keeps a single credential out of the MCP input response', async () => {
+    const read = jest.spyOn(clipboardy, 'read').mockResolvedValue(' secret-token ');
+    const write = jest.spyOn(clipboardy, 'write').mockResolvedValue();
     const requestInput = jest.fn<UserInputProvider['requestInput']>().mockResolvedValue({
       action: 'accept',
-      content: { API_TOKEN: ' secret ', OPTIONAL_REGION: '' },
+      content: { ready: true },
+    });
+
+    const result = await collectCredential(
+      { requestInput },
+      'API token',
+      'API_TOKEN',
+    );
+
+    expect(result).toBe('secret-token');
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledWith('');
+    expect(requestInput.mock.calls[0][0].requestedSchema).toEqual({
+      type: 'object',
+      properties: {
+        ready: expect.objectContaining({ type: 'boolean' }),
+      },
+      required: ['ready'],
+    });
+    expect(JSON.stringify(requestInput.mock.calls[0][0])).not.toContain('secret-token');
+  });
+
+  it('collects required and optional credentials from one clipboard payload', async () => {
+    jest.spyOn(clipboardy, 'read').mockResolvedValue(JSON.stringify({
+      API_TOKEN: ' secret ',
+      OPTIONAL_REGION: '',
+    }));
+    const write = jest.spyOn(clipboardy, 'write').mockResolvedValue();
+    const requestInput = jest.fn<UserInputProvider['requestInput']>().mockResolvedValue({
+      action: 'accept',
+      content: { ready: true },
     });
 
     const result = await collectCredentials(
@@ -21,21 +59,23 @@ describe('request-scoped credential collection', () => {
     );
 
     expect(requestInput).toHaveBeenCalledTimes(1);
-    expect(requestInput.mock.calls[0][0].requestedSchema).toMatchObject({
-      required: ['API_TOKEN'],
-      properties: {
-        API_TOKEN: { type: 'string', minLength: 1 },
-        OPTIONAL_REGION: { type: 'string' },
-      },
+    expect(requestInput.mock.calls[0][0].requestedSchema.required).toEqual(['ready']);
+    expect(requestInput.mock.calls[0][0].requestedSchema.properties).toEqual({
+      ready: expect.objectContaining({ type: 'boolean' }),
     });
-    expect(requestInput.mock.calls[0][0].requestedSchema.properties.OPTIONAL_REGION).not.toHaveProperty('minLength');
     expect(result).toEqual({ API_TOKEN: 'secret' });
+    expect(write).toHaveBeenCalledWith('');
   });
 
-  it('uses one consolidated form across multiple MCPs', async () => {
+  it('uses one local clipboard payload across multiple MCPs', async () => {
+    jest.spyOn(clipboardy, 'read').mockResolvedValue(JSON.stringify({
+      github: { GITHUB_TOKEN: 'token' },
+      maps: { REGION: '' },
+    }));
+    const write = jest.spyOn(clipboardy, 'write').mockResolvedValue();
     const requestInput = jest.fn<UserInputProvider['requestInput']>().mockResolvedValue({
       action: 'accept',
-      content: { 'github:GITHUB_TOKEN': 'token', 'maps:REGION': '' },
+      content: { ready: true },
     });
 
     const result = await collectBulkCredentials(
@@ -47,11 +87,11 @@ describe('request-scoped credential collection', () => {
     );
 
     expect(requestInput).toHaveBeenCalledTimes(1);
-    expect(requestInput.mock.calls[0][0].requestedSchema.required).toEqual(['github:GITHUB_TOKEN']);
-    expect(requestInput.mock.calls[0][0].requestedSchema.properties['github:GITHUB_TOKEN']).toMatchObject({
-      type: 'string',
-      minLength: 1,
+    expect(requestInput.mock.calls[0][0].requestedSchema).toMatchObject({
+      required: ['ready'],
+      properties: { ready: { type: 'boolean' } },
     });
     expect(result).toEqual({ 'github:GITHUB_TOKEN': 'token' });
+    expect(write).toHaveBeenCalledWith('');
   });
 });

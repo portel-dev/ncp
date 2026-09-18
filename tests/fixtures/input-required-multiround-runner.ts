@@ -50,11 +50,11 @@ const operation = async () => {
 const first = await coordinator.handle(context(), operation);
 assert.equal(isInputRequiredResult(first), true);
 if (!isInputRequiredResult(first)) throw new Error('expected input_required');
-assert.equal(first.requestState?.includes('secret-value'), false);
+assert.equal(first.requestState?.includes('first-value'), false);
 
 const firstState = await coordinator.verifyRequestState(first.requestState!, context());
 const second = await coordinator.handle(
-  context(firstState, { input_1: { action: 'accept', content: { value: 'secret-value' } } }),
+  context(firstState, { input_1: { action: 'accept', content: { value: 'first-value' } } }),
   async () => { throw new Error('workflow was replayed'); },
 );
 assert.equal(isInputRequiredResult(second), true);
@@ -65,7 +65,7 @@ const final = await coordinator.handle(
   context(secondState, { input_2: { action: 'accept', content: { confirmed: true } } }),
   operation,
 );
-assert.equal(final, 'secret-value:true');
+assert.equal(final, 'first-value:true');
 assert.equal(starts, 1);
 await assert.rejects(
   coordinator.handle(context(secondState, { input_2: { action: 'accept', content: { confirmed: true } } }), operation),

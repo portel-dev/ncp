@@ -58,3 +58,19 @@ export function redactSensitiveValues(
   }
   return result;
 }
+
+/**
+ * Recursively redact values whose object keys indicate credentials. This is
+ * intended for model-visible confirmations, diagnostics, and tool results.
+ */
+export function redactSensitiveData(value: unknown, key?: string): unknown {
+  if (key && isSensitiveKey(key)) return '********';
+  if (Array.isArray(value)) return value.map((item) => redactSensitiveData(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .map(([entryKey, entryValue]) => [entryKey, redactSensitiveData(entryValue, entryKey)])
+    );
+  }
+  return value;
+}

@@ -18,6 +18,7 @@ import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
 import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials, collectBulkCredentials, elicitMultiSelect, detectHTTPCredentials } from '../utils/elicitation-helper.js';
 import { UIMessages } from '../utils/ui-messages.js';
 import { CLIIndexer } from '../services/cli-indexer.js';
+import { formatCommandDisplay } from '../utils/security.js';
 
 export class NCPManagementMCP implements InternalMCP {
   name = 'mcp';
@@ -383,12 +384,12 @@ URL: ${url}
 
 Do you want to install this MCP?`;
       } else {
-        const argsStr = commandArgs.length > 0 ? ` ${commandArgs.join(' ')}` : '';
+        const commandDisplay = formatCommandDisplay(command!, commandArgs, true);
         confirmationMessage = `⚠️ CONFIRM MCP INSTALLATION
 
 Adding new MCP server: ${mcpName}
 Profile: ${profile}
-Command: ${command}${argsStr}
+Command: ${commandDisplay}
 
 ⚠️ Installing MCPs can execute arbitrary code on your system. Only proceed if you trust this MCP server.
 
@@ -523,8 +524,9 @@ Do you want to install this MCP?`;
       successMessage = `✅ HTTP/SSE MCP server "${mcpName}" added to profile "${profile}"${credentialInfo}\n\n` +
         `URL: ${url}${authInfo}${toolsList}`;
     } else {
+      const commandDisplay = formatCommandDisplay(command!, config.args || [], true);
       successMessage = `✅ MCP server "${mcpName}" added to profile "${profile}"${credentialInfo}\n\n` +
-        `Command: ${command} ${config.args?.join(' ') || ''}${toolsList}`;
+        `Command: ${commandDisplay}${toolsList}`;
     }
 
     logger.info(`Added MCP "${mcpName}" to profile "${profile}" (${transportType})${credentialInfo}`);
@@ -696,7 +698,9 @@ Do you want to remove this MCP?`;
 
       if (isPhoton) {
         // Import as Photon TypeScript code
-        return await this.importPhotonFromClipboard(trimmed);
+        const result = await this.importPhotonFromClipboard(trimmed);
+        if (result.success) await clipboardy.default.write('');
+        return result;
       }
 
       // Try to parse as JSON config
@@ -717,6 +721,8 @@ Do you want to remove this MCP?`;
           imported++;
         }
       }
+
+      if (imported > 0) await clipboardy.default.write('');
 
       return {
         success: true,
@@ -1129,7 +1135,14 @@ Do you want to remove this MCP?`;
     const profile = params?.profile || 'all';
 
     try {
-      const mcps = await this.profileManager!.getProfileMCPs(profile);
+      // Only clipboard export resolves secure references. Response and file
+      // exports use the persisted profile so secrets cannot enter tool output
+      // or a plaintext file.
+      const storedProfile = await this.profileManager!.getProfile(profile);
+      const storedMcps = storedProfile?.mcpServers;
+      const mcps = to === 'clipboard'
+        ? await this.profileManager!.getProfileMCPs(profile)
+        : storedMcps;
 
       if (!mcps || Object.keys(mcps).length === 0) {
         return {
@@ -1156,29 +1169,25 @@ Do you want to remove this MCP?`;
                        `Use ncp:import with from=clipboard to restore later.`
             };
           } catch (error: any) {
-            // Clipboard failed - fallback to response mode
-            logger.warn(`Clipboard write failed: ${error.message}, falling back to response mode`);
+            // Never fall back to model-visible output with materialized secrets.
+            logger.warn(`Clipboard write failed during secure export: ${error.message}`);
             return {
-              success: true,
-              content: `⚠️  Clipboard unavailable. Showing configuration instead:\n\n` +
-                       `\`\`\`json\n${jsonContent}\n\`\`\`\n\n` +
-                       `Please copy manually.`
+              success: false,
+              error: 'Clipboard export failed. NCP did not return the configuration because it may contain credentials.'
             };
           }
         }
 
         case 'response': {
-          // Return JSON in response (visible to AI, for transparency)
+          // Persisted profiles contain secure-storage references, never the
+          // materialized credential values used at runtime.
           return {
             success: true,
             content: `✅ Exported ${Object.keys(mcps).length} MCPs from profile "${profile}"\n\n` +
                      `📋 Configuration:\n\n` +
                      `\`\`\`json\n${jsonContent}\n\`\`\`\n\n` +
                      `💡 You can:\n` +
-                     `• Copy and paste into another MCP client's config\n` +
-                     `• Save to a file for backup\n` +
-                     `• Share with your team\n` +
-                     `• Use with 'ncp import' to restore later`
+                     `🔐 Credential values are omitted. Secure-storage references remain in place.`
           };
         }
 
@@ -1202,7 +1211,8 @@ Do you want to remove this MCP?`;
 
           return {
             success: true,
-            content: `✅ Exported ${Object.keys(mcps).length} MCPs to ${destination}`
+            content: `✅ Exported ${Object.keys(mcps).length} MCPs to ${destination}\n` +
+                     `🔐 Credential values were omitted; the file contains secure-storage references.`
           };
         }
 
