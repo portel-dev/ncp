@@ -2,7 +2,7 @@
 
 ## Overview
 
-Code-Mode now supports **runtime network permissions via elicitations**. When code tries to access a restricted network (private IPs, localhost), the user is prompted for permission. This makes local network MCPs practical while maintaining security.
+Code-Mode supports **runtime network permissions through MCP multi-round-trip input**. When code tries to access a restricted network (private IPs, localhost), NCP suspends the live tool workflow and returns `input_required`. The client supplies the permission response on a retried `tools/call`.
 
 ## The Problem
 

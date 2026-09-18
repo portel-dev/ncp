@@ -4,7 +4,8 @@
  * Manages runtime package approvals with scoped expiration.
  * Approvals are stored in-memory only - no persistent security holes.
  *
- * Uses MCP elicitation if available, falls back to native OS dialogs.
+ * Uses request-scoped MCP input during MCP workflows and native dialogs for
+ * standalone use.
  *
  * Approval Scopes:
  * - "operation": Approve for single code execution only
@@ -127,7 +128,7 @@ export class PackageApprovalManager {
 
   /**
    * Set elicitation function for MCP-based prompts
-   * If not set, falls back to native OS dialogs
+   * If not set, standalone callers use native OS dialogs.
    */
   setElicitationFunction(fn: PackageElicitationFunction): void {
     this.elicitationFunction = fn;
@@ -272,7 +273,8 @@ export class PackageApprovalManager {
 
   /**
    * Request approval for packages from user
-   * Uses MCP elicitation if available, falls back to native OS dialog
+   * Uses request-scoped MCP input when configured. Failure or cancellation is
+   * a denial; native dialogs are used only when no MCP provider is configured.
    *
    * @returns The approval scope if approved, null if denied
    */
@@ -285,7 +287,7 @@ export class PackageApprovalManager {
 
     let selectedLabel: string | null = null;
 
-    // Try MCP elicitation first
+    // MCP workflows fail closed and never switch to an out-of-band dialog.
     if (this.elicitationFunction) {
       try {
         selectedLabel = await this.elicitationFunction({
@@ -294,12 +296,10 @@ export class PackageApprovalManager {
           options: [...optionLabels, 'Deny'],
         });
       } catch (error: any) {
-        logger.warn(`MCP elicitation failed: ${error.message}, falling back to native dialog`);
+        logger.warn(`MCP package approval failed: ${error.message}`);
+        return null;
       }
-    }
-
-    // Fall back to native OS dialog
-    if (selectedLabel === null) {
+    } else {
       try {
         const result = await showNativeDialog({
           title: 'Package Access Permission',

@@ -32,7 +32,7 @@ jest.mock('../src/discovery/engine.js', () => ({
 }));
 
 // Mock MCP SDK
-jest.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
+jest.mock('@modelcontextprotocol/client', () => ({
   Client: jest.fn().mockImplementation(() => ({
     connect: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
     close: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
@@ -41,7 +41,7 @@ jest.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
   }))
 }));
 
-jest.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
+jest.mock('@modelcontextprotocol/client/stdio', () => ({
   StdioClientTransport: jest.fn().mockImplementation(() => ({
     start: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
     close: jest.fn<() => Promise<void>>().mockResolvedValue(undefined)

@@ -47,8 +47,8 @@ describe('Real MCP Execution Tests', () => {
       // Create a minimal test MCP server that echoes parameters
       const testMCPPath = join(testDir, 'test-mcp-server.mjs');
       const testMCPCode = `#!/usr/bin/env node
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { Server } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 
 const server = new Server(
   { name: 'test-mcp', version: '1.0.0' },
@@ -322,7 +322,7 @@ Example:
   const result = await timingExecutor.executeTimingGroup(timingId);
 
 Note: Tests are skipped by default because they require:
-- @modelcontextprotocol/sdk to be installed
+- @modelcontextprotocol/server to be installed
 - Actual process spawning and execution
 - More time to run
 

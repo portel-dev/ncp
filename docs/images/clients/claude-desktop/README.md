@@ -6,7 +6,7 @@ This directory should contain the following screenshots for the Claude Desktop d
 
 ### 1. `dxt-install-dialog.png`
 **What to capture:** Claude Desktop's .dxt installation dialog
-- Shows the installation prompt when double-clicking ncp.dxt
+- Shows the installation prompt when double-clicking ncp.mcpb
 - Should show extension name, version, and Install/Cancel buttons
 - **Dimensions:** ~800x600px recommended
 

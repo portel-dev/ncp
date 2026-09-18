@@ -1,11 +1,8 @@
 /**
  * Connection-related types for the orchestrator
  */
-
-import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import type { Client, SSEClientTransport, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import type { OAuthConfig } from '../../auth/oauth-device-flow.js';
 
 /**

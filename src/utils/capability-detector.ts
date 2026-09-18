@@ -10,6 +10,7 @@ export interface ClientCapabilities {
   roots?: {
     listChanged?: boolean;
   };
+  elicitation?: Record<string, unknown>;
   logging?: Record<string, unknown>;
   completions?: Record<string, unknown>;
   progressNotifications?: boolean;
@@ -41,17 +42,26 @@ export class CapabilityDetector {
       this.supported.add('completions');
     }
 
-    // Check for experimental capabilities (sampling, roots, etc.)
+    // Current MCP revisions advertise server-request capabilities at the
+    // client top level. Keep the experimental lookup for older clients.
     const experimental = clientCapabilities.experimental || {};
 
-    if (experimental.sampling) {
-      this.capabilities.sampling = experimental.sampling;
+    const sampling = clientCapabilities.sampling || experimental.sampling;
+    if (sampling) {
+      this.capabilities.sampling = sampling;
       this.supported.add('sampling');
     }
 
-    if (experimental.roots) {
-      this.capabilities.roots = experimental.roots;
+    const roots = clientCapabilities.roots || experimental.roots;
+    if (roots) {
+      this.capabilities.roots = roots;
       this.supported.add('roots');
+    }
+
+    const elicitation = clientCapabilities.elicitation || experimental.elicitation;
+    if (elicitation) {
+      this.capabilities.elicitation = elicitation;
+      this.supported.add('elicitation');
     }
 
     if (experimental.mcpApps) {

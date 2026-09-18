@@ -15,7 +15,7 @@ let McpTypes;
 import { z } from 'zod';
 
 try {
-  const serverModule = await import('@modelcontextprotocol/sdk/server/index.js');
+  const serverModule = await import('@modelcontextprotocol/server');
   Server = serverModule.Server;
   console.error('[DEBUG] Successfully loaded Server module');
 } catch (err) {
@@ -24,7 +24,7 @@ try {
 }
 
 try {
-  const stdioModule = await import('@modelcontextprotocol/sdk/server/stdio.js');
+  const stdioModule = await import('@modelcontextprotocol/server/stdio');
   StdioServerTransport = stdioModule.StdioServerTransport;
   console.error('[DEBUG] Successfully loaded StdioServerTransport module');
 } catch (err) {
@@ -33,7 +33,7 @@ try {
 }
 
 try {
-  McpTypes = await import('@modelcontextprotocol/sdk/types.js');
+  McpTypes = await import('@modelcontextprotocol/server');
   console.error('[DEBUG] Successfully loaded McpTypes module. Exports:', Object.keys(McpTypes));
 } catch (err) {
   console.error('[ERROR] Failed to load McpTypes module:', err);

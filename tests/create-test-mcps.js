@@ -4,9 +4,8 @@
  *
  * Quickly spin up test MCP servers with different auth types for testing
  */
-
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { Server } from "@modelcontextprotocol/server";
+import { SSEServerTransport } from "@modelcontextprotocol/server-legacy/sse";
 import express from 'express';
 import chalk from 'chalk';
 

@@ -55,11 +55,11 @@
     "build:dxt": "npm run build:mcpb",
     "build:mcpb:patched": "npm run build:mcpb && ./scripts/patch-dxt-zip.sh",
     "build:dxt:patched": "npm run build:mcpb:patched",
-    "build:mcpb:signed": "npm run build:mcpb:patched && npx @anthropic-ai/mcpb sign ncp.mcpb --self-signed && npm run test:mcpb",
+    "build:mcpb:signed": "npm run build:mcpb:patched && npx @anthropic-ai/mcpb sign _internal/artifacts/ncp.mcpb --self-signed && npm run test:mcpb",
     "build:dxt:signed": "npm run build:mcpb:signed",
     "verify:mcpb": "npm run test:mcpb",
     "verify:dxt": "npm run verify:mcpb",
-    "build:mcpb:prod": "npm run build:mcpb && npx @anthropic-ai/mcpb sign ncp.mcpb --cert cert.pem --key key.pem && npm run test:mcpb",
+    "build:mcpb:prod": "npm run build:mcpb && npx @anthropic-ai/mcpb sign _internal/artifacts/ncp.mcpb --cert cert.pem --key key.pem && npm run test:mcpb",
     "build:dxt:prod": "npm run build:mcpb:prod",
     "stats": "node scripts/check-dxt-downloads.js",
     "check:root": "node scripts/check-root-clutter.js",
@@ -110,7 +110,6 @@
   "files:comments": "Explicit list of files to include in the package",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",
-    "@modelcontextprotocol/sdk": "^1.18.0",
     "@napi-rs/keyring": "^1.2.0",
     "@portel/photon-core": "^2.9.4",
     "@types/prompts": "^2.4.9",
@@ -136,7 +135,10 @@
     "prompts": "^2.4.2",
     "tsx": "^4.20.6",
     "uuid": "^11.0.5",
-    "yaml": "^2.8.1"
+    "yaml": "^2.8.1",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@modelcontextprotocol/server-legacy": "^2.0.0",
+    "@modelcontextprotocol/client": "^2.0.0"
   },
   "devDependencies": {
     "@agent-infra/mcp-server-browser": "^1.1.10",

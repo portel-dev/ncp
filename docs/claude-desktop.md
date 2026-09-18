@@ -31,24 +31,24 @@ The easiest way to supercharge Claude Desktop with NCP's powerful MCP orchestrat
 Go to [NCP Releases](https://github.com/portel-dev/ncp/releases/latest) and download:
 
 ```
-ncp.dxt
+ncp.mcpb
 ```
 
 ![Download .dxt file](../images/claude/01-download.png)
-*Screenshot: GitHub releases page showing ncp.dxt download button*
+*Screenshot: GitHub releases page showing ncp.mcpb download button*
 
 **File location after download:**
-- **macOS:** `~/Downloads/ncp.dxt`
-- **Windows:** `%USERPROFILE%\Downloads\ncp.dxt`
+- **macOS:** `~/Downloads/ncp.mcpb`
+- **Windows:** `%USERPROFILE%\Downloads\ncp.mcpb`
 
 ---
 
 ### **Step 2: Double-Click to Install**
 
-Navigate to your Downloads folder and **double-click** `ncp.dxt`:
+Navigate to your Downloads folder and **double-click** `ncp.mcpb`:
 
-![Double-click ncp.dxt](../images/claude/02-double-click.png)
-*Screenshot: Finder/Explorer with ncp.dxt file highlighted*
+![Double-click ncp.mcpb](../images/claude/02-double-click.png)
+*Screenshot: Finder/Explorer with ncp.mcpb file highlighted*
 
 **What happens:**
 - Claude Desktop recognizes the `.dxt` extension
@@ -530,7 +530,7 @@ Then edit `~/.ncp/profiles/all.json` directly and restart Claude Desktop.
 
 4. **Reinstall if needed**
    - Delete `~/.ncp/` folder
-   - Double-click ncp.dxt again
+   - Double-click ncp.mcpb again
    - Restart Claude Desktop
 
 ---

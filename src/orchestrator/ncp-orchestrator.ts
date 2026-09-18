@@ -11,9 +11,8 @@ import { createHash } from 'crypto';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { version } from '../utils/version.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { Client, SSEClientTransport } from "@modelcontextprotocol/client";
 import { DiscoveryEngine } from '../discovery/engine.js';
 import { MCPHealthMonitor } from '../utils/health-monitor.js';
 import { SearchEnhancer } from '../discovery/search-enhancer.js';
@@ -82,7 +81,7 @@ import { MCPUpdateChecker } from '../utils/mcp-update-checker.js';
 import { CodeExecutor } from '../code-mode/code-executor.js';
 import { NetworkPolicyManager, SECURE_NETWORK_POLICY, type ElicitationFunction } from '../code-mode/network-policy.js';
 import { getPackageApprovalManager, type PackageElicitationFunction } from '../code-mode/package-approval.js';
-import type { ElicitationServer } from '../utils/elicitation-helper.js';
+import type { UserInputProvider } from '../utils/elicitation-helper.js';
 import { loadGlobalSettings } from '../utils/global-settings.js';
 import { ToolDiscoveryService } from './services/tool-discovery.js';
 import { CacheService } from './services/cache-service.js';
@@ -192,6 +191,7 @@ export class NCPOrchestrator {
   private profileManager: ProfileManager | null = null;
   private internalMCPManager: InternalMCPManager;
   private backgroundInitPromise: Promise<void> | null = null;
+  private backgroundInitComplete = false;
   private newlyIndexedMCPs: Set<string> = new Set();  // Track MCPs indexed in current run
   private cliScanner: any = null; // CLIScanner instance for query-specific enhancement
   private codeExecutor: CodeExecutor;
@@ -978,6 +978,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
   async initialize(): Promise<void> {
     const startTime = Date.now();
     this.indexingStartTime = startTime;
+    this.backgroundInitComplete = false;
 
     // Clear newly indexed MCPs set for this initialization run
     this.newlyIndexedMCPs.clear();
@@ -1052,10 +1053,14 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
 
     // CRITICAL: Run ALL heavy initialization in background to avoid blocking MCP startup
     // MCP protocol requires fast startup - Claude Desktop will timeout and disconnect otherwise
-    this.backgroundInitPromise = this.runBackgroundInitialization(profile).catch(err => {
-      logger.error(`Background initialization failed: ${err}`);
-      throw err; // Re-throw to propagate to waiters
-    });
+    this.backgroundInitPromise = this.runBackgroundInitialization(profile)
+      .catch(err => {
+        logger.error(`Background initialization failed: ${err}`);
+        throw err; // Re-throw to propagate to waiters
+      })
+      .finally(() => {
+        this.backgroundInitComplete = true;
+      });
 
     logger.info('MCP server ready - background initialization in progress');
   }
@@ -1228,18 +1233,18 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
 
   /**
    * Set elicitation server for runtime network permissions
-   * Creates adapter to convert ElicitationServer format to NetworkPolicy format
+   * Creates adapter to convert UserInputProvider format to NetworkPolicy format
    * Called from MCPServer after construction to wire up elicitation support
    */
-  setElicitationServer(elicitationServer: ElicitationServer): void {
+  setUserInputProvider(elicitationServer: UserInputProvider): void {
     logger.info('🔐 Wiring up elicitation function for runtime network permissions');
 
-    // Create adapter function that converts ElicitationServer.elicitInput
+    // Create adapter function that converts request-scoped user input
     // to NetworkPolicy's ElicitationFunction format
     const elicitationAdapter: ElicitationFunction = async (params) => {
       try {
-        // Call elicitInput with our schema format
-        const result = await elicitationServer.elicitInput({
+        // Request input with our schema format
+        const result = await elicitationServer.requestInput({
           message: params.message,
           requestedSchema: {
             type: 'object',
@@ -1282,7 +1287,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
     // Also wire up package approval elicitation using same adapter pattern
     const packageElicitationAdapter: PackageElicitationFunction = async (params) => {
       try {
-        const result = await elicitationServer.elicitInput({
+        const result = await elicitationServer.requestInput({
           message: params.message,
           requestedSchema: {
             type: 'object',
@@ -1301,10 +1306,10 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
           return result.content.choice;
         }
 
-        return null; // User declined or cancelled
+        return null; // User declined or cancelled; package access stays denied.
       } catch (error: any) {
         logger.warn(`Package elicitation failed: ${error.message}`);
-        return null; // Fall back to native dialog
+        return null; // Fail closed.
       }
     };
 
@@ -2237,7 +2242,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       // Use actual client info for transparent passthrough to downstream MCPs
       client = new Client(
         this.clientInfo,
-        { capabilities: {} }
+        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
       );
 
       // Connect with timeout and filtered output
@@ -2667,7 +2672,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       // Use actual client info for transparent passthrough to downstream MCPs
       const client = new Client(
         this.clientInfo,
-        { capabilities: {} }
+        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
       );
 
       // Connect with timeout and filtered output
@@ -3110,7 +3115,13 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
    * Get current indexing progress
    */
   getIndexingProgress(): { current: number; total: number; currentMCP: string; estimatedTimeRemaining?: number } | null {
-    return this.indexingProgress;
+    if (this.indexingProgress) {
+      return this.indexingProgress;
+    }
+    if (this.backgroundInitPromise && !this.backgroundInitComplete) {
+      return { current: 0, total: 0, currentMCP: 'initializing...' };
+    }
+    return null;
   }
 
   /**
@@ -3259,7 +3270,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       }
 
       // Create temporary connection for resources request
-      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+      const { Client } = await import('@modelcontextprotocol/client');
 
       const silentEnv = {
         ...process.env,
@@ -3274,7 +3285,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       // Use actual client info for transparent passthrough to downstream MCPs
       const client = new Client(
         this.clientInfo,
-        { capabilities: {} }
+        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
       );
 
       // Connect with timeout and filtered output
@@ -3312,7 +3323,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       }
 
       // Create temporary connection for prompts request
-      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+      const { Client } = await import('@modelcontextprotocol/client');
 
       const silentEnv = {
         ...process.env,
@@ -3327,7 +3338,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       // Use actual client info for transparent passthrough to downstream MCPs
       const client = new Client(
         this.clientInfo,
-        { capabilities: {} }
+        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
       );
 
       // Connect with timeout and filtered output
@@ -3366,7 +3377,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       }
 
       // Create temporary connection for prompt request
-      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+      const { Client } = await import('@modelcontextprotocol/client');
 
       const silentEnv = {
         ...process.env,
@@ -3381,7 +3392,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       // Use actual client info for transparent passthrough to downstream MCPs
       const client = new Client(
         this.clientInfo,
-        { capabilities: {} }
+        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
       );
 
       // Connect with timeout and filtered output
@@ -3615,7 +3626,6 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
    */
   async triggerAutoImport(
     clientName: string,
-    elicitationServer?: any,
     notificationManager?: any
   ): Promise<void> {
     if (!this.profileManager) {
@@ -3633,10 +3643,8 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       const mcpsBefore = new Set(Object.keys(profileBefore.mcpServers));
 
       // Run auto-import (adds new MCPs to profile)
-      // Pass elicitation server and notification manager for config replacement flow
       await this.profileManager.tryAutoImportFromClient(
         clientName,
-        elicitationServer,
         notificationManager
       );
 
@@ -3786,7 +3794,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
 
     // Create temporary connection to read resource
     try {
-      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+      const { Client } = await import('@modelcontextprotocol/client');
 
       const silentEnv = {
         ...process.env,
@@ -3801,7 +3809,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       // Use actual client info for transparent passthrough to downstream MCPs
       const client = new Client(
         this.clientInfo,
-        { capabilities: {} }
+        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
       );
 
       // Connect with timeout

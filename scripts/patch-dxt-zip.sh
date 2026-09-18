@@ -3,7 +3,13 @@
 
 set -e
 
-DXT_FILE="ncp.mcpb"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DXT_FILE="${1:-$PROJECT_ROOT/_internal/artifacts/ncp.mcpb}"
+
+if [ ! -f "$DXT_FILE" ]; then
+    echo "  ERROR: Bundle not found: $DXT_FILE"
+    exit 1
+fi
 
 echo "📦 Patching $DXT_FILE to include human-signals build directory..."
 
@@ -13,15 +19,15 @@ cp "$DXT_FILE" "${DXT_FILE}.backup"
 # Extract to temp directory
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
-unzip -q "$OLDPWD/$DXT_FILE"
+unzip -q "$DXT_FILE"
 
 # Copy the human-signals build directory from our node_modules
-if [ -d "$OLDPWD/node_modules/human-signals/build" ]; then
+if [ -d "$PROJECT_ROOT/node_modules/human-signals/build" ]; then
     echo "  Copying human-signals/build..."
-    cp -r "$OLDPWD/node_modules/human-signals/build" node_modules/human-signals/
+    cp -r "$PROJECT_ROOT/node_modules/human-signals/build" node_modules/human-signals/
 else
     echo "  ⚠️  ERROR: Source build directory not found!"
-    cd "$OLDPWD"
+    cd "$PROJECT_ROOT"
     rm -rf "$TEMP_DIR"
     exit 1
 fi
@@ -29,16 +35,16 @@ fi
 # Also copy to execa's nested human-signals
 if [ -d "node_modules/execa/node_modules/human-signals" ]; then
     echo "  Copying to execa/node_modules/human-signals/build..."
-    cp -r "$OLDPWD/node_modules/human-signals/build" node_modules/execa/node_modules/human-signals/
+    cp -r "$PROJECT_ROOT/node_modules/human-signals/build" node_modules/execa/node_modules/human-signals/
 fi
 
 # Re-zip the bundle (using same compression level as mcpb)
 echo "  Re-zipping bundle..."
-rm -f "$OLDPWD/$DXT_FILE"
-zip -q -r "$OLDPWD/$DXT_FILE" . -x "*.DS_Store"
+rm -f "$DXT_FILE"
+zip -q -r "$DXT_FILE" . -x "*.DS_Store"
 
 # Cleanup
-cd "$OLDPWD"
+cd "$PROJECT_ROOT"
 rm -rf "$TEMP_DIR"
 rm -f "${DXT_FILE}.backup"
 

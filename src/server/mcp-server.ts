@@ -1,21 +1,5 @@
-/**
- * NCP MCP Server - SDK-based Implementation
- * Uses official @modelcontextprotocol/sdk Server class
- */
-
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { InitializedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ListPromptsRequestSchema,
-  GetPromptRequestSchema,
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
-  ListRootsRequestSchema,
-  Tool,
-} from '@modelcontextprotocol/sdk/types.js';
+import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
+import { LATEST_PROTOCOL_VERSION, Server, Tool } from "@modelcontextprotocol/server";
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
 import { logger } from '../utils/logger.js';
 import { mcpProtocolLogger } from '../utils/mcp-protocol-logger.js';
@@ -27,7 +11,7 @@ import { ParameterPredictor } from '../utils/parameter-predictor.js';
 import { loadGlobalSettings, isToolWhitelisted, addToolToWhitelist } from '../utils/global-settings.js';
 import { NCP_PROMPTS, generateAddConfirmation, generateRemoveConfirmation, generateConfigInput, generateOperationConfirmation } from './mcp-prompts.js';
 import chalk from 'chalk';
-import type { ElicitationServer } from '../utils/elicitation-helper.js';
+import type { UserInputProvider } from '../utils/elicitation-helper.js';
 import { version } from '../utils/version.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -37,6 +21,7 @@ import { FindResultStructured, MultiQueryResult, ToolResult, ToolParameter } fro
 import { FindResultRenderer } from '../services/find-result-renderer.js';
 import { TokenMetricsTracker } from '../analytics/token-metrics.js';
 import { CapabilityDetector } from '../utils/capability-detector.js';
+import { InputRequiredCoordinator } from './input-required-coordinator.js';
 
 // Get the directory of the current file
 const __filename = fileURLToPath(import.meta.url);
@@ -62,17 +47,19 @@ function getIconDataURI(): string {
   return cachedIconDataURI;
 }
 
-export class MCPServer implements ElicitationServer {
+export class MCPServer implements UserInputProvider {
   private server: Server;
   private orchestrator: NCPOrchestrator;
   private initializationPromise: Promise<void> | null = null;
   private isInitialized: boolean = false;
   private initializationError: Error | null = null;
   private notifications: SessionNotificationManager;
-  private elicitationSupported: boolean | null = null; // null = unknown, true = supported, false = not supported
+  private inputCoordinator: InputRequiredCoordinator;
+  private clientIdentity: string = 'unknown';
   private tokenTracker: TokenMetricsTracker;
   private enableCodeMode: boolean = false; // false = find-and-run, true = find-and-code
   private capabilityDetector: CapabilityDetector; // Track client capabilities for feature negotiation
+  private stdioHandle?: StdioServerHandle;
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
     // Initialize session-scoped notification manager
@@ -80,6 +67,7 @@ export class MCPServer implements ElicitationServer {
 
     // Initialize capability detector for client feature negotiation
     this.capabilityDetector = new CapabilityDetector();
+    this.inputCoordinator = new InputRequiredCoordinator(() => this.clientIdentity);
 
     // Load icon data URI
     const iconDataURI = getIconDataURI();
@@ -98,16 +86,24 @@ export class MCPServer implements ElicitationServer {
           resources: {},    // Enable resources for help docs and health status
           logging: {},      // Enable logging capability for debug output
           completions: {}, // Enable parameter completions
-
-          experimental: {
-            // MCP 2025-11-25 advanced features (in experimental until officially released)
-            sampling: {},    // Server-initiated LLM calls
-            roots: {         // Filesystem hints for file pickers
-              listChanged: true
-            },
-            elicitation: {},  // Enable elicitation for credential collection
-          },
         },
+        inputRequired: {
+          legacyShim: true,
+          maxRounds: 10,
+        },
+        requestState: {
+          verify: this.inputCoordinator.verifyRequestState,
+        },
+        // Keep legacy revisions available for existing hosts while allowing the
+        // v2 SDK's stdio entry point to negotiate the current stateless revision.
+        supportedProtocolVersions: [
+          '2026-07-28',
+          LATEST_PROTOCOL_VERSION,
+          '2025-06-18',
+          '2025-03-26',
+          '2024-11-05',
+          '2024-10-07',
+        ],
       }
     );
 
@@ -141,6 +137,7 @@ export class MCPServer implements ElicitationServer {
       }
 
       if (clientVersion) {
+        this.clientIdentity = `${clientVersion.name || 'unknown'}@${clientVersion.version || 'unknown'}`;
         const clientInfo = {
           name: clientVersion.name || 'unknown',
           version: clientVersion.version || '1.0.0'
@@ -163,7 +160,6 @@ export class MCPServer implements ElicitationServer {
           logger.debug(`Triggering auto-import for client: ${clientInfo.name}`);
           this.orchestrator.triggerAutoImport(
             clientInfo.name,
-            this,  // elicitation server for config replacement dialog
             this.notifications  // notification manager for tips
           ).then(() => {
             logger.debug(`Auto-import completed for ${clientInfo.name}`);
@@ -179,7 +175,7 @@ export class MCPServer implements ElicitationServer {
     // BUGFIX: Manually register notification handler to ensure oninitialized gets called
     // The SDK's constructor already set up a handler, but it captured undefined.
     // We need to re-register it after setting the callback.
-    this.server.setNotificationHandler(InitializedNotificationSchema, () => {
+    this.server.setNotificationHandler('notifications/initialized', () => {
       if (this.server.oninitialized) {
         this.server.oninitialized();
       }
@@ -189,13 +185,13 @@ export class MCPServer implements ElicitationServer {
     // This must happen before initialization so confirmations work from the start
     const internalMCPManager = this.orchestrator.getInternalMCPManager();
     if (internalMCPManager) {
-      internalMCPManager.setElicitationServer(this);
-      logger.info('Elicitation enabled for internal MCPs (clipboard-based credential collection)');
+      internalMCPManager.setUserInputProvider(this);
+      logger.info('Request-scoped input enabled for internal MCPs');
     }
 
     // Wire up elicitation server to orchestrator for runtime network permissions
     // This enables Code-Mode to show permission dialogs for local network access
-    this.orchestrator.setElicitationServer(this);
+    this.orchestrator.setUserInputProvider(this);
     logger.info('Elicitation enabled for Code-Mode runtime network permissions');
 
     // Set up request handlers
@@ -204,7 +200,7 @@ export class MCPServer implements ElicitationServer {
 
   private setupHandlers(): void {
     // Handle tools/list
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+    this.server.setRequestHandler('tools/list', async () => {
       // Log request (non-blocking - don't await)
       mcpProtocolLogger.logRequest('tools/list', {}).catch(() => {});
 
@@ -218,7 +214,8 @@ export class MCPServer implements ElicitationServer {
     });
 
     // Handle tools/call
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    this.server.setRequestHandler('tools/call', async (request, ctx) => {
+      return this.inputCoordinator.handle(ctx, async () => {
       const { name, arguments: args } = request.params;
 
       // Log request (non-blocking - don't await)
@@ -287,17 +284,18 @@ export class MCPServer implements ElicitationServer {
 
         return errorResult;
       }
+      });
     });
 
     // Handle prompts/list
-    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    this.server.setRequestHandler('prompts/list', async () => {
       return {
         prompts: NCP_PROMPTS
       };
     });
 
     // Handle prompts/get
-    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    this.server.setRequestHandler('prompts/get', async (request) => {
       const { name, arguments: args } = request.params;
 
       try {
@@ -309,14 +307,14 @@ export class MCPServer implements ElicitationServer {
     });
 
     // Handle resources/list
-    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    this.server.setRequestHandler('resources/list', async () => {
       return {
         resources: await this.handleListResources()
       };
     });
 
     // Handle resources/read
-    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    this.server.setRequestHandler('resources/read', async (request) => {
       const { uri } = request.params;
 
       // Log request (non-blocking - don't await)
@@ -343,7 +341,7 @@ export class MCPServer implements ElicitationServer {
     });
 
     // MCP 2025-11-25: Handle roots/list for file picker integration
-    this.server.setRequestHandler(ListRootsRequestSchema, async () => {
+    this.server.setRequestHandler('roots/list', async () => {
       return this.handleListRoots();
     });
   }
@@ -599,8 +597,8 @@ ncp.do("send email", {
       // This enables clipboard-based credential collection for ncp:add and other management tools
       const internalMCPManager = this.orchestrator.getInternalMCPManager();
       if (internalMCPManager) {
-        internalMCPManager.setElicitationServer(this);
-        logger.info('Elicitation enabled for internal MCPs (clipboard-based credential collection)');
+        internalMCPManager.setUserInputProvider(this);
+        logger.info('Request-scoped input enabled for internal MCPs');
       }
 
       logger.info('NCP MCP server indexing complete');
@@ -691,8 +689,7 @@ ncp.do("send email", {
           capabilities: {
             tools: {},
             resources: {},
-            prompts: {},
-            elicitation: {}
+            prompts: {}
           },
           serverInfo: {
             name: 'ncp',
@@ -1251,6 +1248,17 @@ ncp.do("send email", {
     // Get health status
     const healthStatus = this.orchestrator.getMCPHealthStatus();
 
+    // Indexing can be active before the orchestrator has published detailed
+    // per-MCP progress. Avoid reporting a normal empty search in that window.
+    if (results.length === 0 && description && !progress && !this.isInitialized && this.initializationPromise) {
+      return {
+        content: [{
+          type: 'text',
+          text: `⏳ Indexing in progress. NCP is still preparing the MCP tool index for "${description}". Please retry shortly.`,
+        }],
+      };
+    }
+
     // SPECIAL CASE: No results found and user has a query - suggest MCPs from registry
     // Only do this if not currently indexing (progress is null or completed)
     if (results.length === 0 && description && !progress) {
@@ -1532,9 +1540,7 @@ Pattern: "${confirmSettings.modifierPattern.substring(0, 100)}..."
 
 This operation may modify data or have side effects.`;
 
-            // Try to get user confirmation via elicitation
-            try {
-              const elicitationResult = await this.elicitInput({
+            const elicitationResult = await this.requestInput({
                 message: confirmationMessage,
                 requestedSchema: {
                   type: 'object',
@@ -1547,10 +1553,22 @@ This operation may modify data or have side effects.`;
                   },
                   required: ['action']
                 }
-              });
+            });
 
-              // Handle user response
-              if (elicitationResult.action === 'decline' || elicitationResult.action === 'cancel') {
+            if (elicitationResult.action === 'decline' || elicitationResult.action === 'cancel') {
+              return {
+                content: [{
+                  type: 'text',
+                  text: `⛔ Operation cancelled by user. The tool "${toolIdentifier}" was not executed.`
+                }],
+                isError: true
+              };
+            }
+
+            if (elicitationResult.action === 'accept' && elicitationResult.content) {
+              const userAction = elicitationResult.content.action;
+
+              if (userAction === 'cancel') {
                 return {
                   content: [{
                     type: 'text',
@@ -1560,44 +1578,22 @@ This operation may modify data or have side effects.`;
                 };
               }
 
-              if (elicitationResult.action === 'accept' && elicitationResult.content) {
-                const userAction = elicitationResult.content.action;
-
-                if (userAction === 'cancel') {
-                  return {
-                    content: [{
-                      type: 'text',
-                      text: `⛔ Operation cancelled by user. The tool "${toolIdentifier}" was not executed.`
-                    }],
-                    isError: true
-                  };
-                }
-
-                if (userAction === 'approve_always') {
-                  // Add to whitelist
-                  await addToolToWhitelist(toolIdentifier);
-                  logger.info(`Tool ${toolIdentifier} added to whitelist by user`);
-                }
-
-                // For both 'approve_once' and 'approve_always', proceed with execution below
-                logger.info(`User approved execution of "${toolIdentifier}" (${userAction})`);
+              if (userAction === 'approve_always') {
+                await addToolToWhitelist(toolIdentifier);
+                logger.info(`Tool ${toolIdentifier} added to whitelist by user`);
               }
-            } catch (elicitationError: any) {
-              // Elicitation failed (client doesn't support it)
-              if (elicitationError.code === -32601) {
-                logger.warn(`Confirmation dialog not supported by client - allowing execution of "${toolIdentifier}" (add to whitelist to skip future warnings)`);
-                // Continue execution - we can't block if client doesn't support confirmations
-              } else {
-                // Other error - log and continue
-                logger.warn(`Confirmation dialog failed: ${elicitationError.message}`);
-              }
+
+              logger.info(`User approved execution of "${toolIdentifier}" (${userAction})`);
             }
           }
         }
       }
     } catch (error: any) {
-      // Log but don't block execution if confirmation logic fails
       logger.warn(`Confirmation check failed: ${error.message}`);
+      return {
+        content: [{ type: 'text', text: `⛔ Unable to confirm execution of "${toolIdentifier}": ${error.message}` }],
+        isError: true,
+      };
     }
     // ===== END CONFIRM-BEFORE-RUN =====
 
@@ -1874,9 +1870,8 @@ This operation may modify data or have side effects.`;
   }
 
   async connect(): Promise<void> {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    logger.info('NCP MCP server connected via stdio transport');
+    this.stdioHandle = serveStdio(() => this.server, { legacy: 'serve' });
+    logger.info('NCP MCP server serving stdio with legacy and current MCP protocol revisions');
   }
 
   async run(): Promise<void> {
@@ -1890,8 +1885,14 @@ This operation may modify data or have side effects.`;
 
   async shutdown(): Promise<void> {
     try {
+      this.inputCoordinator.shutdown();
       await this.orchestrator.cleanup();
-      await this.server.close();
+      if (this.stdioHandle) {
+        await this.stdioHandle.close();
+        this.stdioHandle = undefined;
+      } else {
+        await this.server.close();
+      }
       logger.info('NCP MCP server shut down gracefully');
     } catch (error: any) {
       logger.error(`Error during shutdown: ${error.message}`);
@@ -2269,13 +2270,7 @@ run("ncp:import", {from: "file", source: "~/path/to/config.json"})
     return content;
   }
 
-  /**
-   * Elicitation API for credential collection
-   * Implements the ElicitationServer interface to enable clipboard-based credential collection
-   *
-   * Note: Includes 5-second timeout to detect unsupported clients quickly
-   */
-  async elicitInput(params: {
+  async requestInput(params: {
     message: string;
     requestedSchema: {
       type: 'object';
@@ -2286,48 +2281,7 @@ run("ncp:import", {from: "file", source: "~/path/to/config.json"})
     action: 'accept' | 'decline' | 'cancel';
     content?: Record<string, any>;
   }> {
-    // If we've already detected that elicitation is not supported, fail fast
-    if (this.elicitationSupported === false) {
-      const error: any = new Error('Elicitation not supported by client (cached result)');
-      error.code = -32601;
-      throw error;
-    }
-
-    try {
-      // Add 5-second timeout to detect if client doesn't support elicitation
-      // If client supports it, response comes immediately
-      // If client doesn't support it, request hangs - we treat timeout as "not supported"
-      const result = await Promise.race([
-        this.server.elicitInput(params),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => {
-            // Throw error -32601 (Method not found) to trigger native dialog fallback
-            const error: any = new Error('Elicitation not supported by client (timeout after 5s)');
-            error.code = -32601;
-            reject(error);
-          }, 5000)
-        )
-      ]);
-
-      // If we got here, elicitation is supported
-      this.elicitationSupported = true;
-
-      // Transform SDK result to our interface format
-      return {
-        action: result.action,
-        content: result.content
-      };
-    } catch (error: any) {
-      // If error code is -32601 (Method not found), cache this result
-      if (error.code === -32601) {
-        this.elicitationSupported = false;
-        logger.info('Elicitation not supported by client - will skip future elicitation attempts');
-      }
-
-      logger.error(`Elicitation failed: ${error.message}`);
-      // Re-throw the error so ncp-management.ts can catch it and use native dialog fallback
-      throw error;
-    }
+    return this.inputCoordinator.requestInput(params);
   }
 }
 

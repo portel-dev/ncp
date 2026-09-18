@@ -115,8 +115,8 @@ jobs:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
 
-  build-dxt:
-    name: Build and Test DXT Package
+  build-mcpb:
+    name: Build and Test MCPB Package
     runs-on: macos-latest
     timeout-minutes: 25
 
@@ -133,19 +133,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build DXT package
+      - name: Build MCPB package
         run: npm run build:dxt:patched
         timeout-minutes: 15
 
-      - name: Test DXT package
+      - name: Test MCPB package
         run: npm run test:dxt
         timeout-minutes: 10
         env:
           NODE_OPTIONS: --experimental-vm-modules
 
-      - name: Upload DXT artifact
+      - name: Upload MCPB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ncp-dxt-${{ github.sha }}
-          path: ncp.dxt
+          name: ncp-mcpb-${{ github.sha }}
+          path: _internal/artifacts/ncp.mcpb
           retention-days: 7

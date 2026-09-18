@@ -4,8 +4,8 @@
  * Reproduces exact sequence that Claude Desktop sends
  */
 
-const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
-const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
+const { Client } = require('@modelcontextprotocol/client');
+const { StdioClientTransport } = require('@modelcontextprotocol/client/stdio');
 const { spawn } = require('child_process');
 
 async function testCodeExecution() {

@@ -1,17 +1,7 @@
 #!/usr/bin/env node
 
-/**
- * Mock MCP Server for Testing Smithery Config Detection
- * This server intentionally DOES NOT include configurationSchema in capabilities
- * to test fallback to smithery.yaml detection
- */
-
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
+import { Server } from "@modelcontextprotocol/server";
 
 // Create server WITHOUT configurationSchema in capabilities
 const server = new Server(
@@ -29,7 +19,7 @@ const server = new Server(
 );
 
 // Register tool list handler
-server.setRequestHandler(ListToolsRequestSchema, async () => {
+server.setRequestHandler('tools/list', async () => {
   return {
     tools: [
       {
@@ -50,7 +40,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 });
 
 // Handle tool calls
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+server.setRequestHandler('tools/call', async (request) => {
   const { name, arguments: args } = request.params;
 
   if (name === 'test_tool') {

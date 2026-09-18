@@ -206,7 +206,6 @@ export class ProfileManager {
    */
   async tryAutoImportFromClient(
     clientName: string,
-    elicitationServer?: any,
     notificationManager?: any
   ): Promise<void> {
     try {
@@ -317,11 +316,10 @@ export class ProfileManager {
         }
         logger.info(`   → Added to ${path.join(this.profilesDir, 'all.json')}`);
 
-        // After successful import, offer config replacement (if supported)
+        // After successful import, queue an explicit config optimization action.
         await this.maybeReplaceClientConfig(
           clientName,
           importResult,
-          elicitationServer,
           notificationManager
         );
       }
@@ -333,13 +331,11 @@ export class ProfileManager {
   }
 
   /**
-   * Ask user about replacing client config with NCP-only (optional optimization)
-   * Only triggered after successful auto-import
+   * Queue the client-specific config optimization action after auto-import.
    */
   private async maybeReplaceClientConfig(
     clientName: string,
     importResult: any,
-    elicitationServer?: any,
     notificationManager?: any
   ): Promise<void> {
     // Claude Desktop: Special case - users can disable MCPs via UI
@@ -361,107 +357,13 @@ export class ProfileManager {
       return;
     }
 
-    // No elicitation support: Queue notification immediately
-    if (!elicitationServer) {
-      this.queueConfigOptimizationNotification(
-        clientName,
-        importResult,
-        notificationManager
-      );
-      return;
-    }
-
-    // Ask user via elicitation (30s timeout)
-    const decision = await this.askConfigReplacementPermission(
+    // Initialization notifications cannot initiate MCP requests. Surface an
+    // explicit management action that can use input_required when invoked.
+    this.queueConfigOptimizationNotification(
       clientName,
       importResult,
-      elicitationServer
+      notificationManager
     );
-
-    if (decision === 'replace') {
-      // User approved - backup and replace
-      await this.backupAndReplaceConfig(clientName, importResult);
-
-      // Notify success with restart instruction
-      if (notificationManager) {
-        notificationManager.add({
-          type: 'action',
-          message: `Config replaced for ${clientName} - restart required to apply`
-        });
-      }
-    } else {
-      // Timeout or declined - queue notification
-      this.queueConfigOptimizationNotification(
-        clientName,
-        importResult,
-        notificationManager
-      );
-    }
-  }
-
-  /**
-   * Ask user for permission to replace config (with timeout)
-   */
-  private async askConfigReplacementPermission(
-    clientName: string,
-    importResult: any,
-    elicitationServer: any
-  ): Promise<'replace' | 'declined'> {
-    const totalMCPs = Object.keys(importResult.mcpServers).length;
-    const estimatedTools = totalMCPs * 20;
-
-    try {
-      const result = await Promise.race([
-        elicitationServer.elicitInput({
-          message: `✅ Imported ${importResult.count} MCPs into NCP
-
-**Optimize token usage?**
-
-Your ${clientName} has ${totalMCPs} MCPs configured (~${estimatedTools} tools in context).
-
-**Replace with NCP-only?**
-• Backup saved automatically
-• Reduces to 2 tools (find + run)
-• ~95% token savings
-• Faster responses, longer conversations
-• Restart ${clientName} required
-
-**Keep current?**
-• Manually disable MCPs in settings
-• Both work, but uses more tokens`,
-
-          requestedSchema: {
-            type: 'object',
-            properties: {
-              replace: {
-                type: 'boolean',
-                description: 'Replace config with NCP-only (recommended for token savings)'
-              }
-            },
-            required: ['replace']
-          }
-        }),
-        // 30 second timeout
-        new Promise<'timeout'>((resolve) =>
-          setTimeout(() => resolve('timeout'), 30000)
-        )
-      ]);
-
-      if (result === 'timeout') {
-        logger.info('Config replacement dialog timed out');
-        return 'declined';
-      }
-
-      if (result.action === 'accept' && result.content?.replace) {
-        return 'replace';
-      }
-
-      return 'declined';
-
-    } catch (error) {
-      logger.warn(`Elicitation error: ${error}`);
-      return 'declined';
-    }
   }
 
   /**
@@ -479,18 +381,31 @@ Your ${clientName} has ${totalMCPs} MCPs configured (~${estimatedTools} tools in
     const estimatedTools = totalMCPs * 20;
 
     notificationManager.add({
-      type: 'tip',
-      message: `${totalMCPs} MCPs configured (~${estimatedTools} tools) - replace ${clientName} config with NCP-only to save ~95% tokens`,
+      type: 'action',
+      message: `${totalMCPs} MCPs configured (~${estimatedTools} tools) - run mcp:optimize_client for ${clientName} to replace its config with NCP-only and save ~95% tokens`,
       relatedId: clientName  // AI can ask about client-specific config replacement
     });
+  }
+
+  /** Back up and replace a supported client's MCP configuration with NCP. */
+  async optimizeClientConfig(clientName: string): Promise<string> {
+    const configPath = getClientConfigPath(clientName);
+    if (!configPath) {
+      throw new Error(`Unable to locate a supported client configuration for ${clientName}`);
+    }
+    const definition = getClientDefinition(clientName);
+    if (definition?.configFormat && definition.configFormat !== 'json') {
+      throw new Error(`Config format ${definition.configFormat} for ${clientName} is not supported for automatic replacement`);
+    }
+    await this.backupAndReplaceConfig(clientName);
+    return configPath;
   }
 
   /**
    * Backup and replace client config with NCP-only
    */
   private async backupAndReplaceConfig(
-    clientName: string,
-    importResult: any
+    clientName: string
   ): Promise<void> {
     const configPath = getClientConfigPath(clientName);
 
@@ -508,16 +423,14 @@ Your ${clientName} has ${totalMCPs} MCPs configured (~${estimatedTools} tools in
     const mcpPath = definition?.mcpServersPath || 'mcpServers';
     await fs.mkdir(path.dirname(configPath), { recursive: true });
 
-    await this.backupClientConfigFile(clientName, configPath);
-
     const configData = await this.readJsonConfig(configPath);
     const existingValue = this.getNestedProperty(configData, mcpPath);
 
     if (Array.isArray(existingValue)) {
-      logger.warn(`Cannot auto-optimize ${clientName} config because ${mcpPath} is array-based`);
-      return;
+      throw new Error(`Cannot optimize ${clientName} config because ${mcpPath} is array-based`);
     }
 
+    await this.backupClientConfigFile(clientName, configPath);
     this.setNestedProperty(configData, mcpPath, this.buildNcpServerDefinition());
 
     await fs.writeFile(configPath, JSON.stringify(configData, null, 2), 'utf-8');
@@ -551,15 +464,14 @@ Your ${clientName} has ${totalMCPs} MCPs configured (~${estimatedTools} tools in
       }
       const parsed = JSON.parse(content);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        logger.warn(`Config at ${configPath} is not an object; using empty object for replacement`);
-        return {};
+        throw new Error(`Client config at ${configPath} must contain a JSON object`);
       }
       return parsed;
     } catch (error: any) {
-      if (error.code !== 'ENOENT') {
-        logger.warn(`Failed to read config ${configPath}: ${error.message}`);
+      if (error.code === 'ENOENT') {
+        return {};
       }
-      return {};
+      throw error;
     }
   }
 

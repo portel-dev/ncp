@@ -20,7 +20,7 @@ Complete installation and configuration guide for Claude Desktop users.
 
 #### Step 1: Download & Install
 
-1. **Download:** [ncp.dxt](https://github.com/portel-dev/ncp/releases/latest/download/ncp.dxt) (72MB)
+1. **Download:** [ncp.mcpb](https://github.com/portel-dev/ncp/releases/latest/download/ncp.mcpb) (72MB)
 2. **Double-click** the downloaded file
 3. **Click "Install"** in Claude Desktop's installation dialog
 

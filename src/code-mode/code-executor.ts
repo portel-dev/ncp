@@ -124,7 +124,8 @@ export class CodeExecutor {
 
   /**
    * Check if code requires non-whitelisted packages and handle approval
-   * Uses MCP elicitation if available, falls back to native OS dialog
+   * Uses request-scoped MCP input when configured, or a native dialog for
+   * standalone execution.
    * Returns the list of temporarily approved packages for this execution
    */
   private async checkPackageApproval(code: string): Promise<string[]> {

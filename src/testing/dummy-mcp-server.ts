@@ -1,24 +1,6 @@
 #!/usr/bin/env node
-/**
- * Configurable Dummy MCP Server
- *
- * This server loads tool definitions from a JSON file and provides realistic MCP interfaces
- * for testing the semantic enhancement system. All tool calls return dummy results.
- *
- * Usage:
- *   node dummy-mcp-server.js --mcp-name shell
- *   node dummy-mcp-server.js --mcp-name postgres
- *   node dummy-mcp-server.js --definitions-file custom.json --mcp-name myMcp
- */
-
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ErrorCode,
-  McpError,
-} from '@modelcontextprotocol/sdk/types.js';
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
+import { Server, ProtocolError, ProtocolErrorCode } from "@modelcontextprotocol/server";
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -90,7 +72,7 @@ class DummyMcpServer {
 
   private setupHandlers(): void {
     // List tools handler
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+    this.server.setRequestHandler('tools/list', async () => {
       const tools = Object.values(this.mcpDefinition.tools).map(tool => ({
         name: tool.name,
         description: tool.description,
@@ -101,12 +83,12 @@ class DummyMcpServer {
     });
 
     // Call tool handler
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    this.server.setRequestHandler('tools/call', async (request) => {
       const { name, arguments: args } = request.params;
 
       const tool = this.mcpDefinition.tools[name];
       if (!tool) {
-        throw new McpError(ErrorCode.MethodNotFound, `Tool '${name}' not found`);
+        throw new ProtocolError(ProtocolErrorCode.MethodNotFound, `Tool '${name}' not found`);
       }
 
       // Generate dummy result based on tool type and MCP category

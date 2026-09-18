@@ -15,17 +15,17 @@ Successfully integrated NCP's elicitation system with Code-Mode network policy m
 
 **Implementation:**
 1. Added `setNetworkPolicyManager()` to CodeExecutor for post-construction setup
-2. Created `setElicitationServer()` in NCPOrchestrator with format adapter:
-   - Converts ElicitationServer.elicitInput (schema-based) → ElicitationFunction (string-based)
+2. Created `setUserInputProvider()` in NCPOrchestrator with a request-scoped adapter:
+   - Converts coordinator backed form input into the NetworkPolicyManager response format
    - Creates NetworkPolicyManager with elicitation support
    - Updates CodeExecutor with new policy manager
 3. Wired up in MCPServer constructor
 
 **Architecture Flow:**
 ```
-User Code → NetworkPolicyManager → ElicitationAdapter → MCPServer.elicitInput()
-    ↓                                                            ↓
-Blocked     ← ← ← Permission Cached ← ← ← User Response ← ← Permission Dialog
+User Code → NetworkPolicyManager → UserInputProvider → input_required
+    ↓                                              ↓
+Blocked     ← Permission Cached ← Retried tools/call response
 ```
 
 ### 2. Tests & Demonstrations (Commit: `2a85d2c`)

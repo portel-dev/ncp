@@ -9,13 +9,8 @@
  * - SSE: Legacy HTTP+SSE transport (deprecated but widely supported)
  * - Streamable HTTP: Modern HTTP transport with streaming (MCP 2025-03-26+)
  */
-
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import {
-  StreamableHTTPClientTransport,
-  StreamableHTTPClientTransportOptions,
-} from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SSEClientTransport, StreamableHTTPClientTransport, StreamableHTTPClientTransportOptions } from "@modelcontextprotocol/client";
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { logger } from '../../utils/logger.js';
 import { mcpWrapper } from '../../utils/mcp-wrapper.js';
 import { getRuntimeForExtension } from '../../utils/runtime-detector.js';

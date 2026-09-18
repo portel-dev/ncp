@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Test DXT Package - Validates built .dxt extension works correctly
+# Test MCPB Package - Validates the built extension bundle works correctly.
 # This catches issues like missing dependencies, crashes, etc.
 
 set -e  # Exit on error
@@ -11,11 +11,13 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}🧪 Testing DXT Package...${NC}"
+echo -e "${YELLOW}🧪 Testing MCPB Package...${NC}"
 
 # Find the built extension bundle.
 BUNDLE_FILE=""
-if [ -f "ncp.mcpb" ]; then
+if [ -f "_internal/artifacts/ncp.mcpb" ]; then
+    BUNDLE_FILE="_internal/artifacts/ncp.mcpb"
+elif [ -f "ncp.mcpb" ]; then
     BUNDLE_FILE="ncp.mcpb"
 elif [ -f "ncp.dxt" ]; then
     BUNDLE_FILE="ncp.dxt"
@@ -96,7 +98,7 @@ echo -e "${GREEN}PASS${NC}"
 # Test 2: Check critical dependencies
 echo -n "  2. Checking critical dependencies... "
 MISSING_DEPS=""
-for dep in "uuid" "@modelcontextprotocol/sdk" "@xenova/transformers" "chalk" "commander"; do
+for dep in "uuid" "@modelcontextprotocol/server" "@modelcontextprotocol/client" "@modelcontextprotocol/server-legacy" "@xenova/transformers" "chalk" "commander"; do
     if [ ! -d "node_modules/$dep" ]; then
         MISSING_DEPS="$MISSING_DEPS $dep"
     fi

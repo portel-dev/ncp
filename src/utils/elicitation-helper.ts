@@ -6,17 +6,17 @@
  */
 
 import { logger } from './logger.js';
-import clipboardy from 'clipboardy';
+export interface UserInputRequest {
+  message: string;
+  requestedSchema: {
+    type: 'object';
+    properties: Record<string, any>;
+    required?: string[];
+  };
+}
 
-export interface ElicitationServer {
-  elicitInput(params: {
-    message: string;
-    requestedSchema: {
-      type: 'object';
-      properties: Record<string, any>;
-      required?: string[];
-    };
-  }): Promise<{
+export interface UserInputProvider {
+  requestInput(params: UserInputRequest): Promise<{
     action: 'accept' | 'decline' | 'cancel';
     content?: Record<string, any>;
   }>;
@@ -25,40 +25,33 @@ export interface ElicitationServer {
 /**
  * Collect a single credential value from user via elicitation dialog
  *
- * Shows UI dialog asking user to copy value to clipboard, then reads it server-side.
- * Secrets never appear in chat!
+ * Shows a structured input form. The value is returned directly to the active
+ * request workflow and is never placed in requestState or chat output.
  *
- * @param server MCP server instance with elicitInput capability
+ * @param server request-scoped MCP input provider
  * @param credentialName Human-readable name (e.g., "GitHub Token", "API Key")
  * @param envVarName Environment variable name (e.g., "GITHUB_TOKEN")
  * @param example Optional example value to show user
- * @returns The credential value from clipboard, or null if user cancelled
+ * @returns The credential value, or null if user cancelled
  */
 export async function collectCredential(
-  server: ElicitationServer,
+  server: UserInputProvider,
   credentialName: string,
   envVarName: string,
   example?: string
 ): Promise<string | null> {
-  const exampleText = example ? `\n\nExample: ${example}` : '';
-
-  const result = await server.elicitInput({
-    message: `Please provide your ${credentialName}
-
-1. Copy the value to clipboard
-2. Click Accept below${exampleText}
-
-Your credential will be read from clipboard and never exposed in this chat.`,
-
+  const result = await server.requestInput({
+    message: `Please provide your ${credentialName}. The value is stored locally by NCP and is not included in chat output.`,
     requestedSchema: {
       type: 'object',
       properties: {
-        ready: {
-          type: 'boolean',
-          description: 'I have copied the value to clipboard'
+        value: {
+          type: 'string',
+          minLength: 1,
+          description: `${credentialName}${example ? ` (for example: ${example})` : ''}`
         }
       },
-      required: ['ready']
+      required: ['value']
     }
   });
 
@@ -67,35 +60,21 @@ Your credential will be read from clipboard and never exposed in this chat.`,
     return null;
   }
 
-  // Read raw value from clipboard
-  try {
-    const value = await clipboardy.read();
-
-    if (!value || value.trim().length === 0) {
-      logger.warn(`Clipboard was empty when collecting ${credentialName}`);
-      return null;
-    }
-
-    logger.info(`Successfully collected ${credentialName} from clipboard (${value.length} chars)`);
-    return value.trim();
-  } catch (error: any) {
-    logger.error(`Failed to read clipboard for ${credentialName}: ${error.message}`);
-    return null;
-  }
+  const value = result.content?.value;
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
 /**
- * Collect multiple credentials from user, one at a time
+ * Collect multiple credentials from one structured form
  *
- * For each credential, shows a dialog and collects the value from clipboard.
- * Returns a map of environment variable names to values.
+ * Returns a map of environment variable names to values from one form.
  *
  * @param server MCP server instance
  * @param credentials Array of credentials to collect
  * @returns Map of env var names to values, or null if user cancelled
  */
 export async function collectCredentials(
-  server: ElicitationServer,
+  server: UserInputProvider,
   credentials: Array<{
     envVarName: string;
     displayName: string;
@@ -103,29 +82,32 @@ export async function collectCredentials(
     required?: boolean;
   }>
 ): Promise<Record<string, string> | null> {
-  const collected: Record<string, string> = {};
+  if (credentials.length === 0) return {};
 
-  for (const cred of credentials) {
-    const value = await collectCredential(
-      server,
-      cred.displayName,
-      cred.envVarName,
-      cred.example
-    );
-
-    if (value === null) {
-      if (cred.required !== false) {
-        // User cancelled and this was required
-        logger.info(`User cancelled collecting required credential: ${cred.envVarName}`);
-        return null;
-      }
-      // Optional credential, skip it
-      continue;
-    }
-
-    collected[cred.envVarName] = value;
+  const properties: Record<string, any> = {};
+  const required: string[] = [];
+  for (const credential of credentials) {
+    properties[credential.envVarName] = {
+      type: 'string',
+      ...(credential.required === false ? {} : { minLength: 1 }),
+      description: `${credential.displayName}${credential.example ? ` (for example: ${credential.example})` : ''}`,
+    };
+    if (credential.required !== false) required.push(credential.envVarName);
   }
 
+  const result = await server.requestInput({
+    message: 'Provide the credentials required by this MCP. Values are stored locally and are not included in chat output.',
+    requestedSchema: { type: 'object', properties, required },
+  });
+  if (result.action !== 'accept') return null;
+
+  const collected: Record<string, string> = {};
+  for (const credential of credentials) {
+    const value = result.content?.[credential.envVarName];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      collected[credential.envVarName] = value.trim();
+    }
+  }
   return collected;
 }
 
@@ -140,7 +122,7 @@ export async function collectCredentials(
  * @returns Map of credential keys (mcpName:envVar) to values, or null if cancelled
  */
 export async function collectBulkCredentials(
-  server: ElicitationServer,
+  server: UserInputProvider,
   bulkCredentials: Record<string, Array<{
     envVarName: string;
     displayName: string;
@@ -152,6 +134,7 @@ export async function collectBulkCredentials(
   // Build consolidated schema with all credential fields
   const properties: Record<string, any> = {};
   const fieldKeys: string[] = [];
+  const requiredFieldKeys: string[] = [];
   let message = '📋 Credential Collection for Bulk Import\n\n';
   message += 'Please provide credentials for the following MCPs:\n\n';
 
@@ -164,10 +147,12 @@ export async function collectBulkCredentials(
       // Create unique field key: mcpName:envVarName
       const fieldKey = `${mcpName}:${cred.envVarName}`;
       fieldKeys.push(fieldKey);
+      if (cred.required !== false) requiredFieldKeys.push(fieldKey);
 
       // Add to schema
       properties[fieldKey] = {
         type: 'string',
+        ...(cred.required === false ? {} : { minLength: 1 }),
         description: `${cred.displayName}${cred.example ? ` (e.g., ${cred.example})` : ''}`
       };
 
@@ -181,12 +166,12 @@ export async function collectBulkCredentials(
   message += '⚠️  Credentials are stored locally in your NCP config.';
 
   // Show consolidated form
-  const result = await server.elicitInput({
+  const result = await server.requestInput({
     message,
     requestedSchema: {
       type: 'object',
       properties,
-      required: [] // All fields optional to allow skipping
+      required: requiredFieldKeys
     }
   });
 
@@ -221,7 +206,7 @@ export async function collectBulkCredentials(
  * @returns Auth configuration object, or null if user cancelled
  */
 export async function collectHTTPCredentials(
-  server: ElicitationServer,
+  server: UserInputProvider,
   mcpName: string,
   url: string
 ): Promise<{ type: string; token?: string } | null> {
@@ -241,7 +226,7 @@ export async function collectHTTPCredentials(
     return null;
   }
 
-  // Collect bearer token via clipboard
+  // Collect bearer token in the active request workflow.
   const token = await collectCredential(
     server,
     bearerCred.displayName,
@@ -336,7 +321,7 @@ export function detectHTTPCredentials(mcpName: string, url?: string): Array<{
  * @returns Selected option value, or null if cancelled
  */
 export async function elicitSelect(
-  server: ElicitationServer,
+  server: UserInputProvider,
   fieldName: string,
   options: Array<{ value: string; label: string }>,
   message?: string
@@ -350,7 +335,7 @@ export async function elicitSelect(
   const description = options.map(opt => `• ${opt.label}`).join('\n');
 
   try {
-    const result = await server.elicitInput({
+    const result = await server.requestInput({
       message: message || `${defaultMessage}\n\n${description}`,
       requestedSchema: {
         type: 'object',
@@ -378,7 +363,7 @@ export async function elicitSelect(
 
     return null;
   } catch (error: any) {
-    // Elicitation not supported or timed out - return null to allow fallback behavior
+    // Optional selections degrade to the existing empty outcome.
     logger.warn(`Elicitation failed for ${fieldName}: ${error.message}`);
     return null;
   }
@@ -397,7 +382,7 @@ export async function elicitSelect(
  * @returns Array of selected option values, empty array if cancelled
  */
 export async function elicitMultiSelect(
-  server: ElicitationServer,
+  server: UserInputProvider,
   fieldName: string,
   options: Array<{ value: string; label: string }>,
   message?: string
@@ -411,7 +396,7 @@ export async function elicitMultiSelect(
   const description = options.map(opt => `☐ ${opt.label}`).join('\n');
 
   try {
-    const result = await server.elicitInput({
+    const result = await server.requestInput({
       message: message || `${defaultMessage}\n\n${description}`,
       requestedSchema: {
         type: 'object',
@@ -442,7 +427,7 @@ export async function elicitMultiSelect(
 
     return [];
   } catch (error: any) {
-    // Elicitation not supported or timed out - return empty array to allow fallback behavior
+    // Optional selections degrade to the existing empty outcome.
     logger.warn(`Elicitation failed for ${fieldName}: ${error.message}`);
     return [];
   }

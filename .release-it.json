@@ -1,4 +1,7 @@
 {
+  "hooks": {
+    "after:bump": "node scripts/sync-server-version.cjs"
+  },
   "git": {
     "commitMessage": "release: ${version}",
     "tagName": "${version}"

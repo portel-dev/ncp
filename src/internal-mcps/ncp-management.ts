@@ -9,14 +9,13 @@
  */
 
 import * as path from 'path';
-import { InternalMCP, InternalTool, InternalToolResult, ElicitationCapable } from './types.js';
+import { InternalMCP, InternalTool, InternalToolResult, UserInputProvider } from './types.js';
 import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { getNcpBaseDirectory } from '../utils/ncp-paths.js';
 import { RegistryMCPCandidate } from '../services/registry-client.js';
 import { UnifiedRegistryClient } from '../services/unified-registry-client.js';
 import { collectCredentials, detectRequiredEnvVars, collectHTTPCredentials, collectBulkCredentials, elicitMultiSelect, detectHTTPCredentials } from '../utils/elicitation-helper.js';
-import { showConfirmDialog } from '../utils/native-dialog.js';
 import { UIMessages } from '../utils/ui-messages.js';
 import { CLIIndexer } from '../services/cli-indexer.js';
 
@@ -25,7 +24,7 @@ export class NCPManagementMCP implements InternalMCP {
   description = 'MCP configuration management tools (built-in)';
 
   private profileManager: ProfileManager | null = null;
-  private elicitationServer: ElicitationCapable | null = null;
+  private elicitationServer: UserInputProvider | null = null;
 
   tools: InternalTool[] = [
     {
@@ -134,6 +133,20 @@ export class NCPManagementMCP implements InternalMCP {
           }
         }
       }
+    },
+    {
+      name: 'optimize_client',
+      description: 'Back up a supported MCP client configuration and replace its MCP server list with NCP. Requires explicit user confirmation.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          client_name: {
+            type: 'string',
+            description: 'Client whose configuration should be optimized, such as Cursor or Windsurf'
+          }
+        },
+        required: ['client_name']
+      }
     }
   ];
 
@@ -146,10 +159,10 @@ export class NCPManagementMCP implements InternalMCP {
   }
 
   /**
-   * Set the elicitation server for user interaction
+   * Set the request-scoped user input provider
    * Called by MCP server after initialization
    */
-  setElicitationServer(server: ElicitationCapable): void {
+  setUserInputProvider(server: UserInputProvider): void {
     this.elicitationServer = server;
   }
 
@@ -178,10 +191,13 @@ export class NCPManagementMCP implements InternalMCP {
         case 'doctor':
           return await this.handleDoctor(parameters);
 
+        case 'optimize_client':
+          return await this.handleOptimizeClient(parameters);
+
         default:
           return {
             success: false,
-            error: `Unknown tool: ${toolName}. Available tools: add, remove, list, export, doctor`
+            error: `Unknown tool: ${toolName}. Available tools: add, remove, list, export, doctor, optimize_client`
           };
       }
     } catch (error: any) {
@@ -381,124 +397,24 @@ Do you want to install this MCP?`;
 
       let approved = false;
 
-      try {
-        // Try elicitation first (works with supporting MCP clients)
-        const result = await this.elicitationServer.elicitInput({
-          message: confirmationMessage,
-          requestedSchema: {
-            type: 'object',
-            properties: {
-              action: {
-                type: 'string',
-                enum: ['approve', 'cancel'],
-                description: 'Choose: approve (install MCP) or cancel (don\'t install)'
-              }
-            },
-            required: ['action']
-          }
-        });
-
-        approved = !(result.action === 'decline' || result.action === 'cancel' ||
-                    (result.action === 'accept' && result.content?.action === 'cancel'));
-
-      } catch (error: any) {
-        // Check if client doesn't support elicitation (error -32601: Method not found)
-        const isMethodNotFound = error.code === -32601 ||
-                                 (error.message && error.message.includes('Method not found'));
-
-        if (isMethodNotFound) {
-          logger.warn('Elicitation not supported by client, falling back to native OS dialog');
-
-          // Fallback to native OS dialog
-          try {
-            const result = await showConfirmDialog(
-              'NCP: Confirm MCP Installation',
-              confirmationMessage,
-              'Approve',
-              'Cancel'
-            );
-
-            // Handle timeout with retry instruction
-            if (result.timedOut && result.stillPending) {
-              return {
-                success: false,
-                error: `⏳ Waiting for user confirmation...\n\n` +
-                       `A confirmation dialog is still open on your system. Please:\n` +
-                       `1. Check for a dialog box asking to approve MCP installation\n` +
-                       `2. Click "Approve" or "Cancel" in that dialog\n` +
-                       `3. Retry this operation (I'll check if you already responded)\n\n` +
-                       `💡 If you already clicked Approve, just retry this exact same operation and it will proceed.`
-              };
+      // Try elicitation first (works with supporting MCP clients)
+      const result = await this.elicitationServer.requestInput({
+        message: confirmationMessage,
+        requestedSchema: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['approve', 'cancel'],
+              description: 'Choose: approve (install MCP) or cancel (don\'t install)'
             }
-
-            approved = result.approved;
-          } catch (nativeError: any) {
-            // Dialog system failed (missing zenity, PowerShell error, etc.)
-            // This is our limitation, not user's choice - provide manual installation instructions
-            logger.error(`Native dialog failed: ${nativeError.message}`);
-
-            const profilePath = await this.profileManager!.getProfilePath(profile);
-
-            // Build config based on transport type
-            let configToAdd: any;
-            let cliCommand: string;
-
-            if (transportType === 'http') {
-              configToAdd = {
-                url
-              };
-              cliCommand = `Manual config edit required (HTTP URLs not supported via CLI)`;
-            } else {
-              const argsStr = commandArgs.length > 0 ? commandArgs.join(' ') : '';
-              configToAdd = {
-                command,
-                args: commandArgs
-              };
-              cliCommand = `ncp add ${mcpName} ${command} ${argsStr}`;
-            }
-
-            // Check if running as extension with global CLI disabled
-            const isExtension = process.env.NCP_MODE === 'extension';
-            const globalCliEnabled = process.env.NCP_ENABLE_GLOBAL_CLI === 'true';
-
-            let errorMessage = `⚠️  Cannot show confirmation dialog: ${nativeError.message}\n\n` +
-                               `For security, NCP requires user confirmation before installing MCPs.\n\n`;
-
-            // If extension without global CLI, suggest enabling it first
-            if (isExtension && !globalCliEnabled) {
-              errorMessage += `📌 EASIEST OPTION: Enable the global NCP command\n\n` +
-                              `1. Edit your Claude Desktop extension settings (.dxt file)\n` +
-                              `2. Set: "enableGlobalCLI": true\n` +
-                              `3. Restart Claude Desktop\n` +
-                              `4. Use command: ${cliCommand}\n\n` +
-                              `────────────────────────────────────────\n\n`;
-            }
-
-            const credentialHint = transportType === 'http'
-              ? `💡 If this MCP requires authentication, add the "auth" field in the config.`
-              : `💡 If this MCP requires API keys/credentials, add them to the "env" field in the config.`;
-
-            errorMessage += `📝 OR: Install manually by editing configuration\n\n` +
-                            `1. Open your profile configuration file:\n` +
-                            `   ${profilePath}\n\n` +
-                            `2. Add this to the "mcpServers" section:\n` +
-                            `   "${mcpName}": ${JSON.stringify(configToAdd, null, 2).split('\n').join('\n   ')}\n\n` +
-                            `3. Save the file\n\n` +
-                            `4. Restart NCP or your MCP client\n\n` +
-                            `⚙️  Full reference: ${cliCommand}\n\n` +
-                            credentialHint;
-
-            return {
-              success: false,
-              error: errorMessage
-            };
-          }
-        } else {
-          // Other elicitation error
-          logger.error(`Elicitation error: ${error.message}`);
-          throw error;
+          },
+          required: ['action']
         }
-      }
+      });
+
+      approved = !(result.action === 'decline' || result.action === 'cancel' ||
+                  (result.action === 'accept' && result.content?.action === 'cancel'));
 
       if (!approved) {
         return {
@@ -521,26 +437,17 @@ Do you want to install this MCP?`;
 
       // Try to collect HTTP credentials (bearer tokens) if needed
       if (this.elicitationServer) {
-        try {
-          const httpAuth = await collectHTTPCredentials(this.elicitationServer, mcpName, url);
+        const requiresAuth = detectHTTPCredentials(mcpName, url).length > 0;
+        const httpAuth = await collectHTTPCredentials(this.elicitationServer, mcpName, url);
 
-          if (httpAuth) {
-            config.auth = httpAuth;
-            credentialInfo = ' with authentication';
-            logger.info(`Collected HTTP authentication for "${mcpName}"`);
-          } else {
-            logger.info(`No authentication required for HTTP MCP "${mcpName}"`);
-          }
-        } catch (error: any) {
-          // User cancelled credential collection
-          if (error.message && error.message.includes('cancelled')) {
-            return {
-              success: false,
-              error: 'User cancelled credential collection'
-            };
-          }
-          // Other errors - log but continue without auth (might be public endpoint)
-          logger.warn(`Failed to collect HTTP credentials: ${error.message}`);
+        if (httpAuth) {
+          config.auth = httpAuth;
+          credentialInfo = ' with authentication';
+          logger.info(`Collected HTTP authentication for "${mcpName}"`);
+        } else if (requiresAuth) {
+          return { success: false, error: 'User cancelled credential collection' };
+        } else {
+          logger.info(`No authentication required for HTTP MCP "${mcpName}"`);
         }
       }
     } else {
@@ -648,100 +555,24 @@ Do you want to remove this MCP?`;
 
       let approved = false;
 
-      try {
-        // Try elicitation first (works with supporting MCP clients)
-        const result = await this.elicitationServer.elicitInput({
-          message: confirmationMessage,
-          requestedSchema: {
-            type: 'object',
-            properties: {
-              action: {
-                type: 'string',
-                enum: ['approve', 'cancel'],
-                description: 'Choose: approve (remove MCP) or cancel (keep it)'
-              }
-            },
-            required: ['action']
-          }
-        });
-
-        approved = !(result.action === 'decline' || result.action === 'cancel' ||
-                    (result.action === 'accept' && result.content?.action === 'cancel'));
-
-      } catch (error: any) {
-        // Check if client doesn't support elicitation (error -32601: Method not found)
-        const isMethodNotFound = error.code === -32601 ||
-                                 (error.message && error.message.includes('Method not found'));
-
-        if (isMethodNotFound) {
-          logger.warn('Elicitation not supported by client, falling back to native OS dialog');
-
-          // Fallback to native OS dialog
-          try {
-            const result = await showConfirmDialog(
-              'NCP: Confirm MCP Removal',
-              confirmationMessage,
-              'Approve',
-              'Cancel'
-            );
-
-            // Handle timeout with retry instruction
-            if (result.timedOut && result.stillPending) {
-              return {
-                success: false,
-                error: `⏳ Waiting for user confirmation...\n\n` +
-                       `A confirmation dialog is still open on your system. Please:\n` +
-                       `1. Check for a dialog box asking to approve MCP removal\n` +
-                       `2. Click "Approve" or "Cancel" in that dialog\n` +
-                       `3. Retry this operation (I'll check if you already responded)\n\n` +
-                       `💡 If you already clicked Approve, just retry this exact same operation and it will proceed.`
-              };
+      // Try elicitation first (works with supporting MCP clients)
+      const result = await this.elicitationServer.requestInput({
+        message: confirmationMessage,
+        requestedSchema: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['approve', 'cancel'],
+              description: 'Choose: approve (remove MCP) or cancel (keep it)'
             }
-
-            approved = result.approved;
-          } catch (nativeError: any) {
-            // Dialog system failed (missing zenity, PowerShell error, etc.)
-            // This is our limitation, not user's choice - provide manual removal instructions
-            logger.error(`Native dialog failed: ${nativeError.message}`);
-
-            const profilePath = await this.profileManager!.getProfilePath(profile);
-
-            // Check if running as extension with global CLI disabled
-            const isExtension = process.env.NCP_MODE === 'extension';
-            const globalCliEnabled = process.env.NCP_ENABLE_GLOBAL_CLI === 'true';
-
-            let errorMessage = `⚠️  Cannot show confirmation dialog: ${nativeError.message}\n\n` +
-                               `For security, NCP requires user confirmation before removing MCPs.\n\n`;
-
-            // If extension without global CLI, suggest enabling it first
-            if (isExtension && !globalCliEnabled) {
-              errorMessage += `📌 EASIEST OPTION: Enable the global NCP command\n\n` +
-                              `1. Edit your Claude Desktop extension settings (.dxt file)\n` +
-                              `2. Set: "enableGlobalCLI": true\n` +
-                              `3. Restart Claude Desktop\n` +
-                              `4. Use command: ncp remove ${mcpName}\n\n` +
-                              `────────────────────────────────────────\n\n`;
-            }
-
-            errorMessage += `📝 OR: Remove manually by editing configuration\n\n` +
-                            `1. Open your profile configuration file:\n` +
-                            `   ${profilePath}\n\n` +
-                            `2. Find and delete the "${mcpName}" entry from the "mcpServers" section\n\n` +
-                            `3. Save the file\n\n` +
-                            `4. Restart NCP or your MCP client\n\n` +
-                            `💡 Make sure to preserve valid JSON format (watch for trailing commas).`;
-
-            return {
-              success: false,
-              error: errorMessage
-            };
-          }
-        } else {
-          // Other elicitation error
-          logger.error(`Elicitation error: ${error.message}`);
-          throw error;
+          },
+          required: ['action']
         }
-      }
+      });
+
+      approved = !(result.action === 'decline' || result.action === 'cancel' ||
+                  (result.action === 'accept' && result.content?.action === 'cancel'));
 
       if (!approved) {
         return {
@@ -802,6 +633,41 @@ Do you want to remove this MCP?`;
     return {
       success: true,
       content: successMessage
+    };
+  }
+
+  private async handleOptimizeClient(params: any): Promise<InternalToolResult> {
+    const clientName = typeof params?.client_name === 'string' ? params.client_name.trim() : '';
+    if (!clientName) {
+      return { success: false, error: 'Missing required parameter: client_name' };
+    }
+    if (!this.elicitationServer) {
+      return { success: false, error: 'Client configuration optimization requires interactive confirmation' };
+    }
+
+    const result = await this.elicitationServer.requestInput({
+      message: `Back up and replace the ${clientName} MCP configuration with NCP-only? This reduces the client tool list and requires restarting ${clientName}.`,
+      requestedSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['approve', 'cancel'],
+            description: 'Approve config backup and replacement, or cancel'
+          }
+        },
+        required: ['action']
+      }
+    });
+
+    if (result.action !== 'accept' || result.content?.action !== 'approve') {
+      return { success: false, error: `⛔ Configuration optimization cancelled for ${clientName}.` };
+    }
+
+    const configPath = await this.profileManager!.optimizeClientConfig(clientName);
+    return {
+      success: true,
+      content: `✅ Backed up and replaced the ${clientName} MCP configuration with NCP-only.\n\nConfig: ${configPath}\nRestart ${clientName} to apply the change.`
     };
   }
 
@@ -1361,8 +1227,8 @@ Do you want to remove this MCP?`;
 
     if (transportType === 'stdio') {
       // Stdio transport - use MCP SDK client
-      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
-      const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+      const { Client } = await import('@modelcontextprotocol/client');
+      const { StdioClientTransport } = await import('@modelcontextprotocol/client/stdio');
 
       let transport: any = null;
       let client: any = null;
@@ -1389,7 +1255,8 @@ Do you want to remove this MCP?`;
             version: '1.0.0'
           },
           {
-            capabilities: {}
+            capabilities: {},
+            versionNegotiation: { mode: 'auto' },
           }
         );
 

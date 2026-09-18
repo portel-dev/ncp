@@ -3,14 +3,18 @@
  *
  * Collects sensitive credentials using appropriate method based on context:
  * Priority:
- * 1. MCP Elicitation (if available) - Best for AI clients
- * 2. Native OS dialogs - Fallback for MCP server mode
- * 3. Terminal readline - For CLI usage
+ * 1. MCP request-scoped input when handling an MCP request
+ * 2. Native OS dialogs outside an MCP request
+ * 3. Terminal readline for CLI usage
  */
 
 import { createInterface } from 'readline';
 import { showNativeDialog } from './native-dialog.js';
-import { collectCredential as collectViaElicitation, ElicitationServer } from './elicitation-helper.js';
+import {
+  collectCredential as collectViaElicitation,
+  collectCredentials,
+  UserInputProvider,
+} from './elicitation-helper.js';
 import { logger } from './logger.js';
 
 export interface CredentialPromptOptions {
@@ -18,7 +22,7 @@ export interface CredentialPromptOptions {
   description?: string;   // Additional context
   hidden?: boolean;       // Hide input (default: true for credentials)
   example?: string;       // Example value to show user
-  elicitationServer?: ElicitationServer; // Optional elicitation server for MCP protocol
+  elicitationServer?: UserInputProvider; // Optional request-scoped MCP input provider
 }
 
 /**
@@ -41,13 +45,13 @@ function isTerminalMode(): boolean {
 /**
  * Check if elicitation is available and supported
  */
-function hasElicitationSupport(server?: ElicitationServer): boolean {
+function hasElicitationSupport(server?: UserInputProvider): boolean {
   if (!server) {
     return false;
   }
 
-  // Check if the server has the elicitInput method
-  if (typeof server.elicitInput !== 'function') {
+  // Check if the server has the request-scoped input method
+  if (typeof server.requestInput !== 'function') {
     return false;
   }
 
@@ -191,8 +195,8 @@ async function promptWithDialog(options: CredentialPromptOptions): Promise<strin
  * Prompt user for a credential using context-appropriate method
  *
  * Priority chain:
- * 1. MCP Elicitation (if elicitationServer provided) - MCP protocol standard
- * 2. Native OS dialog (if not terminal mode) - Fallback for MCP server
+ * 1. MCP request-scoped input (if elicitationServer provided)
+ * 2. Native OS dialog when no MCP provider is present
  * 3. Terminal readline (if terminal mode) - CLI usage
  *
  * @param options Credential prompt configuration
@@ -200,26 +204,16 @@ async function promptWithDialog(options: CredentialPromptOptions): Promise<strin
  */
 export async function promptForCredential(options: CredentialPromptOptions): Promise<string | null> {
   try {
-    // Priority 1: Use MCP elicitation if available (MCP protocol standard)
+    // MCP workflows must fail closed: cancellation or an unavailable client
+    // never falls through to a second, out-of-band prompt.
     if (hasElicitationSupport(options.elicitationServer)) {
-      logger.debug(`Using MCP elicitation for ${options.name}`);
-      try {
-        const credential = await collectViaElicitation(
-          options.elicitationServer!,
-          options.name,
-          options.name.toUpperCase().replace(/\s+/g, '_'),
-          options.example
-        );
-
-        if (credential) {
-          return credential;
-        }
-
-        // User cancelled or elicitation failed, try fallback
-        logger.warn(`Elicitation failed or cancelled for ${options.name}, trying fallback`);
-      } catch (error: any) {
-        logger.warn(`Elicitation error for ${options.name}: ${error.message}, trying fallback`);
-      }
+      logger.debug(`Using MCP request-scoped input for ${options.name}`);
+      return collectViaElicitation(
+        options.elicitationServer!,
+        options.name,
+        options.name.toUpperCase().replace(/\s+/g, '_'),
+        options.example
+      );
     }
 
     // Priority 2/3: Fall back to dialog or terminal based on context
@@ -246,6 +240,18 @@ export async function promptForCredential(options: CredentialPromptOptions): Pro
 export async function promptForCredentials(
   credentials: CredentialPromptOptions[]
 ): Promise<Record<string, string> | null> {
+  const provider = credentials[0]?.elicitationServer;
+  if (provider && credentials.every((credential) => credential.elicitationServer === provider)) {
+    return collectCredentials(
+      provider,
+      credentials.map((credential) => ({
+        envVarName: credential.name,
+        displayName: credential.name,
+        example: credential.example,
+      })),
+    );
+  }
+
   const results: Record<string, string> = {};
 
   for (const cred of credentials) {

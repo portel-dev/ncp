@@ -15,8 +15,8 @@ import { UIMessages } from '../utils/ui-messages.js';
 import { OutputFormatter } from '../services/output-formatter.js';
 import { ErrorHandler } from '../services/error-handler.js';
 import { CachePatcher } from '../cache/cache-patcher.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { Client } from "@modelcontextprotocol/client";
 import { mcpWrapper } from '../utils/mcp-wrapper.js';
 import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 import { UpdateChecker } from '../utils/update-checker.js';
@@ -412,7 +412,7 @@ async function discoverSingleMCP(name: string, command: string, args: string[] =
 
     client = new Client(
       { name: 'ncp-oss', version: version },
-      { capabilities: {} }
+      { capabilities: {}, versionNegotiation: { mode: 'auto' } }
     );
 
     // Connect with timeout and filtered output

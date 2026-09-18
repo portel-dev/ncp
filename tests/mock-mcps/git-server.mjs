@@ -29,14 +29,14 @@ try {
 // Load dependencies as ESM modules
 console.error('[DEBUG] Loading SDK modules as ESM...');
 try {
-  await import('@modelcontextprotocol/sdk/server/index.js');
-  await import('@modelcontextprotocol/sdk/server/stdio.js');
-  await import('@modelcontextprotocol/sdk/types.js');
+  await import('@modelcontextprotocol/server');
+  await import('@modelcontextprotocol/server/stdio');
+  await import('@modelcontextprotocol/server');
   console.error('[DEBUG] Successfully loaded SDK modules');
 } catch (err) {
   console.error('[ERROR] Failed to load MCP SDK dependencies:', err.message);
   console.error('[ERROR] Error stack:', err.stack);
-  console.error('[ERROR] Check that @modelcontextprotocol/sdk is installed');
+  console.error('[ERROR] Check that @modelcontextprotocol/server is installed');
   process.exit(1);
 }
 

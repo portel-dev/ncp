@@ -9,9 +9,7 @@
  *   node tests/validate-mcp-url.js <url>
  *   node tests/validate-mcp-url.js https://api.example.com/mcp/sse
  */
-
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport, Client } from "@modelcontextprotocol/client";
 import { AuthDetector } from '../dist/auth/auth-detector.js';
 import chalk from 'chalk';
 

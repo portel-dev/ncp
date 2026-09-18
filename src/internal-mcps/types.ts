@@ -30,8 +30,8 @@ export interface InternalToolResult {
   error?: string;
 }
 
-export interface ElicitationCapable {
-  elicitInput(params: {
+export interface UserInputProvider {
+  requestInput(params: {
     message: string;
     requestedSchema: {
       type: 'object';
@@ -114,10 +114,9 @@ export interface InternalMCP {
   executeTool(toolName: string, parameters: any): Promise<InternalToolResult>;
 
   /**
-   * Optionally set elicitation server for user interaction
-   * Used by management tools to show confirmation dialogs
+   * Optionally set the request-scoped user input provider.
    */
-  setElicitationServer?(server: ElicitationCapable): void;
+  setUserInputProvider?(server: UserInputProvider): void;
 
   /**
    * Optionally handle notifications when events are dispatched

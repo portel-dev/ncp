@@ -17,7 +17,7 @@
  *   This is a legacy structure that can be unified under 'ncp' namespace in future refactoring.
  */
 
-import { InternalMCP, InternalToolResult, ElicitationCapable } from './types.js';
+import { InternalMCP, InternalToolResult, UserInputProvider } from './types.js';
 import { NCPManagementMCP } from './ncp-management.js';
 import { SchedulerMCP } from './scheduler.js';
 import { AnalyticsMCP } from './analytics.js';
@@ -259,10 +259,10 @@ export class InternalMCPManager {
   /**
    * Set elicitation server for internal MCPs that support user interaction
    */
-  setElicitationServer(server: ElicitationCapable): void {
+  setUserInputProvider(server: UserInputProvider): void {
     for (const mcp of this.internalMCPs.values()) {
-      if (mcp.setElicitationServer) {
-        mcp.setElicitationServer(server);
+      if (mcp.setUserInputProvider) {
+        mcp.setUserInputProvider(server);
         logger.debug(`Set elicitation server for internal MCP: ${mcp.name}`);
       }
     }

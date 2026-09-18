@@ -7,10 +7,8 @@
  * - Idle connection cleanup
  * - Automatic reconnection after max executions
  */
-
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { logger } from '../../utils/logger.js';
 import { withFilteredOutput } from '../../transports/filtered-stdio-transport.js';
 import type {
@@ -151,7 +149,10 @@ export class ConnectionPoolManager implements OrchestratorService {
       );
 
       // Use client info from context
-      const client = new Client(this.context.clientInfo, { capabilities: {} });
+      const client = new Client(this.context.clientInfo, {
+        capabilities: {},
+        versionNegotiation: { mode: 'auto' },
+      });
 
       // Connect with timeout and filtered output
       await withFilteredOutput(async () => {

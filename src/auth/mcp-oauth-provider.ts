@@ -15,14 +15,14 @@ import { randomBytes, createHash } from 'crypto';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
-import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type {
+  OAuthClientInformationContext,
   OAuthClientMetadata,
-  OAuthClientInformation,
-  OAuthClientInformationFull,
-  OAuthTokens,
-  AuthorizationServerMetadata,
-} from '@modelcontextprotocol/sdk/shared/auth.js';
+  OAuthDiscoveryState,
+  OAuthClientProvider,
+  StoredOAuthClientInformation,
+  StoredOAuthTokens,
+} from '@modelcontextprotocol/client';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -49,9 +49,10 @@ export interface MCPOAuthConfig {
  * Stored OAuth state for an MCP server
  */
 interface StoredOAuthState {
-  clientInfo?: OAuthClientInformationFull;
-  tokens?: OAuthTokens;
+  clientInfo?: StoredOAuthClientInformation;
+  tokens?: StoredOAuthTokens;
   codeVerifier?: string;
+  discoveryState?: OAuthDiscoveryState;
 }
 
 /**
@@ -125,7 +126,7 @@ export class MCPOAuthProvider implements OAuthClientProvider {
   /**
    * Load stored client information
    */
-  async clientInformation(): Promise<OAuthClientInformation | undefined> {
+  async clientInformation(ctx?: OAuthClientInformationContext): Promise<StoredOAuthClientInformation | undefined> {
     await this.loadState();
 
     // Return pre-configured client info if available
@@ -133,15 +134,19 @@ export class MCPOAuthProvider implements OAuthClientProvider {
       return {
         client_id: this.config.clientId,
         client_secret: this.config.clientSecret || undefined,
+        ...(ctx?.issuer && { issuer: ctx.issuer }),
       };
     }
 
     // Return dynamically registered client info
     if (this.oauthState.clientInfo) {
-      return {
-        client_id: this.oauthState.clientInfo.client_id,
-        client_secret: this.oauthState.clientInfo.client_secret,
-      };
+      // A registration belongs to the authorization server that issued it.
+      // Legacy state without an issuer is deliberately not reused after an
+      // issuer is known; the client will register again for that issuer.
+      if (ctx?.issuer && this.oauthState.clientInfo.issuer !== ctx.issuer) {
+        return undefined;
+      }
+      return this.oauthState.clientInfo;
     }
 
     return undefined;
@@ -150,7 +155,7 @@ export class MCPOAuthProvider implements OAuthClientProvider {
   /**
    * Save client information after dynamic registration
    */
-  async saveClientInformation(clientInfo: OAuthClientInformationFull): Promise<void> {
+  async saveClientInformation(clientInfo: StoredOAuthClientInformation): Promise<void> {
     this.oauthState.clientInfo = clientInfo;
     await this.saveState();
     logger.debug(`Saved client registration for ${this.config.serverUrl}`);
@@ -159,15 +164,18 @@ export class MCPOAuthProvider implements OAuthClientProvider {
   /**
    * Load stored tokens
    */
-  async tokens(): Promise<OAuthTokens | undefined> {
+  async tokens(ctx?: OAuthClientInformationContext): Promise<StoredOAuthTokens | undefined> {
     await this.loadState();
+    if (ctx?.issuer && this.oauthState.tokens?.issuer !== ctx.issuer) {
+      return undefined;
+    }
     return this.oauthState.tokens;
   }
 
   /**
    * Save tokens after authorization
    */
-  async saveTokens(tokens: OAuthTokens): Promise<void> {
+  async saveTokens(tokens: StoredOAuthTokens): Promise<void> {
     this.oauthState.tokens = tokens;
     await this.saveState();
     logger.debug(`Saved tokens for ${this.config.serverUrl}`);
@@ -220,7 +228,7 @@ export class MCPOAuthProvider implements OAuthClientProvider {
   /**
    * Invalidate stored credentials
    */
-  async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier'): Promise<void> {
+  async invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): Promise<void> {
     switch (scope) {
       case 'all':
         this.oauthState = {};
@@ -234,9 +242,22 @@ export class MCPOAuthProvider implements OAuthClientProvider {
       case 'verifier':
         delete this.oauthState.codeVerifier;
         break;
+      case 'discovery':
+        delete this.oauthState.discoveryState;
+        break;
     }
     await this.saveState();
     logger.debug(`Invalidated ${scope} credentials for ${this.config.serverUrl}`);
+  }
+
+  async saveDiscoveryState(state: OAuthDiscoveryState): Promise<void> {
+    this.oauthState.discoveryState = state;
+    await this.saveState();
+  }
+
+  async discoveryState(): Promise<OAuthDiscoveryState | undefined> {
+    await this.loadState();
+    return this.oauthState.discoveryState;
   }
 
   /**

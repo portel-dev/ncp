@@ -5,7 +5,10 @@ echo "🔨 Building NCP MCPB (MCP Bundle) from clean directory..."
 
 # Store project root directory
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ARTIFACT_DIR="$PROJECT_ROOT/_internal/artifacts"
+BUNDLE_PATH="$ARTIFACT_DIR/ncp.mcpb"
 echo "📍 Project root: $PROJECT_ROOT"
+mkdir -p "$ARTIFACT_DIR"
 
 # Build TypeScript first
 echo "📦 Building TypeScript..."
@@ -56,14 +59,14 @@ fi
 # Pack MCPB from clean directory
 # Skip prepack script since we already built in project root
 echo "📦 Packing MCPB (MCP Bundle)..."
-npm_config_ignore_scripts=true npx @anthropic-ai/mcpb pack . "$PROJECT_ROOT/ncp.mcpb"
+npm_config_ignore_scripts=true npx @anthropic-ai/mcpb pack . "$BUNDLE_PATH"
 
 # WORKAROUND: mcpb excludes build/ directories from node_modules
 # Extract MCPB (zip format), manually add build directories, re-pack
 echo "🔧 Fixing missing build directories (mcpb workaround)..."
 PATCH_DIR=$(mktemp -d)
 cd "$PATCH_DIR"
-unzip -q "$PROJECT_ROOT/ncp.mcpb"
+unzip -q "$BUNDLE_PATH"
 
 # Copy missing build directories from temp install
 if [ -d "$TEMP_DIR/node_modules/human-signals/build" ]; then
@@ -78,8 +81,8 @@ if [ -d "$TEMP_DIR/node_modules/execa/node_modules/human-signals/build" ]; then
 fi
 
 # Re-pack as zip (MCPB is zip format, not tar.gz)
-rm -f "$PROJECT_ROOT/ncp.mcpb"
-zip -qr "$PROJECT_ROOT/ncp.mcpb" .
+rm -f "$BUNDLE_PATH"
+zip -qr "$BUNDLE_PATH" .
 cd "$PROJECT_ROOT"
 
 # Cleanup temp directories
@@ -91,7 +94,7 @@ echo "🧪 Testing MCPB (MCP spec compliance)..."
 
 # Verify it's a valid zip file
 echo "   • Verifying zip format..."
-if ! unzip -t "$PROJECT_ROOT/ncp.mcpb" > /dev/null 2>&1; then
+if ! unzip -t "$BUNDLE_PATH" > /dev/null 2>&1; then
   echo "   ❌ FAILED: MCPB is not a valid zip file"
   exit 1
 fi
@@ -99,7 +102,7 @@ echo "   ✅ Valid zip format"
 
 TEST_DIR=$(mktemp -d)
 cd "$TEST_DIR"
-unzip -q "$PROJECT_ROOT/ncp.mcpb" > /dev/null 2>&1
+unzip -q "$BUNDLE_PATH" > /dev/null 2>&1
 
 # Quick verification test
 echo "   • Checking dependencies..."
@@ -140,6 +143,6 @@ cd "$PROJECT_ROOT"
 rm -rf "$TEST_DIR"
 
 echo ""
-echo "✅ MCPB (MCP Bundle) built and tested successfully: ncp.mcpb"
-echo "   Size: $(ls -lh ncp.mcpb | awk '{print $5}')"
-echo "   SHA256: $(shasum -a 256 ncp.mcpb | awk '{print $1}')"
+echo "✅ MCPB (MCP Bundle) built and tested successfully: $BUNDLE_PATH"
+echo "   Size: $(ls -lh "$BUNDLE_PATH" | awk '{print $5}')"
+echo "   SHA256: $(shasum -a 256 "$BUNDLE_PATH" | awk '{print $1}')"

@@ -23,7 +23,7 @@ import {
 } from '@portel/photon-core';
 import type { MCPClientFactory } from './mcp-client-factory.js';
 import { logger } from '../utils/logger.js';
-import { ElicitationServer } from '../utils/elicitation-helper.js';
+import { UserInputProvider } from '../utils/elicitation-helper.js';
 import * as path from 'path';
 
 /**
@@ -37,7 +37,7 @@ export class PhotonAdapter implements InternalMCP {
   private instance: PhotonMCP;
   private mcpClass: typeof PhotonMCP;
   private sourceFilePath?: string;
-  private elicitationServer?: ElicitationServer;
+  private elicitationServer?: UserInputProvider;
   private mcpClientFactory?: MCPClientFactory;
   private instanceStore?: InstanceStore;
 
@@ -303,7 +303,7 @@ export class PhotonAdapter implements InternalMCP {
   /**
    * Set the elicitation server for generator input prompts and settings elicitation
    */
-  setElicitationServer(server: ElicitationServer): void {
+  setUserInputProvider(server: UserInputProvider): void {
     this.elicitationServer = server;
   }
 
@@ -334,7 +334,7 @@ export class PhotonAdapter implements InternalMCP {
     }
 
     try {
-      const result = await this.elicitationServer.elicitInput({
+      const result = await this.elicitationServer.requestInput({
         message: `Configure settings for ${this.name}`,
         requestedSchema: {
           type: 'object',
@@ -388,7 +388,7 @@ export class PhotonAdapter implements InternalMCP {
       switch (ask.ask) {
         case 'text':
         case 'password': {
-          const result = await this.elicitationServer.elicitInput({
+          const result = await this.elicitationServer.requestInput({
             message: ask.message,
             requestedSchema: {
               type: 'object',
@@ -410,7 +410,7 @@ export class PhotonAdapter implements InternalMCP {
         }
 
         case 'confirm': {
-          const result = await this.elicitationServer.elicitInput({
+          const result = await this.elicitationServer.requestInput({
             message: ask.message,
             requestedSchema: {
               type: 'object',
@@ -434,7 +434,7 @@ export class PhotonAdapter implements InternalMCP {
           const options = ask.options || [];
           const values = options.map((o: any) => typeof o === 'string' ? o : o.value);
 
-          const result = await this.elicitationServer.elicitInput({
+          const result = await this.elicitationServer.requestInput({
             message: ask.message,
             requestedSchema: {
               type: 'object',
@@ -458,7 +458,7 @@ export class PhotonAdapter implements InternalMCP {
         }
 
         case 'number': {
-          const result = await this.elicitationServer.elicitInput({
+          const result = await this.elicitationServer.requestInput({
             message: ask.message,
             requestedSchema: {
               type: 'object',
@@ -482,7 +482,7 @@ export class PhotonAdapter implements InternalMCP {
         }
 
         case 'date': {
-          const result = await this.elicitationServer.elicitInput({
+          const result = await this.elicitationServer.requestInput({
             message: ask.message,
             requestedSchema: {
               type: 'object',
