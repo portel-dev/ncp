@@ -38,6 +38,7 @@ Use a client that advertises form elicitation support.
 3. Cancel a protected operation; verify no side effect occurs.
 4. Add or remove an MCP; verify no profile file changes before approval.
 5. Add an MCP that needs several credentials; verify they appear in one form.
+6. Verify collected secrets are replaced by `_USE_SECURE_STORAGE_` in the profile, appear only as metadata in `ncp credentials list`, and are materialized when the MCP starts.
 6. Trigger a Photon with sequential asks; verify each prompt resumes the same execution.
 7. Import MCPs from a supported client, then run `mcp:optimize_client` with its `client_name`; verify cancellation leaves the config unchanged and approval creates a backup before replacement.
 

@@ -17,7 +17,7 @@ import { homedir } from 'os';
 const SERVICE_NAME = '@portel/ncp';
 const CREDENTIAL_INDEX_FILE = path.join(homedir(), '.ncp', 'credentials.json');
 
-export type CredentialType = 'bearer_token' | 'api_key' | 'oauth_token' | 'basic_auth' | 'custom';
+export type CredentialType = 'bearer_token' | 'api_key' | 'oauth_token' | 'oauth_client_secret' | 'basic_auth' | 'custom';
 
 export interface CredentialMetadata {
   mcpName: string;
@@ -31,6 +31,9 @@ export interface BasicAuthCredential {
   username: string;
   password: string;
 }
+
+export type EnvironmentCredentials = Record<string, string>;
+export type StoredCredential = string | BasicAuthCredential | EnvironmentCredentials;
 
 /**
  * Secure credential storage using OS keychain with encrypted file fallback
@@ -129,7 +132,7 @@ export class SecureCredentialStore {
   async setCredential(
     mcpName: string,
     type: CredentialType,
-    credential: string | BasicAuthCredential,
+    credential: StoredCredential,
     description?: string
   ): Promise<boolean> {
     await this.ensureInitialized();
@@ -177,7 +180,7 @@ export class SecureCredentialStore {
   /**
    * Retrieve credential securely
    */
-  async getCredential(mcpName: string, type: CredentialType): Promise<string | BasicAuthCredential | null> {
+  async getCredential(mcpName: string, type: CredentialType): Promise<StoredCredential | null> {
     await this.ensureInitialized();
     const accountId = this.getAccountId(mcpName, type);
 
@@ -199,10 +202,14 @@ export class SecureCredentialStore {
         return null;
       }
 
-      // Deserialize if basic auth
-      if (type === 'basic_auth') {
+      // Structured credentials are serialized before storage.
+      if (type === 'basic_auth' || type === 'custom') {
         try {
-          return JSON.parse(credentialString);
+          const parsed = JSON.parse(credentialString);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return parsed;
+          }
+          return credentialString;
         } catch {
           // If parsing fails, assume it's a plain token
           return credentialString;

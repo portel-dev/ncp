@@ -30,6 +30,7 @@ import { getCacheDirectory } from '../utils/ncp-paths.js';
 import { setNCPTitle, updateNCPProgress } from '../utils/terminal-title.js';
 import { getRuntimeForExtension } from '../utils/runtime-detector.js';
 import type { CredentialType } from '../auth/secure-credential-store.js';
+import { redactIfSensitive } from '../utils/redact-sensitive.js';
 
 // Check for no-color flag early
 const noColor = process.argv.includes('--no-color') || process.env.NO_COLOR === 'true';
@@ -894,7 +895,7 @@ async function handleManualAdd(name: string, command: string, args: string[], op
         const [key, value] = envVar.split('=');
         if (key && value) {
           env[key] = value;
-          console.log(chalk.dim(`   ${key}=${formatCommandDisplay(value)}`));
+          console.log(chalk.dim(`   ${key}=${redactIfSensitive(key, formatCommandDisplay(value))}`));
         }
       }
     }

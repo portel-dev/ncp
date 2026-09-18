@@ -489,7 +489,11 @@ Do you want to install this MCP?`;
     }
 
     // Add MCP to profile
-    await this.profileManager!.addMCPToProfile(profile, mcpName, config);
+    await this.profileManager!.addMCPToProfile(profile, mcpName, config, {
+      sensitiveEnvKeys: transportType === 'stdio'
+        ? Object.keys(config.env || {})
+        : [],
+    });
 
     // Try to get tools from the newly added MCP
     let toolsList = '';
@@ -1065,7 +1069,9 @@ Do you want to remove this MCP?`;
                       }
 
                       // Save updated config
-                      await this.profileManager!.addMCPToProfile('all', mcp.displayName, mcpConfig);
+                      await this.profileManager!.addMCPToProfile('all', mcp.displayName, mcpConfig, {
+                        sensitiveEnvKeys: mcp.transport === 'stdio' ? Object.keys(mcpCreds) : [],
+                      });
                       credentialsConfigured++;
                       logger.info(`Updated credentials for ${mcp.displayName}`);
                     }

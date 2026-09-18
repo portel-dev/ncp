@@ -163,7 +163,7 @@ export async function collectBulkCredentials(
   }
 
   message += '💡 Leave fields empty to skip optional credentials.\n';
-  message += '⚠️  Credentials are stored locally in your NCP config.';
+  message += '🔐 Credentials are stored in the OS keychain or NCP encrypted credential store.';
 
   // Show consolidated form
   const result = await server.requestInput({

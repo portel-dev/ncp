@@ -12,6 +12,13 @@ import { getClientConfigPath, getClientDefinition } from '../utils/client-regist
 import type { OAuthConfig } from '../auth/oauth-device-flow.js';
 import { getSecureCredentialStore, type CredentialType } from '../auth/secure-credential-store.js';
 import { logger } from '../utils/logger.js';
+import { isSensitiveKey } from '../utils/redact-sensitive.js';
+
+export const SECURE_STORAGE_REFERENCE = '_USE_SECURE_STORAGE_';
+
+interface AddMCPOptions {
+  sensitiveEnvKeys?: string[];
+}
 
 interface MCPConfig {
   command?: string;  // Optional: for stdio transport
@@ -21,6 +28,12 @@ interface MCPConfig {
   auth?: {
     type: 'oauth' | 'bearer' | 'apiKey' | 'basic';
     oauth?: OAuthConfig;  // OAuth 2.0 Device Flow configuration
+    oauth21?: {
+      clientId?: string;
+      clientSecret?: string;
+      scopes?: string[];
+      callbackPort?: number;
+    };
     token?: string;       // Bearer token or API key
     username?: string;    // Basic auth username
     password?: string;    // Basic auth password
@@ -50,16 +63,17 @@ export class ProfileManager {
   /**
    * Store sensitive credentials in secure storage and replace with references
    */
-  private async storeCredentials(mcpName: string, config: MCPConfig): Promise<MCPConfig> {
-    if (!config.auth) {
-      return config;
-    }
-
+  private async storeCredentials(
+    mcpName: string,
+    config: MCPConfig,
+    sensitiveEnvKeys: string[] = []
+  ): Promise<MCPConfig> {
     // Clone config to avoid mutating original
     const securConfig = JSON.parse(JSON.stringify(config));
+    const explicitlySensitive = new Set(sensitiveEnvKeys);
 
     // Store token/API key
-    if (config.auth.token) {
+    if (config.auth?.token && config.auth.token !== SECURE_STORAGE_REFERENCE) {
       const type: CredentialType = config.auth.type === 'bearer' ? 'bearer_token' : 'api_key';
       const success = await this.credentialStore.setCredential(
         mcpName,
@@ -69,18 +83,17 @@ export class ProfileManager {
       );
 
       if (success) {
-        // Only replace with secure reference if storage succeeded
-        securConfig.auth.token = '_USE_SECURE_STORAGE_';
+        securConfig.auth.token = SECURE_STORAGE_REFERENCE;
         logger.debug(`Stored ${type} for ${mcpName} in secure storage`);
       } else {
-        // Storage failed - keep the token in the config as fallback
-        // This is less secure but ensures the MCP can still work
-        logger.warn(`Failed to store ${type} for ${mcpName} in secure storage - keeping in profile`);
+        throw new Error(`Secure storage rejected the ${type} for ${mcpName}`);
       }
     }
 
     // Store basic auth credentials
-    if (config.auth.username && config.auth.password) {
+    if (config.auth?.username && config.auth.password &&
+        config.auth.username !== SECURE_STORAGE_REFERENCE &&
+        config.auth.password !== SECURE_STORAGE_REFERENCE) {
       const success = await this.credentialStore.setCredential(
         mcpName,
         'basic_auth',
@@ -89,14 +102,62 @@ export class ProfileManager {
       );
 
       if (success) {
-        // Only replace with secure references if storage succeeded
-        securConfig.auth.username = '_USE_SECURE_STORAGE_';
-        securConfig.auth.password = '_USE_SECURE_STORAGE_';
+        securConfig.auth.username = SECURE_STORAGE_REFERENCE;
+        securConfig.auth.password = SECURE_STORAGE_REFERENCE;
         logger.debug(`Stored basic auth for ${mcpName} in secure storage`);
       } else {
-        // Storage failed - keep credentials in the config as fallback
-        logger.warn(`Failed to store basic auth for ${mcpName} in secure storage - keeping in profile`);
+        throw new Error(`Secure storage rejected the basic auth credential for ${mcpName}`);
       }
+    }
+
+    const oauthClientSecret = config.auth?.oauth21?.clientSecret || config.auth?.oauth?.clientSecret;
+    if (oauthClientSecret && oauthClientSecret !== SECURE_STORAGE_REFERENCE) {
+      const success = await this.credentialStore.setCredential(
+        mcpName,
+        'oauth_client_secret',
+        oauthClientSecret,
+        `OAuth client secret for ${mcpName}`
+      );
+      if (!success) {
+        throw new Error(`Secure storage rejected the OAuth client secret for ${mcpName}`);
+      }
+      if (securConfig.auth.oauth21?.clientSecret) {
+        securConfig.auth.oauth21.clientSecret = SECURE_STORAGE_REFERENCE;
+      }
+      if (securConfig.auth.oauth?.clientSecret) {
+        securConfig.auth.oauth.clientSecret = SECURE_STORAGE_REFERENCE;
+      }
+    }
+
+    // Environment credentials use one encrypted/keychain entry per MCP. The
+    // profile keeps only references, while non-sensitive settings remain clear.
+    const environmentCredentials = Object.fromEntries(
+      Object.entries(config.env || {}).filter(([key, value]) =>
+        value !== SECURE_STORAGE_REFERENCE &&
+        (explicitlySensitive.has(key) || isSensitiveKey(key))
+      )
+    );
+
+    if (Object.keys(environmentCredentials).length > 0) {
+      const existing = await this.credentialStore.getCredential(mcpName, 'custom');
+      const existingEnvironment = existing && typeof existing === 'object'
+        ? existing as Record<string, string>
+        : {};
+      const success = await this.credentialStore.setCredential(
+        mcpName,
+        'custom',
+        { ...existingEnvironment, ...environmentCredentials },
+        `Environment credentials for ${mcpName}`
+      );
+
+      if (!success) {
+        throw new Error(`Secure storage rejected environment credentials for ${mcpName}`);
+      }
+
+      for (const key of Object.keys(environmentCredentials)) {
+        securConfig.env[key] = SECURE_STORAGE_REFERENCE;
+      }
+      logger.debug(`Stored ${Object.keys(environmentCredentials).length} environment credential(s) for ${mcpName}`);
     }
 
     return securConfig;
@@ -106,15 +167,11 @@ export class ProfileManager {
    * Load actual credentials from secure storage if references are found
    */
   private async loadCredentials(mcpName: string, config: MCPConfig): Promise<MCPConfig> {
-    if (!config.auth) {
-      return config;
-    }
-
     // Clone config to avoid mutating cached version
     const fullConfig = JSON.parse(JSON.stringify(config));
 
     // Load token/API key if it's a reference
-    if (config.auth.token === '_USE_SECURE_STORAGE_') {
+    if (config.auth?.token === SECURE_STORAGE_REFERENCE) {
       const type: CredentialType = config.auth.type === 'bearer' ? 'bearer_token' : 'api_key';
       const credential = await this.credentialStore.getCredential(mcpName, type);
       if (credential && typeof credential === 'string') {
@@ -125,13 +182,54 @@ export class ProfileManager {
     }
 
     // Load basic auth credentials if they're references
-    if (config.auth.username === '_USE_SECURE_STORAGE_' && config.auth.password === '_USE_SECURE_STORAGE_') {
+    if (config.auth?.username === SECURE_STORAGE_REFERENCE && config.auth.password === SECURE_STORAGE_REFERENCE) {
       const credential = await this.credentialStore.getCredential(mcpName, 'basic_auth');
       if (credential && typeof credential === 'object') {
         fullConfig.auth.username = credential.username;
         fullConfig.auth.password = credential.password;
       } else {
         logger.warn(`Failed to load basic auth for ${mcpName} from secure storage`);
+      }
+    }
+
+    const referencesOAuthClientSecret =
+      config.auth?.oauth21?.clientSecret === SECURE_STORAGE_REFERENCE ||
+      config.auth?.oauth?.clientSecret === SECURE_STORAGE_REFERENCE;
+    if (referencesOAuthClientSecret) {
+      const secret = await this.credentialStore.getCredential(mcpName, 'oauth_client_secret');
+      if (typeof secret === 'string' && secret.length > 0) {
+        if (fullConfig.auth.oauth21?.clientSecret === SECURE_STORAGE_REFERENCE) {
+          fullConfig.auth.oauth21.clientSecret = secret;
+        }
+        if (fullConfig.auth.oauth?.clientSecret === SECURE_STORAGE_REFERENCE) {
+          fullConfig.auth.oauth.clientSecret = secret;
+        }
+      } else {
+        if (fullConfig.auth.oauth21) delete fullConfig.auth.oauth21.clientSecret;
+        if (fullConfig.auth.oauth) delete fullConfig.auth.oauth.clientSecret;
+        logger.warn(`Secure OAuth client secret is unavailable for ${mcpName}`);
+      }
+    }
+
+    const referencedEnvironmentKeys = Object.entries(config.env || {})
+      .filter(([, value]) => value === SECURE_STORAGE_REFERENCE)
+      .map(([key]) => key);
+
+    if (referencedEnvironmentKeys.length > 0) {
+      const stored = await this.credentialStore.getCredential(mcpName, 'custom');
+      const environment = stored && typeof stored === 'object'
+        ? stored as Record<string, string>
+        : {};
+
+      for (const key of referencedEnvironmentKeys) {
+        const value = environment[key];
+        if (typeof value === 'string' && value.length > 0) {
+          fullConfig.env[key] = value;
+        } else {
+          // Never pass the reference marker to a child process as a credential.
+          delete fullConfig.env[key];
+          logger.warn(`Secure environment credential ${key} is unavailable for ${mcpName}`);
+        }
       }
     }
 
@@ -633,8 +731,12 @@ export class ProfileManager {
   async addMCPToProfile(
     profileName: string,
     mcpName: string,
-    config: MCPConfig
+    config: MCPConfig,
+    options: AddMCPOptions = {}
   ): Promise<void> {
+    // Resolve secure storage before mutating profile state. A storage failure
+    // leaves both the in-memory profile and its file untouched.
+    const secureConfig = await this.storeCredentials(mcpName, config, options.sensitiveEnvKeys);
     let profile = this.profiles.get(profileName);
 
     if (!profile) {
@@ -650,9 +752,6 @@ export class ProfileManager {
       };
       this.profiles.set(profileName, profile);
     }
-
-    // Store credentials securely and get config with references
-    const secureConfig = await this.storeCredentials(mcpName, config);
 
     // Add or update MCP config
     profile.mcpServers[mcpName] = secureConfig;
@@ -721,27 +820,25 @@ export class ProfileManager {
     let errors = 0;
 
     for (const [mcpName, config] of Object.entries(profile.mcpServers)) {
-      if (!config.auth) continue;
-
       // Check if credentials are plain-text (not already secure references)
-      const hasPlainTextToken = config.auth.token && config.auth.token !== '_USE_SECURE_STORAGE_';
+      const hasPlainTextToken = config.auth?.token && config.auth.token !== SECURE_STORAGE_REFERENCE;
       const hasPlainTextBasicAuth =
-        config.auth.username &&
+        config.auth?.username &&
         config.auth.password &&
-        config.auth.username !== '_USE_SECURE_STORAGE_';
+        config.auth.username !== SECURE_STORAGE_REFERENCE;
+      const hasPlainTextOAuthClientSecret =
+        (config.auth?.oauth21?.clientSecret && config.auth.oauth21.clientSecret !== SECURE_STORAGE_REFERENCE) ||
+        (config.auth?.oauth?.clientSecret && config.auth.oauth.clientSecret !== SECURE_STORAGE_REFERENCE);
+      const sensitiveEnvironmentKeys = Object.entries(config.env || {})
+        .filter(([key, value]) => value !== SECURE_STORAGE_REFERENCE && isSensitiveKey(key))
+        .map(([key]) => key);
 
-      if (hasPlainTextToken || hasPlainTextBasicAuth) {
+      if (hasPlainTextToken || hasPlainTextBasicAuth || hasPlainTextOAuthClientSecret || sensitiveEnvironmentKeys.length > 0) {
         try {
-          const success = await this.credentialStore.migrateFromPlainText(mcpName, config.auth);
-          if (success) {
-            // Update profile with secure references
-            const secureConfig = await this.storeCredentials(mcpName, config);
-            profile.mcpServers[mcpName] = secureConfig;
-            migrated++;
-            logger.info(`Migrated credentials for ${mcpName}`);
-          } else {
-            errors++;
-          }
+          const secureConfig = await this.storeCredentials(mcpName, config, sensitiveEnvironmentKeys);
+          profile.mcpServers[mcpName] = secureConfig;
+          migrated++;
+          logger.info(`Migrated credentials for ${mcpName}`);
         } catch (error) {
           logger.error(`Failed to migrate credentials for ${mcpName}: ${error}`);
           errors++;

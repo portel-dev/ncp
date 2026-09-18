@@ -164,7 +164,7 @@ async function promptWithDialog(options: CredentialPromptOptions): Promise<strin
   const exampleText = options.example ? `\n\nExample: ${options.example}` : '';
   const descriptionText = options.description ? `\n${options.description}` : '';
 
-  const message = `Enter your ${options.name}${descriptionText}${exampleText}\n\nThe value will be stored securely in your NCP profile configuration.`;
+  const message = `Enter your ${options.name}${descriptionText}${exampleText}\n\nThe value will be stored in the OS keychain or NCP encrypted credential store.`;
 
   try {
     const result = await showNativeDialog({

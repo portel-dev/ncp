@@ -12,7 +12,7 @@
 
 import { createServer, Server } from 'http';
 import { randomBytes, createHash } from 'crypto';
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
 import type {
@@ -24,6 +24,10 @@ import type {
   StoredOAuthTokens,
 } from '@modelcontextprotocol/client';
 import { logger } from '../utils/logger.js';
+import {
+  getSecureCredentialStore,
+  type SecureCredentialStore,
+} from './secure-credential-store.js';
 
 /**
  * Configuration for the MCP OAuth provider
@@ -37,12 +41,14 @@ export interface MCPOAuthConfig {
   scopes?: string[];
   /** Local callback port (default: 9876) */
   callbackPort?: number;
-  /** Storage directory for tokens (default: ~/.ncp/auth) */
+  /** Legacy plaintext directory used only for one-time migration (default: ~/.ncp/auth) */
   storageDir?: string;
   /** Pre-registered client ID (optional - if not provided, uses dynamic registration) */
   clientId?: string;
   /** Pre-registered client secret (optional) */
   clientSecret?: string;
+  /** Override used by tests and embedders. Defaults to NCP secure storage. */
+  credentialStore?: Pick<SecureCredentialStore, 'getCredential' | 'setCredential'>;
 }
 
 /**
@@ -66,10 +72,11 @@ interface StoredOAuthState {
  * 5. Stores and refreshes tokens
  */
 export class MCPOAuthProvider implements OAuthClientProvider {
-  private config: Required<MCPOAuthConfig>;
+  private config: Required<Omit<MCPOAuthConfig, 'credentialStore'>>;
   private oauthState: StoredOAuthState = {};
   private callbackServer?: Server;
   private serverKey: string;
+  private credentialStore: Pick<SecureCredentialStore, 'getCredential' | 'setCredential'>;
 
   constructor(config: MCPOAuthConfig) {
     this.config = {
@@ -81,6 +88,7 @@ export class MCPOAuthProvider implements OAuthClientProvider {
       clientId: config.clientId || '',
       clientSecret: config.clientSecret || '',
     };
+    this.credentialStore = config.credentialStore || getSecureCredentialStore();
 
     // Create a unique key for this server's stored state
     this.serverKey = this.createServerKey(config.serverUrl);
@@ -373,29 +381,54 @@ export class MCPOAuthProvider implements OAuthClientProvider {
   }
 
   /**
-   * Load state from disk
+   * Load state from secure storage, migrating the old plaintext file if present.
    */
   private async loadState(): Promise<void> {
+    const secureState = await this.credentialStore.getCredential(`oauth:${this.serverKey}`, 'oauth_token');
+    if (typeof secureState === 'string') {
+      try {
+        this.oauthState = JSON.parse(secureState);
+        return;
+      } catch {
+        logger.warn(`Ignoring invalid encrypted OAuth state for ${this.config.serverUrl}`);
+      }
+    }
+
+    // Migrate legacy plaintext state on first access.
+    const filePath = join(this.config.storageDir, `${this.serverKey}.json`);
     try {
-      const filePath = join(this.config.storageDir, `${this.serverKey}.json`);
       const data = await readFile(filePath, 'utf-8');
       this.oauthState = JSON.parse(data);
     } catch (error) {
       // File doesn't exist or is invalid - start fresh
       this.oauthState = {};
+      return;
     }
+
+    await this.saveState();
   }
 
   /**
-   * Save state to disk
+   * Save state to secure storage and remove any legacy plaintext copy.
    */
   private async saveState(): Promise<void> {
+    const stored = await this.credentialStore.setCredential(
+      `oauth:${this.serverKey}`,
+      'oauth_token',
+      JSON.stringify(this.oauthState),
+      `OAuth state for ${this.config.serverUrl}`
+    );
+    if (!stored) {
+      throw new Error(`Secure storage rejected OAuth state for ${this.config.serverUrl}`);
+    }
+
+    const legacyPath = join(this.config.storageDir, `${this.serverKey}.json`);
     try {
-      await mkdir(this.config.storageDir, { recursive: true });
-      const filePath = join(this.config.storageDir, `${this.serverKey}.json`);
-      await writeFile(filePath, JSON.stringify(this.oauthState, null, 2));
+      await unlink(legacyPath);
     } catch (error) {
-      logger.error('Failed to save OAuth state:', error);
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger.warn(`Could not remove legacy OAuth state file: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }
 
