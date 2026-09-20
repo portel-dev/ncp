@@ -4,6 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Quick Reference - Common Commands
 
+### Supported Runtime
+
+Use Node.js 24 LTS for development, testing, and releases (`.nvmrc`). Node.js 26 is not currently supported because Jest's open-handle inspection is incompatible with its Web Streams implementation.
+
 ### Development Workflow
 ```bash
 # Build the project
