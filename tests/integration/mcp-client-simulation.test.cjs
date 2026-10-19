@@ -20,6 +20,7 @@ const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { pathToFileURL } = require('url');
 
 // Test configuration
 // Keep integration state isolated from both the checkout and the user's NCP config.
@@ -105,7 +106,7 @@ class MCPClientSimulator {
 
       const offlinePreload = path.resolve(__dirname, '../fixtures/offline-fetch-preload.mjs');
       this.ncp = spawn(process.execPath, [
-        '--import', offlinePreload,
+        '--import', pathToFileURL(offlinePreload).href,
         path.resolve(process.cwd(), 'dist/index-mcp.js')
       ], {
         stdio: ['pipe', 'pipe', 'pipe'],
