@@ -100,6 +100,7 @@ export class MCPWrapper {
 
 const { spawn } = require('child_process');
 const fs = require('fs');
+const { StringDecoder } = require('string_decoder');
 
 // Paths are JSON-encoded to handle Windows backslashes properly
 const logFile = ${escapeForJS(logFile)};
@@ -130,29 +131,49 @@ const child = spawn(command, args, {
 // Forward stdin to child (for JSON-RPC requests)
 process.stdin.pipe(child.stdin);
 
-// Handle stdout: Log everything, but forward JSON-RPC to parent
-child.stdout.on('data', (chunk) => {
-  const text = chunk.toString();
-  logStream.write(\`[STDOUT] \${text}\`);
+// Handle stdout: Log everything, but forward complete JSON-RPC frames to parent
+const stdoutDecoder = new StringDecoder('utf8');
+let stdoutBuffer = '';
 
-  // Check if this looks like JSON-RPC and forward it
-  text.split('\\n').forEach(line => {
-    line = line.trim();
-    if (line) {
-      try {
-        const parsed = JSON.parse(line);
-        if (parsed.jsonrpc === '2.0' ||
-            (typeof parsed.id !== 'undefined' &&
-             (parsed.method || parsed.result || parsed.error))) {
-          // This is JSON-RPC, forward to parent
-          process.stdout.write(line + '\\n');
-        }
-      } catch (e) {
-        // Not JSON-RPC, just log it
-        logStream.write(\`[NON-JSONRPC] \${line}\\n\`);
-      }
+function forwardLine(rawLine) {
+  const line = rawLine.trim();
+  if (!line) return;
+
+  try {
+    const parsed = JSON.parse(line);
+    if (parsed.jsonrpc === '2.0' ||
+        (typeof parsed.id !== 'undefined' &&
+         (parsed.method || parsed.result || parsed.error))) {
+      // This is JSON-RPC, forward it as a complete protocol frame.
+      process.stdout.write(line + '\\n');
     }
-  });
+  } catch (e) {
+    // Not JSON-RPC, just log it
+    logStream.write('[NON-JSONRPC] ' + line + '\\n');
+  }
+}
+
+function handleStdoutText(text) {
+  if (!text) return;
+  logStream.write('[STDOUT] ' + text);
+  stdoutBuffer += text;
+
+  let newlineIndex;
+  while ((newlineIndex = stdoutBuffer.indexOf('\\n')) !== -1) {
+    const line = stdoutBuffer.slice(0, newlineIndex);
+    stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+    forwardLine(line);
+  }
+}
+
+child.stdout.on('data', (chunk) => {
+  handleStdoutText(stdoutDecoder.write(chunk));
+});
+
+child.stdout.on('end', () => {
+  handleStdoutText(stdoutDecoder.end());
+  if (stdoutBuffer.trim()) forwardLine(stdoutBuffer);
+  stdoutBuffer = '';
 });
 
 // Handle stderr: Log everything (these are usually startup messages)
@@ -167,11 +188,18 @@ child.on('error', (error) => {
   process.exit(1);
 });
 
-child.on('exit', (code, signal) => {
+child.on('close', (code, signal) => {
+  // The child has stopped accepting input; detach from the parent's stdin so
+  // an otherwise-open client pipe cannot keep this wrapper alive.
+  process.stdin.unpipe(child.stdin);
+  process.stdin.pause();
+  if (typeof process.stdin.unref === 'function') process.stdin.unref();
+
   logStream.write(\`[EXIT] Process exited with code \${code}, signal \${signal}\\n\`);
   logStream.write(\`--- MCP Session Ended: \${new Date().toISOString()} ---\\n\\n\`);
   logStream.end();
-  process.exit(code || 0);
+  // Let queued protocol frames and log writes drain before Node exits.
+  process.exitCode = code || 0;
 });
 
 // Handle parent process signals

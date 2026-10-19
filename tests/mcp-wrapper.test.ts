@@ -9,6 +9,7 @@ import { MCPWrapper } from '../src/utils/mcp-wrapper.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
+import { spawn } from 'child_process';
 
 describe('MCPWrapper', () => {
   let mcpWrapper: MCPWrapper;
@@ -71,6 +72,157 @@ describe('MCPWrapper', () => {
     it('should handle special characters in MCP name', () => {
       const result = mcpWrapper.createWrapper('test-mcp_123', 'echo');
       expect(result).toBeDefined();
+    });
+
+    it('forwards large fragmented JSON-RPC lines without corrupting UTF-8', async () => {
+      const mcpName = `fragmented-output-${process.pid}-${Date.now()}`;
+      const fixturePath = path.join(testDir, 'fragmented-stdio-child.cjs');
+      const fixtureSource = String.raw`
+let received = '';
+let replied = false;
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  received += chunk;
+  if (replied || !received.includes('\n')) return;
+  replied = true;
+
+  const text = '🙂'.repeat(20000) + ' 結果';
+  const response = Buffer.from(JSON.stringify({
+    jsonrpc: '2.0',
+    id: 17,
+    result: { content: [{ type: 'text', text }] }
+  }) + '\n', 'utf8');
+  process.stdout.write('fixture startup log\n');
+
+  const marker = response.indexOf(Buffer.from('🙂', 'utf8'));
+  const chunks = [
+    response.subarray(0, marker + 1),
+    response.subarray(marker + 1, marker + 2),
+    response.subarray(marker + 2, marker + 3),
+    response.subarray(marker + 3, marker + 4)
+  ];
+  for (let offset = marker + 4; offset < response.length; offset += 8192) {
+    chunks.push(response.subarray(offset, Math.min(offset + 8192, response.length)));
+  }
+
+  let index = 0;
+  const writeNext = () => {
+    if (index >= chunks.length) {
+      process.stdout.end(() => process.exit(0));
+      return;
+    }
+    process.stdout.write(chunks[index++]);
+    setTimeout(writeNext, 2);
+  };
+  writeNext();
+});
+`;
+      fs.writeFileSync(fixturePath, fixtureSource);
+      const wrapper = mcpWrapper.createWrapper(mcpName, process.execPath, [fixturePath]);
+      const logFile = mcpWrapper.getLogFile(mcpName);
+      let child: ReturnType<typeof spawn> | undefined;
+
+      try {
+        const outcome = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+          child = spawn(process.execPath, [wrapper.args[0], mcpName]);
+          const stdout: Buffer[] = [];
+          const stderr: Buffer[] = [];
+          const timeout = setTimeout(() => {
+            child?.kill();
+            reject(new Error(`Generated wrapper timed out. stderr: ${Buffer.concat(stderr).toString('utf8')}`));
+          }, 10000);
+
+          child.stdout!.on('data', chunk => stdout.push(Buffer.from(chunk)));
+          child.stderr!.on('data', chunk => stderr.push(Buffer.from(chunk)));
+          child.once('error', error => {
+            clearTimeout(timeout);
+            reject(error);
+          });
+          child.once('close', code => {
+            clearTimeout(timeout);
+            resolve({
+              code,
+              stdout: Buffer.concat(stdout).toString('utf8'),
+              stderr: Buffer.concat(stderr).toString('utf8'),
+            });
+          });
+          child.stdin!.end(JSON.stringify({ jsonrpc: '2.0', id: 17, method: 'ping' }) + '\n');
+        });
+
+        expect(outcome.code).toBe(0);
+        expect(outcome.stderr).toBe('');
+        const lines = outcome.stdout.trim().split(/\r?\n/);
+        expect(lines).toHaveLength(1);
+        const response = JSON.parse(lines[0]);
+        const text = response.result.content[0].text as string;
+        expect(Buffer.byteLength(lines[0], 'utf8')).toBeGreaterThan(64 * 1024);
+        expect(text).toBe('🙂'.repeat(20000) + ' 結果');
+      } finally {
+        if (child && child.exitCode === null && child.signalCode === null) child.kill();
+        fs.rmSync(wrapper.args[0], { force: true });
+        fs.rmSync(logFile, { force: true });
+      }
+    });
+
+    it('drains a large response after a child exits and does not wait on open parent stdin', async () => {
+      const mcpName = `large-exit-output-${process.pid}-${Date.now()}`;
+      const fixturePath = path.join(testDir, 'single-write-stdio-child.cjs');
+      const fixtureSource = String.raw`
+process.stdin.once('data', () => {
+  const text = '🙂'.repeat(20000) + ' 結果';
+  const response = JSON.stringify({
+    jsonrpc: '2.0',
+    id: 23,
+    result: { content: [{ type: 'text', text }] }
+  }) + '\n';
+  process.stdout.write(response, () => process.exit(0));
+});
+`;
+      fs.writeFileSync(fixturePath, fixtureSource);
+      const wrapper = mcpWrapper.createWrapper(mcpName, process.execPath, [fixturePath]);
+      const logFile = mcpWrapper.getLogFile(mcpName);
+      let child: ReturnType<typeof spawn> | undefined;
+
+      try {
+        const outcome = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
+          child = spawn(process.execPath, [wrapper.args[0], mcpName]);
+          const stdout: Buffer[] = [];
+          const stderr: Buffer[] = [];
+          const timeout = setTimeout(() => {
+            child?.kill();
+            reject(new Error(`Generated wrapper did not exit with parent stdin open. stderr: ${Buffer.concat(stderr).toString('utf8')}`));
+          }, 10000);
+
+          child.stdout!.on('data', chunk => stdout.push(Buffer.from(chunk)));
+          child.stderr!.on('data', chunk => stderr.push(Buffer.from(chunk)));
+          child.once('error', error => {
+            clearTimeout(timeout);
+            reject(error);
+          });
+          child.once('close', code => {
+            clearTimeout(timeout);
+            resolve({
+              code,
+              stdout: Buffer.concat(stdout).toString('utf8'),
+              stderr: Buffer.concat(stderr).toString('utf8'),
+            });
+          });
+          // Keep stdin open after the request, as an MCP client normally does.
+          child.stdin!.write(JSON.stringify({ jsonrpc: '2.0', id: 23, method: 'ping' }) + '\n');
+        });
+
+        expect(outcome.code).toBe(0);
+        expect(outcome.stderr).toBe('');
+        const lines = outcome.stdout.trim().split(/\r?\n/);
+        expect(lines).toHaveLength(1);
+        const response = JSON.parse(lines[0]);
+        expect(Buffer.byteLength(lines[0], 'utf8')).toBeGreaterThan(64 * 1024);
+        expect(response.result.content[0].text).toBe('🙂'.repeat(20000) + ' 結果');
+      } finally {
+        if (child && child.exitCode === null && child.signalCode === null) child.kill();
+        fs.rmSync(wrapper.args[0], { force: true });
+        fs.rmSync(logFile, { force: true });
+      }
     });
   });
 
