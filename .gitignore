@@ -101,6 +101,7 @@ docs-site/docs/
 docs-site/llms.md
 docs-site/readme.md
 docs-site/public/assets/
+docs-site/public/docs/benchmarks/
 docs-site/public/llms.txt
 docs-site/public/llms-full.txt
 docs-site/public/ncp-docs-index.json

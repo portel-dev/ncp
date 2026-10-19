@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
+import { chmod, mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   DetailedTaskV2Schema,
@@ -32,13 +32,10 @@ export class McpTaskStore {
 
   async initialize(): Promise<PersistedMcpTask[]> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
-    // Enforce private permissions even when a directory already existed.
-    const directoryHandle = await open(this.directory, 'r');
-    try {
-      await directoryHandle.chmod(0o700);
-    } finally {
-      await directoryHandle.close();
-    }
+    // POSIX modes do not configure Windows ACLs. On Windows the state directory
+    // inherits the user's filesystem permissions, and directory handles cannot
+    // be used for chmod/fsync through Node's ordinary file API.
+    if (process.platform !== 'win32') await chmod(this.directory, 0o700);
     const records: PersistedMcpTask[] = [];
     for (const name of await readdir(this.directory)) {
       if (!name.endsWith('.json')) continue;
@@ -86,11 +83,13 @@ export class McpTaskStore {
         await handle.close();
       }
       await rename(temporary, target);
-      const directoryHandle = await open(this.directory, 'r');
-      try {
-        await directoryHandle.sync();
-      } finally {
-        await directoryHandle.close();
+      if (process.platform !== 'win32') {
+        const directoryHandle = await open(this.directory, 'r');
+        try {
+          await directoryHandle.sync();
+        } finally {
+          await directoryHandle.close();
+        }
       }
     } catch (error) {
       await rm(temporary, { force: true }).catch(() => {});

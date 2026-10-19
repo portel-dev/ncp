@@ -155,6 +155,17 @@ for (const file of [join(siteDir, 'readme.md'), ...listMarkdownFiles(siteDocsDir
   writeFileSync(file, sanitizeMissingImages(file, escaped));
 }
 
+// JSON benchmark downloads are linked from Markdown; VitePress does not copy
+// ordinary document links into the built site automatically.
+const benchmarkDownloads = join(publicDir, 'docs', 'benchmarks');
+resetDir(benchmarkDownloads);
+const benchmarkSources = join(root, 'docs', 'benchmarks');
+if (existsSync(benchmarkSources)) {
+  for (const name of readdirSync(benchmarkSources)) {
+    if (name.endsWith('.json')) copyFileSync(join(benchmarkSources, name), join(benchmarkDownloads, name));
+  }
+}
+
 resetDir(join(publicDir, 'assets'));
 cpSync(join(root, 'assets'), join(publicDir, 'assets'), { recursive: true });
 resetDir(join(siteDir, 'assets'));

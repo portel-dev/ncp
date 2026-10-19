@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-19T11:10:03.717Z",
+  "runtime": {
+    "node": "v24.21.0",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "workload": {
+    "downstreamToolCount": 192,
+    "selectedTool": "billing:lookup_invoice",
+    "query": "look up invoice",
+    "iterations": 15,
+    "profile": "deterministic in-process MCP fixture; no network or model calls"
+  },
+  "methods": {
+    "directFullCatalog": {
+      "catalogBytes": 78424,
+      "workflowRequestBytes": 112,
+      "workflowPayloadBytes": 78816,
+      "cold": {
+        "medianMs": 2.466,
+        "p95Ms": 10.478
+      },
+      "warm": {
+        "medianMs": 1.728,
+        "p95Ms": 2.361
+      }
+    },
+    "selectedToolPayloadLowerBound": {
+      "catalogBytes": 413,
+      "workflowRequestBytes": 112,
+      "workflowPayloadBytes": 805,
+      "note": "Hypothetical host-side one-tool catalog selection; MCP tools/list has no standard per-tool filter, so this is a payload lower bound."
+    },
+    "ncpDeferredFindRun": {
+      "advertisedCoreCatalogBytes": 2615,
+      "workflowRequestBytes": 221,
+      "findResponseBytes": 1768,
+      "workflowPayloadBytes": 4884,
+      "cold": {
+        "medianMs": 9.061,
+        "p95Ms": 27.934
+      },
+      "warm": {
+        "medianMs": 3.586,
+        "p95Ms": 7.32
+      }
+    }
+  },
+  "success": {
+    "direct": {
+      "passed": 30,
+      "failed": 0
+    },
+    "selectedToolPayloadLowerBound": {
+      "passed": 30,
+      "failed": 0
+    },
+    "ncpDeferredFindRun": {
+      "passed": 30,
+      "failed": 0
+    }
+  },
+  "resultFidelity": {
+    "directToFixtureExact": true,
+    "selectedToFixtureExact": true,
+    "ncpToFixtureExact": true,
+    "comparedFields": [
+      "content including image block",
+      "structuredContent",
+      "_meta"
+    ]
+  },
+  "tokenProxy": {
+    "method": "serialized JSON bytes divided by four, rounded up",
+    "values": {
+      "directCatalog": 19606,
+      "selectedCatalog": 104,
+      "ncpCoreCatalog": 654,
+      "directWorkflow": 19704,
+      "selectedToolWorkflow": 202,
+      "ncpWorkflow": 1221
+    },
+    "limitation": "Byte-based rough proxy only; excludes transport framing and model tokenization, and does not estimate all prompt/context reuse behavior."
+  },
+  "limitations": [
+    "Cold latency includes server/client fixture construction, in-memory connection, and the first workflow call; warm latency reuses connected sessions. Both exclude host model planning, real MCP processes, network latency, and embedding model initialization.",
+    "The discovery engine is seeded to return the correct fixture result; search relevance and misses are not benchmarked.",
+    "NCP uses its real MCPServer tools/list/tools/call handlers and NCPOrchestrator find/run methods, with a controlled downstream connection result.",
+    "The selected-tool row is an explicitly hypothetical selective catalog payload, not an MCP protocol feature.",
+    "The result is deterministic correctness evidence and a reproducibility harness, not a claim about production host performance."
+  ]
+}

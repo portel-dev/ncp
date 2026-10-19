@@ -10,30 +10,34 @@ import ProfileManager from '../../src/profiles/profile-manager.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { resetPathsCache, setOverrideWorkingDirectory } from '../../src/utils/ncp-paths.js';
 
 describe('Internal MCPs - E2E Tests', () => {
   let manager: InternalMCPManager;
   let profileManager: ProfileManager;
   let testConfigPath: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Create isolated test environment
     testConfigPath = fs.mkdtempSync(path.join(os.tmpdir(), 'ncp-e2e-test-'));
 
-    // ProfileManager uses env vars for config path, set it before instantiation
-    process.env.NCP_CONFIG_PATH = testConfigPath;
+    // ProfileManager resolves paths through ncp-paths, not NCP_CONFIG_PATH.
+    // Set the working-directory override before constructing either manager.
+    setOverrideWorkingDirectory(testConfigPath);
     profileManager = new ProfileManager();
     manager = new InternalMCPManager();
-    manager.initialize(profileManager);
+    await manager.initialize(profileManager);
   });
 
-  afterEach(() => {
-    // Cleanup
-    if (fs.existsSync(testConfigPath)) {
-      fs.rmSync(testConfigPath, { recursive: true, force: true });
+  afterEach(async () => {
+    try {
+      // Cleanup the isolated working directory and its .ncp state.
+      if (fs.existsSync(testConfigPath)) {
+        await fs.promises.rm(testConfigPath, { recursive: true, force: true });
+      }
+    } finally {
+      resetPathsCache();
     }
-    // Clean up environment variable to prevent test pollution
-    delete process.env.NCP_CONFIG_PATH;
   });
 
   describe('Scheduler MCP', () => {

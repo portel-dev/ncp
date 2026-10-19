@@ -17,7 +17,7 @@
 
 </div>
 
-Your MCPs, [supercharged](#-supercharged-features). Find any tool instantly, execute with code mode, run on schedule, discover skills, load Photons, ready for any client. Smart loading saves tokens and energy.
+Your MCPs, [supercharged](#-supercharged-features). Discover tools, execute with code mode, run on schedule, find skills, and load Photons through common MCP clients. On-demand discovery keeps the initial tool surface focused.
 
 **Related Portel project:** [Photon](https://photon.portel.dev/) turns TypeScript methods into reliable agent-facing capabilities: MCP tools, embedded app UIs, CLI commands, web routes, schedules, webhooks, retries, and Beam interfaces. NCP helps agents discover and operate tools; Photon helps developers build the tools and apps agents can trust.
 
@@ -25,12 +25,15 @@ Your MCPs, [supercharged](#-supercharged-features). Find any tool instantly, exe
 
 Instead of your AI juggling 50+ tools scattered across different MCPs, NCP gives it a single, unified interface with **code mode execution, scheduling, skills discovery, and custom Photons**.
 
-Your AI sees just **2-3 simple tools:**
+Most hosts see NCP's small gateway surface (`find`, `run`, and, when enabled, `code`). Hosts that support MCP Apps can also receive selected app callback tools so embedded interfaces keep working. NCP adds app tools selectively; it omits conflicting app groups rather than renaming callbacks that an app may call by name.
+
 - **`find`** - Search for any tool, skill, or Photon: "I need to read a file" → finds the right tool automatically
 - **`code`** - Execute TypeScript directly: `await github.create_issue({...})` (code mode, enabled by default)
 - **`run`** - Execute tools individually (when code mode is disabled)
 
 Behind the scenes, NCP manages all 50+ tools + skills + Photons: routing requests, discovering the right capability, executing code, scheduling tasks, managing health, and caching responses.
+
+The host determines which optional features it can use. NCP advertises MCP Apps, Skills, and Tasks capabilities, while clients that do not support an extension continue with the core tools and existing request flows.
 
 ![NCP Transformation Flow](docs/images/ncp-transformation-flow.png)
 
@@ -39,8 +42,7 @@ Behind the scenes, NCP manages all 50+ tools + skills + Photons: routing request
 - **Code mode** lets AI write multi-step TypeScript workflows combining tools, skills, and scheduling
 - **Skills** provide domain expertise: canvas design, PDF manipulation, document generation, more
 - **Photons** enable custom TypeScript MCPs without npm publishing
-- **97% fewer tokens burned** on tool confusion (2,500 vs 103,000 for 80 tools)
-- **5x faster responses** (sub-second tool selection vs 5-8 seconds)
+- **On-demand discovery** keeps the initial tool surface focused; actual context use depends on the host, enabled NCP tools, and connected servers
 - **Your AI becomes focused.** Not desperate.
 
 🚀 **NEW:** Project-level configuration - each project can define its own MCPs automatically
@@ -99,15 +101,15 @@ When your AI assistant manages 50 tools directly:
 
 ```
 🤖 AI Assistant Context:
-├── Filesystem MCP (12 tools) ─ 15,000 tokens
-├── Database MCP (8 tools) ─── 12,000 tokens
-├── Web Search MCP (6 tools) ── 8,000 tokens
-├── Email MCP (15 tools) ───── 18,000 tokens
-├── Shell MCP (10 tools) ───── 14,000 tokens
-├── GitHub MCP (20 tools) ──── 25,000 tokens
-└── Slack MCP (9 tools) ────── 11,000 tokens
+├── Filesystem MCP (12 tools)
+├── Database MCP (8 tools)
+├── Web Search MCP (6 tools)
+├── Email MCP (15 tools)
+├── Shell MCP (10 tools)
+├── GitHub MCP (20 tools)
+└── Slack MCP (9 tools)
 
-💀 Total: 80 tools = 103,000 tokens of schemas
+💀 Total: 80 tool schemas compete for attention before useful work begins
 ```
 
 **What happens:**
@@ -122,34 +124,20 @@ With NCP as Chief of Staff:
 
 ```
 🤖 AI Assistant Context:
-└── NCP (2 unified tools) ──── 2,500 tokens
+└── NCP gateway tools → discover and run the tools needed for this request
 
 🎯 Behind the scenes: NCP manages all 80 tools
-📈 Context saved: 100,500 tokens (97% reduction!)
-⚡ Decision time: Sub-second tool selection
+📈 Tool discovery happens on demand
 🎪 AI behavior: Confident, focused, decisive
 ```
 
-**Real results from our testing:**
-
-| Your MCP Setup | Without NCP | With NCP | Token Savings |
-|----------------|-------------|----------|---------------|
-| **Small** (5 MCPs, 25 tools) | 15,000 tokens | 8,000 tokens | **47% saved** |
-| **Medium** (15 MCPs, 75 tools) | 45,000 tokens | 12,000 tokens | **73% saved** |
-| **Large** (30 MCPs, 150 tools) | 90,000 tokens | 15,000 tokens | **83% saved** |
-| **Enterprise** (50+ MCPs, 250+ tools) | 150,000 tokens | 20,000 tokens | **87% saved** |
-
-**Translation:**
-- **5x faster responses** (8 seconds → 1.5 seconds)
-- **12x longer conversations** before hitting limits
-- **90% reduction** in wrong tool selection
-- **Zero context exhaustion** in typical sessions
+NCP reduces the need to load every downstream tool schema into the host up front. The amount of context saved and any effect on response time vary with the host, server catalog, and enabled features.
 
 ---
 
 ## 📋 **Prerequisites**
 
-- **Node.js 18+** ([Download here](https://nodejs.org/))
+- **Node.js 22+** (Node.js 24 recommended; CI uses 24) ([Download here](https://nodejs.org/))
 - **npm** (included with Node.js) or **npx** for running packages
 - **Command line access** (Terminal on Mac/Linux, Command Prompt/PowerShell on Windows)
 
@@ -198,7 +186,7 @@ Add to your client's MCP configuration:
 }
 ```
 
-**✅ Done!** Your AI now sees just 2 tools instead of 50+.
+**✅ Done!** Your AI can discover and run tools through NCP. Hosts with MCP Apps support may also receive selected app callback tools.
 
 ![NCP List Overview](docs/images/ncp-list.png)
 
@@ -259,7 +247,7 @@ ncp run filesystem read_file --path "/tmp/test.txt" --dry-run
 - NCP shows version number
 - `ncp list` shows your imported MCPs
 - `ncp find` returns relevant tools
-- Your AI client shows only NCP in its tool list
+- Your AI client shows NCP's gateway tools; an Apps-capable host may also show selected app callback tools
 
 ---
 
@@ -323,10 +311,9 @@ Then ask Claude to create the scraper - it will use the web photon automatically
 - **Desperate Assistant:** "I see 50 tools... which should I use... let me think..."
 - **Executive Assistant:** "I need file access. Done." *(NCP handles the details)*
 
-### **💰 Massive Token Savings**
-- **Before:** 100k+ tokens burned on tool confusion
-- **After:** 2.5k tokens for focused execution
-- **Result:** 40x token efficiency = 40x longer conversations
+### **💰 Focused Tool Discovery**
+- NCP lets the host search a larger tool catalog on demand
+- The context impact depends on your host and enabled tool surface
 
 ### **🎯 Eliminates Choice Paralysis**
 - **Desperate:** AI freezes, picks wrong tool, asks for clarification
@@ -346,10 +333,10 @@ Here's exactly how NCP empowers your MCPs:
 
 | Feature | What It Does | Why It Matters |
 |---------|-------------|----------------|
-| **🔍 Instant Tool Discovery** | Semantic search understands intent ("read a file") not just keywords | Your AI finds the RIGHT tool in <1s instead of analyzing 50 schemas |
-| **📦 On-Demand Loading** | MCPs and tools load only when needed, not at startup | Saves 97% of context tokens - AI starts working immediately |
+| **🔍 Tool Discovery** | Search tools by intent as well as keywords | Find relevant tools without exposing every downstream schema at once |
+| **📦 On-Demand Loading** | Discover downstream tools when needed | Keeps the initial tool surface focused; context savings vary by setup |
 | **⏰ Automated Scheduling** | Run any tool on cron schedules or natural language times | Background automation without keeping AI sessions open |
-| **🔌 Universal Compatibility** | Works with Claude Desktop, Claude Code, Cursor, VS Code, and any MCP client | One configuration for all your AI tools - no vendor lock-in |
+| **🔌 MCP Client Support** | Works with common MCP clients, including Claude Desktop, Claude Code, Cursor, and VS Code | Core gateway behavior is available broadly; extension support depends on the host |
 | **💾 Smart Caching** | Intelligent caching of tool schemas and responses | Eliminates redundant indexing - energy efficient and fast |
 
 **The result:** Your MCPs go from scattered tools to a **unified, intelligent system** that your AI can actually use effectively.
@@ -573,7 +560,7 @@ api-backend/
   server/
 ```
 
-### **HTTP/SSE Transport & Hibernation Support**
+### **Remote MCP Transports and Hibernation Support**
 
 NCP supports both **stdio** (local) and **HTTP/SSE** (remote) MCP servers:
 
@@ -583,12 +570,13 @@ NCP supports both **stdio** (local) and **HTTP/SSE** (remote) MCP servers:
 ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/Documents
 ```
 
-**HTTP/SSE Transport** (Remote):
+**Streamable HTTP** (Remote):
 ```json
 {
   "mcpServers": {
     "remote-mcp": {
       "url": "https://mcp.example.com/api",
+      "transport": "streamableHttp",
       "auth": {
         "type": "bearer",
         "token": "your-token-here"
@@ -597,6 +585,8 @@ ncp add filesystem npx @modelcontextprotocol/server-filesystem ~/Documents
   }
 }
 ```
+
+For a legacy HTTP/SSE endpoint, set `"transport": "sse"`. If an older profile has a URL and no `transport`, NCP continues to use its legacy SSE behavior. New registry imports select Streamable HTTP by default. Protocol-version negotiation is separate from transport selection and does not discover another endpoint automatically.
 
 **OAuth 2.1 with PKCE** (MCP 2025-03-26 spec):
 ```json
@@ -653,7 +643,17 @@ NCP automatically supports hibernation-enabled MCP servers (like Cloudflare Dura
 - ♻️ **Resource efficiency** - No idle server costs
 - 🚀 **Scale to zero** - Servers automatically sleep when not needed
 
-> **Note:** Hibernation is a server-side feature. NCP's standard HTTP/SSE client automatically works with both traditional and hibernation-enabled servers without any special configuration.
+> **Note:** Hibernation is a server-side feature. NCP's remote MCP client works with both traditional and hibernation-enabled servers without special configuration.
+
+### **Modern MCP extensions and result handling**
+
+NCP preserves downstream tool descriptors and native MCP results through discovery and `run`, including structured content, error state, metadata, and text, image, audio, resource, and resource-link blocks. If an integration previously parsed JSON text that encoded an array of result blocks, update it to consume the native MCP result fields.
+
+When a host advertises MCP Apps support, NCP selectively exposes downstream app launch tools and app callbacks, and serves their `ui://` resources. The host controls whether app-only callbacks are available to the model. Tool-name and UI-resource collisions cause the affected app groups to be omitted; their ordinary tools remain available through `find` and `run`.
+
+The Skills extension exposes local and compatible remote skill manifests on demand, including SHA-256 digests for the manifest bytes. The Tasks extension gives compatible modern hosts durable handles for `run` and `code`, with `tasks/get`, `tasks/update`, and `tasks/cancel`. After a restart, unfinished work is reported as interrupted rather than replayed; cancellation is reported only when NCP can confirm the worker stopped. Hosts without Tasks support keep the existing synchronous or multi-round request flow.
+
+Response caches are bounded, and private cached entries are partitioned by server configuration and credential identity. Server cache lifetimes and tool-list change notifications guide refreshes. For transport, SDK, registry, extension, and compatibility details, see the [MCP compatibility notes](docs/development/mcp-compatibility.md).
 
 ### **Photon Runtime (CLI vs DXT)**
 
@@ -748,6 +748,8 @@ Your AI stays creative. NCP handles the precision.
 ---
 
 ## 📚 **Deep Dive: How It Works**
+
+A [reproducible gateway benchmark](docs/benchmarks/mcp-gateway.md) measures serialized payload sizes, local latency, workflow completion, and result fidelity. Run `npm run benchmark:mcp`; its byte-based token proxy is labeled separately from actual tokenizer measurements.
 
 Want the technical details? Token analysis, architecture diagrams, and performance benchmarks:
 

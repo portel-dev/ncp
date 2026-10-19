@@ -91,6 +91,7 @@ describe('CLI Integration Tests', () => {
       env: {
         ...childEnv,
         NCP_CONFIG_PATH: testConfigPath,
+        NCP_WORKING_DIR: testConfigPath,
         NCP_CONFIRM_BEFORE_RUN: 'false', // Disable confirmation dialogs for automated tests
         ...opts.env
       },

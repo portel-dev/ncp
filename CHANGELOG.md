@@ -1,5 +1,28 @@
 # Changelog
 
+## [Unreleased]
+
+### Features
+
+* distinguish Streamable HTTP from legacy SSE for URL-based MCP connections; new registry imports choose Streamable HTTP while existing profiles without a transport setting retain legacy SSE behavior
+* preserve downstream MCP tool descriptors and native result blocks, including structured content, metadata, error state, and multimodal content
+* selectively expose MCP Apps launch and callback tools to compatible hosts, proxy app resources, and omit app groups with tool-name or resource-URI collisions
+* expose local and compatible remote Skills manifests with byte sizes and SHA-256 digests
+* support durable MCP Tasks handles for `run` and `code` on compatible hosts, including polling, suspended-input updates, cooperative cancellation, and interrupted-task recovery
+* bound downstream response caches, partition private entries by server configuration and credential identity, and refresh catalogs from declared lifetimes and tool-list change notifications
+
+### Fixes
+
+* keep Tasks persistence compatible with Windows directory operations while retaining file flushes and atomic replacement
+* make build and postinstall scripts portable and propagate development build failures
+
+### Development
+
+* run the MCP extension suite in CI on Node 24 and isolate CLI/internal-MCP end-to-end tests from user profiles
+* add a reproducible gateway benchmark for payload size, local latency, workflow completion, and result fidelity
+
+See the [MCP compatibility notes](docs/development/mcp-compatibility.md) for host behavior, transport details, migration guidance, and validation scope.
+
 ## [2.3.1](https://github.com/portel-dev/ncp/compare/2.3.0...2.3.1) (2026-06-12)
 
 ### Bug Fixes

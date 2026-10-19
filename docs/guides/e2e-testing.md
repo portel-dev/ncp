@@ -48,9 +48,9 @@ npm run test:ci
 
 GitHub Actions workflow created at `.github/workflows/ci.yml`:
 
-- ✅ Runs on Ubuntu + macOS
-- ✅ Tests Node 18.x and 20.x
-- ✅ Includes critical tests, E2E tests, integration tests, DXT tests
+- ✅ Runs on Ubuntu, Windows, and macOS
+- ✅ Tests Node 24.x
+- ✅ Includes critical, compatibility, extension, conformance smoke, integration, and DXT tests; run `npm run test:e2e` for the CLI/internal-MCP end-to-end suite
 - ✅ Code coverage reporting
 - ✅ Type checking
 - ✅ DXT package building and validation

@@ -122,6 +122,12 @@ reports cancellation when a worker can guarantee it has stopped. Stdio has one
 local trust domain: random task IDs are bearer references inside the profile,
 and self-declared MCP client names are not an authentication boundary.
 
+The store flushes each temporary task file before atomic replacement. On POSIX
+systems it also enforces owner-only directory modes and flushes the directory
+after rename. Windows uses inherited filesystem ACLs; Node does not provide the
+same directory flush operation there, so power-loss durability of the rename
+depends on the filesystem.
+
 ### Catalog freshness
 
 Bounded SDK response caches survive downstream reconnects and partition private

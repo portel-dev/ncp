@@ -18,10 +18,10 @@
   "type": "module",
   "scripts": {
     "extract-schemas": "tsx scripts/extract-schemas.ts",
-    "copy-schemas": "mkdir -p dist/internal-mcps && cp src/internal-mcps/*.schema.json dist/internal-mcps/ 2>/dev/null || true",
-    "build": "npm run extract-schemas && tsc && npm run copy-schemas && chmod +x dist/index.js dist/index-mcp.js",
+    "copy-schemas": "node scripts/copy-schemas.cjs",
+    "build": "npm run extract-schemas && tsc && npm run copy-schemas && node scripts/set-executable-bits.cjs",
     "postinstall": "npm run build:if-dev",
-    "build:if-dev": "[ -d node_modules/typescript ] && npm run build || echo 'Build skipped (production install)'",
+    "build:if-dev": "node scripts/build-if-dev.cjs",
     "start": "node dist/index.js",
     "dev": "npm run build && npm run start",
     "docs:sync": "node scripts/sync-docs-site.mjs",
@@ -70,7 +70,8 @@
     "release:dry": "npm run check:root && release-it --dry-run",
     "test:compatibility": "npm test -- --runInBand tests/mcp-modern-protocol.test.ts tests/mcp-stateless-client-context.test.ts tests/input-required-coordinator.test.ts tests/mcp-oauth-provider.test.ts tests/mcp-result-fidelity.test.ts tests/registry-client.test.ts tests/orchestrator/downstream-elicitation.test.ts tests/integration/oauth-integration.test.ts tests/orchestrator/tool-discovery.test.ts tests/cache-patcher.test.ts",
     "test:conformance": "node tests/conformance/run.mjs",
-    "test:extensions": "npm test -- --runInBand tests/mcp-apps-gateway.test.ts tests/mcp-skills-gateway.test.ts tests/mcp-task-gateway.test.ts tests/mcp-task-transport.test.ts tests/mcp-server-extensions.test.ts tests/orchestrator/mcp-response-cache.test.ts"
+    "test:extensions": "npm test -- --runInBand tests/mcp-apps-gateway.test.ts tests/mcp-skills-gateway.test.ts tests/mcp-task-gateway.test.ts tests/mcp-task-store.test.ts tests/mcp-task-transport.test.ts tests/mcp-server-extensions.test.ts tests/orchestrator/mcp-response-cache.test.ts",
+    "benchmark:mcp": "cross-env NODE_ENV=test node --import tsx tests/manual/benchmark-mcp-gateway.ts"
   },
   "keywords": [
     "mcp",
@@ -109,7 +110,8 @@
     "README.md",
     "server.json",
     "assets",
-    "package.json"
+    "package.json",
+    "scripts/build-if-dev.cjs"
   ],
   "files:comments": "Explicit list of files to include in the package",
   "dependencies": {
