@@ -2436,6 +2436,13 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
   private async ensureFreshCatalog(mcpName: string): Promise<void> {
     const definition = this.definitions.get(mcpName);
     if (!definition) return;
+    const config = definition.config;
+    const isLocalCatalog = this.internalMCPManager?.isInternalMCP(mcpName)
+      || config.env?.NCP_CLI_TOOL === 'true'
+      || config.command === 'internal'
+      || config.command === '__internal__'
+      || (!config.command && !config.url);
+    if (isLocalCatalog) return;
     if (!definition.catalogNeedsRefresh && (definition.catalogExpiresAt ?? 0) > Date.now()) return;
 
     const connection = await this.getOrCreateConnection(mcpName);

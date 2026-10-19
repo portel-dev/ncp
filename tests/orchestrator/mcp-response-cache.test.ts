@@ -107,6 +107,58 @@ describe('MCP response cache and list changes', () => {
     await expect(orchestrator.refreshMCPServerCatalogs()).resolves.toEqual([]);
   });
 
+  it('refreshes stale external catalogs on detailed find without connecting to local definitions', async () => {
+    const refreshedTools = [{
+      name: 'fresh_tool',
+      description: 'Fresh external fixture tool',
+      inputSchema: { type: 'object', properties: { value: { type: 'string' } } },
+    }];
+    const listTools = jest.fn(async () => ({ tools: refreshedTools, ttlMs: 60_000 }));
+    const orchestrator = Object.create(NCPOrchestrator.prototype) as any;
+    orchestrator.waitForInitialization = async () => {};
+    orchestrator.definitions = new Map([
+      ['ncp', {
+        name: 'ncp', config: { name: 'ncp', command: 'internal' },
+        tools: [{ name: 'status', description: 'Local management status' }],
+      }],
+      ['cached-cli', {
+        name: 'cached-cli',
+        config: { name: 'cached-cli', command: 'cached-cli', env: { NCP_CLI_TOOL: 'true' } },
+        tools: [{ name: 'inspect', description: 'Cached CLI operation' }],
+      }],
+      ['fixture', {
+        name: 'fixture', config: { name: 'fixture', command: 'fixture-command' },
+        tools: [{ name: 'cached_tool', description: 'Stale external fixture tool' }],
+        catalogNeedsRefresh: true,
+      }],
+    ]);
+    orchestrator.internalMCPManager = { isInternalMCP: (name: string) => name === 'ncp' };
+    orchestrator.connections = new Map();
+    orchestrator.getOrCreateConnection = jest.fn(async (name: string) => {
+      if (name !== 'fixture') throw new Error(`Unexpected connection for local catalog ${name}`);
+      return { client: { listTools }, tools: [] };
+    });
+    orchestrator.allTools = [
+      { name: 'ncp:status', description: 'ncp: Local management status', mcpName: 'ncp' },
+      { name: 'cached-cli:inspect', description: 'cached-cli: Cached CLI operation', mcpName: 'cached-cli' },
+      { name: 'fixture:cached_tool', description: 'fixture: Stale external fixture tool', mcpName: 'fixture' },
+    ];
+    orchestrator.toolToMCP = new Map([
+      ['ncp:status', 'ncp'], ['cached-cli:inspect', 'cached-cli'], ['fixture:cached_tool', 'fixture'],
+    ]);
+    orchestrator.healthMonitor = { getHealthyMCPs: (names: string[]) => names };
+    orchestrator.discovery = { replaceMCPTools: jest.fn(async () => {}) };
+    orchestrator.newlyIndexedMCPs = new Set();
+
+    const results = await orchestrator.find('', 10, true);
+
+    expect(results.map((result: any) => result.mcpName)).toEqual(['ncp', 'cached-cli', 'fixture']);
+    expect(orchestrator.getOrCreateConnection).toHaveBeenCalledTimes(1);
+    expect(orchestrator.getOrCreateConnection).toHaveBeenCalledWith('fixture');
+    expect(listTools).toHaveBeenCalledTimes(1);
+    expect(orchestrator.definitions.get('fixture').tools).toEqual(refreshedTools);
+  });
+
   it('bounds the number of cached server stores', () => {
     const registry = new MCPResponseCacheRegistry(2, 4);
     const first = registry.get('server-a');
