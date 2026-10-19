@@ -259,8 +259,9 @@ async function test1_Initialize() {
     return false;
   }
 
-  // Allow 1500ms on Windows/macOS CI runners (slower than local dev)
-  const maxDuration = process.platform === 'win32' || process.env.CI ? 1500 : 1000;
+  // This includes cold Node/module startup on shared runners. Protocol
+  // responsiveness after initialization is checked separately below.
+  const maxDuration = process.platform === 'win32' || process.env.CI ? 5000 : 1000;
   if (duration > maxDuration) {
     logError(`Initialize took ${duration}ms (should be < ${maxDuration}ms)`);
     return false;
