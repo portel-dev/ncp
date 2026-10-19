@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.0.0] (unreleased)
+## [3.0.0](https://github.com/portel-dev/ncp/compare/2.3.1...3.0.0) (2026-10-19)
 
 ### Breaking changes
 
@@ -20,7 +20,6 @@
 * preserve mixed-case Windows executable paths when launching downstream MCP servers
 * buffer fragmented stdio messages and UTF-8 characters so large MCP App resources arrive intact
 * keep built-in and cached CLI catalogs out of external MCP refreshes, including during execution confirmation
-
 * keep Tasks persistence compatible with Windows directory operations while retaining file flushes and atomic replacement
 * make build and postinstall scripts portable and propagate development build failures
 
