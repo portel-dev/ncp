@@ -250,7 +250,8 @@ export class PersistentRAGEngine {
   private metadataPath: string;
   private cacheMetadata: CacheMetadata | null = null;
   private isInitialized = false;
-  private indexingQueue: Array<{ mcpName: string; tools: any[] }> = [];
+  private indexingQueue: Array<{ mcpName: string; tools: any[]; generation: number }> = [];
+  private readonly mcpIndexGenerations = new Map<string, number>();
   private isIndexing = false;
   private semanticEnhancementEngine: SemanticEnhancementEngine;
 
@@ -459,18 +460,18 @@ export class PersistentRAGEngine {
   async indexMCP(mcpName: string, tools: any[]): Promise<void> {
     if (!this.isInitialized) {
       // Queue for later processing
-      this.indexingQueue.push({ mcpName, tools });
+      this.indexingQueue.push({ mcpName, tools, generation: this.mcpIndexGenerations.get(mcpName) ?? 0 });
       logger.info(`📋 Queued ${mcpName} for indexing (${tools.length} tools)`);
       return;
     }
 
     if (this.isIndexing) {
       // Add to queue if already indexing
-      this.indexingQueue.push({ mcpName, tools });
+      this.indexingQueue.push({ mcpName, tools, generation: this.mcpIndexGenerations.get(mcpName) ?? 0 });
       return;
     }
 
-    await this.performIndexing(mcpName, tools);
+    await this.performIndexing(mcpName, tools, this.mcpIndexGenerations.get(mcpName) ?? 0);
   }
 
   /**
@@ -480,7 +481,7 @@ export class PersistentRAGEngine {
   async indexMCPFromCache(mcpName: string, tools: any[]): Promise<void> {
     if (!this.isInitialized) {
       // Queue for later processing
-      this.indexingQueue.push({ mcpName, tools });
+      this.indexingQueue.push({ mcpName, tools, generation: this.mcpIndexGenerations.get(mcpName) ?? 0 });
       return;
     }
 
@@ -500,13 +501,36 @@ export class PersistentRAGEngine {
     }
 
     // Fallback to normal indexing if not all cached
-    await this.performIndexing(mcpName, tools);
+    await this.performIndexing(mcpName, tools, this.mcpIndexGenerations.get(mcpName) ?? 0);
+  }
+
+  /** Replace an MCP's embedding rows so removed tools cannot remain discoverable. */
+  async replaceMCP(mcpName: string, tools: any[]): Promise<void> {
+    const generation = (this.mcpIndexGenerations.get(mcpName) ?? 0) + 1;
+    this.mcpIndexGenerations.set(mcpName, generation);
+    // Drop older queued snapshots too; otherwise a pending index operation
+    // could reinsert a tool removed by this catalog update.
+    this.indexingQueue = this.indexingQueue.filter(task => task.mcpName !== mcpName);
+    while (this.isIndexing) {
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    const prefix = `${mcpName}:`;
+    const retainedIds = new Set(tools.map(tool => tool.id || `${mcpName}:${tool.name}`));
+    for (const toolId of this.vectorDB.keys()) {
+      if (toolId.startsWith(prefix) && !retainedIds.has(toolId)) this.vectorDB.delete(toolId);
+    }
+    if (!this.isInitialized) {
+      this.indexingQueue.push({ mcpName, tools, generation });
+      return;
+    }
+    await this.performIndexing(mcpName, tools, generation);
   }
 
   /**
    * Perform actual indexing of tools
    */
-  private async performIndexing(mcpName: string, tools: any[]): Promise<void> {
+  private async performIndexing(mcpName: string, tools: any[], generation = this.mcpIndexGenerations.get(mcpName) ?? 0): Promise<void> {
+    if (generation !== (this.mcpIndexGenerations.get(mcpName) ?? 0)) return;
     this.isIndexing = true;
     logger.info(`🔍 Indexing ${mcpName} (${tools.length} tools)...`);
 
@@ -515,6 +539,7 @@ export class PersistentRAGEngine {
 
     try {
       for (const tool of tools) {
+        if (generation !== (this.mcpIndexGenerations.get(mcpName) ?? 0)) return;
         const toolId = tool.id || `${mcpName}:${tool.name}`;
         const description = tool.description || tool.name;
         const hash = this.hashTool(description, tool.inputSchema);
@@ -542,6 +567,7 @@ export class PersistentRAGEngine {
               pooling: 'mean',
               normalize: true
             });
+            if (generation !== (this.mcpIndexGenerations.get(mcpName) ?? 0)) return;
 
             // Generate TypeScript interface
             const tsInterface = this.generateTypeScriptInterface(
@@ -597,6 +623,7 @@ export class PersistentRAGEngine {
       }
 
       // Update MCP hash for change detection
+      if (generation !== (this.mcpIndexGenerations.get(mcpName) ?? 0)) return;
       const mcpHash = this.hashObject(tools);
       const mcpHashes = this.cacheMetadata?.mcpHashes || {};
       mcpHashes[mcpName] = mcpHash;
@@ -615,7 +642,7 @@ export class PersistentRAGEngine {
       // Process next item in queue
       if (this.indexingQueue.length > 0) {
         const next = this.indexingQueue.shift()!;
-        setImmediate(() => this.performIndexing(next.mcpName, next.tools));
+        setImmediate(() => this.performIndexing(next.mcpName, next.tools, next.generation));
       }
     }
   }
@@ -626,7 +653,7 @@ export class PersistentRAGEngine {
   private async processIndexingQueue(): Promise<void> {
     while (this.indexingQueue.length > 0) {
       const task = this.indexingQueue.shift()!;
-      await this.performIndexing(task.mcpName, task.tools);
+      await this.performIndexing(task.mcpName, task.tools, task.generation);
     }
   }
 

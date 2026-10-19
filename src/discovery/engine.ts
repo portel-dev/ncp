@@ -283,6 +283,24 @@ export class DiscoveryEngine {
     await this.ragEngine.indexMCPFromCache(mcpName, tools);
   }
 
+  /** Replace the live catalog for one MCP, pruning removed tools from both indexes. */
+  async replaceMCPTools(mcpName: string, tools: any[]): Promise<void> {
+    const prefix = `${mcpName}:`;
+    const removedIds = new Set([...this.tools.keys()].filter(id => id.startsWith(prefix)));
+    for (const id of removedIds) {
+      const previous = this.tools.get(id);
+      this.tools.delete(id);
+      this.toolPatterns.delete(id);
+      if (previous?.description && this.toolsByDescription.get(previous.description.toLowerCase()) === id) {
+        this.toolsByDescription.delete(previous.description.toLowerCase());
+      }
+    }
+    await this.ragEngine.replaceMCP(mcpName, tools);
+    for (const tool of tools) {
+      await this.indexTool({ ...tool, id: `${mcpName}:${tool.name}` });
+    }
+  }
+
   /**
    * Get RAG engine statistics
    */

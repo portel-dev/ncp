@@ -1,4 +1,4 @@
-import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
+import { serveStdio, StdioServerTransport, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
 import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, LATEST_PROTOCOL_VERSION, PROTOCOL_VERSION_META_KEY, Server, Tool, type ServerContext } from "@modelcontextprotocol/server";
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
 import { logger } from '../utils/logger.js';
@@ -23,10 +23,48 @@ import { TokenMetricsTracker } from '../analytics/token-metrics.js';
 import { CapabilityDetector } from '../utils/capability-detector.js';
 import { InputRequiredCoordinator } from './input-required-coordinator.js';
 import { redactSensitiveData } from '../utils/redact-sensitive.js';
+import { McpAppsGateway, MCP_APPS_EXTENSION, MCP_APP_HTML_MIME_TYPE } from './mcp-apps-gateway.js';
+import { SkillsMcpGateway, SKILLS_EXTENSION_ID, type SkillsDownstreamSource } from './mcp-skills-gateway.js';
+import { McpTaskGateway } from './mcp-task-gateway.js';
+import { wrapMcpTaskTransport } from './mcp-task-transport.js';
+import { TASKS_EXTENSION_ID_V2 } from '@modelcontextprotocol/ext-tasks/core/v2';
 
 // Get the directory of the current file
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+interface GatewayToolCallParams {
+  name: string;
+  arguments?: Record<string, any>;
+  _meta?: Record<string, any>;
+}
+
+const toolCallParamsSchema = {
+  '~standard': {
+    version: 1 as const,
+    vendor: 'ncp',
+    validate(value: unknown): { value: GatewayToolCallParams } | { issues: Array<{ message: string }> } {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return { issues: [{ message: 'Tool call params must be an object' }] };
+      }
+      const params = value as GatewayToolCallParams;
+      if (typeof params.name !== 'string' || !params.name ||
+          (params.arguments !== undefined && (!params.arguments || typeof params.arguments !== 'object' || Array.isArray(params.arguments))) ||
+          (params._meta !== undefined && (!params._meta || typeof params._meta !== 'object' || Array.isArray(params._meta)))) {
+        return { issues: [{ message: 'Tool calls require a name and optional object arguments' }] };
+      }
+      return { value: params };
+    },
+  },
+};
+
+const passthroughResultSchema = {
+  '~standard': {
+    version: 1 as const,
+    vendor: 'ncp',
+    validate: (value: unknown) => ({ value }),
+  },
+};
 
 // Load and encode the NCP icon as a data URI.
 // Sync read is acceptable here: memoized, and first call happens in the
@@ -62,8 +100,14 @@ export class MCPServer implements UserInputProvider {
   private capabilityDetector: CapabilityDetector; // Track client capabilities for feature negotiation
   private stdioHandle?: StdioServerHandle;
   private readonly autoImportedClients = new Set<string>();
+  private appsGateway: McpAppsGateway;
+  private skillsGateway: SkillsMcpGateway;
+  private taskGateway: McpTaskGateway;
+  private readonly taskOwnerIdentity: string;
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
+    // Stdio has one local trust domain. Client-supplied MCP names are not authentication.
+    this.taskOwnerIdentity = `local-profile:${profileName}`;
     // Initialize session-scoped notification manager
     this.notifications = new SessionNotificationManager();
 
@@ -83,11 +127,16 @@ export class MCPServer implements UserInputProvider {
       },
       {
         capabilities: {
-          tools: {},
+          tools: { listChanged: true },
           prompts: {},      // Enable prompts for user confirmation dialogs
           resources: {},    // Enable resources for help docs and health status
           logging: {},      // Enable logging capability for debug output
           completions: {}, // Enable parameter completions
+          extensions: {
+            [MCP_APPS_EXTENSION]: {},
+            [SKILLS_EXTENSION_ID]: {},
+            [TASKS_EXTENSION_ID_V2]: {},
+          },
         },
         inputRequired: {
           legacyShim: true,
@@ -112,6 +161,22 @@ export class MCPServer implements UserInputProvider {
 
     // Profile-aware orchestrator using real MCP connections
     this.orchestrator = new NCPOrchestrator(profileName, showProgress, forceRetry);
+    this.appsGateway = new McpAppsGateway({
+      getServers: async () => {
+        return this.orchestrator.refreshMCPServerCatalogs();
+      },
+      readResource: (serverName, uri) => this.orchestrator.readMCPResource(serverName, uri),
+      callTool: (serverName, toolName, args, meta) =>
+        this.handleRun({ tool: `${serverName}:${toolName}`, parameters: args }, meta),
+      reservedToolNames: ['find', 'code', 'run'],
+      onDiagnostic: (message) => logger.debug(message),
+    });
+    this.skillsGateway = new SkillsMcpGateway({ downstream: () => this.getRemoteSkillSources() });
+    this.orchestrator.setToolCatalogChangedHandler(() => {
+      this.server.sendToolListChanged().catch(() => {});
+    });
+    this.taskGateway = new McpTaskGateway(profileName);
+    this.taskGateway.setFallbackInputProvider(this.inputCoordinator);
 
     // Initialize token metrics tracker
     this.tokenTracker = new TokenMetricsTracker();
@@ -211,7 +276,7 @@ export class MCPServer implements UserInputProvider {
       mcpProtocolLogger.logRequest('tools/list', {}).catch(() => {});
 
       const result = {
-        tools: this.getToolDefinitions(),
+        tools: await this.getAdvertisedTools(ctx),
       };
 
       // Log response (non-blocking - don't await)
@@ -220,78 +285,109 @@ export class MCPServer implements UserInputProvider {
     });
 
     // Handle tools/call
-    this.server.setRequestHandler('tools/call', async (request, ctx) => {
+    this.server.setRequestHandler('tools/call', {
+      params: toolCallParamsSchema,
+      result: this.taskGateway.toolCallResultSchema,
+    }, async (params, ctx) => {
       this.updateClientContextFromRequest(ctx);
-      return this.inputCoordinator.handle(ctx, async () => {
-      const { name, arguments: args } = request.params;
+      const callParams = params as GatewayToolCallParams;
+      const { name, arguments: args } = callParams;
+      const invoke = async (taskExecution = false) => {
 
-      // Log request (non-blocking - don't await)
-      mcpProtocolLogger.logRequest('tools/call', { name, arguments: args }).catch(() => {});
+        // Log request (non-blocking - don't await)
+        mcpProtocolLogger.logRequest('tools/call', { name, arguments: args }).catch(() => {});
 
-      try {
-        let result;
-        switch (name) {
-          case 'find':
-            result = await this.handleFind(args);
-            break;
+        try {
+          let result;
+          switch (name) {
+            case 'find':
+              result = await this.handleFind(args);
+              break;
 
-          case 'run':
-            result = await this.handleRun(args);
-            break;
+            case 'run':
+              result = await this.handleRun(args, callParams._meta);
+              break;
 
-          case 'code':
-            result = await this.handleCode(args);
-            break;
+            case 'code':
+              result = await this.handleCode(args);
+              break;
 
-          default:
-            // Suggest similar methods
-            const suggestions = this.getSuggestions(name, ['find', 'run', 'code']);
-            const suggestionText = suggestions.length > 0 ? ` Did you mean: ${suggestions.join(', ')}?` : '';
+            default:
+              if (await this.appsGateway.resolveTool(name)) {
+                result = await this.appsGateway.callTool(name, args || {}, callParams._meta);
+                break;
+              }
+              // Suggest similar methods
+              const suggestions = this.getSuggestions(name, ['find', 'run', 'code']);
+              const suggestionText = suggestions.length > 0 ? ` Did you mean: ${suggestions.join(', ')}?` : '';
 
-            result = {
-              content: [{
-                type: 'text',
-                text: `Method not found: '${name}'. NCP supports 'find', 'run', and 'code' methods.${suggestionText} Use 'find()' to discover available tools.`
-              }],
-              isError: true,
-            };
-        }
-
-        // Append notifications to response (if any)
-        if (this.notifications.hasNotifications() && result.content && result.content.length > 0) {
-          const notificationText = this.notifications.formatForResponse();
-          const firstContent = result.content[0];
-          if (firstContent.type === 'text') {
-            firstContent.text += notificationText;
+              result = {
+                content: [{
+                  type: 'text',
+                  text: `Method not found: '${name}'. NCP supports 'find', 'run', and 'code' methods.${suggestionText} Use 'find()' to discover available tools.`
+                }],
+                isError: true,
+              };
           }
+
+          // Append notifications to response (if any)
+          if (this.notifications.hasNotifications() && result.content && result.content.length > 0) {
+            const notificationText = this.notifications.formatForResponse();
+            const firstContent = result.content[0];
+            if (firstContent.type === 'text') {
+              firstContent.text += notificationText;
+            }
+          }
+
+          // Log successful response (non-blocking - don't await)
+          mcpProtocolLogger.logResponse('tools/call', result).catch(() => {});
+          return result;
+        } catch (error: any) {
+          if (taskExecution) throw error;
+          logger.error(`Tool execution failed: ${name} - ${error.message}`);
+
+          // Log to error log (non-blocking)
+          mcpProtocolLogger.logError(error, `tools/call:${name}`).catch(() => {});
+
+          const errorResult = {
+            content: [{
+              type: 'text',
+              text: error.message || 'Tool execution failed'
+            }],
+            isError: true,
+          };
+
+          // Log error response (non-blocking - don't await)
+          mcpProtocolLogger.logResponse('tools/call', null, {
+            code: 'TOOL_EXECUTION_FAILED',
+            message: error.message
+          }).catch(() => {});
+
+          return errorResult;
         }
-
-        // Log successful response (non-blocking - don't await)
-        mcpProtocolLogger.logResponse('tools/call', result).catch(() => {});
-        return result;
-      } catch (error: any) {
-        logger.error(`Tool execution failed: ${name} - ${error.message}`);
-
-        // Log to error log (non-blocking)
-        mcpProtocolLogger.logError(error, `tools/call:${name}`).catch(() => {});
-
-        const errorResult = {
-          content: [{
-            type: 'text',
-            text: error.message || 'Tool execution failed'
-          }],
-          isError: true,
-        };
-
-        // Log error response (non-blocking - don't await)
-        mcpProtocolLogger.logResponse('tools/call', null, {
-          code: 'TOOL_EXECUTION_FAILED',
-          message: error.message
-        }).catch(() => {});
-
-        return errorResult;
+      };
+      const envelope = ctx.mcpReq.envelope as Record<string, unknown> | undefined;
+      if ((name === 'code' || name === 'run') &&
+          envelope?.[PROTOCOL_VERSION_META_KEY] === '2026-07-28' &&
+          this.supportsExtension(TASKS_EXTENSION_ID_V2, ctx)) {
+        return this.taskGateway.call({
+          ownerIdentity: this.requestOwner(ctx),
+          clientSupportsTasks: true,
+          execute: async () => invoke(true),
+          statusMessage: `Running NCP ${name}`,
+        });
       }
-      });
+      return this.inputCoordinator.handle(ctx, () => invoke());
+    });
+
+    this.taskGateway.registerHandlers(this.server, (ctx) => this.requestOwner(ctx as ServerContext));
+    this.skillsGateway.register({
+      setRequestHandler: (method, schemas, handler) => {
+        this.server.setRequestHandler(method as any, schemas as any, async (params, ctx) => {
+          this.updateClientContextFromRequest(ctx);
+          return await handler(params, ctx) as any;
+        });
+      },
     });
 
     // Handle prompts/list
@@ -356,6 +452,71 @@ export class MCPServer implements UserInputProvider {
       this.updateClientContextFromRequest(ctx);
       return this.handleListRoots();
     });
+  }
+
+  private supportsExtension(extension: string, ctx?: ServerContext): boolean {
+    const envelope = ctx?.mcpReq.envelope as Record<string, unknown> | undefined;
+    const capabilities = (envelope?.[CLIENT_CAPABILITIES_META_KEY] ?? this.server.getClientCapabilities()) as any;
+    const settings = capabilities?.extensions?.[extension];
+    if (extension === MCP_APPS_EXTENSION) {
+      return Array.isArray(settings?.mimeTypes) && settings.mimeTypes.includes(MCP_APP_HTML_MIME_TYPE);
+    }
+    return !!settings;
+  }
+
+  private requestOwner(_ctx: ServerContext): string {
+    // Random task IDs are bearer references within this local profile; changing
+    // the host's self-declared name must not create a false authorization boundary.
+    return this.taskOwnerIdentity;
+  }
+
+  private async getAdvertisedTools(ctx?: ServerContext): Promise<Tool[]> {
+    const apps = await this.appsGateway.getToolsForHost(this.supportsExtension(MCP_APPS_EXTENSION, ctx));
+    return [...this.getToolDefinitions(), ...apps as Tool[]].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private async getRemoteSkillSources(): Promise<SkillsDownstreamSource[]> {
+    await this.waitForInitialization();
+    const sources: SkillsDownstreamSource[] = [];
+    for (const server of await this.orchestrator.getVerifiedMCPServerCatalogs()) {
+      if (!(server.capabilities as any)?.extensions?.[SKILLS_EXTENSION_ID]) continue;
+      const originId = server.originId;
+      const verifyOrigin = async () => {
+        const current = (await this.orchestrator.getVerifiedMCPServerCatalogs()).find(candidate => candidate.serverName === server.serverName);
+        if (!current || current.originId !== originId) throw new Error('Downstream skill origin changed; refresh the skill manifest');
+      };
+      const request = async (method: string, params: Record<string, unknown>): Promise<any> => {
+        await verifyOrigin();
+        const client = await this.orchestrator.getMCPClient(server.serverName);
+        return client.request({ method, params } as any, passthroughResultSchema as any);
+      };
+      sources.push({
+        originId,
+        listSkills: async () => {
+          const skills: any[] = [];
+          const seen = new Set<string>();
+          let cursor: string | undefined;
+          let result: any;
+          do {
+            result = await request('skills/list', cursor ? { cursor } : {});
+            if (!Array.isArray(result.skills)) throw new Error('Invalid downstream Skills listing');
+            skills.push(...result.skills);
+            cursor = result.nextCursor;
+            if (cursor) {
+              if (seen.has(cursor) || seen.size >= 64) throw new Error('Invalid downstream Skills pagination');
+              seen.add(cursor);
+            }
+          } while (cursor);
+          return { ...result, skills };
+        },
+        getSkill: (uri) => request('skills/get', { uri }),
+        readResource: async (uri) => {
+          await verifyOrigin();
+          return this.orchestrator.readMCPResource(server.serverName, uri) as any;
+        },
+      });
+    }
+    return sources;
   }
 
   /**
@@ -631,6 +792,7 @@ ncp.do("send email", {
         logger.info('Request-scoped input enabled for internal MCPs');
       }
 
+      this.server.sendToolListChanged().catch(() => {});
       logger.info('NCP MCP server indexing complete');
     }).catch((error) => {
       logger.error('Failed to initialize orchestrator:', error);
@@ -1464,7 +1626,7 @@ ncp.do("send email", {
     };
   }
 
-  private async handleRun(args: any): Promise<any> {
+  private async handleRun(args: any, meta?: Record<string, any>): Promise<any> {
     // Check if indexing is still in progress
     if (!this.isInitialized && this.initializationPromise) {
       const progress = this.orchestrator.getIndexingProgress();
@@ -1646,7 +1808,7 @@ This operation may modify data or have side effects.`;
     // ===== END CONFIRM-BEFORE-RUN =====
 
     // Normal execution
-    const result = await this.orchestrator.run(toolIdentifier, parameters);
+    const result = await this.orchestrator.run(toolIdentifier, parameters, meta);
 
     const downstreamResult = result.mcpResult;
     if (downstreamResult && Array.isArray(downstreamResult.content)) {
@@ -1932,7 +2094,13 @@ This operation may modify data or have side effects.`;
   }
 
   async connect(): Promise<void> {
-    this.stdioHandle = serveStdio(() => this.server, { legacy: 'serve' });
+    this.stdioHandle = serveStdio(() => this.server, {
+      legacy: 'serve',
+      transport: wrapMcpTaskTransport(
+        new StdioServerTransport(), this.taskGateway, this.taskOwnerIdentity,
+        { name: 'ncp', version },
+      ),
+    });
     logger.info('NCP MCP server serving stdio with legacy and current MCP protocol revisions');
   }
 
@@ -1948,6 +2116,7 @@ This operation may modify data or have side effects.`;
   async shutdown(): Promise<void> {
     try {
       this.inputCoordinator.shutdown();
+      await this.taskGateway.shutdown();
       await this.orchestrator.cleanup();
       if (this.stdioHandle) {
         await this.stdioHandle.close();
@@ -1986,6 +2155,8 @@ This operation may modify data or have side effects.`;
         mimeType: 'text/markdown'
       }
     ];
+
+    ncpResources.push(...await this.appsGateway.listResources() as any[]);
 
     // Only get MCP resources if orchestrator is initialized (non-blocking)
     if (this.isInitialized) {
@@ -2042,6 +2213,8 @@ This operation may modify data or have side effects.`;
    * Handle resources/read request
    */
   private async handleReadResource(uri: string): Promise<any> {
+    if (uri.startsWith('skill://')) return this.skillsGateway.read(uri);
+    if (uri.startsWith('ui://')) return this.appsGateway.readResource(uri);
     // Handle NCP-specific resources (always available)
     if (uri.startsWith('ncp://')) {
       const content = await this.generateNCPResourceContent(uri);
@@ -2343,7 +2516,7 @@ run("ncp:import", {from: "file", source: "~/path/to/config.json"})
     action: 'accept' | 'decline' | 'cancel';
     content?: Record<string, any>;
   }> {
-    return this.inputCoordinator.requestInput(params);
+    return this.taskGateway.requestInput(params);
   }
 }
 

@@ -43,8 +43,8 @@
     "test:cli": "bash tests/cli-help-validation.sh",
     "test:mcpb": "if [ -f scripts/test-dxt-package.sh ]; then bash scripts/test-dxt-package.sh; else echo 'MCPB test script not found, skipping'; fi",
     "test:dxt": "npm run test:mcpb",
-    "test:pre-publish": "npm run test:critical && npm run test:compatibility && npm run test:conformance && npm run test:integration && npm run test:integration:dxt",
-    "test:ci": "npm run test:critical && npm run test:compatibility && npm run test:conformance && npm run test:e2e && npm run test:integration && npm run test:integration:dxt && npm run test:mcpb",
+    "test:pre-publish": "npm run test:critical && npm run test:compatibility && npm run test:extensions && npm run test:conformance && npm run test:integration && npm run test:integration:dxt",
+    "test:ci": "npm run test:critical && npm run test:compatibility && npm run test:extensions && npm run test:conformance && npm run test:e2e && npm run test:integration && npm run test:integration:dxt && npm run test:mcpb",
     "test:package": "node scripts/test-package-locally.cjs",
     "test:features": "bash scripts/test-features.sh",
     "test:client-registry": "node scripts/test-client-registry.js",
@@ -69,7 +69,8 @@
     "release": "npm run check:root && release-it",
     "release:dry": "npm run check:root && release-it --dry-run",
     "test:compatibility": "npm test -- --runInBand tests/mcp-modern-protocol.test.ts tests/mcp-stateless-client-context.test.ts tests/input-required-coordinator.test.ts tests/mcp-oauth-provider.test.ts tests/mcp-result-fidelity.test.ts tests/registry-client.test.ts tests/orchestrator/downstream-elicitation.test.ts tests/integration/oauth-integration.test.ts tests/orchestrator/tool-discovery.test.ts tests/cache-patcher.test.ts",
-    "test:conformance": "node tests/conformance/run.mjs"
+    "test:conformance": "node tests/conformance/run.mjs",
+    "test:extensions": "npm test -- --runInBand tests/mcp-apps-gateway.test.ts tests/mcp-skills-gateway.test.ts tests/mcp-task-gateway.test.ts tests/mcp-task-transport.test.ts tests/mcp-server-extensions.test.ts tests/orchestrator/mcp-response-cache.test.ts"
   },
   "keywords": [
     "mcp",
@@ -114,6 +115,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",
     "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/ext-tasks": "0.2.2",
     "@modelcontextprotocol/server": "^2.0.0",
     "@modelcontextprotocol/server-legacy": "^2.0.0",
     "@napi-rs/keyring": "^1.2.0",

@@ -88,6 +88,7 @@ import { SkillsService } from './services/skills-service.js';
 import { PhotonService } from './services/photon-service.js';
 import { ConnectionPoolManager } from './services/connection-pool.js';
 import { DefaultTransportFactory } from './services/transport-factory.js';
+import { fingerprintMCPPrincipal, fingerprintMCPServerConfig, guardMCPResponseCacheStore, MCPResponseCacheRegistry } from './services/mcp-response-cache.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -157,6 +158,7 @@ interface MCPConnection {
     description?: string;
     websiteUrl?: string;
   };
+  serverCapabilities?: Record<string, unknown>;
   lastUsed: number;
   connectTime: number;
   executionCount: number;
@@ -173,6 +175,12 @@ interface MCPDefinition {
     description?: string;
     websiteUrl?: string;
   };
+  serverCapabilities?: Record<string, unknown>;
+  /** Opaque identity of the configured server and authenticated principal. */
+  originId?: string;
+  /** SDK-advertised catalog freshness; persisted catalogs begin stale. */
+  catalogExpiresAt?: number;
+  catalogNeedsRefresh?: boolean;
 }
 
 /** Preserve all fields returned by tools/list, including newer MCP extensions. */
@@ -189,6 +197,8 @@ interface MCPToolDescriptor {
 export class NCPOrchestrator {
   private definitions: Map<string, MCPDefinition> = new Map();
   private connections: Map<string, MCPConnection> = new Map();
+  private readonly responseCacheRegistry = new MCPResponseCacheRegistry();
+  private toolCatalogChangedHandler?: (serverName: string) => void;
   private toolToMCP: Map<string, string> = new Map();
   private allTools: Array<{ name: string; description: string; mcpName: string }> = [];
   private profileName: string;
@@ -1363,17 +1373,81 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
     logger.info('✅ Runtime package approval enabled via elicitations');
   }
 
-  private createMCPClient(): Client {
+  private async createMCPClient(config: MCPConfig): Promise<Client> {
+    const cacheIdentity = fingerprintMCPServerConfig({
+      name: config.name,
+      command: config.command,
+      args: config.args,
+      url: config.url,
+      transport: config.transport,
+    });
+    const cachePartition = await this.getMCPPrincipalCachePartition(config);
+    const definition = this.definitions.get(config.name);
+    if (definition) {
+      definition.originId = fingerprintMCPPrincipal({ cacheIdentity, cachePartition });
+    }
     const client = new Client(
       this.clientInfo,
       {
-        capabilities: { elicitation: { form: {} } } as any,
+        capabilities: {
+          elicitation: { form: {} },
+          extensions: {
+            'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] },
+            'io.modelcontextprotocol/skills': {},
+          },
+        } as any,
         versionNegotiation: { mode: 'auto' },
-        inputRequired: { autoFulfill: true }
+        inputRequired: { autoFulfill: true },
+        responseCacheStore: guardMCPResponseCacheStore(
+          this.responseCacheRegistry.get(cacheIdentity),
+          cachePartition,
+          () => this.getMCPPrincipalCachePartition(config),
+        ),
+        cachePartition,
+        defaultCacheTtlMs: 0,
+        listChanged: {
+          tools: {
+            autoRefresh: true,
+            onChanged: (error, tools) => {
+              if (error || !tools) {
+                if (error) logger.warn(`Failed to refresh tool catalog for ${config.name}: ${error.message}`);
+                return;
+              }
+              void this.applyToolCatalogUpdate(config.name, tools as MCPToolDescriptor[], undefined, true)
+                .catch(updateError => logger.warn(`Failed to apply changed tools for ${config.name}: ${updateError.message}`));
+            },
+          },
+        },
       }
     );
     this.registerDownstreamElicitationHandler(client);
     return client;
+  }
+
+  private async getMCPPrincipalCachePartition(config: MCPConfig): Promise<string> {
+    if (!config.auth && Object.keys(config.env ?? {}).length === 0) return '';
+
+    let credential: unknown = config.auth ?? null;
+    if (config.auth?.type === 'oauth' && config.auth.oauth21 && config.url) {
+      try {
+        const tokens = await this.transportFactory.getOAuthProvider(config as any).tokens();
+        credential = tokens?.access_token ?? config.auth.oauth21;
+      } catch {
+        credential = config.auth.oauth21;
+      }
+    } else if (config.auth) {
+      try {
+        // Use the same credential resolution as the transport, including a
+        // refreshed OAuth token or an injected bearer-token provider.
+        credential = await this.transportFactory.getAuthToken(config as any);
+      } catch {
+        // Credential resolution may happen during connect; hashing the
+        // configured identity still keeps distinct auth configurations apart.
+        credential = config.auth;
+      }
+    }
+
+    return fingerprintMCPPrincipal({ credential, env: config.env ?? {} });
   }
 
   /**
@@ -1945,7 +2019,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
             inputSchema: toolMetadata?.inputSchema
           };
         }),
-        serverInfo: mcpMetadata?.serverInfo
+        serverInfo: mcpMetadata?.serverInfo,
+        serverCapabilities: (mcpMetadata as any)?.serverCapabilities,
+        catalogNeedsRefresh: true,
       });
 
       // Add to all tools and create mappings
@@ -2020,7 +2096,10 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
             ...tool,
             inputSchema: tool.inputSchema  // Preserve as-is, don't default to {}
           })),
-          serverInfo: result.serverInfo
+          serverInfo: result.serverInfo,
+          serverCapabilities: result.serverCapabilities,
+          catalogExpiresAt: result.catalogExpiresAt,
+          catalogNeedsRefresh: false,
         });
 
         // Track that this MCP was newly indexed in this run
@@ -2191,7 +2270,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       });
     };
 
-    let client = this.createMCPClient();
+    let client = await this.createMCPClient(config);
     let transport = await this.createTransport(config, env);
     try {
       await connect(client, transport);
@@ -2216,7 +2295,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       }
 
       try { await client.close(); } catch {}
-      client = this.createMCPClient();
+      client = await this.createMCPClient(config);
       try {
         transport = await this.createTransport(config, env);
         await connect(client, transport);
@@ -2272,6 +2351,8 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
   // Based on commercial NCP's probeMCPTools method
   private async probeMCPTools(config: MCPConfig, timeout: number = this.QUICK_PROBE_TIMEOUT): Promise<{
     tools: MCPToolDescriptor[];
+    serverCapabilities?: Record<string, unknown>;
+    catalogExpiresAt: number;
     serverInfo?: {
       name: string;
       title?: string;
@@ -2303,11 +2384,15 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
 
       // Capture server info after connection
       const serverInfo = client!.getServerVersion();
+      const serverCapabilities = client!.getServerCapabilities() as Record<string, unknown> | undefined;
 
       // Get tool list with filtered output
       const response = await withFilteredOutput(async () => {
         return await client!.listTools();
       });
+      const ttlMs = Number.isFinite((response as any)?.ttlMs)
+        ? Math.max(0, Math.min((response as any).ttlMs, 24 * 60 * 60 * 1000))
+        : 0;
 
       const tools = response.tools.map(t => ({
         ...t,
@@ -2319,6 +2404,8 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
 
       return {
         tools,
+        serverCapabilities,
+        catalogExpiresAt: Date.now() + ttlMs,
         serverInfo: serverInfo ? {
           name: serverInfo.name || config.name,
           title: serverInfo.title,
@@ -2346,11 +2433,181 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
     }
   }
 
+  private async ensureFreshCatalog(mcpName: string): Promise<void> {
+    const definition = this.definitions.get(mcpName);
+    if (!definition) return;
+    if (!definition.catalogNeedsRefresh && (definition.catalogExpiresAt ?? 0) > Date.now()) return;
+
+    const connection = await this.getOrCreateConnection(mcpName);
+    const response = await withFilteredOutput(async () => connection.client.listTools({}, { cacheMode: 'use' }));
+    const ttlMs = Number.isFinite((response as any)?.ttlMs)
+      ? Math.max(0, Math.min((response as any).ttlMs, 24 * 60 * 60 * 1000))
+      : 0;
+    await this.applyToolCatalogUpdate(mcpName, response.tools as MCPToolDescriptor[], Date.now() + ttlMs);
+  }
+
+  private async applyToolCatalogUpdate(
+    mcpName: string,
+    tools: MCPToolDescriptor[],
+    expiresAt?: number,
+    fromListChanged = false,
+  ): Promise<void> {
+    const definition = this.definitions.get(mcpName);
+    if (!definition) return;
+    const previousCatalog = JSON.stringify(definition.tools);
+    const previousNames = new Set(definition.tools.map(tool => tool.name));
+    const normalizedTools = tools.map(tool => ({ ...tool, description: tool.description || '' }));
+    definition.tools = normalizedTools;
+    definition.catalogExpiresAt = expiresAt ?? Date.now();
+    definition.catalogNeedsRefresh = false;
+
+    const connection = this.connections.get(mcpName);
+    if (connection) connection.tools = normalizedTools;
+
+    this.allTools = this.allTools.filter(tool => tool.mcpName !== mcpName);
+    for (const [toolName, owner] of this.toolToMCP) {
+      if (owner === mcpName) this.toolToMCP.delete(toolName);
+    }
+
+    const discoveryTools = normalizedTools.map(tool => {
+      const prefixedName = `${mcpName}:${tool.name}`;
+      const description = tool.description || 'No description available';
+      this.allTools.push({ name: prefixedName, description: `${mcpName}: ${description}`, mcpName });
+      this.toolToMCP.set(prefixedName, mcpName);
+      const otherOwner = [...this.definitions.entries()].some(([otherName, other]) =>
+        otherName !== mcpName && other.tools.some(otherTool => otherTool.name === tool.name));
+      if (!otherOwner) this.toolToMCP.set(tool.name, mcpName);
+      return {
+        id: prefixedName,
+        name: tool.name,
+        description,
+        mcpServer: mcpName,
+        inputSchema: tool.inputSchema || {},
+      };
+    });
+
+    // Keep name mappings for any previous aliases still uniquely owned by
+    // another MCP after removing this server's old catalog.
+    for (const oldName of previousNames) {
+      if (normalizedTools.some(tool => tool.name === oldName)) continue;
+      const remainingOwner = [...this.definitions.entries()].find(([otherName, other]) =>
+        otherName !== mcpName && other.tools.some(tool => tool.name === oldName));
+      if (remainingOwner) this.toolToMCP.set(oldName, remainingOwner[0]);
+    }
+
+    await this.discovery.replaceMCPTools(mcpName, discoveryTools);
+    this.newlyIndexedMCPs.add(mcpName);
+    if (fromListChanged) definition.catalogExpiresAt = Date.now();
+    if (previousCatalog !== JSON.stringify(normalizedTools)) {
+      try { this.toolCatalogChangedHandler?.(mcpName); }
+      catch (error: any) { logger.warn(`Tool catalog change callback failed for ${mcpName}: ${error.message}`); }
+    }
+  }
+
+  /** Register the outer server's tools/list_changed notifier. */
+  setToolCatalogChangedHandler(handler: ((serverName: string) => void) | undefined): void {
+    this.toolCatalogChangedHandler = handler;
+  }
+
+  /** Snapshot of discovered downstream tool catalogs and their capabilities. */
+  getMCPServerCatalogs(): Array<{ serverName: string; tools: MCPToolDescriptor[]; capabilities?: Record<string, unknown>; originId: string }> {
+    return [...this.definitions.values()].map(definition => ({
+      serverName: definition.name,
+      tools: definition.tools.map(tool => ({ ...tool })),
+      capabilities: definition.serverCapabilities ?? this.connections.get(definition.name)?.serverCapabilities,
+      originId: definition.originId ?? fingerprintMCPPrincipal({
+        server: fingerprintMCPServerConfig({
+          name: definition.config.name,
+          command: definition.config.command,
+          args: definition.config.args,
+          url: definition.config.url,
+          transport: definition.config.transport,
+        }),
+        principal: definition.config.auth ?? null,
+        env: definition.config.env ?? {},
+      }),
+    }));
+  }
+
+  /** Catalog snapshot whose origin IDs reflect currently resolved credentials. */
+  async getVerifiedMCPServerCatalogs(): Promise<ReturnType<NCPOrchestrator['getMCPServerCatalogs']>> {
+    const catalogs = this.getMCPServerCatalogs();
+    await Promise.all(catalogs.map(async catalog => {
+      const definition = this.definitions.get(catalog.serverName);
+      if (!definition) return;
+      const cacheIdentity = fingerprintMCPServerConfig({
+        name: definition.config.name,
+        command: definition.config.command,
+        args: definition.config.args,
+        url: definition.config.url,
+        transport: definition.config.transport,
+      });
+      const cachePartition = await this.getMCPPrincipalCachePartition(definition.config);
+      const originId = fingerprintMCPPrincipal({ cacheIdentity, cachePartition });
+      definition.originId = originId;
+      catalog.originId = originId;
+    }));
+    return catalogs;
+  }
+
+  /**
+   * Refresh only stale catalogs that can contribute MCP Apps tools. This lets
+   * resource/tool snapshots reflect TTL changes without waking unrelated
+   * stdio servers for every protocol request.
+   */
+  async refreshMCPServerCatalogs(): Promise<ReturnType<NCPOrchestrator['getMCPServerCatalogs']>> {
+    const appExtension = 'io.modelcontextprotocol/ui';
+    const resourceUriFor = (tool: MCPToolDescriptor): unknown => {
+      const metadata = tool._meta as Record<string, any> | undefined;
+      return metadata?.ui?.resourceUri ?? metadata?.['ui/resourceUri'];
+    };
+    const isAppTool = (tool: MCPToolDescriptor): boolean => {
+      const metadata = tool._meta as Record<string, any> | undefined;
+      const visibility = metadata?.ui?.visibility ?? metadata?.['ui/visibility'];
+      return typeof resourceUriFor(tool) === 'string'
+        || (Array.isArray(visibility) && visibility.includes('app'));
+    };
+    const staleApps = [...this.definitions.values()].filter(definition => {
+      const capabilities = definition.serverCapabilities ?? this.connections.get(definition.name)?.serverCapabilities;
+      const hasUiExtension = Boolean((capabilities as any)?.extensions?.[appExtension]);
+      const hasAppTools = definition.tools.some(isAppTool);
+      return (hasUiExtension || hasAppTools)
+        && (definition.catalogNeedsRefresh || (definition.catalogExpiresAt ?? 0) <= Date.now());
+    });
+    const unavailable = new Set<string>();
+    await Promise.all(staleApps.map(async definition => {
+      try {
+        await this.ensureFreshCatalog(definition.name);
+      } catch (error: any) {
+        unavailable.add(definition.name);
+        logger.warn(`Omitting unavailable MCP Apps catalog ${definition.name}: ${error.message}`);
+      }
+    }));
+    return this.getMCPServerCatalogs().filter(catalog => !unavailable.has(catalog.serverName));
+  }
+
+  /** Get a live pooled client for protocol extensions, refreshing its catalog first. */
+  async getMCPClient(serverName: string): Promise<Client> {
+    await this.ensureFreshCatalog(serverName);
+    return (await this.getOrCreateConnection(serverName)).client;
+  }
+
+  /** Read a downstream resource without flattening its content or metadata. */
+  async readMCPResource(serverName: string, uri: string): Promise<unknown> {
+    const client = await this.getMCPClient(serverName);
+    return withFilteredOutput(async () => client.readResource({ uri }, { cacheMode: 'use' }));
+  }
+
   async find(query: string, limit: number = 5, detailed: boolean = false, confidenceThreshold: number = 0.35): Promise<DiscoveryResult[]> {
     // Wait for background initialization to complete (this is where indexing + spinner happens)
     await this.waitForInitialization();
 
     if (!query) {
+      if (detailed) {
+        // An explicit full catalog request is on-demand, so revalidate stale
+        // persisted catalogs here without opening connections during startup.
+        await Promise.all([...this.definitions.keys()].map(name => this.ensureFreshCatalog(name)));
+      }
       // No query = list all tools, filtered by health
       const healthyTools = this.allTools.filter(tool => this.healthMonitor.getHealthyMCPs([tool.mcpName]).length > 0);
       const results = healthyTools.slice(0, limit).map(tool => {
@@ -2362,7 +2619,8 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
           mcpName: tool.mcpName,
           confidence: 1.0,
           description: detailed ? tool.description : undefined,
-          schema: detailed ? this.getToolSchema(tool.mcpName, actualToolName) : undefined
+          schema: detailed ? this.getToolSchema(tool.mcpName, actualToolName) : undefined,
+          descriptor: detailed ? this.getToolDescriptor(tool.mcpName, actualToolName) : undefined,
         };
       });
       return results;
@@ -2372,7 +2630,28 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
     // DOUBLE SEARCH TECHNIQUE: Request 2x results to account for filtering disabled MCPs
     try {
       const doubleLimit = limit * 2; // Request double to account for filtered MCPs
-      const vectorResults = await this.discovery.findRelevantTools(query, doubleLimit, confidenceThreshold);
+      let vectorResults = await this.discovery.findRelevantTools(query, doubleLimit, confidenceThreshold);
+
+      if (detailed) {
+        const candidateServers = new Set<string>();
+        for (const result of vectorResults) {
+          const name = result.name.includes(':') ? result.name.split(':', 2)[0] : this.toolToMCP.get(result.name);
+          if (name && this.definitions.has(name)) candidateServers.add(name);
+        }
+        let refreshed = false;
+        for (const name of candidateServers) {
+          const definition = this.definitions.get(name);
+          if (definition && (definition.catalogNeedsRefresh || (definition.catalogExpiresAt ?? 0) <= Date.now())) {
+            await this.ensureFreshCatalog(name);
+            refreshed = true;
+          }
+        }
+        if (refreshed) {
+          // Removed tools are pruned from the live search index before the
+          // detailed response and schemas are generated.
+          vectorResults = await this.discovery.findRelevantTools(query, doubleLimit, confidenceThreshold);
+        }
+      }
 
       // Apply universal term frequency scoring boost
       const adjustedResults = this.adjustScoresUniversally(query, vectorResults);
@@ -2397,7 +2676,8 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
           mcpName: actualMcpName,  // Use actualMcpName for health filtering
           confidence: result.confidence,
           description: detailed ? fullTool?.description : undefined,
-          schema: detailed ? this.getToolSchema(actualMcpName, toolName) : undefined
+          schema: detailed ? this.getToolSchema(actualMcpName, toolName) : undefined,
+          descriptor: detailed ? this.getToolDescriptor(actualMcpName, toolName) : undefined,
         };
       });
 
@@ -2467,7 +2747,8 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
                 mcpName,
                 confidence: result.confidence,
                 description: detailed ? fullTool?.description : undefined,
-                schema: detailed ? this.getToolSchema(mcpName, toolName) : undefined
+                schema: detailed ? this.getToolSchema(mcpName, toolName) : undefined,
+                descriptor: detailed ? this.getToolDescriptor(mcpName, toolName) : undefined,
               };
             });
 
@@ -2532,7 +2813,8 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
           mcpName: tool.mcpName,
           confidence: 0.5,
           description: detailed ? tool.description : undefined,
-          schema: detailed ? this.getToolSchema(tool.mcpName, actualToolName) : undefined
+          schema: detailed ? this.getToolSchema(tool.mcpName, actualToolName) : undefined,
+          descriptor: detailed ? this.getToolDescriptor(tool.mcpName, actualToolName) : undefined,
         };
       });
     }
@@ -2595,6 +2877,20 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       return {
         success: false,
         error: `MCP '${mcpName}' not found. Available MCPs: ${availableMcps}. Use 'ncp find' to discover tools or check your profile configuration.`
+      };
+    }
+
+    try {
+      await this.ensureFreshCatalog(mcpName);
+    } catch (error: any) {
+      logger.warn(`Could not revalidate ${mcpName} before execution: ${error.message}`);
+      return { success: false, error: `Could not verify the current tool catalog for ${mcpName}: ${error.message}` };
+    }
+
+    if (!this.definitions.get(mcpName)?.tools.some(tool => tool.name === actualToolName)) {
+      return {
+        success: false,
+        error: `Tool '${toolName}' is no longer available from ${mcpName}. Use 'find' to discover the current tools.`,
       };
     }
 
@@ -2723,11 +3019,13 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
 
       // Capture server info after successful connection
       const serverInfo = client.getServerVersion();
+      const serverCapabilities = client.getServerCapabilities() as Record<string, unknown> | undefined;
 
       const connection: MCPConnection = {
         client,
         transport,
-        tools: [], // Will be populated if needed
+        tools: definition.tools,
+        serverCapabilities,
         serverInfo: serverInfo ? {
           name: serverInfo.name || mcpName,
           title: serverInfo.title,
@@ -2739,6 +3037,8 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
         connectTime: Date.now() - connectStart,
         executionCount: 1
       };
+
+      if (serverCapabilities) definition.serverCapabilities = serverCapabilities;
 
       // Store connection for reuse
       this.connections.set(mcpName, connection);
@@ -2816,7 +3116,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
               ...tool,
               inputSchema: tool.inputSchema || {}
             })),
-            serverInfo: mcpData.serverInfo || { name: mcpName, version: 'unknown' }
+            serverInfo: mcpData.serverInfo || { name: mcpName, version: 'unknown' },
+            serverCapabilities: mcpData.serverCapabilities,
+            catalogNeedsRefresh: true,
           });
 
           // Build allTools array and tool mappings
@@ -2913,7 +3215,8 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
             ...profile.mcpServers[mcpName]
           },
           tools: data.tools || [],
-          serverInfo: data.serverInfo
+          serverInfo: data.serverInfo,
+          catalogNeedsRefresh: true,
         });
 
         // Add tools to allTools and create mappings
@@ -2994,7 +3297,8 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
             mcpName,
             mcpConfig,
             definition.tools,
-            definition.serverInfo
+            definition.serverInfo,
+            definition.serverCapabilities,
           );
         }
       }
@@ -3009,6 +3313,12 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       logger.error(`Optimized cache save failed: ${error.message}`);
       throw error;
     }
+  }
+
+  private getToolDescriptor(mcpName: string, toolName: string): MCPToolDescriptor | undefined {
+    const tool = this.definitions.get(mcpName)?.tools.find(candidate => candidate.name === toolName)
+      ?? this.connections.get(mcpName)?.tools.find(candidate => candidate.name === toolName);
+    return tool ? { ...tool } : undefined;
   }
 
   private getToolSchema(mcpName: string, toolName: string): any {

@@ -42,6 +42,7 @@ export interface ToolMetadataCache {
         version: string;
         description?: string;
       };
+      serverCapabilities?: Record<string, unknown>;
     }
   }
 }
@@ -197,7 +198,13 @@ export class CachePatcher {
   /**
    * Patch tool metadata cache - Add MCP
    */
-  async patchAddMCP(mcpName: string, config: MCPConfig, tools: Tool[], serverInfo: any): Promise<void> {
+  async patchAddMCP(
+    mcpName: string,
+    config: MCPConfig,
+    tools: Tool[],
+    serverInfo: any,
+    serverCapabilities?: Record<string, unknown>,
+  ): Promise<void> {
     logger.info(`🔧 Patching tool metadata cache: adding ${mcpName}`);
 
     const cache = await this.loadToolMetadataCache();
@@ -216,7 +223,8 @@ export class CachePatcher {
         name: serverInfo?.name || mcpName,
         version: serverInfo?.version || '1.0.0',
         description: serverInfo?.description
-      }
+      },
+      ...(serverCapabilities ? { serverCapabilities } : {}),
     };
 
     await this.saveToolMetadataCache(cache);
