@@ -11,6 +11,9 @@
  * 3. find returns partial results during indexing (not empty)
  * 4. Cache profileHash persists across restarts
  * 5. Second startup uses cache (no re-indexing)
+ *
+ * The suite blocks network access and exercises the keyword-discovery fallback;
+ * semantic model quality is not covered here.
  */
 
 const { spawn, spawnSync } = require('child_process');
@@ -19,33 +22,36 @@ const path = require('path');
 const os = require('os');
 
 // Test configuration
-// Use local .ncp directory for integration tests to avoid conflicts with user's global config
-const NCP_DIR = path.join(process.cwd(), '.ncp');
-const PROFILES_DIR = path.join(NCP_DIR, 'profiles');
-const CACHE_DIR = path.join(NCP_DIR, 'cache');
+// Keep integration state isolated from both the checkout and the user's NCP config.
+let TEST_ROOT;
+let NCP_DIR;
+let PROFILES_DIR;
+let CACHE_DIR;
 const TEST_PROFILE = 'integration-test';
+const FIXTURE_MCP_NAME = 'local_fixture';
 const TIMEOUT_MS = 10000;
+const CACHE_POLL_TIMEOUT_MS = 30000;
+const activeClients = new Set();
 
 // Ensure test profile exists
 function setupTestProfile() {
-  // Create .ncp directory structure
-  if (!fs.existsSync(PROFILES_DIR)) {
-    fs.mkdirSync(PROFILES_DIR, { recursive: true });
-  }
-  if (!fs.existsSync(CACHE_DIR)) {
-    fs.mkdirSync(CACHE_DIR, { recursive: true });
-  }
+  TEST_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'ncp-client-simulation-'));
+  NCP_DIR = path.join(TEST_ROOT, '.ncp');
+  PROFILES_DIR = path.join(NCP_DIR, 'profiles');
+  CACHE_DIR = path.join(NCP_DIR, 'cache');
+  fs.mkdirSync(PROFILES_DIR, { recursive: true });
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
 
-  // Create minimal test profile with filesystem MCP
-  // filesystem MCP requires allowed directories as arguments
+  // Use a deterministic local MCP fixture so indexing never installs packages or uses the network.
+  const fixturePath = path.resolve(__dirname, '../fixtures/integration-stdio-mcp.mjs');
   const profilePath = path.join(PROFILES_DIR, `${TEST_PROFILE}.json`);
   const testProfile = {
     name: TEST_PROFILE, // IMPORTANT: profile.name must match filename for ProfileManager to load it correctly
     description: 'Integration test profile',
     mcpServers: {
-      filesystem: {
-        command: 'npx',
-        args: ['@modelcontextprotocol/server-filesystem', '/tmp']
+      [FIXTURE_MCP_NAME]: {
+        command: process.execPath,
+        args: [fixturePath]
       }
     },
     metadata: {
@@ -89,16 +95,23 @@ class MCPClientSimulator {
     this.responses = [];
     this.responseBuffer = '';
     this.requestId = 0;
+    this.stderrBuffer = '';
+    activeClients.add(this);
   }
 
   start() {
     return new Promise((resolve, reject) => {
       logInfo('Starting NCP MCP server...');
 
-      this.ncp = spawn('node', ['dist/index-mcp.js'], {
+      const offlinePreload = path.resolve(__dirname, '../fixtures/offline-fetch-preload.mjs');
+      this.ncp = spawn(process.execPath, [
+        '--import', offlinePreload,
+        path.resolve(process.cwd(), 'dist/index-mcp.js')
+      ], {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
+          NCP_WORKING_DIR: TEST_ROOT,
           NCP_PROFILE: TEST_PROFILE,  // Use env var instead of CLI arg
           NO_COLOR: 'true',  // Disable colors in output
           NCP_DEBUG: 'true'  // Enable debug logging
@@ -126,15 +139,14 @@ class MCPClientSimulator {
       this.ncp.stderr.on('data', (data) => {
         // Collect stderr for debugging
         const msg = data.toString();
+        this.stderrBuffer += msg;
         if (msg.includes('[DEBUG]') || msg.includes('ERROR') || msg.includes('WARN')) {
           console.log(msg.trim());
         }
       });
 
       this.ncp.on('error', reject);
-
-      // Give it a moment to start
-      setTimeout(resolve, 100);
+      this.ncp.once('spawn', resolve);
     });
   }
 
@@ -180,7 +192,8 @@ class MCPClientSimulator {
         }
 
         if (Date.now() - startTime > timeoutMs) {
-          reject(new Error(`Timeout waiting for response to request ${id}`));
+          const stderr = this.stderrBuffer.trim().slice(-4000);
+          reject(new Error(`Timeout waiting for response to request ${id}${stderr ? `\nChild stderr:\n${stderr}` : ''}`));
           return;
         }
 
@@ -193,18 +206,29 @@ class MCPClientSimulator {
 
   async stop() {
     if (this.ncp) {
-      // Close stdin to trigger graceful shutdown (allows cache finalization)
-      this.ncp.stdin.end();
-      // Wait for process to exit gracefully
+      const child = this.ncp;
+      if (child.exitCode !== null || child.signalCode !== null) {
+        activeClients.delete(this);
+        return;
+      }
+
+      // Close stdin to trigger graceful shutdown (allows cache finalization).
       await new Promise(resolve => {
-        this.ncp.once('exit', resolve);
-        // Fallback: force kill after 2 seconds if it doesn't exit
-        setTimeout(() => {
-          if (!this.ncp.killed) {
-            this.ncp.kill();
-            resolve();
-          }
+        let settled = false;
+        let forceKillTimer;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          if (forceKillTimer) clearTimeout(forceKillTimer);
+          activeClients.delete(this);
+          resolve();
+        };
+        child.once('exit', finish);
+        forceKillTimer = setTimeout(() => {
+          if (child.exitCode === null && child.signalCode === null) child.kill();
+          finish();
         }, 2000);
+        child.stdin.end();
       });
     }
   }
@@ -373,45 +397,56 @@ async function test4_CacheProfileHashPersists() {
   // Start server and let it create cache
   const client1 = new MCPClientSimulator();
   await client1.start();
+  await client1.initializeLegacy();
 
   const id1 = client1.sendRequest('tools/call', {
     name: 'find',
-    arguments: {}
+    arguments: { description: 'read a local file' }
   });
 
-  await client1.waitForResponse(id1, 10000);
+  const response = await client1.waitForResponse(id1, TIMEOUT_MS);
+  if (response.error) {
+    throw new Error(`find failed while indexing cache: ${response.error.message}`);
+  }
 
-  // Wait a bit for indexing to potentially complete
-  await new Promise(resolve => setTimeout(resolve, 2000));
-
+  // Wait for the profile hash and complete fixture catalog, not a guessed delay.
+  const completedCache = await waitForCompletedCatalog(metaPath, csvPath, client1);
   await client1.stop();
 
-  // Wait for cache to be finalized and written
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
   // Check cache metadata
-  if (!fs.existsSync(metaPath)) {
-    logError('Cache metadata file not created');
-    logInfo(`Expected at: ${metaPath}`);
-
-    // List what's in cache dir for debugging
-    if (fs.existsSync(CACHE_DIR)) {
-      const files = fs.readdirSync(CACHE_DIR);
-      logInfo(`Files in cache dir: ${files.join(', ')}`);
-    }
-
-    return false;
-  }
-
-  const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-
-  if (!metadata.profileHash || metadata.profileHash === '') {
-    logError(`profileHash is empty: "${metadata.profileHash}"`);
-    return false;
-  }
+  const metadata = completedCache.metadata;
 
   logSuccess(`Cache profileHash saved: ${metadata.profileHash.substring(0, 16)}...`);
   return true;
+}
+
+async function waitForCompletedCatalog(metaPath, csvPath, client, timeoutMs = CACHE_POLL_TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  let lastState = 'cache metadata not written yet';
+
+  while (Date.now() < deadline) {
+    try {
+      const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+      const indexedMCPs = metadata.indexedMCPs || {};
+      const rows = fs.readFileSync(csvPath, 'utf-8').split(/\r?\n/).filter(Boolean).slice(1);
+      const fixtureIndexed = Object.prototype.hasOwnProperty.call(indexedMCPs, FIXTURE_MCP_NAME);
+      const complete = Boolean(metadata.profileHash)
+        && fixtureIndexed
+        && Number(metadata.totalMCPs) >= 1
+        && Number(metadata.totalTools) >= 1
+        && rows.length >= Number(metadata.totalTools);
+
+      lastState = `profileHash=${metadata.profileHash ? 'present' : 'empty'}, totalMCPs=${metadata.totalMCPs}, totalTools=${metadata.totalTools}, indexed=${Object.keys(indexedMCPs).join(',') || 'none'}, csvRows=${rows.length}`;
+      if (complete) return { metadata, rows };
+    } catch (error) {
+      lastState = error.message;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  const stderr = client?.stderrBuffer?.trim().slice(-4000);
+  throw new Error(`Timed out after ${timeoutMs}ms waiting for the completed ${FIXTURE_MCP_NAME} catalog (${lastState})${stderr ? `\nChild stderr:\n${stderr}` : ''}`);
 }
 
 async function test5_NoReindexingOnRestart() {
@@ -422,29 +457,35 @@ async function test5_NoReindexingOnRestart() {
   // Get initial cache state
   const metaBefore = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
   const hashBefore = metaBefore.profileHash;
-  const lastUpdatedBefore = metaBefore.lastUpdated;
-
-  // Wait a moment to ensure timestamp would change if re-indexed
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  if (!hashBefore || !metaBefore.indexedMCPs?.[FIXTURE_MCP_NAME] || Number(metaBefore.totalTools) < 1) {
+    throw new Error('Cannot verify cache reuse: the initial profile hash and completed fixture catalog must be present');
+  }
 
   // Start server again
   const client = new MCPClientSimulator();
   await client.start();
+  await client.initializeLegacy();
 
   const id = client.sendRequest('tools/call', {
     name: 'find',
-    arguments: {}
+    arguments: { description: 'read a local file' }
   });
 
-  await client.waitForResponse(id, 10000);
+  const response = await client.waitForResponse(id, TIMEOUT_MS);
+  if (response.error) {
+    throw new Error(`find failed on cached restart: ${response.error.message}`);
+  }
+  const completedCache = await waitForCompletedCatalog(metaPath, path.join(CACHE_DIR, `${TEST_PROFILE}-tools.csv`), client);
   await client.stop();
 
-  // Wait for any potential cache updates
-  await new Promise(resolve => setTimeout(resolve, 500));
-
   // Check cache wasn't regenerated
-  const metaAfter = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+  const metaAfter = completedCache.metadata;
   const hashAfter = metaAfter.profileHash;
+
+  if (!hashAfter) {
+    logError('profileHash is empty after restart; equality with an empty hash cannot verify cache reuse');
+    return false;
+  }
 
   if (hashBefore !== hashAfter) {
     logError(`profileHash changed on restart (cache invalidated):\n  Before: ${hashBefore}\n  After: ${hashAfter}`);
@@ -461,7 +502,9 @@ async function test5_NoReindexingOnRestart() {
 async function test6_CredentialsJsonOutput() {
   logInfo('Test 6: credentials --json returns well-formed output');
 
-  const result = spawnSync('node', ['dist/index.js', 'credentials', '--json'], {
+  const result = spawnSync(process.execPath, [
+    'dist/index.js', '--working-dir', TEST_ROOT, 'credentials', '--json'
+  ], {
     env: {
       ...process.env,
       NO_COLOR: 'true'
@@ -499,14 +542,18 @@ async function test6_CredentialsJsonOutput() {
   return true;
 }
 
+async function cleanupTestEnvironment() {
+  await Promise.all([...activeClients].map(client => client.stop()));
+  if (TEST_ROOT && fs.existsSync(TEST_ROOT)) {
+    fs.rmSync(TEST_ROOT, { recursive: true, force: true });
+  }
+}
+
 async function runAllTests() {
   console.log('\n' + '='.repeat(60));
   console.log('🧪 NCP Integration Test Suite');
   console.log('   Simulating Real AI Client Behavior');
   console.log('='.repeat(60) + '\n');
-
-  // Setup test environment
-  setupTestProfile();
 
   const tests = [
     test1_Initialize,
@@ -520,19 +567,25 @@ async function runAllTests() {
   let passed = 0;
   let failed = 0;
 
-  for (const test of tests) {
-    try {
-      const result = await test();
-      if (result) {
-        passed++;
-      } else {
+  try {
+    setupTestProfile();
+
+    for (const test of tests) {
+      try {
+        const result = await test();
+        if (result) {
+          passed++;
+        } else {
+          failed++;
+        }
+      } catch (error) {
+        logError(`${test.name} threw error: ${error.message}`);
         failed++;
       }
-    } catch (error) {
-      logError(`${test.name} threw error: ${error.message}`);
-      failed++;
+      console.log(''); // Blank line between tests
     }
-    console.log(''); // Blank line between tests
+  } finally {
+    await cleanupTestEnvironment();
   }
 
   console.log('='.repeat(60));
@@ -541,25 +594,20 @@ async function runAllTests() {
 
   if (failed > 0) {
     console.log('❌ INTEGRATION TESTS FAILED - DO NOT RELEASE\n');
-    process.exit(1);
+    process.exitCode = 1;
   } else {
     console.log('✅ ALL INTEGRATION TESTS PASSED - Safe to release\n');
-    process.exit(0);
+    process.exitCode = 0;
   }
 }
-
-// Cleanup on exit
-process.on('exit', () => {
-  // Clean up test profile cache if needed
-  const metaPath = path.join(CACHE_DIR, `${TEST_PROFILE}-cache-meta.json`);
-  if (fs.existsSync(metaPath)) {
-    // Optionally clean up: fs.unlinkSync(metaPath);
-  }
-});
 
 // Run tests
 runAllTests().catch(error => {
   logError(`Test suite crashed: ${error.message}`);
   console.error(error);
-  process.exit(1);
+  cleanupTestEnvironment().catch(cleanupError => {
+    console.error(`Failed to clean integration test temp directory: ${cleanupError.message}`);
+  }).finally(() => {
+    process.exitCode = 1;
+  });
 });

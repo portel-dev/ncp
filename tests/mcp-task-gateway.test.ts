@@ -12,6 +12,10 @@ import {
 import { McpTaskGateway } from '../src/server/mcp-task-gateway.js';
 import { McpTaskStore } from '../src/server/mcp-task-store.js';
 
+// These checks wait for flushed files, not a filesystem performance target.
+jest.setTimeout(30_000);
+const TASK_WAIT_TIMEOUT_MS = 10_000;
+
 const ACCEPT_ANY = {
   '~standard': {
     version: 1,
@@ -292,21 +296,24 @@ async function waitForStatus(
   owner: string,
   status: string,
 ): Promise<any> {
-  const deadline = performance.now() + 2_000;
+  const deadline = performance.now() + TASK_WAIT_TIMEOUT_MS;
   while (performance.now() < deadline) {
     const task = await gateway.getTask(taskId, owner) as any;
     if (task.status === status) return task;
-    await delay(5);
+    await delay(50);
   }
+  // Surface a storage failure instead of hiding it behind a polling timeout.
+  await (gateway as any).liveTasks.get(taskId)?.writes;
   throw new Error('Task did not reach status ' + status);
 }
 
 async function waitForTask(gateway: McpTaskGateway, taskId: string, owner: string): Promise<any> {
-  const deadline = performance.now() + 2_000;
+  const deadline = performance.now() + TASK_WAIT_TIMEOUT_MS;
   while (performance.now() < deadline) {
     const task = await gateway.getTask(taskId, owner) as any;
     if (['completed', 'failed', 'cancelled'].includes(task.status)) return task;
-    await delay(5);
+    await delay(50);
   }
+  await (gateway as any).liveTasks.get(taskId)?.writes;
   throw new Error('Task did not complete');
 }
