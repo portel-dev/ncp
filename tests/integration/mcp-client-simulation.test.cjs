@@ -113,6 +113,7 @@ class MCPClientSimulator {
         env: {
           ...process.env,
           NCP_WORKING_DIR: TEST_ROOT,
+          NCP_CONFIG_PATH: NCP_DIR,
           NCP_PROFILE: TEST_PROFILE,  // Use env var instead of CLI arg
           NO_COLOR: 'true',  // Disable colors in output
           NCP_DEBUG: 'true'  // Enable debug logging
@@ -424,10 +425,12 @@ async function test4_CacheProfileHashPersists() {
 async function waitForCompletedCatalog(metaPath, csvPath, client, timeoutMs = CACHE_POLL_TIMEOUT_MS) {
   const deadline = Date.now() + timeoutMs;
   let lastState = 'cache metadata not written yet';
+  let lastMetadata;
 
   while (Date.now() < deadline) {
     try {
       const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+      lastMetadata = metadata;
       const indexedMCPs = metadata.indexedMCPs || {};
       const rows = fs.readFileSync(csvPath, 'utf-8').split(/\r?\n/).filter(Boolean).slice(1);
       const fixtureIndexed = Object.prototype.hasOwnProperty.call(indexedMCPs, FIXTURE_MCP_NAME);
@@ -446,8 +449,34 @@ async function waitForCompletedCatalog(metaPath, csvPath, client, timeoutMs = CA
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 
-  const stderr = client?.stderrBuffer?.trim().slice(-4000);
-  throw new Error(`Timed out after ${timeoutMs}ms waiting for the completed ${FIXTURE_MCP_NAME} catalog (${lastState})${stderr ? `\nChild stderr:\n${stderr}` : ''}`);
+  const stderr = client?.stderrBuffer?.trim();
+  const stderrDiagnostics = stderr
+    ? stderr.length <= 16000
+      ? stderr
+      : `${stderr.slice(0, 4000)}\n... ${stderr.length - 12000} characters omitted ...\n${stderr.slice(-8000)}`
+    : '';
+  let debugLogDiagnostics = '';
+  const logsDir = path.join(NCP_DIR, 'logs');
+  if (fs.existsSync(logsDir)) {
+    const debugLogs = fs.readdirSync(logsDir)
+      .filter(file => file.startsWith('ncp-debug-') && file.endsWith('.log'))
+      .map(file => ({ file, modified: fs.statSync(path.join(logsDir, file)).mtimeMs }))
+      .sort((a, b) => a.modified - b.modified)
+      .map(({ file }) => `--- ${file} ---\n${fs.readFileSync(path.join(logsDir, file), 'utf-8')}`)
+      .join('\n');
+    if (debugLogs) debugLogDiagnostics = debugLogs.length <= 24000
+      ? debugLogs
+      : `${debugLogs.slice(0, 6000)}\n... ${debugLogs.length - 18000} characters omitted ...\n${debugLogs.slice(-12000)}`;
+  }
+  const failedMCPs = lastMetadata?.failedMCPs
+    ? `\nFailed MCP records:\n${JSON.stringify(lastMetadata.failedMCPs, null, 2)}`
+    : '';
+  throw new Error(
+    `Timed out after ${timeoutMs}ms waiting for the completed ${FIXTURE_MCP_NAME} catalog (${lastState})` +
+    `${failedMCPs}` +
+    `${stderrDiagnostics ? `\nChild stderr:\n${stderrDiagnostics}` : ''}` +
+    `${debugLogDiagnostics ? `\nNCP debug logs:\n${debugLogDiagnostics}` : ''}`
+  );
 }
 
 async function test5_NoReindexingOnRestart() {

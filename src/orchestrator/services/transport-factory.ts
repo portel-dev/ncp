@@ -291,14 +291,16 @@ export class DefaultTransportFactory implements TransportFactory {
    */
   private setupEnvironment(
     mcpName: string,
-    env?: Record<string, string>
+    env?: Record<string, string>,
+    platform = process.platform
   ): Record<string, string> {
     const processEnv = (env || {}) as Record<string, string>;
-    const platform = process.platform;
 
     const pathSeparator = platform === 'win32' ? ';' : ':';
     let standardPaths: string;
     let pathCheckNeeded = false;
+    let pathKey = 'PATH';
+    let currentPath = processEnv.PATH;
 
     if (platform === 'darwin') {
       // macOS: Include both Homebrew locations (Intel and Apple Silicon)
@@ -311,8 +313,21 @@ export class DefaultTransportFactory implements TransportFactory {
       // Windows: Only ensure basic system paths exist
       const windir = process.env.WINDIR || process.env.windir || 'C:\\Windows';
       standardPaths = `${windir}\\System32;${windir}`;
+      // Windows treats environment variable names case-insensitively. Preserve
+      // the existing spelling and value (Windows commonly exposes this as
+      // `Path`) so adding system paths never discards the caller's executable
+      // search path. If config.env supplied a differently-cased duplicate,
+      // use its last value, matching the order in which env objects are merged.
+      const pathEntries = Object.keys(processEnv).filter(key => key.toLowerCase() === 'path');
+      if (pathEntries.length > 0) {
+        pathKey = pathEntries[pathEntries.length - 1];
+        currentPath = processEnv[pathKey];
+        for (const key of pathEntries) {
+          if (key !== pathKey) delete processEnv[key];
+        }
+      }
       pathCheckNeeded =
-        !!processEnv.PATH && !processEnv.PATH.toLowerCase().includes('system32');
+        !!currentPath && !currentPath.toLowerCase().includes('system32');
     } else {
       // Linux: Standard system paths
       standardPaths = '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
@@ -323,12 +338,12 @@ export class DefaultTransportFactory implements TransportFactory {
     }
 
     // Set or augment PATH
-    if (!processEnv.PATH) {
-      processEnv.PATH = standardPaths;
-      logger.debug(`Set PATH for ${mcpName}: ${processEnv.PATH}`);
+    if (!currentPath) {
+      processEnv[pathKey] = standardPaths;
+      logger.debug(`Set PATH for ${mcpName}: ${processEnv[pathKey]}`);
     } else if (pathCheckNeeded) {
-      processEnv.PATH = `${standardPaths}${pathSeparator}${processEnv.PATH}`;
-      logger.debug(`Augmented PATH for ${mcpName}: ${processEnv.PATH}`);
+      processEnv[pathKey] = `${standardPaths}${pathSeparator}${currentPath}`;
+      logger.debug(`Augmented PATH for ${mcpName}: ${processEnv[pathKey]}`);
     }
 
     return processEnv;
