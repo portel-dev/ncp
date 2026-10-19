@@ -79,7 +79,7 @@ describe('CLI Integration Tests', () => {
   };
 
   const runCLI = (args: string, opts: { env?: Record<string, string> } = {}) => {
-    const argArray = parseArgs(args);
+    const argArray = ['--working-dir', testConfigPath, ...parseArgs(args)];
     const childEnv = { ...process.env };
 
     // Keep isolated-vm disabled during tests to avoid platform-specific segfaults.
@@ -91,7 +91,6 @@ describe('CLI Integration Tests', () => {
       env: {
         ...childEnv,
         NCP_CONFIG_PATH: testConfigPath,
-        NCP_WORKING_DIR: testConfigPath,
         NCP_CONFIRM_BEFORE_RUN: 'false', // Disable confirmation dialogs for automated tests
         ...opts.env
       },
@@ -106,6 +105,15 @@ describe('CLI Integration Tests', () => {
           : result.error
             ? 1
             : 0;
+
+    if (exitCode !== 0) {
+      const details = [
+        `[CLI test] ${argArray.join(' ')} exited with status ${exitCode}${result.signal ? ` (${result.signal})` : ''}.`,
+        result.error ? `spawnSync error: ${result.error.message}` : '',
+        result.stderr?.trim() ? `stderr:\n${result.stderr.trim()}` : ''
+      ].filter(Boolean).join('\n');
+      process.stderr.write(`${details}\n`);
+    }
 
     return {
       stdout: result.stdout || '',
@@ -206,6 +214,7 @@ describe('CLI Integration Tests', () => {
 
       // Debug mode should still work
       expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain(`[DEBUG PATHS] Using --working-dir override: ${path.join(testConfigPath, '.ncp')}`);
     }, 60000);
 
     // TODO: Fix CLI exit code handling for environment variables

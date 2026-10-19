@@ -1,9 +1,10 @@
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { Client } from '@modelcontextprotocol/client';
 import { jest } from '@jest/globals';
-import { InMemoryTransport, Server } from '@modelcontextprotocol/server';
+import { InMemoryTransport, ProtocolErrorCode, Server } from '@modelcontextprotocol/server';
 import {
   GetTaskResultV2Schema,
   TASKS_EXTENSION_ID_V2,
@@ -233,27 +234,37 @@ describe('McpTaskGateway', () => {
   });
 
   it('expires suspended tasks, rejects pending input, and cannot recreate the expired record', async () => {
+    // Storage flushes on a busy runner may exceed a short TTL. Freeze the
+    // clock during setup, then advance it only once input is durably suspended.
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'performance'] });
     const gateway = new McpTaskGateway('profile-a', { directory: tempDir, ttlMs: 200 });
-    let executionFinished!: () => void;
-    const finished = new Promise<void>((resolve) => { executionFinished = resolve; });
-    const created = await gateway.call({
-      ownerIdentity: 'expiry-client@1',
-      clientSupportsTasks: true,
-      execute: async ({ userInputProvider }) => {
-        try {
-          await userInputProvider.requestInput({ message: 'Continue?', requestedSchema: { type: 'object', properties: {} } });
-        } catch {
-          executionFinished();
-        }
-        return { content: [{ type: 'text', text: 'late' }] } as any;
-      },
-    }) as any;
-    await waitForStatus(gateway, created.taskId, 'expiry-client@1', 'input_required');
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    await finished;
-    await expect(gateway.getTask(created.taskId, 'expiry-client@1')).rejects.toThrow('Unknown task');
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(await new McpTaskStore('profile-a', tempDir).read(created.taskId)).toBeUndefined();
+    try {
+      let executionFinished!: () => void;
+      const finished = new Promise<void>((resolve) => { executionFinished = resolve; });
+      const created = await gateway.call({
+        ownerIdentity: 'expiry-client@1',
+        clientSupportsTasks: true,
+        execute: async ({ userInputProvider }) => {
+          try {
+            await userInputProvider.requestInput({ message: 'Continue?', requestedSchema: { type: 'object', properties: {} } });
+          } catch {
+            executionFinished();
+          }
+          return { content: [{ type: 'text', text: 'late' }] } as any;
+        },
+      }) as any;
+      await waitForStatus(gateway, created.taskId, 'expiry-client@1', 'input_required');
+      await jest.advanceTimersByTimeAsync(250);
+      await finished;
+      await expect(gateway.getTask(created.taskId, 'expiry-client@1')).rejects.toMatchObject({
+        code: ProtocolErrorCode.InvalidParams,
+      });
+      await delay(20);
+      expect(await new McpTaskStore('profile-a', tempDir).read(created.taskId)).toBeUndefined();
+    } finally {
+      await gateway.shutdown();
+      jest.useRealTimers();
+    }
   });
 
   it('discards malformed records and keeps punctuation-distinct profiles separate', async () => {
@@ -281,21 +292,21 @@ async function waitForStatus(
   owner: string,
   status: string,
 ): Promise<any> {
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline) {
+  const deadline = performance.now() + 2_000;
+  while (performance.now() < deadline) {
     const task = await gateway.getTask(taskId, owner) as any;
     if (task.status === status) return task;
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await delay(5);
   }
   throw new Error('Task did not reach status ' + status);
 }
 
 async function waitForTask(gateway: McpTaskGateway, taskId: string, owner: string): Promise<any> {
-  const deadline = Date.now() + 2_000;
-  while (Date.now() < deadline) {
+  const deadline = performance.now() + 2_000;
+  while (performance.now() < deadline) {
     const task = await gateway.getTask(taskId, owner) as any;
     if (['completed', 'failed', 'cancelled'].includes(task.status)) return task;
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await delay(5);
   }
   throw new Error('Task did not complete');
 }
