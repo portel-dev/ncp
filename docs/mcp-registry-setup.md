@@ -105,27 +105,45 @@ Should output: (no errors = valid)
 
 The workflow triggers automatically when you publish a GitHub Release via the Release workflow.
 
-### Option 2: Manual Test (Local)
+### Option 2: Retry an Existing Release
+
+Run the updated workflow from `main` with the existing release tag:
+
+```bash
+gh workflow run publish-mcp-registry.yml --ref main -f release_tag=3.0.0
+```
+
+The workflow checks out that tag and verifies its package version. This retries
+only MCP Registry publication; it does not republish npm or change the tag.
+Rerunning an old failed release-event run uses the workflow from that release,
+so use this manual trigger to pick up a workflow fix.
+
+Publisher v1.8.1 derives the GitHub OIDC audience from the registry URL. Older
+publishers can fail with `invalid audience`; their fallback also does not
+support the `--token-stdin` flag. The workflow pins the publisher and verifies
+the downloaded archive against its release checksum.
+
+### Option 3: Manual Validation (Local)
 
 You can test MCP Publisher authentication locally:
 
 ```bash
 # Download MCP Publisher
-VERSION="v1.1.0"
+VERSION="v1.8.1"
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 
-curl -L "https://github.com/modelcontextprotocol/registry/releases/download/${VERSION}/mcp-publisher_${VERSION#v}_${OS}_${ARCH}.tar.gz" | tar xz
+curl -L "https://github.com/modelcontextprotocol/registry/releases/download/${VERSION}/mcp-publisher_${OS}_${ARCH}.tar.gz" | tar xz
 
 # Test authentication
 ./mcp-publisher login github-oidc  # Try OIDC first
 
 # Or with PAT
 export GITHUB_TOKEN="your-pat-here"
-echo "$GITHUB_TOKEN" | ./mcp-publisher login github --token-stdin
+./mcp-publisher login github --token "$GITHUB_TOKEN"
 
 # Dry run publish (doesn't actually publish)
-./mcp-publisher publish --dry-run
+./mcp-publisher validate server.json
 ```
 
 ---

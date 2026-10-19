@@ -3,68 +3,96 @@ name: Publish to MCP Registry
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release tag to publish to the MCP Registry'
+        required: true
+        type: string
 
 permissions:
   contents: read
-  id-token: write  # Required for GitHub OIDC authentication with MCP registry
+  id-token: write
+
+concurrency:
+  group: mcp-registry-${{ inputs.release_tag || github.event.release.tag_name }}
+  cancel-in-progress: false
 
 jobs:
   publish-to-mcp-registry:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+      PUBLISHER_VERSION: v1.8.1
     steps:
-      - name: Checkout code
+      - name: Check release tag
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Expected a versioned release tag"
+            exit 1
+          fi
+
+      - name: Checkout released code
         uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ inputs.release_tag || github.event.release.tag_name }}
 
       - name: Get version from tag
         id: get_version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          VERSION="${RELEASE_TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Publishing version: $VERSION"
+          jq -e --arg version "$VERSION" '.version == $version' package.json
 
       - name: Update server.json with release version
+        env:
+          RELEASE_VERSION: ${{ steps.get_version.outputs.version }}
         run: |
-          VERSION=${{ steps.get_version.outputs.version }}
-          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' server.json > server.json.tmp
+          jq --arg version "$RELEASE_VERSION" '.version = $version | .packages[0].version = $version' server.json > server.json.tmp
           mv server.json.tmp server.json
-          cat server.json
 
-      - name: Validate server.json
+      - name: Download and verify MCP Publisher
         run: |
-          curl -sS https://static.modelcontextprotocol.io/schemas/2025-09-16/server.schema.json -o /tmp/server.schema.json
-          # Basic JSON validation
-          jq empty server.json
-          echo "✓ server.json is valid JSON"
-
-      - name: Download MCP Publisher
-        run: |
-          VERSION="v1.1.0"
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
           ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/download/${VERSION}/mcp-publisher_${VERSION#v}_${OS}_${ARCH}.tar.gz" | tar xz
-          chmod +x mcp-publisher
+          ASSET="mcp-publisher_${OS}_${ARCH}.tar.gz"
+          CHECKSUMS="registry_${PUBLISHER_VERSION#v}_checksums.txt"
+          BASE_URL="https://github.com/modelcontextprotocol/registry/releases/download/${PUBLISHER_VERSION}"
+          curl --fail --silent --show-error --location "$BASE_URL/$ASSET" --output "$ASSET"
+          curl --fail --silent --show-error --location "$BASE_URL/$CHECKSUMS" --output "$CHECKSUMS"
+          awk -v asset="$ASSET" '$2 == asset { print }' "$CHECKSUMS" > publisher-checksum.txt
+          test -s publisher-checksum.txt
+          sha256sum --check publisher-checksum.txt
+          tar xzf "$ASSET" mcp-publisher
           ./mcp-publisher --version
 
+      - name: Validate server.json
+        run: ./mcp-publisher validate server.json
+
       - name: Login to MCP Registry
+        env:
+          MCP_GITHUB_TOKEN: ${{ secrets.MCP_GITHUB_TOKEN }}
         run: |
-          # Try GitHub OIDC first (preferred, no secrets needed)
           if ./mcp-publisher login github-oidc; then
-            echo "✓ Authenticated via GitHub OIDC"
-          elif [ -n "${{ secrets.MCP_GITHUB_TOKEN }}" ]; then
-            # Fallback to GitHub PAT if OIDC fails or org not detected
-            echo "⚠ OIDC failed, falling back to GitHub PAT"
-            echo "${{ secrets.MCP_GITHUB_TOKEN }}" | ./mcp-publisher login github --token-stdin
+            echo "Authenticated via GitHub OIDC"
+          elif [ -n "$MCP_GITHUB_TOKEN" ]; then
+            echo "OIDC failed; using the configured GitHub PAT"
+            ./mcp-publisher login github --token "$MCP_GITHUB_TOKEN"
           else
-            echo "❌ Authentication failed. See RELEASE.md for setup instructions."
+            echo "Registry authentication failed and no fallback token is configured"
             exit 1
           fi
 
       - name: Publish to MCP Registry
-        run: ./mcp-publisher publish
+        run: ./mcp-publisher publish server.json
 
       - name: Summary
+        env:
+          RELEASE_VERSION: ${{ steps.get_version.outputs.version }}
         run: |
-          echo "✅ Successfully published NCP v${{ steps.get_version.outputs.version }} to MCP Registry"
-          echo "📦 Package: io.github.portel-dev/ncp"
-          echo "🔗 NPM: https://www.npmjs.com/package/@portel/ncp"
+          echo "Published NCP $RELEASE_VERSION to MCP Registry"
+          echo "Package: io.github.portel-dev/ncp"
+          echo "npm: https://www.npmjs.com/package/@portel/ncp"
