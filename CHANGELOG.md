@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [3.0.0] (unreleased)
+
+### Breaking changes
+
+* `run` returns the native MCP tool result, including structured and multimodal content, instead of JSON text containing an array of MCP content blocks. Clients that parsed the old text wrapper must consume the result's `content`, `structuredContent`, `isError`, and `_meta` fields directly. See the migration guidance below.
 
 ### Features
 
@@ -12,6 +16,10 @@
 * bound downstream response caches, partition private entries by server configuration and credential identity, and refresh catalogs from declared lifetimes and tool-list change notifications
 
 ### Fixes
+
+* preserve mixed-case Windows executable paths when launching downstream MCP servers
+* buffer fragmented stdio messages and UTF-8 characters so large MCP App resources arrive intact
+* keep built-in and cached CLI catalogs out of external MCP refreshes, including during execution confirmation
 
 * keep Tasks persistence compatible with Windows directory operations while retaining file flushes and atomic replacement
 * make build and postinstall scripts portable and propagate development build failures

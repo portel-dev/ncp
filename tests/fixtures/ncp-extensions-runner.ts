@@ -244,11 +244,12 @@ async function closeHarness(harness: Awaited<ReturnType<typeof createHarness>>):
 }
 
 async function waitForTaskStatus(transport: StdioClientTransport, taskId: string, status: string): Promise<any> {
-  const deadline = Date.now() + 3_000;
+  // Durable task responses include file sync; this is not a latency benchmark.
+  const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     const task = await rawExtensionRequest(transport, 'tasks/get', { taskId });
     if (task.status === status) return task;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`Task ${taskId} did not reach ${status}`);
 }
@@ -257,7 +258,7 @@ async function rawExtensionRequest(transport: StdioClientTransport, method: stri
   const id = `extension-test-${++rawRequestId}`;
   const previous = transport.onmessage;
   const response = new Promise<any>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${method}`)), 3_000);
+    const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${method}`)), 10_000);
     transport.onmessage = (message: any) => {
       if (message?.id === id) {
         clearTimeout(timeout);
