@@ -26,6 +26,7 @@ export interface ProviderStdioConfig {
 
 export interface ProviderHttpConfig {
   url: string;
+  transport?: 'sse' | 'streamableHttp';
   auth: 'bearer' | 'oauth' | 'basic';
   docs: string;
   notes?: string;
@@ -86,6 +87,7 @@ function transformMCPToProvider(mcp: any): Provider | null {
     if (isHttpBased) {
       provider.http = {
         url: mcp.transport?.endpoint || (hasHttpCommand ? mcp.installCommand.replace(/^Use HTTP endpoint:\s*/, '') : ''),
+        transport: mcp.transport?.type === 'sse' || meta?.recommendedTransport === 'sse' ? 'sse' : 'streamableHttp',
         auth: meta?.authType || 'bearer',
         docs: mcp.homepage || '',
         notes: meta?.notes

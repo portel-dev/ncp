@@ -32,6 +32,11 @@ export interface ToolResult {
   /** Full JSON schema */
   schema?: any;
 
+  /** Full MCP tool descriptor metadata, when supplied by the server. */
+  outputSchema?: any;
+  annotations?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+
   /** Health status */
   healthy: boolean;
 }

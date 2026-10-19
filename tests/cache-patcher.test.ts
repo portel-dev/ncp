@@ -55,6 +55,24 @@ describe('CachePatcher tool metadata', () => {
     expect(reloaded.mcps['example'].serverInfo.version).toBe('1.2.3');
   });
 
+  it('preserves rich descriptors and JSON Schema keywords across a disk round trip', async () => {
+    const descriptor = {
+      name: 'report', description: 'Build a report',
+      inputSchema: {
+        $defs: { id: { type: 'string', minLength: 1 } },
+        anyOf: [{ type: 'object', properties: { id: { $ref: '#/$defs/id' } } }],
+        unevaluatedProperties: false,
+      },
+      outputSchema: { anyOf: [{ type: 'null' }, { type: 'array', items: { type: 'number' } }] },
+      annotations: { readOnlyHint: true, idempotentHint: true },
+      _meta: { ui: { resourceUri: 'ui://report/view.html' } },
+      futureExtension: { nested: ['retained'] },
+    };
+    await new CachePatcher().patchAddMCP('rich', sampleConfig, [descriptor], sampleServerInfo);
+    const cache = await new CachePatcher().loadToolMetadataCache();
+    expect(cache.mcps.rich.tools[0]).toEqual(descriptor);
+  });
+
   it('patchRemoveMCP removes only the named MCP', async () => {
     const patcher = new CachePatcher();
     await patcher.patchAddMCP('keep', sampleConfig, sampleTools, sampleServerInfo);

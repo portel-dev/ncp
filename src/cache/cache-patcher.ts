@@ -14,6 +14,10 @@ export interface Tool {
   name: string;
   description: string;
   inputSchema?: any;
+  outputSchema?: any;
+  annotations?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export interface ToolMetadataCache {
@@ -28,6 +32,10 @@ export interface ToolMetadataCache {
         name: string;
         description: string;
         inputSchema: any;
+        outputSchema?: any;
+        annotations?: Record<string, unknown>;
+        _meta?: Record<string, unknown>;
+        [key: string]: unknown;
       }>;
       serverInfo: {
         name: string;
@@ -199,9 +207,10 @@ export class CachePatcher {
       configHash,
       discoveredAt: Date.now(),
       tools: tools.map(tool => ({
+        ...tool,
         name: tool.name,
         description: tool.description || 'No description available',
-        inputSchema: tool.inputSchema || {}
+        inputSchema: tool.inputSchema
       })),
       serverInfo: {
         name: serverInfo?.name || mcpName,

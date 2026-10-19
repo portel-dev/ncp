@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { isInputRequiredResult, type ServerContext } from '@modelcontextprotocol/server';
+import { CLIENT_INFO_META_KEY, isInputRequiredResult, type ServerContext } from '@modelcontextprotocol/server';
 import { InputRequiredCoordinator } from '../../src/server/input-required-coordinator.js';
 
 function context(
@@ -179,4 +179,22 @@ await assert.rejects(
   /Invalid or expired interaction state/,
 );
 expiring.shutdown();
+
+let mostRecentClient = 'host-a';
+const stateless = new InputRequiredCoordinator(() => mostRecentClient);
+function modernContext(name: string): ServerContext {
+  const ctx = context();
+  (ctx.mcpReq as any).envelope = { [CLIENT_INFO_META_KEY]: { name, version: '1.0.0' } };
+  return ctx;
+}
+const statelessPending = await stateless.handle(modernContext('host-a'), async () => {
+  await stateless.requestInput({ message: 'Confirm', requestedSchema: { type: 'object', properties: {} } });
+  return 'done';
+});
+assert.ok(isInputRequiredResult(statelessPending));
+if (!isInputRequiredResult(statelessPending)) throw new Error('expected input_required');
+mostRecentClient = 'host-b';
+await stateless.verifyRequestState(statelessPending.requestState!, modernContext('host-a'));
+await assert.rejects(stateless.verifyRequestState(statelessPending.requestState!, modernContext('host-b')));
+stateless.shutdown();
 process.stdout.write('ok\n');

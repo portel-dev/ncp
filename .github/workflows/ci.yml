@@ -48,6 +48,14 @@ jobs:
         env:
           NODE_OPTIONS: --experimental-vm-modules
 
+      - name: Run MCP compatibility tests
+        run: npm run test:compatibility
+        timeout-minutes: 10
+
+      - name: Run official MCP client conformance smoke tests
+        run: npm run test:conformance
+        timeout-minutes: 5
+
       - name: Run integration tests
         run: npm run test:integration
         timeout-minutes: 10

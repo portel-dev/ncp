@@ -11,7 +11,7 @@
  */
 
 import { createServer, Server } from 'http';
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes, createHash, timingSafeEqual } from 'crypto';
 import { readFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -59,6 +59,7 @@ interface StoredOAuthState {
   tokens?: StoredOAuthTokens;
   codeVerifier?: string;
   discoveryState?: OAuthDiscoveryState;
+  authorizationState?: string;
 }
 
 /**
@@ -74,7 +75,14 @@ interface StoredOAuthState {
 export class MCPOAuthProvider implements OAuthClientProvider {
   private config: Required<Omit<MCPOAuthConfig, 'credentialStore'>>;
   private oauthState: StoredOAuthState = {};
-  private callbackServer?: Server;
+  private callbackServers: Server[] = [];
+  private finishAuthHandler?: (callbackParams: URLSearchParams) => Promise<void>;
+  private activeFinishAuthHandler?: (callbackParams: URLSearchParams) => Promise<void>;
+  private authorizationCompletion?: Promise<void>;
+  private resolveAuthorization?: () => void;
+  private rejectAuthorization?: (error: Error) => void;
+  private callbackTimeout?: ReturnType<typeof setTimeout>;
+  private authorizationComplete = false;
   private serverKey: string;
   private credentialStore: Pick<SecureCredentialStore, 'getCredential' | 'setCredential'>;
 
@@ -115,6 +123,8 @@ export class MCPOAuthProvider implements OAuthClientProvider {
   get clientMetadata(): OAuthClientMetadata {
     return {
       client_name: this.config.clientName,
+      // The localhost redirect is a native-app loopback redirect (RFC 8252).
+      application_type: 'native',
       redirect_uris: [this.redirectUrl],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
@@ -128,7 +138,18 @@ export class MCPOAuthProvider implements OAuthClientProvider {
    * Generate OAuth state parameter
    */
   async state(): Promise<string> {
-    return randomBytes(32).toString('base64url');
+    if (this.authorizationCompletion && !this.authorizationComplete) {
+      throw new Error('OAuth authorization is already in progress for this server');
+    }
+    const state = randomBytes(32).toString('base64url');
+    this.oauthState.authorizationState = state;
+    await this.saveState();
+    return state;
+  }
+
+  /** Register the SDK transport callback used to redeem authorization codes. */
+  setFinishAuthHandler(handler: (callbackParams: URLSearchParams) => Promise<void>): void {
+    this.finishAuthHandler = handler;
   }
 
   /**
@@ -197,20 +218,43 @@ export class MCPOAuthProvider implements OAuthClientProvider {
    * 2. Open browser with authorization URL
    * 3. Wait for callback with authorization code
    */
-  async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
+  async redirectToAuthorization(
+    authorizationUrl: URL,
+    finishAuthHandler?: (callbackParams: URLSearchParams) => Promise<void>
+  ): Promise<void> {
     logger.info('Starting OAuth authorization flow...');
     logger.info(`Authorization URL: ${authorizationUrl.toString()}`);
+
+    const handler = finishAuthHandler || this.finishAuthHandler;
+    if (!handler) {
+      throw new Error('OAuth callback handler is not configured for this transport');
+    }
+
+    if (!this.authorizationCompletion || this.authorizationComplete) {
+      this.authorizationComplete = false;
+      this.activeFinishAuthHandler = handler;
+      this.authorizationCompletion = new Promise<void>((resolve, reject) => {
+        this.resolveAuthorization = resolve;
+        this.rejectAuthorization = reject;
+      });
+      // A callback can arrive before the orchestrator begins waiting after the SDK
+      // reports its initial UnauthorizedError. Keep early rejection handled.
+      void this.authorizationCompletion.catch(() => undefined);
+    }
+
+    // Bind the local listener before opening the browser so fast redirects are not lost.
+    await this.startCallbackServer();
 
     // Try to open browser
     const opened = await this.openBrowser(authorizationUrl.toString());
 
     if (!opened) {
       // Fallback: print URL for manual navigation
-      console.log('\n=== OAuth Authorization Required ===');
-      console.log('Please open the following URL in your browser:');
-      console.log(`\n  ${authorizationUrl.toString()}\n`);
-      console.log('After authorizing, you will be redirected to the callback URL.');
-      console.log('=====================================\n');
+      console.error('\n=== OAuth Authorization Required ===');
+      console.error('Please open the following URL in your browser:');
+      console.error(`\n  ${authorizationUrl.toString()}\n`);
+      console.error('After authorizing, you will be redirected to the callback URL.');
+      console.error('=====================================\n');
     }
   }
 
@@ -218,6 +262,9 @@ export class MCPOAuthProvider implements OAuthClientProvider {
    * Save PKCE code verifier
    */
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
+    if (this.authorizationCompletion && !this.authorizationComplete) {
+      throw new Error('OAuth authorization is already in progress for this server');
+    }
     this.oauthState.codeVerifier = codeVerifier;
     await this.saveState();
   }
@@ -271,83 +318,156 @@ export class MCPOAuthProvider implements OAuthClientProvider {
   /**
    * Start callback server and wait for authorization code
    *
-   * Returns a promise that resolves with the authorization code
-   * when the user completes authorization in their browser.
+   * Returns the callback query parameters when the user returns from authorization.
    */
-  async waitForCallback(timeoutMs: number = 300000): Promise<string> {
+  async waitForCallback(timeoutMs: number = 300000): Promise<URLSearchParams> {
+    await this.startCallbackServer(timeoutMs);
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.stopCallbackServer();
-        reject(new Error('Authorization timeout - user did not complete authorization'));
-      }, timeoutMs);
+      this.callbackResolve = resolve;
+      this.callbackReject = reject;
+    });
+  }
 
-      this.callbackServer = createServer((req, res) => {
-        const url = new URL(req.url || '/', `http://localhost:${this.config.callbackPort}`);
+  /** Wait for the active browser callback to finish exchanging its authorization code. */
+  async waitForAuthorization(): Promise<void> {
+    await (this.authorizationCompletion || Promise.resolve());
+  }
 
-        if (url.pathname === '/callback') {
-          const code = url.searchParams.get('code');
-          const error = url.searchParams.get('error');
-          const errorDescription = url.searchParams.get('error_description');
+  /** Stop a pending callback flow when its owning transport is closed. */
+  cancelAuthorization(): void {
+    if (!this.authorizationCompletion || this.authorizationComplete) return;
+    this.rejectAuthorization?.(new Error('OAuth authorization was cancelled'));
+    this.authorizationComplete = true;
+    delete this.oauthState.authorizationState;
+    void this.saveState().catch((error) => logger.warn(`Could not clear cancelled OAuth state: ${String(error)}`));
+    this.stopCallbackServer();
+    this.activeFinishAuthHandler = undefined;
+  }
 
-          if (error) {
-            res.writeHead(400, { 'Content-Type': 'text/html' });
-            res.end(`
-              <html>
-                <body>
-                  <h1>Authorization Failed</h1>
-                  <p>Error: ${error}</p>
-                  <p>${errorDescription || ''}</p>
-                  <p>You can close this window.</p>
-                </body>
-              </html>
-            `);
-            clearTimeout(timeout);
-            this.stopCallbackServer();
-            reject(new Error(`OAuth error: ${error} - ${errorDescription}`));
-            return;
-          }
+  private callbackResolve?: (params: URLSearchParams) => void;
+  private callbackReject?: (error: Error) => void;
 
-          if (code) {
-            res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end(`
-              <html>
-                <body>
-                  <h1>Authorization Successful!</h1>
-                  <p>You can close this window and return to the terminal.</p>
-                  <script>window.close();</script>
-                </body>
-              </html>
-            `);
-            clearTimeout(timeout);
-            this.stopCallbackServer();
-            resolve(code);
-            return;
-          }
-        }
+  private startCallbackServer(timeoutMs: number = 300000): Promise<void> {
+    if (this.callbackServers.length > 0) return Promise.resolve();
+    this.callbackTimeout = setTimeout(() => {
+      this.stopCallbackServer();
+      const error = new Error('Authorization timeout - user did not complete authorization');
+      this.callbackReject?.(error);
+      this.rejectAuthorization?.(error);
+      this.authorizationComplete = true;
+      delete this.oauthState.authorizationState;
+      void this.saveState().catch((saveError) => logger.warn(`Could not clear expired OAuth state: ${String(saveError)}`));
+      this.clearCallbackWaiters();
+      this.activeFinishAuthHandler = undefined;
+    }, timeoutMs);
 
+    const callbackHandler = async (req: import('http').IncomingMessage, res: import('http').ServerResponse) => {
+      const url = new URL(req.url || '/', `http://localhost:${this.config.callbackPort}`);
+      if (req.method !== 'GET' || url.pathname !== '/callback') {
         res.writeHead(404);
         res.end('Not found');
+        return;
+      }
+
+      const expectedState = this.oauthState.authorizationState;
+      const actualState = url.searchParams.get('state');
+      if (!expectedState || !actualState || !this.matchesState(expectedState, actualState)) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('OAuth state validation failed. You can close this window.');
+        return;
+      }
+      // Let Node flush the callback response before closing the one-shot listener.
+      res.once('finish', () => this.stopCallbackServer());
+
+      try {
+        const finishAuthHandler = this.activeFinishAuthHandler || this.finishAuthHandler;
+        if (!finishAuthHandler) throw new Error('OAuth callback handler is not configured');
+        // Consume the state before doing network work so this callback cannot be replayed.
+        delete this.oauthState.authorizationState;
+        await this.saveState();
+        await finishAuthHandler(url.searchParams);
+        this.resolveAuthorization?.();
+        this.authorizationComplete = true;
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<html><body><h1>Authorization successful</h1><p>You can close this window.</p><script>window.close();</script></body></html>');
+        this.callbackResolve?.(url.searchParams);
+      } catch (error) {
+        // Do not echo callback-controlled OAuth error details into the browser response.
+        logger.warn(`OAuth callback processing failed: ${error instanceof Error ? error.message : String(error)}`);
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Authorization could not be completed. You can close this window.');
+        this.callbackReject?.(error instanceof Error ? error : new Error(String(error)));
+        this.rejectAuthorization?.(error instanceof Error ? error : new Error(String(error)));
+        this.authorizationComplete = true;
+      } finally {
+        if (this.callbackTimeout) clearTimeout(this.callbackTimeout);
+        this.callbackTimeout = undefined;
+        this.clearCallbackWaiters();
+        this.activeFinishAuthHandler = undefined;
+      }
+    };
+    const ipv4Server = createServer(callbackHandler);
+    const ipv6Server = createServer(callbackHandler);
+    this.callbackServers = [ipv4Server, ipv6Server];
+
+    return new Promise((resolve, reject) => {
+      const listen = (server: Server, host: string, required: boolean): Promise<void> => new Promise((done, fail) => {
+        server.once('listening', () => done());
+        server.once('error', (err) => {
+          if (!required) {
+            server.close();
+            done();
+            return;
+          }
+          fail(err);
+        });
+        server.listen(this.config.callbackPort, host);
       });
 
-      this.callbackServer.listen(this.config.callbackPort, () => {
-        logger.debug(`OAuth callback server listening on port ${this.config.callbackPort}`);
-      });
-
-      this.callbackServer.on('error', (err) => {
-        clearTimeout(timeout);
-        reject(new Error(`Failed to start callback server: ${err.message}`));
-      });
+      void (async () => {
+        try {
+          await listen(ipv4Server, '127.0.0.1', true);
+          // Bind both loopback families so localhost works regardless of the
+          // address order chosen by the user's browser or resolver.
+          await listen(ipv6Server, '::1', false);
+          logger.debug(`OAuth callback server listening on loopback port ${this.config.callbackPort}`);
+          resolve();
+        } catch (err) {
+          if (this.callbackTimeout) clearTimeout(this.callbackTimeout);
+          this.callbackTimeout = undefined;
+          const error = new Error(`Failed to start callback server: ${err instanceof Error ? err.message : String(err)}`);
+          this.callbackReject?.(error);
+          this.clearCallbackWaiters();
+          this.rejectAuthorization?.(error);
+          this.authorizationComplete = true;
+          this.callbackServers = [];
+          reject(error);
+        }
+      })();
     });
+  }
+
+  private matchesState(expected: string, actual: string): boolean {
+    const expectedBytes = Buffer.from(expected);
+    const actualBytes = Buffer.from(actual);
+    return expectedBytes.length === actualBytes.length && timingSafeEqual(expectedBytes, actualBytes);
+  }
+
+  private clearCallbackWaiters(): void {
+    this.callbackResolve = undefined;
+    this.callbackReject = undefined;
   }
 
   /**
    * Stop the callback server
    */
   private stopCallbackServer(): void {
-    if (this.callbackServer) {
-      this.callbackServer.close();
-      this.callbackServer = undefined;
+    if (this.callbackTimeout) clearTimeout(this.callbackTimeout);
+    this.callbackTimeout = undefined;
+    for (const server of this.callbackServers) {
+      if (server.listening) server.close();
     }
+    this.callbackServers = [];
   }
 
   /**

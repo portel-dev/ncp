@@ -43,8 +43,8 @@
     "test:cli": "bash tests/cli-help-validation.sh",
     "test:mcpb": "if [ -f scripts/test-dxt-package.sh ]; then bash scripts/test-dxt-package.sh; else echo 'MCPB test script not found, skipping'; fi",
     "test:dxt": "npm run test:mcpb",
-    "test:pre-publish": "npm run test:critical && npm run test:integration && npm run test:integration:dxt",
-    "test:ci": "npm run test:critical && npm run test:e2e && npm run test:integration && npm run test:integration:dxt && npm run test:mcpb",
+    "test:pre-publish": "npm run test:critical && npm run test:compatibility && npm run test:conformance && npm run test:integration && npm run test:integration:dxt",
+    "test:ci": "npm run test:critical && npm run test:compatibility && npm run test:conformance && npm run test:e2e && npm run test:integration && npm run test:integration:dxt && npm run test:mcpb",
     "test:package": "node scripts/test-package-locally.cjs",
     "test:features": "bash scripts/test-features.sh",
     "test:client-registry": "node scripts/test-client-registry.js",
@@ -67,7 +67,9 @@
     "prepack": "npm run build && npm run test:pre-publish",
     "prepublishOnly": "npm run build && npm run test:pre-publish && npm run check:root && node scripts/sync-server-version.cjs",
     "release": "npm run check:root && release-it",
-    "release:dry": "npm run check:root && release-it --dry-run"
+    "release:dry": "npm run check:root && release-it --dry-run",
+    "test:compatibility": "npm test -- --runInBand tests/mcp-modern-protocol.test.ts tests/mcp-stateless-client-context.test.ts tests/input-required-coordinator.test.ts tests/mcp-oauth-provider.test.ts tests/mcp-result-fidelity.test.ts tests/registry-client.test.ts tests/orchestrator/downstream-elicitation.test.ts tests/integration/oauth-integration.test.ts tests/orchestrator/tool-discovery.test.ts tests/cache-patcher.test.ts",
+    "test:conformance": "node tests/conformance/run.mjs"
   },
   "keywords": [
     "mcp",
@@ -111,6 +113,9 @@
   "files:comments": "Explicit list of files to include in the package",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@modelcontextprotocol/server-legacy": "^2.0.0",
     "@napi-rs/keyring": "^1.2.0",
     "@portel/photon-core": "^2.9.4",
     "@types/prompts": "^2.4.9",
@@ -136,10 +141,7 @@
     "prompts": "^2.4.2",
     "tsx": "^4.20.6",
     "uuid": "^11.0.5",
-    "yaml": "^2.8.1",
-    "@modelcontextprotocol/server": "^2.0.0",
-    "@modelcontextprotocol/server-legacy": "^2.0.0",
-    "@modelcontextprotocol/client": "^2.0.0"
+    "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@agent-infra/mcp-server-browser": "^1.1.10",
@@ -150,6 +152,7 @@
     "@currents/mcp": "^2.0.0",
     "@heroku/mcp-server": "^1.0.7",
     "@hubspot/mcp-server": "^0.4.0",
+    "@modelcontextprotocol/conformance": "0.1.16",
     "@modelcontextprotocol/server-filesystem": "^2025.8.21",
     "@modelcontextprotocol/server-sequential-thinking": "^2025.7.1",
     "@notionhq/notion-mcp-server": "^1.9.0",

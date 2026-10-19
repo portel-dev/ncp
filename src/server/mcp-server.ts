@@ -1,5 +1,5 @@
 import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
-import { LATEST_PROTOCOL_VERSION, Server, Tool } from "@modelcontextprotocol/server";
+import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, LATEST_PROTOCOL_VERSION, PROTOCOL_VERSION_META_KEY, Server, Tool, type ServerContext } from "@modelcontextprotocol/server";
 import { NCPOrchestrator } from '../orchestrator/ncp-orchestrator.js';
 import { logger } from '../utils/logger.js';
 import { mcpProtocolLogger } from '../utils/mcp-protocol-logger.js';
@@ -61,6 +61,7 @@ export class MCPServer implements UserInputProvider {
   private enableCodeMode: boolean = false; // false = find-and-run, true = find-and-code
   private capabilityDetector: CapabilityDetector; // Track client capabilities for feature negotiation
   private stdioHandle?: StdioServerHandle;
+  private readonly autoImportedClients = new Set<string>();
 
   constructor(profileName: string = 'default', showProgress: boolean = false, forceRetry: boolean = false) {
     // Initialize session-scoped notification manager
@@ -100,6 +101,7 @@ export class MCPServer implements UserInputProvider {
         supportedProtocolVersions: [
           '2026-07-28',
           LATEST_PROTOCOL_VERSION,
+          '2025-11-25',
           '2025-06-18',
           '2025-03-26',
           '2024-11-05',
@@ -152,12 +154,14 @@ export class MCPServer implements UserInputProvider {
           version,
           ...(iconDataURI && { icon: { src: iconDataURI } })
         };
-        mcpProtocolLogger.logInitialize(clientInfo, serverInfo, '2025-11-25').catch(error => {
+        const protocolVersion = this.server.getNegotiatedProtocolVersion() || 'unknown';
+        mcpProtocolLogger.logInitialize(clientInfo, serverInfo, protocolVersion).catch(error => {
           logger.error('Failed to log initialize handshake', error);
         });
 
         // Trigger auto-import asynchronously (don't block initialize response)
-        if (clientInfo.name && clientInfo.name !== 'unknown') {
+        if (clientInfo.name && clientInfo.name !== 'unknown' && !this.autoImportedClients.has(this.clientIdentity)) {
+          this.autoImportedClients.add(this.clientIdentity);
           logger.debug(`Triggering auto-import for client: ${clientInfo.name}`);
           this.orchestrator.triggerAutoImport(
             clientInfo.name,
@@ -201,7 +205,8 @@ export class MCPServer implements UserInputProvider {
 
   private setupHandlers(): void {
     // Handle tools/list
-    this.server.setRequestHandler('tools/list', async () => {
+    this.server.setRequestHandler('tools/list', async (_request, ctx) => {
+      this.updateClientContextFromRequest(ctx);
       // Log request (non-blocking - don't await)
       mcpProtocolLogger.logRequest('tools/list', {}).catch(() => {});
 
@@ -216,6 +221,7 @@ export class MCPServer implements UserInputProvider {
 
     // Handle tools/call
     this.server.setRequestHandler('tools/call', async (request, ctx) => {
+      this.updateClientContextFromRequest(ctx);
       return this.inputCoordinator.handle(ctx, async () => {
       const { name, arguments: args } = request.params;
 
@@ -289,14 +295,16 @@ export class MCPServer implements UserInputProvider {
     });
 
     // Handle prompts/list
-    this.server.setRequestHandler('prompts/list', async () => {
+    this.server.setRequestHandler('prompts/list', async (_request, ctx) => {
+      this.updateClientContextFromRequest(ctx);
       return {
         prompts: NCP_PROMPTS
       };
     });
 
     // Handle prompts/get
-    this.server.setRequestHandler('prompts/get', async (request) => {
+    this.server.setRequestHandler('prompts/get', async (request, ctx) => {
+      this.updateClientContextFromRequest(ctx);
       const { name, arguments: args } = request.params;
 
       try {
@@ -308,14 +316,16 @@ export class MCPServer implements UserInputProvider {
     });
 
     // Handle resources/list
-    this.server.setRequestHandler('resources/list', async () => {
+    this.server.setRequestHandler('resources/list', async (_request, ctx) => {
+      this.updateClientContextFromRequest(ctx);
       return {
         resources: await this.handleListResources()
       };
     });
 
     // Handle resources/read
-    this.server.setRequestHandler('resources/read', async (request) => {
+    this.server.setRequestHandler('resources/read', async (request, ctx) => {
+      this.updateClientContextFromRequest(ctx);
       const { uri } = request.params;
 
       // Log request (non-blocking - don't await)
@@ -342,9 +352,50 @@ export class MCPServer implements UserInputProvider {
     });
 
     // MCP 2025-11-25: Handle roots/list for file picker integration
-    this.server.setRequestHandler('roots/list', async () => {
+    this.server.setRequestHandler('roots/list', async (_request, ctx) => {
+      this.updateClientContextFromRequest(ctx);
       return this.handleListRoots();
     });
+  }
+
+  /**
+   * Stateless modern requests carry validated client identity and capabilities
+   * in the per-request metadata envelope. Refresh the state used by discovery,
+   * execution and downstream MCP clients on every request; do not run legacy
+   * initialize side effects (notably auto-import) here.
+   */
+  private updateClientContextFromRequest(ctx: ServerContext): void {
+    const envelope = ctx.mcpReq.envelope as (Record<string, unknown> | undefined);
+    if (!envelope) return;
+
+    const protocolVersion = envelope[PROTOCOL_VERSION_META_KEY];
+    if (typeof protocolVersion !== 'string') return;
+
+    const clientInfo = envelope[CLIENT_INFO_META_KEY] as { name?: string; version?: string } | undefined;
+    const clientCapabilities = envelope[CLIENT_CAPABILITIES_META_KEY];
+
+    // A server instance can receive independent stateless requests from
+    // different clients, so discard capabilities from any earlier request.
+    this.capabilityDetector = new CapabilityDetector();
+    if (clientCapabilities && typeof clientCapabilities === 'object') {
+      this.capabilityDetector.updateFromClientCapabilities(clientCapabilities);
+    }
+    // Modern logging is request-scoped and deprecated in the current era.
+    // Never route it through the process-wide legacy callback, which could
+    // otherwise send a notification to the wrong stateless client.
+    logger.clearLogCallback();
+
+    if (clientInfo) {
+      const normalizedClientInfo = {
+        name: clientInfo.name || 'unknown',
+        version: clientInfo.version || '1.0.0',
+      };
+      this.clientIdentity = `${normalizedClientInfo.name}@${clientInfo.version || 'unknown'}`;
+      this.orchestrator.setClientInfo(normalizedClientInfo);
+    } else {
+      this.clientIdentity = 'unknown';
+      this.orchestrator.setClientInfo({ name: 'unknown', version: '1.0.0' });
+    }
   }
 
   private getToolDefinitions(): Tool[] {
@@ -453,30 +504,8 @@ export class MCPServer implements UserInputProvider {
         },
         required: ['tool']
       },
-      // MCP 2025-11-25: Declare result structure for generic tool results
-      outputSchema: {
-        type: 'object',
-        title: 'ToolExecutionResult',
-        description: 'Result from tool execution',
-        properties: {
-          content: {
-            type: 'array',
-            description: 'Tool output content (text, images, resources, etc.)',
-            items: {
-              type: 'object',
-              properties: {
-                type: { type: 'string', enum: ['text', 'image', 'audio', 'resource', 'resource_link'] },
-                text: { type: 'string', description: 'Text content' },
-                data: { type: 'string', description: 'Base64-encoded binary data' },
-                mimeType: { type: 'string', description: 'MIME type for binary data' },
-                uri: { type: 'string', description: 'Resource URI' }
-              }
-            }
-          },
-          isError: { type: 'boolean', description: 'Whether result is an error' },
-          _meta: { type: 'object', description: 'Result metadata' }
-        }
-      }
+      // The result schema is intentionally omitted: run dispatches to arbitrary
+      // downstream tools, each of which may return a different structured shape.
     };
 
     const codeTool: Tool = {
@@ -968,8 +997,10 @@ ncp.do("send email", {
 
     // Parse parameters from schema
     let parameters: ToolParameter[] = [];
-    if (tool.schema) {
-      const parsedParams = this.parseParameters(tool.schema);
+    const descriptor = tool.descriptor || {};
+    const inputSchema = tool.schema ?? descriptor.inputSchema;
+    if (inputSchema) {
+      const parsedParams = this.parseParameters(inputSchema);
       parameters = parsedParams.map(p => ({
         name: p.name,
         type: p.type,
@@ -989,14 +1020,29 @@ ncp.do("send email", {
       description: tool.description || '',
       confidence: tool.confidence || 1.0,
       parameters,
-      schema: tool.schema,
+      schema: inputSchema,
       healthy: tool.healthy !== false
     };
+
+    // Keep the discovered MCP descriptor available to structured clients.
+    // These fields are not included in the human-readable renderer.
+    const outputSchema = tool.outputSchema ?? descriptor.outputSchema;
+    const annotations = tool.annotations ?? descriptor.annotations;
+    const descriptorMeta = tool._meta ?? descriptor._meta;
+    if (outputSchema !== undefined) toolObj.outputSchema = outputSchema;
+    if (annotations !== undefined) toolObj.annotations = annotations;
+    if (descriptorMeta !== undefined) toolObj._meta = descriptorMeta;
 
     // Add UI metadata only when client supports structured content
     if (this.supportsCapability('structuredContent')) {
       toolObj._meta = {
-        ui: uiMetadata
+        ...(toolObj._meta || {}),
+        // Preserve the server-authored MCP Apps UI metadata (resourceUri,
+        // CSP, and other fields) and keep NCP's inferred hints namespaced.
+        ncp: {
+          ...((toolObj._meta as any)?.ncp || {}),
+          uiHints: uiMetadata
+        }
       };
     }
 
@@ -1601,6 +1647,20 @@ This operation may modify data or have side effects.`;
 
     // Normal execution
     const result = await this.orchestrator.run(toolIdentifier, parameters);
+
+    const downstreamResult = result.mcpResult;
+    if (downstreamResult && Array.isArray(downstreamResult.content)) {
+      // Count text for analytics without changing the protocol result. In
+      // particular, keep image/audio/resource blocks and structuredContent
+      // out of JSON-stringified model text. The downstream isError flag is
+      // authoritative even when execution itself completed successfully.
+      const responseText = downstreamResult.content
+        .filter((block: any) => block?.type === 'text' && typeof block.text === 'string')
+        .map((block: any) => block.text)
+        .join('\n');
+      this.tokenTracker.trackRun(responseText, toolIdentifier).catch(() => {});
+      return downstreamResult;
+    }
 
     if (result.success) {
       const responseText = typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2);

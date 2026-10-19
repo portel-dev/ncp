@@ -9,12 +9,12 @@
  * - SSE: Legacy HTTP+SSE transport (deprecated but widely supported)
  * - Streamable HTTP: Modern HTTP transport with streaming (MCP 2025-03-26+)
  */
-import { SSEClientTransport, StreamableHTTPClientTransport, StreamableHTTPClientTransportOptions } from "@modelcontextprotocol/client";
+import { SSEClientTransport, StreamableHTTPClientTransport, StreamableHTTPClientTransportOptions, type SSEClientTransportOptions } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { logger } from '../../utils/logger.js';
 import { mcpWrapper } from '../../utils/mcp-wrapper.js';
 import { getRuntimeForExtension } from '../../utils/runtime-detector.js';
-import { MCPOAuthProvider, createMCPOAuthProvider } from '../../auth/mcp-oauth-provider.js';
+import { MCPOAuthProvider, createMCPOAuthProvider, type MCPOAuthConfig } from '../../auth/mcp-oauth-provider.js';
 import type { MCPConfig, MCPTransport } from '../types/connection.js';
 import type { TransportFactory } from './connection-pool.js';
 
@@ -22,6 +22,7 @@ import type { TransportFactory } from './connection-pool.js';
  * Auth token provider function type
  */
 export type AuthTokenProvider = (config: MCPConfig) => Promise<string>;
+export type MCPOAuthProviderFactory = (config: MCPOAuthConfig) => MCPOAuthProvider;
 
 /**
  * Default Transport Factory implementation
@@ -30,10 +31,15 @@ export type AuthTokenProvider = (config: MCPConfig) => Promise<string>;
  */
 export class DefaultTransportFactory implements TransportFactory {
   private authTokenProvider?: AuthTokenProvider;
+  private oauthProviderFactory: MCPOAuthProviderFactory;
   private oauthProviders: Map<string, MCPOAuthProvider> = new Map();
 
-  constructor(authTokenProvider?: AuthTokenProvider) {
+  constructor(
+    authTokenProvider?: AuthTokenProvider,
+    oauthProviderFactory: MCPOAuthProviderFactory = createMCPOAuthProvider
+  ) {
     this.authTokenProvider = authTokenProvider;
+    this.oauthProviderFactory = oauthProviderFactory;
   }
 
   /**
@@ -45,7 +51,7 @@ export class DefaultTransportFactory implements TransportFactory {
     let provider = this.oauthProviders.get(key);
 
     if (!provider) {
-      provider = createMCPOAuthProvider({
+      provider = this.oauthProviderFactory({
         serverUrl: config.url!,
         clientName: 'NCP - MCP Aggregator',
         scopes: config.auth?.oauth21?.scopes,
@@ -57,6 +63,12 @@ export class DefaultTransportFactory implements TransportFactory {
     }
 
     return provider;
+  }
+
+  /** Wait for the active SDK OAuth callback for a server configuration. */
+  async waitForAuthorization(config: MCPConfig): Promise<void> {
+    if (!this.usesOAuth21(config)) return;
+    await this.getOAuthProvider(config).waitForAuthorization();
   }
 
   /**
@@ -99,9 +111,13 @@ export class DefaultTransportFactory implements TransportFactory {
   private async createSSETransport(config: MCPConfig): Promise<SSEClientTransport> {
     const url = new URL(config.url!);
     const headers: Record<string, string> = {};
+    const options: SSEClientTransportOptions = {};
+    let transport!: SSEClientTransport;
 
     // Handle authentication
-    if (config.auth) {
+    if (this.usesOAuth21(config)) {
+      logger.debug(`Using OAuth 2.1 for ${config.name}`);
+    } else if (config.auth) {
       const token = await this.getAuthToken(config);
 
       switch (config.auth.type) {
@@ -124,16 +140,25 @@ export class DefaultTransportFactory implements TransportFactory {
     }
 
     // Use requestInit and eventSourceInit for headers
-    const options =
-      Object.keys(headers).length > 0
-        ? {
-            requestInit: { headers },
-            eventSourceInit: { headers } as EventSourceInit,
-          }
-        : undefined;
+    if (Object.keys(headers).length > 0) {
+      options.requestInit = { headers };
+      // The SDK uses requestInit for SSE headers; EventSourceInit is an EventSource
+      // options object and does not accept a headers field in the platform type.
+      options.eventSourceInit = {
+        fetch: async (input, init) => {
+          const mergedHeaders = new Headers(init?.headers);
+          for (const [name, value] of Object.entries(headers)) mergedHeaders.set(name, value);
+          return fetch(input, { ...init, headers: mergedHeaders });
+        },
+      };
+    }
+
+    const oauthProvider = this.createOAuthProviderForTransport(config, () => transport);
+    if (oauthProvider) options.authProvider = oauthProvider;
 
     logger.debug(`Creating SSE transport for ${config.name} at ${url.toString()}`);
-    return new SSEClientTransport(url, options);
+    transport = new SSEClientTransport(url, options);
+    return transport;
   }
 
   /**
@@ -154,11 +179,10 @@ export class DefaultTransportFactory implements TransportFactory {
 
     // Build transport options with proper typing
     const options: StreamableHTTPClientTransportOptions = {};
+    let transport!: StreamableHTTPClientTransport;
 
     // Handle OAuth 2.1 authentication via authProvider
-    if (config.auth?.type === 'oauth') {
-      const oauthProvider = this.getOAuthProvider(config);
-      options.authProvider = oauthProvider;
+    if (this.usesOAuth21(config)) {
       logger.debug(`Using OAuth 2.1 for ${config.name}`);
     }
     // Handle static authentication types
@@ -166,6 +190,7 @@ export class DefaultTransportFactory implements TransportFactory {
       const token = await this.getAuthToken(config);
 
       switch (config.auth.type) {
+        case 'oauth': // Legacy device-flow token supplied by the configured token provider.
         case 'bearer':
           headers['Authorization'] = `Bearer ${token}`;
           break;
@@ -188,6 +213,9 @@ export class DefaultTransportFactory implements TransportFactory {
       options.requestInit = { headers };
     }
 
+    const oauthProvider = this.createOAuthProviderForTransport(config, () => transport);
+    if (oauthProvider) options.authProvider = oauthProvider;
+
     // Resume existing session if available
     if (config.sessionId) {
       options.sessionId = config.sessionId;
@@ -205,7 +233,33 @@ export class DefaultTransportFactory implements TransportFactory {
     logger.debug(
       `Creating Streamable HTTP transport for ${config.name} at ${url.toString()}`
     );
-    return new StreamableHTTPClientTransport(url, options);
+    transport = new StreamableHTTPClientTransport(url, options);
+    return transport;
+  }
+
+  private createOAuthProviderForTransport(
+    config: MCPConfig,
+    getTransport: () => SSEClientTransport | StreamableHTTPClientTransport
+  ): MCPOAuthProvider | undefined {
+    if (!this.usesOAuth21(config)) return undefined;
+    const provider = this.getOAuthProvider(config);
+    return new Proxy(provider, {
+      get(target, property) {
+        if (property === 'redirectToAuthorization') {
+          return (authorizationUrl: URL) => target.redirectToAuthorization(
+            authorizationUrl,
+            (callbackParams) => getTransport().finishAuth(callbackParams)
+          );
+        }
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+  }
+
+  private usesOAuth21(config: MCPConfig): boolean {
+    return config.auth?.type === 'oauth' &&
+      (!!config.auth.oauth21 || !config.auth.oauth);
   }
 
   /**

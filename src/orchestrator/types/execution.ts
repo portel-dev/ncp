@@ -1,3 +1,5 @@
+import type { CallToolResult } from '@modelcontextprotocol/client';
+
 /**
  * Execution-related types for the orchestrator
  */
@@ -8,6 +10,8 @@
 export interface ExecutionResult {
   success: boolean;
   content?: unknown;
+  /** Complete result from a downstream MCP call, when one was made. */
+  mcpResult?: CallToolResult;
   error?: string;
 }
 

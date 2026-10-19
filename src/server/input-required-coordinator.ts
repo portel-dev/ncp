@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
+  CLIENT_INFO_META_KEY,
   createRequestStateCodec,
   inputRequired,
   inputResponse,
@@ -76,7 +77,17 @@ export class InputRequiredCoordinator implements UserInputProvider {
     this.codec = createRequestStateCodec<RequestStatePayload>({
       key: randomBytes(32),
       ttlSeconds: workflowTtlMs / 1000,
-      bind: (ctx) => `${ctx.mcpReq.method}\0${ctx.sessionId ?? ''}\0${this.clientIdentity()}`,
+      bind: (ctx) => {
+        // Modern state is verified before the request handler refreshes the
+        // legacy server fields. Bind to this request's validated identity so
+        // another stateless request cannot invalidate a pending interaction.
+        const envelope = ctx.mcpReq.envelope as Record<string, unknown> | undefined;
+        const client = envelope?.[CLIENT_INFO_META_KEY] as { name?: string; version?: string } | undefined;
+        const identity = envelope
+          ? `${client?.name ?? 'unknown'}@${client?.version ?? 'unknown'}`
+          : this.clientIdentity();
+        return `${ctx.mcpReq.method}\0${ctx.sessionId ?? ''}\0${identity}`;
+      },
     });
   }
 

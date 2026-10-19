@@ -138,15 +138,16 @@ export interface RegistrySearchOptions {
 }
 
 export class RegistryClient {
-  private baseURL = 'https://registry.modelcontextprotocol.io/v0';
+  private baseURL = 'https://registry.modelcontextprotocol.io/v0.1';
   private cache: Map<string, { data: any; timestamp: number }> = new Map();
   private readonly CACHE_TTL = 30 * 60 * 1000; // 30 minutes (longer for large dataset)
   private allServersCache: ServerSearchResult[] | null = null;
   private allServersCacheTime: number = 0;
+  private lastSyncedAt?: string;
 
   /**
-   * Fetch ALL servers from registry (up to 100 - API limit) for comprehensive dataset
-   * This allows intelligent client-side sorting and filtering
+   * Fetch every page before publishing a catalog snapshot. Subsequent refreshes
+   * include tombstones so removed entries cannot linger in discovery results.
    */
   private async fetchAllServers(): Promise<ServerSearchResult[]> {
     // Check cache first (30 min TTL)
@@ -158,20 +159,52 @@ export class RegistryClient {
     logger.debug('Fetching comprehensive registry dataset...');
 
     try {
-      // Fetch maximum allowed dataset (100 servers - API limit)
-      const url = `${this.baseURL}/servers?limit=100`;
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`Registry API error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const servers = data.servers || [];
+      const syncStartedAt = new Date().toISOString();
+      const catalog = new Map<string, ServerSearchResult>(
+        (this.allServersCache || []).map(entry => [entry.server.name, entry])
+      );
+      const seenCursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const url = new URL(`${this.baseURL}/servers`);
+        url.searchParams.set('limit', '100');
+        url.searchParams.set('version', 'latest');
+        if (this.lastSyncedAt) {
+          url.searchParams.set('updated_since', this.lastSyncedAt);
+          url.searchParams.set('include_deleted', 'true');
+        }
+        if (cursor) url.searchParams.set('cursor', cursor);
+        const response = await fetch(url.toString(), { signal: AbortSignal.timeout(15_000) });
+        if (!response.ok) throw new Error(`Registry API error: ${response.statusText}`);
+        const data = await response.json();
+        if (!Array.isArray(data.servers)) throw new Error('Registry returned an invalid server list');
+        for (const entry of data.servers as ServerSearchResult[]) {
+          if (!entry.server?.name || !entry.server.version) {
+            throw new Error('Registry returned an invalid server entry');
+          }
+          if (entry._meta?.['io.modelcontextprotocol.registry/official']?.status === 'deleted') {
+            if (catalog.get(entry.server.name)?.server.version === entry.server.version) {
+              catalog.delete(entry.server.name);
+            }
+          } else {
+            catalog.set(entry.server.name, entry);
+          }
+        }
+        cursor = data.metadata?.nextCursor;
+        if (cursor !== undefined && typeof cursor !== 'string') {
+          throw new Error('Registry returned an invalid pagination cursor');
+        }
+        if (cursor) {
+          if (seenCursors.has(cursor)) throw new Error('Registry repeated a pagination cursor');
+          seenCursors.add(cursor);
+        }
+      } while (cursor);
+      const servers = [...catalog.values()];
 
       // Cache the full dataset
       this.allServersCache = servers;
       this.allServersCacheTime = Date.now();
+      this.lastSyncedAt = syncStartedAt;
 
       logger.debug(`Fetched and cached ${servers.length} servers from registry`);
 
@@ -343,7 +376,7 @@ export class RegistryClient {
       if (cached) return cached;
 
       const encoded = encodeURIComponent(serverName);
-      const response = await fetch(`${this.baseURL}/servers/${encoded}`);
+      const response = await fetch(`${this.baseURL}/servers/${encoded}/versions/latest`);
 
       if (!response.ok) {
         throw new Error(`Server not found: ${serverName}`);
@@ -519,5 +552,8 @@ export class RegistryClient {
    */
   clearCache(): void {
     this.cache.clear();
+    this.allServersCache = null;
+    this.allServersCacheTime = 0;
+    this.lastSyncedAt = undefined;
   }
 }

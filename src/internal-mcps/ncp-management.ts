@@ -51,6 +51,11 @@ export class NCPManagementMCP implements InternalMCP {
             type: 'string',
             description: 'Optional. URL for HTTP/SSE servers. Only for manual single-MCP configuration when mcp_name is a simple name (overrides auto-detected URL mode).'
           },
+          transport: {
+            type: 'string',
+            enum: ['streamableHttp', 'sse'],
+            description: 'Optional transport for a new HTTP server (default: streamableHttp). Use sse for legacy SSE endpoints.'
+          },
           profile: {
             type: 'string',
             description: 'Target profile name (default: "all")',
@@ -222,7 +227,11 @@ export class NCPManagementMCP implements InternalMCP {
     let command = params.command;
     let commandArgs = params.args || [];
     let url = params.url;
+    let remoteTransport: 'sse' | 'streamableHttp' = params.transport === 'sse' ? 'sse' : 'streamableHttp';
     const profile = params.profile || 'all';
+    if (params.transport !== undefined && !['sse', 'streamableHttp'].includes(params.transport)) {
+      return { success: false, error: 'transport must be either "sse" or "streamableHttp"' };
+    }
 
     // === SMART AUTO-DETECTION (matching CLI behavior) ===
 
@@ -337,6 +346,7 @@ export class NCPManagementMCP implements InternalMCP {
           commandArgs = provider.stdio.args || [];
         } else if (transport === 'http' && provider.http) {
           url = provider.http.url;
+          remoteTransport = provider.http.transport || 'streamableHttp';
         } else {
           return {
             success: false,
@@ -433,7 +443,8 @@ Do you want to install this MCP?`;
     if (transportType === 'http') {
       // HTTP/SSE server configuration
       config = {
-        url
+        url,
+        transport: remoteTransport
       };
 
       // Try to collect HTTP credentials (bearer tokens) if needed
@@ -961,6 +972,7 @@ Do you want to remove this MCP?`;
             // HTTP/SSE server
             config = {
               url: details.url!,
+              transport: details.transport === 'sse' ? 'sse' : 'streamableHttp',
               auth: {
                 type: 'bearer'
               }

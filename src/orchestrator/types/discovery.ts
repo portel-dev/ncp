@@ -11,6 +11,8 @@ export interface DiscoveryResult {
   confidence: number;
   description?: string;
   schema?: Record<string, unknown>;
+  /** Full downstream tool descriptor, available for detailed/list results. */
+  descriptor?: import('./connection.js').ToolDefinition;
 }
 
 /**

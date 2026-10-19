@@ -40,6 +40,9 @@ export interface TransportFactory {
    * Get authentication token for a config (if needed)
    */
   getAuthToken?(config: MCPConfig): Promise<string>;
+
+  /** Wait for the active OAuth 2.1 browser flow to complete, when supported. */
+  waitForAuthorization?(config: MCPConfig): Promise<void>;
 }
 
 /**

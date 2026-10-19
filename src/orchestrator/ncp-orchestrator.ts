@@ -12,17 +12,16 @@ import ProfileManager from '../profiles/profile-manager.js';
 import { logger } from '../utils/logger.js';
 import { version } from '../utils/version.js';
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { Client, SSEClientTransport } from "@modelcontextprotocol/client";
+import { Client, UnauthorizedError, type CallToolResult } from "@modelcontextprotocol/client";
 import { DiscoveryEngine } from '../discovery/engine.js';
 import { MCPHealthMonitor } from '../utils/health-monitor.js';
 import { SearchEnhancer } from '../discovery/search-enhancer.js';
-import { mcpWrapper } from '../utils/mcp-wrapper.js';
 import { withFilteredOutput } from '../transports/filtered-stdio-transport.js';
 import { ToolSchemaParser, ParameterInfo } from '../services/tool-schema-parser.js';
 import { InternalMCPManager } from '../internal-mcps/internal-mcp-manager.js';
 import { ToolContextResolver } from '../services/tool-context-resolver.js';
 import type { OAuthConfig } from '../auth/oauth-device-flow.js';
-import { getRuntimeForExtension, logRuntimeInfo } from '../utils/runtime-detector.js';
+import { logRuntimeInfo } from '../utils/runtime-detector.js';
 import { getFileWatcher } from '../services/file-watcher.js';
 // Simple string similarity for tool name matching
 function calculateSimilarity(str1: string, str2: string): number {
@@ -88,6 +87,7 @@ import { CacheService } from './services/cache-service.js';
 import { SkillsService } from './services/skills-service.js';
 import { PhotonService } from './services/photon-service.js';
 import { ConnectionPoolManager } from './services/connection-pool.js';
+import { DefaultTransportFactory } from './services/transport-factory.js';
 
 interface DiscoveryResult {
   toolName: string;
@@ -95,11 +95,14 @@ interface DiscoveryResult {
   confidence: number;
   description?: string;
   schema?: any;
+  descriptor?: MCPToolDescriptor;
 }
 
 interface ExecutionResult {
   success: boolean;
   content?: any;
+  /** Complete downstream MCP result, including structured data and media/resource blocks. */
+  mcpResult?: CallToolResult;
   error?: string;
 }
 
@@ -109,12 +112,15 @@ interface MCPConfig {
   args?: string[];
   env?: Record<string, string>;
   url?: string;  // Optional: for HTTP/SSE transport (Claude Desktop native)
+  transport?: 'sse' | 'streamableHttp';
+  sessionId?: string;
   auth?: {
     type: 'oauth' | 'bearer' | 'apiKey' | 'basic';
     oauth?: OAuthConfig;  // OAuth 2.0 Device Flow configuration
     token?: string;       // Bearer token or API key
     username?: string;    // Basic auth username
     password?: string;    // Basic auth password
+    oauth21?: { clientId?: string; clientSecret?: string; scopes?: string[]; callbackPort?: number };
   };
 }
 
@@ -126,12 +132,15 @@ interface Profile {
     args?: string[];
     env?: Record<string, string>;
     url?: string;  // Optional: for HTTP/SSE transport
+    transport?: 'sse' | 'streamableHttp';
+    sessionId?: string;
     auth?: {
       type: 'oauth' | 'bearer' | 'apiKey' | 'basic';
       oauth?: OAuthConfig;  // OAuth 2.0 Device Flow configuration
       token?: string;       // Bearer token or API key
       username?: string;    // Basic auth username
       password?: string;    // Basic auth password
+      oauth21?: { clientId?: string; clientSecret?: string; scopes?: string[]; callbackPort?: number };
     };
   }>;
   metadata?: any;
@@ -139,8 +148,8 @@ interface Profile {
 
 interface MCPConnection {
   client: Client;
-  transport: StdioClientTransport | SSEClientTransport;
-  tools: Array<{name: string; description: string}>;
+  transport: StdioClientTransport | import('@modelcontextprotocol/client').SSEClientTransport | import('@modelcontextprotocol/client').StreamableHTTPClientTransport;
+  tools: MCPToolDescriptor[];
   serverInfo?: {
     name: string;
     title?: string;
@@ -156,7 +165,7 @@ interface MCPConnection {
 interface MCPDefinition {
   name: string;
   config: MCPConfig;
-  tools: Array<{name: string; description: string; inputSchema?: any}>;
+  tools: MCPToolDescriptor[];
   serverInfo?: {
     name: string;
     title?: string;
@@ -164,6 +173,17 @@ interface MCPDefinition {
     description?: string;
     websiteUrl?: string;
   };
+}
+
+/** Preserve all fields returned by tools/list, including newer MCP extensions. */
+interface MCPToolDescriptor {
+  name: string;
+  description: string;
+  inputSchema?: any;
+  outputSchema?: any;
+  annotations?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export class NCPOrchestrator {
@@ -190,6 +210,9 @@ export class NCPOrchestrator {
   private indexingStartTime: number = 0;
   private profileManager: ProfileManager | null = null;
   private internalMCPManager: InternalMCPManager;
+  private transportFactory: DefaultTransportFactory;
+  private userInputProvider?: UserInputProvider;
+  private elicitationHandlerClients = new WeakSet<Client>();
   private backgroundInitPromise: Promise<void> | null = null;
   private backgroundInitComplete = false;
   private newlyIndexedMCPs: Set<string> = new Set();  // Track MCPs indexed in current run
@@ -227,6 +250,7 @@ export class NCPOrchestrator {
     this.showProgress = showProgress;
     this.forceRetry = forceRetry;
     this.internalMCPManager = new InternalMCPManager();
+    this.transportFactory = new DefaultTransportFactory(async (config) => this.getAuthToken(config as MCPConfig));
 
     // Initialize CodeExecutor with tools provider, executor, and Photon instances
     this.codeExecutor = new CodeExecutor(
@@ -430,6 +454,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
               confidence: tool.confidence || 1.0,
               parameters,
               schema: tool.schema,
+              descriptor: tool.descriptor,
               healthy: tool.healthy !== false
             };
           });
@@ -466,7 +491,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
         } else if (toolName === 'ncp:run') {
           const result = await this.run(params.tool, params.parameters || {});
           if (result.success) {
-            return result.content;
+            return result.mcpResult && Object.prototype.hasOwnProperty.call(result.mcpResult, 'structuredContent')
+              ? result.mcpResult.structuredContent
+              : result.content;
           } else {
             // Provide better error messages when error field is missing
             const errorMessage = result.error ||
@@ -489,7 +516,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
             async (tool: string, toolParams: any) => {
               const result = await this.run(tool, toolParams);
               if (result.success) {
-                return result.content;
+                return result.mcpResult && Object.prototype.hasOwnProperty.call(result.mcpResult, 'structuredContent')
+                  ? result.mcpResult.structuredContent
+                  : result.content;
               } else {
                 throw new Error(result.error || `Failed to execute tool: ${tool}`);
               }
@@ -795,7 +824,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
         // Handle regular tools
         const result = await this.run(toolName, params);
         if (result.success) {
-          return result.content;
+          return result.mcpResult && Object.prototype.hasOwnProperty.call(result.mcpResult, 'structuredContent')
+            ? result.mcpResult.structuredContent
+            : result.content;
         } else {
           // Provide better error messages when error field is missing
           const errorMessage = result.error ||
@@ -1027,7 +1058,10 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
         command: config.command,
         args: config.args,
         env: config.env || {},
-        url: config.url
+        url: config.url,
+        transport: config.transport,
+        sessionId: config.sessionId,
+        auth: config.auth
       }));
 
       // Initialize CSV cache
@@ -1125,7 +1159,10 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       command: config.command,
       args: config.args,
       env: config.env || {},
-      url: config.url  // HTTP/SSE transport support
+      url: config.url,
+      transport: config.transport,
+      sessionId: config.sessionId,
+      auth: config.auth
     }));
 
     if (!cacheValid) {
@@ -1237,6 +1274,13 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
    * Called from MCPServer after construction to wire up elicitation support
    */
   setUserInputProvider(elicitationServer: UserInputProvider): void {
+    this.userInputProvider = elicitationServer;
+    // Connections may have been opened before the server wired request-scoped
+    // input. Their capability was declared when the client was created, so
+    // installing the handler now is still protocol-safe.
+    for (const connection of this.connections.values()) {
+      this.registerDownstreamElicitationHandler(connection.client);
+    }
     logger.info('🔐 Wiring up elicitation function for runtime network permissions');
 
     // Create adapter function that converts request-scoped user input
@@ -1317,6 +1361,59 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
     getPackageApprovalManager().setElicitationFunction(packageElicitationAdapter);
 
     logger.info('✅ Runtime package approval enabled via elicitations');
+  }
+
+  private createMCPClient(): Client {
+    const client = new Client(
+      this.clientInfo,
+      {
+        capabilities: { elicitation: { form: {} } } as any,
+        versionNegotiation: { mode: 'auto' },
+        inputRequired: { autoFulfill: true }
+      }
+    );
+    this.registerDownstreamElicitationHandler(client);
+    return client;
+  }
+
+  /**
+   * Bridge downstream elicitation to the server's request-scoped input
+   * coordinator. The SDK's input-required driver uses this same handler before
+   * retrying a call, so completed tool effects are never replayed by NCP.
+   */
+  private registerDownstreamElicitationHandler(client: Client): void {
+    if (this.elicitationHandlerClients.has(client)) return;
+    this.elicitationHandlerClients.add(client);
+    client.setRequestHandler('elicitation/create', async (request: any) => {
+      const params = request?.params || {};
+      const provider = this.userInputProvider;
+
+      // URL elicitation can open a separate authorization surface and is not
+      // representable by UserInputProvider. Decline it rather than accepting
+      // an authorization step that NCP cannot show to the user.
+      if ((params.mode !== undefined && params.mode !== 'form') || !params.requestedSchema || typeof params.requestedSchema !== 'object') {
+        logger.warn('Downstream MCP requested unsupported URL or malformed elicitation; declining safely');
+        return { action: 'decline' };
+      }
+      if (!provider) {
+        logger.warn('Downstream MCP requested user input before an input provider was configured; declining safely');
+        return { action: 'decline' };
+      }
+
+      try {
+        const response = await provider.requestInput({
+          message: typeof params.message === 'string' ? params.message : 'A downstream MCP needs your input',
+          requestedSchema: params.requestedSchema
+        });
+        if (response.action === 'accept') {
+          return { action: 'accept', content: response.content || {} };
+        }
+        return { action: response.action };
+      } catch (error: any) {
+        logger.warn(`Downstream MCP elicitation failed: ${error?.message || error}`);
+        return { action: 'cancel' };
+      }
+    });
   }
 
   /**
@@ -1842,9 +1939,10 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
           // Find schema in metadata cache
           const toolMetadata = mcpMetadata?.tools?.find(mt => mt.name === t.toolName);
           return {
+            ...(toolMetadata || {}),
             name: t.toolName,
             description: t.description,
-            inputSchema: toolMetadata?.inputSchema  // Use schema from metadata cache
+            inputSchema: toolMetadata?.inputSchema
           };
         }),
         serverInfo: mcpMetadata?.serverInfo
@@ -2062,110 +2160,72 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
    * Supports both stdio (command/args) and HTTP/SSE (url) transports
    * Handles OAuth authentication for HTTP/SSE connections
    */
-  private async createTransport(config: MCPConfig, env?: Record<string, string>): Promise<StdioClientTransport | SSEClientTransport> {
-    if (config.url) {
-      // HTTP/SSE transport (Claude Desktop native support)
-      const url = new URL(config.url);
-      const headers: Record<string, string> = {};
+  private async createTransport(config: MCPConfig, env?: Record<string, string>): Promise<StdioClientTransport | import('@modelcontextprotocol/client').SSEClientTransport | import('@modelcontextprotocol/client').StreamableHTTPClientTransport> {
+    // Historical profiles without a transport field used legacy SSE. Keep
+    // those endpoints working; new registry imports record streamableHttp.
+    const transportConfig = config.url && !config.transport
+      ? { ...config, transport: 'sse' as const }
+      : config;
+    return this.transportFactory.createTransport(transportConfig as any, env);
+  }
 
-      // Handle authentication
-      if (config.auth) {
-        const token = await this.getAuthToken(config);
-
-        switch (config.auth.type) {
-          case 'oauth':
-          case 'bearer':
-            headers['Authorization'] = `Bearer ${token}`;
-            break;
-          case 'apiKey':
-            // API key can be in header or query param - assume header for now
-            headers['X-API-Key'] = token;
-            break;
-          case 'basic':
-            if (config.auth.username && config.auth.password) {
-              const credentials = Buffer.from(`${config.auth.username}:${config.auth.password}`).toString('base64');
-              headers['Authorization'] = `Basic ${credentials}`;
-            }
-            break;
+  private async connectMCPClient(
+    config: MCPConfig,
+    env: Record<string, string>,
+    timeoutMs: number,
+    timeoutMessage: string
+  ): Promise<{ client: Client; transport: StdioClientTransport | import('@modelcontextprotocol/client').SSEClientTransport | import('@modelcontextprotocol/client').StreamableHTTPClientTransport }> {
+    const connect = async (client: Client, transport: StdioClientTransport | import('@modelcontextprotocol/client').SSEClientTransport | import('@modelcontextprotocol/client').StreamableHTTPClientTransport) => {
+      await withFilteredOutput(async () => {
+        let timer: NodeJS.Timeout | undefined;
+        try {
+          await Promise.race([
+            client.connect(transport),
+            new Promise((_, reject) => {
+              timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+            })
+          ]);
+        } finally {
+          if (timer) clearTimeout(timer);
         }
-      }
-
-      // Use requestInit to add custom headers to POST requests
-      // and eventSourceInit to add headers to the initial SSE connection
-      const options = Object.keys(headers).length > 0 ? {
-        requestInit: { headers },
-        eventSourceInit: { headers } as EventSourceInit
-      } : undefined;
-
-      return new SSEClientTransport(url, options);
-    }
-
-    if (config.command) {
-      // stdio transport (local process)
-      const resolvedCommand = getRuntimeForExtension(config.command);
-      const wrappedCommand = mcpWrapper.createWrapper(
-        config.name,
-        resolvedCommand,
-        config.args || []
-      );
-
-      // Ensure PATH includes all necessary directories (critical for Claude Desktop extension sandbox)
-      // Claude Desktop may provide limited PATH that doesn't include Homebrew, npm global, etc.
-      // This matches what Claude Desktop provides when spawning MCPs directly
-      const processEnv = env as Record<string, string>;
-      const platform = process.platform;
-
-      // Get platform-specific path separator and standard paths
-      const pathSeparator = platform === 'win32' ? ';' : ':';
-      let standardPaths: string;
-      let pathCheckNeeded = false;
-
-      if (platform === 'darwin') {
-        // macOS: Include both Homebrew locations (Intel and Apple Silicon)
-        standardPaths = '/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin';
-        // Check if Homebrew directories are missing
-        pathCheckNeeded = !!processEnv.PATH &&
-          !processEnv.PATH.includes('/opt/homebrew/bin') &&
-          !processEnv.PATH.includes('/usr/local/bin');
-      } else if (platform === 'win32') {
-        // Windows: Only ensure basic system paths exist
-        // User-specific paths (Scoop, npm, etc.) are already in process.env.PATH
-        // and findInPATH() in runtime-detector.ts handles command resolution
-        const windir = process.env.WINDIR || process.env.windir || 'C:\\Windows';
-        standardPaths = `${windir}\\System32;${windir}`;
-
-        // Only augment if System32 is missing (very rare edge case)
-        // Use case-insensitive check since Windows paths are case-insensitive
-        pathCheckNeeded = !!processEnv.PATH &&
-          !processEnv.PATH.toLowerCase().includes('system32');
-      } else {
-        // Linux: Standard system paths
-        standardPaths = '/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
-        // Check if standard Linux directories are missing
-        pathCheckNeeded = !!processEnv.PATH &&
-          !processEnv.PATH.includes('/usr/local/bin') &&
-          !processEnv.PATH.includes('/usr/bin');
-      }
-
-      // Set or augment PATH
-      if (!processEnv.PATH) {
-        // No PATH at all - set standard paths
-        processEnv.PATH = standardPaths;
-        logger.debug(`Set PATH for ${config.name}: ${processEnv.PATH}`);
-      } else if (pathCheckNeeded) {
-        // PATH exists but doesn't include standard directories - prepend them
-        processEnv.PATH = `${standardPaths}${pathSeparator}${processEnv.PATH}`;
-        logger.debug(`Augmented PATH for ${config.name}: ${processEnv.PATH}`);
-      }
-
-      return new StdioClientTransport({
-        command: wrappedCommand.command,
-        args: wrappedCommand.args,
-        env: processEnv
       });
-    }
+    };
 
-    throw new Error(`Invalid config for ${config.name}: must have either 'command' or 'url'`);
+    let client = this.createMCPClient();
+    let transport = await this.createTransport(config, env);
+    try {
+      await connect(client, transport);
+      return { client, transport };
+    } catch (error: any) {
+      const oauthNeedsBrowserAuth = config.auth?.type === 'oauth' &&
+        (!config.auth.oauth || !!config.auth.oauth21);
+      const waitForAuthorization = this.transportFactory.waitForAuthorization;
+      const isUnauthorized = error instanceof UnauthorizedError || error?.name === 'UnauthorizedError';
+      if (!isUnauthorized || !oauthNeedsBrowserAuth || typeof waitForAuthorization !== 'function') {
+        try { await client.close(); } catch {}
+        throw error;
+      }
+
+      try {
+        // The authorization callback finishes the provider attached to this
+        // transport. Keep it alive until finishAuth has consumed the callback.
+        await waitForAuthorization.call(this.transportFactory, config as any);
+      } catch (authorizationError) {
+        try { await client.close(); } catch {}
+        throw authorizationError;
+      }
+
+      try { await client.close(); } catch {}
+      client = this.createMCPClient();
+      try {
+        transport = await this.createTransport(config, env);
+        await connect(client, transport);
+        return { client, transport };
+      } catch (retryError) {
+        try { await client.close(); } catch {}
+        throw retryError;
+      }
+    }
   }
 
   /**
@@ -2211,7 +2271,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
 
   // Based on commercial NCP's probeMCPTools method
   private async probeMCPTools(config: MCPConfig, timeout: number = this.QUICK_PROBE_TIMEOUT): Promise<{
-    tools: Array<{name: string; description: string; inputSchema?: any}>;
+    tools: MCPToolDescriptor[];
     serverInfo?: {
       name: string;
       title?: string;
@@ -2225,7 +2285,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
     }
 
     let client: Client | null = null;
-    let transport: StdioClientTransport | SSEClientTransport | null = null;
+    let transport: StdioClientTransport | import('@modelcontextprotocol/client').SSEClientTransport | import('@modelcontextprotocol/client').StreamableHTTPClientTransport | null = null;
 
     try {
       // Create temporary connection for discovery
@@ -2237,23 +2297,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
         NO_COLOR: 'true'
       };
 
-      transport = await this.createTransport(config, silentEnv);
-
-      // Use actual client info for transparent passthrough to downstream MCPs
-      client = new Client(
-        this.clientInfo,
-        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
-      );
-
-      // Connect with timeout and filtered output
-      await withFilteredOutput(async () => {
-        await Promise.race([
-          client!.connect(transport!),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Probe timeout')), timeout)
-          )
-        ]);
-      });
+      const connected = await this.connectMCPClient(config, silentEnv, timeout, 'Probe timeout');
+      client = connected.client;
+      transport = connected.transport;
 
       // Capture server info after connection
       const serverInfo = client!.getServerVersion();
@@ -2264,10 +2310,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       });
 
       const tools = response.tools.map(t => ({
-        name: t.name,
-        description: t.description || '',
-        inputSchema: t.inputSchema  // Preserve schema as-is
-      }));
+        ...t,
+        description: t.description || ''
+      } as MCPToolDescriptor));
 
       // Disconnect immediately
       await client.close();
@@ -2608,9 +2653,14 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
         }
       });
 
+      const resultText = Array.isArray(result.content)
+        ? result.content.filter((block: any) => block?.type === 'text').map((block: any) => block.text).join('\n')
+        : undefined;
       return {
-        success: true,
-        content: result.content
+        success: result.isError !== true,
+        content: result.content,
+        mcpResult: result,
+        error: result.isError === true ? (resultText || 'Downstream MCP tool returned an error result') : undefined
       };
 
     } catch (error: any) {
@@ -2667,23 +2717,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
         NO_COLOR: 'true'
       };
 
-      const transport = await this.createTransport(definition.config, silentEnv);
-
-      // Use actual client info for transparent passthrough to downstream MCPs
-      const client = new Client(
-        this.clientInfo,
-        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
+      const { client, transport } = await this.connectMCPClient(
+        definition.config, silentEnv, this.CONNECTION_TIMEOUT, 'Connection timeout'
       );
-
-      // Connect with timeout and filtered output
-      await withFilteredOutput(async () => {
-        await Promise.race([
-          client.connect(transport),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Connection timeout')), this.CONNECTION_TIMEOUT)
-          )
-        ]);
-      });
 
       // Capture server info after successful connection
       const serverInfo = client.getServerVersion();
@@ -3270,8 +3306,6 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       }
 
       // Create temporary connection for resources request
-      const { Client } = await import('@modelcontextprotocol/client');
-
       const silentEnv = {
         ...process.env,
         ...(definition.config.env || {}),
@@ -3280,23 +3314,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
         NO_COLOR: 'true'
       };
 
-      const transport = await this.createTransport(definition.config, silentEnv);
-
-      // Use actual client info for transparent passthrough to downstream MCPs
-      const client = new Client(
-        this.clientInfo,
-        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
+      const { client } = await this.connectMCPClient(
+        definition.config, silentEnv, this.QUICK_PROBE_TIMEOUT, 'Resources connection timeout'
       );
-
-      // Connect with timeout and filtered output
-      await withFilteredOutput(async () => {
-        await Promise.race([
-          client.connect(transport),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Resources connection timeout')), this.QUICK_PROBE_TIMEOUT)
-          )
-        ]);
-      });
 
       // Get resources list with filtered output
       const response = await withFilteredOutput(async () => {
@@ -3323,8 +3343,6 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       }
 
       // Create temporary connection for prompts request
-      const { Client } = await import('@modelcontextprotocol/client');
-
       const silentEnv = {
         ...process.env,
         ...(definition.config.env || {}),
@@ -3333,23 +3351,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
         NO_COLOR: 'true'
       };
 
-      const transport = await this.createTransport(definition.config, silentEnv);
-
-      // Use actual client info for transparent passthrough to downstream MCPs
-      const client = new Client(
-        this.clientInfo,
-        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
+      const { client } = await this.connectMCPClient(
+        definition.config, silentEnv, this.QUICK_PROBE_TIMEOUT, 'Prompts connection timeout'
       );
-
-      // Connect with timeout and filtered output
-      await withFilteredOutput(async () => {
-        await Promise.race([
-          client.connect(transport),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Prompts connection timeout')), this.QUICK_PROBE_TIMEOUT)
-          )
-        ]);
-      });
 
       // Get prompts list with filtered output
       const response = await withFilteredOutput(async () => {
@@ -3377,8 +3381,6 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
       }
 
       // Create temporary connection for prompt request
-      const { Client } = await import('@modelcontextprotocol/client');
-
       const silentEnv = {
         ...process.env,
         ...(definition.config.env || {}),
@@ -3387,23 +3389,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
         NO_COLOR: 'true'
       };
 
-      const transport = await this.createTransport(definition.config, silentEnv);
-
-      // Use actual client info for transparent passthrough to downstream MCPs
-      const client = new Client(
-        this.clientInfo,
-        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
+      const { client } = await this.connectMCPClient(
+        definition.config, silentEnv, this.QUICK_PROBE_TIMEOUT, 'Prompt connection timeout'
       );
-
-      // Connect with timeout and filtered output
-      await withFilteredOutput(async () => {
-        await Promise.race([
-          client.connect(transport),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Prompt connection timeout')), this.QUICK_PROBE_TIMEOUT)
-          )
-        ]);
-      });
 
       // Get the specific prompt with filtered output
       const response = await withFilteredOutput(async () => {
@@ -3794,8 +3782,6 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
 
     // Create temporary connection to read resource
     try {
-      const { Client } = await import('@modelcontextprotocol/client');
-
       const silentEnv = {
         ...process.env,
         ...(definition.config.env || {}),
@@ -3804,23 +3790,9 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
         NO_COLOR: 'true'
       };
 
-      const transport = await this.createTransport(definition.config, silentEnv);
-
-      // Use actual client info for transparent passthrough to downstream MCPs
-      const client = new Client(
-        this.clientInfo,
-        { capabilities: {}, versionNegotiation: { mode: 'auto' } }
+      const { client } = await this.connectMCPClient(
+        definition.config, silentEnv, this.QUICK_PROBE_TIMEOUT, 'Resource connection timeout'
       );
-
-      // Connect with timeout
-      await withFilteredOutput(async () => {
-        await Promise.race([
-          client.connect(transport),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Resource connection timeout')), this.QUICK_PROBE_TIMEOUT)
-          )
-        ]);
-      });
 
       // Read resource
       const response = await withFilteredOutput(async () => {
@@ -3948,18 +3920,14 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
    * Get tools for a specific MCP server
    * Used by MCPClient.list() to discover available tools
    */
-  getToolsForMCP(mcpName: string): Array<{ name: string; description?: string; inputSchema?: any }> {
-    const tools: Array<{ name: string; description?: string; inputSchema?: any }> = [];
+  getToolsForMCP(mcpName: string): MCPToolDescriptor[] {
+    const tools: MCPToolDescriptor[] = [];
 
     // Check active connection first
     const connection = this.connections.get(mcpName);
-    if (connection && connection.tools) {
+    if (connection?.tools?.length) {
       for (const tool of connection.tools) {
-        tools.push({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: (tool as any).inputSchema,
-        });
+        tools.push({ ...tool });
       }
       return tools;
     }
@@ -3968,11 +3936,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
     const internalMCP = this.internalMCPManager.getInternalMCP(mcpName);
     if (internalMCP) {
       for (const tool of internalMCP.tools) {
-        tools.push({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-        });
+        tools.push({ ...tool });
       }
       return tools;
     }
@@ -3981,11 +3945,7 @@ Returns: { success, tool, mappedParams, paramMappings, result, error }`,
     const definition = this.definitions.get(mcpName);
     if (definition && definition.tools) {
       for (const tool of definition.tools) {
-        tools.push({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: (tool as any).inputSchema,
-        });
+        tools.push({ ...tool });
       }
       return tools;
     }

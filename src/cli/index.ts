@@ -804,7 +804,8 @@ async function handleKnownProvider(provider: any, options: any) {
     console.log(chalk.dim(`   Adding ${provider.name} (HTTP) to profile...`));
 
     const httpConfig: any = {
-      url: provider.http.url
+      url: provider.http.url,
+      transport: provider.http.transport || 'streamableHttp'
     };
 
     // Add bearer token if provided via --token flag

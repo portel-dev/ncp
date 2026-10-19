@@ -25,6 +25,8 @@ interface MCPConfig {
   args?: string[];
   env?: Record<string, string>;
   url?: string;  // Optional: for HTTP/SSE transport
+  transport?: 'sse' | 'streamableHttp';
+  sessionId?: string;
   auth?: {
     type: 'oauth' | 'bearer' | 'apiKey' | 'basic';
     oauth?: OAuthConfig;  // OAuth 2.0 Device Flow configuration
@@ -387,6 +389,8 @@ export class ProfileManager {
           // HTTP/SSE transport fields
           if (config.url) {
             cleanConfig.url = config.url;
+            cleanConfig.transport = config.transport;
+            cleanConfig.sessionId = config.sessionId;
           }
 
           // Auth configuration (for HTTP MCPs)

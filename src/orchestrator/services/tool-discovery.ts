@@ -210,6 +210,9 @@ export class ToolDiscoveryService implements OrchestratorService {
       const actualToolName = tool.name.includes(':')
         ? tool.name.split(':', 2)[1]
         : tool.name;
+      const descriptor = definitions.get(tool.mcpName)?.tools.find(
+        (candidate) => candidate.name === actualToolName
+      );
 
       return {
         toolName: prefixedName,
@@ -219,6 +222,7 @@ export class ToolDiscoveryService implements OrchestratorService {
         schema: detailed
           ? this.getToolSchema(tool.mcpName, actualToolName)
           : undefined,
+        descriptor: detailed && descriptor ? { ...descriptor } : undefined,
       };
     });
   }
@@ -252,6 +256,9 @@ export class ToolDiscoveryService implements OrchestratorService {
           (t.name === prefixedToolName || t.name === toolName) &&
           t.mcpName === actualMcpName
       );
+      const descriptor = definitions.get(actualMcpName)?.tools.find(
+        (candidate) => candidate.name === toolName
+      );
 
       return {
         toolName: fullTool?.name || prefixedToolName,
@@ -261,6 +268,7 @@ export class ToolDiscoveryService implements OrchestratorService {
         schema: detailed
           ? this.getToolSchema(actualMcpName, toolName)
           : undefined,
+        descriptor: detailed && descriptor ? { ...descriptor } : undefined,
       };
     });
   }

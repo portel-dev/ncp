@@ -104,6 +104,11 @@ export interface ToolDefinition {
   name: string;
   description: string;
   inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  annotations?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+  /** Retain future fields introduced by newer MCP revisions. */
+  [key: string]: unknown;
 }
 
 /**

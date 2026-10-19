@@ -156,6 +156,27 @@ describe('ToolDiscoveryService', () => {
       expect(results.length).toBe(2);
     });
 
+    it('preserves the full cached tool descriptor for detailed listings', async () => {
+      const descriptor = {
+        name: 'create_issue',
+        description: 'Create GitHub issue',
+        inputSchema: { type: 'object', properties: { title: { type: 'string' } } },
+        outputSchema: { type: 'object', properties: { issueId: { type: 'string' } } },
+        annotations: { readOnlyHint: false, destructiveHint: true },
+        _meta: { 'ui/resource': 'issue-form' },
+        vendorExtension: { mode: 'full' },
+      };
+      const original = sampleDefinitions.get('github')!.tools[0];
+      sampleDefinitions.get('github')!.tools[0] = descriptor;
+
+      try {
+        const results = await discoveryService.find('', { limit: 1, detailed: true });
+        expect(results[0].descriptor).toEqual(descriptor);
+      } finally {
+        sampleDefinitions.get('github')!.tools[0] = original;
+      }
+    });
+
     it('should filter out unhealthy MCPs when listing', async () => {
       mockHealthMonitor.getHealthyMCPs.mockImplementation((mcps) =>
         mcps.filter((m) => m !== 'slack')

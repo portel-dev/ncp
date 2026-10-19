@@ -42,10 +42,29 @@ export interface OrchestratorInterface {
     success: boolean;
     content?: any;
     error?: string;
+    /** Original downstream MCP result, preserved for Photon callers. */
+    mcpResult?: DownstreamMCPResult;
   }>;
   getConnectionNames(): string[];
   isConnected(mcpName: string): boolean;
-  getToolsForMCP(mcpName: string): Array<{ name: string; description?: string; inputSchema?: any }>;
+  getToolsForMCP(mcpName: string): Array<{
+    name: string;
+    description?: string;
+    inputSchema?: any;
+    outputSchema?: any;
+    annotations?: Record<string, unknown>;
+    _meta?: Record<string, unknown>;
+    [key: string]: unknown;
+  }>;
+}
+
+/** Full modern MCP result shape (Photon's currently published type is narrower). */
+export interface DownstreamMCPResult {
+  content: any[];
+  isError?: boolean;
+  structuredContent?: unknown;
+  _meta?: unknown;
+  [key: string]: unknown;
 }
 
 /**
@@ -84,6 +103,14 @@ export class NCPMCPTransport implements MCPTransport {
 
     const result = await this.orchestrator.run(fullToolName, parameters);
 
+    if (result.mcpResult) {
+      // Preserve the complete MCP result. Photon and its callers need native
+      // content blocks and structured output, including error and app metadata.
+      // photon-core's public MCPToolResult type predates audio and resource_link
+      // blocks. The runtime result remains the exact original MCP object.
+      return result.mcpResult as MCPToolResult;
+    }
+
     if (!result.success) {
       return {
         content: [{ type: 'text', text: result.error || 'Unknown error' }],
@@ -91,7 +118,8 @@ export class NCPMCPTransport implements MCPTransport {
       };
     }
 
-    // Convert orchestrator result to MCP format
+    // Compatibility fallback for orchestrators that still return the legacy
+    // value-only result shape.
     const content = result.content;
 
     if (typeof content === 'string') {
@@ -115,11 +143,7 @@ export class NCPMCPTransport implements MCPTransport {
   async listTools(mcpName: string): Promise<MCPToolInfo[]> {
     const tools = this.orchestrator.getToolsForMCP(mcpName);
 
-    return tools.map(tool => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-    }));
+    return tools.map(tool => ({ ...tool }));
   }
 
   async isConnected(mcpName: string): Promise<boolean> {
