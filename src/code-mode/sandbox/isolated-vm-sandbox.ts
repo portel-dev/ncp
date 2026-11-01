@@ -64,6 +64,8 @@ export interface IsolatedVMExecutionResult {
   result: unknown;
   logs: string[];
   error?: string;
+  /** Whether user code reached script.run before the error occurred. */
+  executionStarted?: boolean;
   duration: number;
 }
 
@@ -121,6 +123,7 @@ export class IsolatedVMSandbox {
   ): Promise<IsolatedVMExecutionResult> {
     const startTime = Date.now();
     const logs: string[] = [];
+    let executionStarted = false;
 
     // Load isolated-vm module
     const ivmModule = await getIVM();
@@ -160,6 +163,8 @@ export class IsolatedVMSandbox {
         filename: 'user-code.js',
       });
 
+      // Mark before entering user code so runtime failures never trigger replay.
+      executionStarted = true;
       // Run with timeout
       const resultRef = await script.run(context, {
         timeout: this.config.timeout,
@@ -176,6 +181,7 @@ export class IsolatedVMSandbox {
       return {
         result,
         logs,
+        executionStarted,
         duration,
       };
     } catch (error: any) {
@@ -197,6 +203,7 @@ export class IsolatedVMSandbox {
         result: null,
         logs,
         error: errorMessage,
+        executionStarted,
         duration,
       };
     } finally {

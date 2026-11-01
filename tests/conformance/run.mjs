@@ -9,9 +9,16 @@ const quote = value => process.platform === 'win32'
   ? `"${value.replaceAll('"', '""')}"`
   : `'${value.replaceAll("'", "'\\''")}'`;
 const command = `${quote(process.execPath)} --import tsx ${quote(fileURLToPath(new URL('../fixtures/conformance-client.ts', import.meta.url)))}`;
-for (const scenario of ['initialize', 'tools_call']) {
+// Keep the previous stable lifecycle covered while exercising the currently
+// published wire protocol. The 2026-07-28 revision is stateless, so it has no
+// initialize scenario; tools_call is applicable to both revisions.
+for (const [scenario, specVersion] of [
+  ['initialize', '2025-11-25'],
+  ['tools_call', '2025-11-25'],
+  ['tools_call', '2026-07-28'],
+]) {
   const result = spawnSync(process.execPath, [cli, 'client', '--command', command,
-    '--scenario', scenario, '--spec-version', '2025-11-25', '--timeout', '30000'], {
+    '--scenario', scenario, '--spec-version', specVersion, '--timeout', '30000'], {
     cwd: root, stdio: 'inherit', timeout: 60_000,
   });
   if (result.error) throw result.error;

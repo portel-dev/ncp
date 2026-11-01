@@ -51,6 +51,8 @@ export interface CodeExecutionResult {
   result: any;
   logs: string[];
   error?: string;
+  /** True when user code began running in the selected backend. */
+  executionStarted?: boolean;
   runId?: string; // Unique ID for this execution (enables save-as-photon)
   errorDetails?: {
     originalError: any;
@@ -211,19 +213,39 @@ export class CodeExecutor {
 
     // Get effective whitelist (built-in + temporarily approved)
     const effectiveWhitelist = approvalManager.getEffectiveWhitelist();
+    const terminalError = async (error: any, logs: string[] = []): Promise<CodeExecutionResult> => {
+      const message = error?.message || String(error);
+      try { await auditLogger.logCodeExecutionError(code, message, { mcpName: 'code-mode' }); } catch (logError) {
+        logger.debug(`Could not log execution error: ${logError}`);
+      }
+      try { await stateLog.writeError(message, error?.stack); } catch (logError) {
+        logger.debug(`Could not log error to state log: ${logError}`);
+      }
+      return { result: null, logs: [...logs, `[ERROR] ${message}`], error: message, runId };
+    };
 
     try {
-      // Try IsolatedVMSandbox first (most secure - true V8 Isolate)
+      // Select an execution backend before running user code. Once execution
+      // begins, errors must not replay the script in another backend because
+      // tool calls and other effects may already have happened.
       if (IsolatedVMSandbox.isAvailable()) {
         try {
           const result = await this.executeWithIsolatedVM(code, timeout);
+          if (result.error) {
+            if (result.executionStarted) return await terminalError(new Error(result.error), result.logs);
+            throw new Error(result.error);
+          }
 
           // Phase 5: Log success
           const duration = Date.now() - startTime;
-          await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
-            mcpName: 'code-mode',
-            userId: 'isolated-vm'
-          });
+          try {
+            await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
+              mcpName: 'code-mode',
+              userId: 'isolated-vm'
+            });
+          } catch (logError) {
+            logger.debug(`Could not log execution success: ${logError}`);
+          }
 
           // Log to state log and include runId in response
           try {
@@ -234,20 +256,29 @@ export class CodeExecutor {
 
           return { ...result, runId };
         } catch (isolatedVMError: any) {
-          logger.warn(`IsolatedVM execution failed: ${isolatedVMError.message}, falling back to Subprocess`);
+          if (isolatedVMError?.executionStarted) return await terminalError(isolatedVMError);
+          logger.warn(`IsolatedVM startup failed: ${isolatedVMError.message}, falling back to Subprocess`);
         }
       }
 
       // Try SubprocessSandbox (second most secure - true process isolation)
       try {
         const result = await this.executeWithSubprocess(code, timeout);
+        if (result.error) {
+          if (result.executionStarted) return await terminalError(new Error(result.error), result.logs);
+          throw new Error(result.error);
+        }
 
         // Phase 5: Log success
         const duration = Date.now() - startTime;
-        await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
-          mcpName: 'code-mode',
-          userId: 'subprocess'
-        });
+        try {
+          await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
+            mcpName: 'code-mode',
+            userId: 'subprocess'
+          });
+        } catch (logError) {
+          logger.debug(`Could not log execution success: ${logError}`);
+        }
 
         // Log to state log and include runId in response
         try {
@@ -258,17 +289,26 @@ export class CodeExecutor {
 
         return { ...result, runId };
       } catch (subprocessError: any) {
-        logger.warn(`Subprocess execution failed: ${subprocessError.message}, falling back to Worker Thread`);
+        if (subprocessError?.executionStarted) return await terminalError(subprocessError);
+        logger.warn(`Subprocess startup failed: ${subprocessError.message}, falling back to Worker Thread`);
 
         // Fallback to Worker Thread (third most secure)
         try {
           const result = await this.executeWithWorkerThread(code, timeout);
+          if (result.error) {
+            if (result.executionStarted) return await terminalError(new Error(result.error), result.logs);
+            throw new Error(result.error);
+          }
 
           const duration = Date.now() - startTime;
-          await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
-            mcpName: 'code-mode',
-            userId: 'worker-fallback'
-          });
+          try {
+            await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
+              mcpName: 'code-mode',
+              userId: 'worker-fallback'
+            });
+          } catch (logError) {
+            logger.debug(`Could not log execution success: ${logError}`);
+          }
 
           // Log to state log and include runId in response
           try {
@@ -279,17 +319,22 @@ export class CodeExecutor {
 
           return { ...result, runId };
         } catch (workerError: any) {
-          logger.warn(`Worker Thread execution failed: ${workerError.message}, falling back to VM`);
+          if (workerError?.executionStarted) return await terminalError(workerError);
+          logger.warn(`Worker Thread startup failed: ${workerError.message}, falling back to VM`);
 
           // Final fallback to VM module (least secure but stable)
           try {
             const result = await this.executeWithVM(code, timeout);
 
             const duration = Date.now() - startTime;
-            await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
-              mcpName: 'code-mode',
-              userId: 'vm-fallback'
-            });
+            try {
+              await auditLogger.logCodeExecutionSuccess(code, result.result, duration, {
+                mcpName: 'code-mode',
+                userId: 'vm-fallback'
+              });
+            } catch (logError) {
+              logger.debug(`Could not log execution success: ${logError}`);
+            }
 
             // Log to state log and include runId in response
             try {
@@ -307,7 +352,9 @@ export class CodeExecutor {
               name: vmError.name,
               codeLength: code.length
             });
-            await auditLogger.logCodeExecutionError(code, vmError.message, { mcpName: 'code-mode' });
+            try { await auditLogger.logCodeExecutionError(code, vmError.message, { mcpName: 'code-mode' }); } catch (logError) {
+              logger.debug(`Could not log execution error: ${logError}`);
+            }
 
             // Log error to state log
             try {
@@ -376,13 +423,11 @@ export class CodeExecutor {
     const result = await sandbox.execute(code, sandboxTools, this.toolExecutor);
 
     // Convert to CodeExecutionResult format
-    if (result.error) {
-      throw new Error(result.error);
-    }
-
     return {
       result: result.result,
       logs: result.logs,
+      error: result.error,
+      executionStarted: result.executionStarted,
     };
   }
 
@@ -430,13 +475,11 @@ export class CodeExecutor {
     const result = await sandbox.execute(code, sandboxTools, this.toolExecutor);
 
     // Convert to CodeExecutionResult format
-    if (result.error) {
-      throw new Error(result.error);
-    }
-
     return {
       result: result.result,
       logs: result.logs,
+      error: result.error,
+      executionStarted: result.executionStarted,
     };
   }
 
@@ -474,6 +517,7 @@ export class CodeExecutor {
     return new Promise((resolve, reject) => {
       const logs: string[] = [];
       let worker: Worker | null = null;
+      let executionStarted = false;
 
       try {
         // Create worker with resource limits
@@ -498,13 +542,21 @@ export class CodeExecutor {
         const timeoutHandle = setTimeout(() => {
           if (worker) {
             worker.terminate();
-            reject(new Error(`Execution timeout after ${timeout}ms`));
+            const error = new Error(`Execution timeout after ${timeout}ms`) as Error & { executionStarted?: boolean };
+            // At timeout the worker may have started but its notification may
+            // still be queued, so conservatively prohibit a replay.
+            error.executionStarted = true;
+            reject(error);
           }
         }, timeout);
 
         // Handle messages from worker
         worker.on('message', (message: { type: string; data: any }) => {
           switch (message.type) {
+            case 'execution_started':
+              executionStarted = true;
+              break;
+
             case 'log':
               logs.push(message.data);
               break;
@@ -599,7 +651,8 @@ export class CodeExecutor {
               worker?.terminate();
               resolve({
                 result: message.data.result,
-                logs: message.data.logs
+                logs: message.data.logs,
+                executionStarted
               });
               break;
 
@@ -623,6 +676,7 @@ export class CodeExecutor {
                 result: null,
                 logs: message.data.logs,
                 error: errorMessage,
+                executionStarted,
                 errorDetails: {
                   originalError: errorData,
                   pendingCalls: message.data.pendingCallsInfo
@@ -635,6 +689,7 @@ export class CodeExecutor {
         // Handle worker errors
         worker.on('error', (error) => {
           clearTimeout(timeoutHandle);
+          (error as Error & { executionStarted?: boolean }).executionStarted = executionStarted;
           reject(error);
         });
 
@@ -643,7 +698,9 @@ export class CodeExecutor {
           clearTimeout(timeoutHandle);
 
           if (code !== 0) {
-            reject(new Error(`Worker stopped with exit code ${code}`));
+            const error = new Error(`Worker stopped with exit code ${code}`) as Error & { executionStarted?: boolean };
+            error.executionStarted = executionStarted;
+            reject(error);
           }
         });
 

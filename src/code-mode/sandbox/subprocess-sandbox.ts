@@ -54,6 +54,8 @@ export interface SandboxExecutionResult {
   result: unknown;
   logs: string[];
   error?: string;
+  /** True once the parent has sent user code to the child process. */
+  executionStarted?: boolean;
   duration: number;
 }
 
@@ -111,6 +113,7 @@ export class SubprocessSandbox {
     const logs: string[] = [];
     let result: unknown = null;
     let error: string | undefined;
+    let executionStarted = false;
 
     return new Promise((resolve, reject) => {
       // Spawn isolated process
@@ -163,6 +166,7 @@ export class SubprocessSandbox {
         switch (msg.type) {
           case 'ready':
             // Worker is ready, send code to execute
+            executionStarted = true;
             proc.send({
               type: 'execute',
               code,
@@ -233,6 +237,7 @@ export class SubprocessSandbox {
           result,
           logs,
           error,
+          executionStarted,
           duration,
         });
       });

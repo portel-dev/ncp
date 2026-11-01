@@ -10,6 +10,8 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { CodeExecutor } from '../../src/code-mode/code-executor.js';
 import type { ToolDefinition } from '../../src/code-mode/code-executor.js';
+import { SubprocessSandbox } from '../../src/code-mode/sandbox/subprocess-sandbox.js';
+import { IsolatedVMSandbox } from '../../src/code-mode/sandbox/isolated-vm-sandbox.js';
 
 describe('CodeExecutor Integration', () => {
   let codeExecutor: CodeExecutor;
@@ -156,6 +158,66 @@ describe('CodeExecutor Integration', () => {
       );
 
       expect(result.error).toBeDefined();
+    });
+  });
+
+  describe('execution retry safety', () => {
+    it('does not replay completed tool side effects after a runtime error', async () => {
+      const result = await codeExecutor.executeCode(`
+        await test.echo({ message: 'side effect' });
+        throw new Error('failure after side effect');
+      `, 5000);
+
+      expect(result.error).toContain('failure after side effect');
+      expect(mockToolExecutor).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not replay tool side effects after timeout', async () => {
+      const result = await codeExecutor.executeCode(`
+        await test.echo({ message: 'side effect before timeout' });
+        await new Promise(() => {});
+      `, 500);
+
+      expect(result.error?.toLowerCase()).toMatch(/time.*out|terminated/);
+      expect(mockToolExecutor).toHaveBeenCalledTimes(1);
+    }, 10000);
+
+    it('does not fall back after isolated-vm reports a runtime error', async () => {
+      const available = jest.spyOn(IsolatedVMSandbox, 'isAvailable').mockReturnValue(true);
+      const isolatedExecution = jest.spyOn(IsolatedVMSandbox.prototype, 'execute')
+        .mockResolvedValue({ result: null, logs: [], error: 'isolated runtime failure', executionStarted: true, duration: 1 });
+      const subprocessExecution = jest.spyOn(SubprocessSandbox.prototype, 'execute');
+
+      try {
+        const result = await codeExecutor.executeCode('throw new Error("runtime failure");', 5000);
+
+        expect(result.error).toBe('isolated runtime failure');
+        expect(subprocessExecution).not.toHaveBeenCalled();
+      } finally {
+        available.mockRestore();
+        isolatedExecution.mockRestore();
+        subprocessExecution.mockRestore();
+      }
+    });
+
+    it('falls back after subprocess startup failure, then does not replay worker runtime effects', async () => {
+      const isolatedAvailable = jest.spyOn(IsolatedVMSandbox, 'isAvailable').mockReturnValue(false);
+      const startupFailure = jest.spyOn(SubprocessSandbox.prototype, 'execute')
+        .mockRejectedValueOnce(new Error('simulated spawn failure'));
+
+      try {
+        const result = await codeExecutor.executeCode(`
+          await test.echo({ message: 'worker side effect' });
+          throw new Error('worker runtime failure');
+        `, 5000);
+
+        expect(result.error).toContain('worker runtime failure');
+        expect(startupFailure).toHaveBeenCalledTimes(1);
+        expect(mockToolExecutor).toHaveBeenCalledTimes(1);
+      } finally {
+        isolatedAvailable.mockRestore();
+        startupFailure.mockRestore();
+      }
     });
   });
 

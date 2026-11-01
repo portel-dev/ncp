@@ -1,5 +1,4 @@
 import {
-  CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY,
   SERVER_INFO_META_KEY,
   ProtocolError,
@@ -109,10 +108,6 @@ class McpTaskTransport implements Transport {
   private async handleTaskRequest(message: Record<string, unknown>): Promise<void> {
     const id = message.id as string | number;
     const envelope = requestEnvelope(message);
-    if (!validClientInfo(envelope?.[CLIENT_INFO_META_KEY])) {
-      await this.sendError(id, ProtocolErrorCode.InvalidRequest, 'Modern task requests require client name and version metadata');
-      return;
-    }
     if (!isRecord(envelope?.[CLIENT_CAPABILITIES_META_KEY_V2]) ||
         !isRecord(envelope[CLIENT_CAPABILITIES_META_KEY_V2]?.extensions)) {
       await this.sendError(id, ProtocolErrorCode.InvalidRequest, 'Modern task requests require a client capabilities object');
@@ -197,11 +192,6 @@ function requestEnvelope(message: Record<string, unknown>): Record<string, unkno
 function hasRequestId(message: Record<string, unknown>): boolean {
   return (typeof message.id === 'string') ||
     (typeof message.id === 'number' && Number.isSafeInteger(message.id));
-}
-
-function validClientInfo(value: unknown): value is { name: string; version: string } {
-  return isRecord(value) && typeof value.name === 'string' && value.name.length > 0 &&
-    typeof value.version === 'string' && value.version.length > 0;
 }
 
 function isRecord(value: unknown): value is Record<string, any> {

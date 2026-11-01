@@ -49,14 +49,16 @@ describe('MCP Tasks transport adapter', () => {
     });
   });
 
-  it('validates modern client metadata and task request parameters', async () => {
+  it('accepts optional client identity while validating required task metadata and parameters', async () => {
     const inner = new TestTransport();
     const gateway = new McpTaskGateway('transport-profile', { directory });
     const wrapped = wrapMcpTaskTransport(inner, gateway, 'profile-owner', { name: 'ncp', version: '1.0.0' });
     wrapped.onmessage = () => {};
-    inner.dispatch(request('tasks/get', 1, {}, { omitClientInfo: true }));
+    inner.dispatch(request('tasks/get', 1, { taskId: '00000000-0000-4000-8000-000000000000' }, { omitClientInfo: true }));
     await waitForSend(inner);
-    expect(inner.sent[0]).toMatchObject({ id: 1, error: { code: ProtocolErrorCode.InvalidRequest } });
+    // An absent self-reported client identity must not block a request. It is
+    // handled normally, and the gateway still scopes access to ownerIdentity.
+    expect(inner.sent[0]).toMatchObject({ id: 1, error: { code: ProtocolErrorCode.InvalidParams, message: 'Unknown task' } });
 
     inner.dispatch(request('tasks/get', 2, { taskId: 12 }));
     await waitForSend(inner, 2);

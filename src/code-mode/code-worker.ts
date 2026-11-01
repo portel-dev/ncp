@@ -88,8 +88,8 @@ interface NetworkCallResponse {
 }
 
 interface WorkerMessage {
-  type: 'tool_call' | 'binding_call' | 'network_call' | 'log' | 'result' | 'error';
-  data: any;
+  type: 'tool_call' | 'binding_call' | 'network_call' | 'log' | 'result' | 'error' | 'execution_started';
+  data?: any;
 }
 
 if (!parentPort) {
@@ -683,6 +683,9 @@ function cleanup(): void {
     ].join('\n');
     const fn = new AsyncFunction('__context__', fnBody);
 
+    // Tell the host that user code is about to run. If the worker fails after
+    // this point, the executor must not replay the script in another backend.
+    parentPort!.postMessage({ type: 'execution_started' } as WorkerMessage);
     const result = await fn(context);
 
     // Send result
