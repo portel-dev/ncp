@@ -360,6 +360,7 @@ ncp add github npx @modelcontextprotocol/server-github                       # N
 
 # Search and productivity
 ncp add brave-search npx @modelcontextprotocol/server-brave-search           # No path needed
+ncp add specstream npx @specstream/server-specstream
 ```
 
 ![NCP Add Command](docs/images/ncp-add.png)
@@ -376,6 +377,7 @@ ncp add brave-search npx @modelcontextprotocol/server-brave-search           # N
 ncp add sequential-thinking npx @modelcontextprotocol/server-sequential-thinking  # 5,550+ downloads
 ncp add memory npx @modelcontextprotocol/server-memory                            # 4,200+ downloads
 ncp add brave-search npx @modelcontextprotocol/server-brave-search                # 680+ downloads
+ncp add specstream npx @specstream/server-specstream
 ```
 
 ### **🛠️ Development Essentials**

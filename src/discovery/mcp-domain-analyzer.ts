@@ -80,6 +80,7 @@ export class MCPDomainAnalyzer {
 
     // Search & Information
     { name: 'brave-search', description: 'Web search capabilities with privacy-focused results and real-time information', category: 'search', popularity: 80 },
+    { name: 'specstream', description: 'Fast, live web data engine for AI agents with search, extract, and real-time information capabilities', category: 'search', popularity: 80 },
     { name: 'tavily', description: 'Web search and information retrieval optimized for AI agents and research tasks', category: 'search', popularity: 85 },
     { name: 'perplexity', description: 'AI-powered search and research with cited sources and comprehensive answers', category: 'search', popularity: 75 },
 
